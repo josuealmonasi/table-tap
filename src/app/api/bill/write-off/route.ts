@@ -5,7 +5,8 @@ import { actingFrontOfHouse } from "@/lib/api-guard";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { logEvent } from "@/lib/activity-log";
 import { logDetail } from "@/lib/log-detail";
-import { applyWriteOff, paidSoFar } from "@/lib/apply-write-off";
+import { applyWriteOff } from "@/lib/apply-write-off";
+import { applyWriteOffRest, coverageByOrder, owedCents, REST_REFUSAL } from "@/lib/write-off-rest";
 import { MANAGES } from "@/lib/membership";
 import { formatMoney } from "@/lib/format";
 import {
@@ -67,13 +68,14 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   const orders = writableOff((rows ?? []) as Order[]);
   if (orders.length === 0) return await apiError("apiErr.nothingToWriteOff", 409);
 
-  // Part of it is paid: forgiving the whole total would report money that came
-  // in as lost (paths audit #5). Refused before a waiter's ask is stored, so
-  // nobody is told to wait for an approval that cannot be given.
-  const paid = await paidSoFar(actor.restaurantId, orders.map(o => o.id));
-  if (paid === null) return await apiError("apiErr.generic", 503);
+  // Part of it is paid: only the rest is lost, so only the rest is written off
+  // (write_off_remainder_v1). Forgiving the whole total would report money
+  // that came in as lost (paths audit #5).
+  const paidBy = await coverageByOrder(actor.restaurantId, orders.map(o => o.id));
+  if (paidBy === null) return await apiError("apiErr.generic", 503);
+  const paid = Math.round([...paidBy.values()].reduce((a, b) => a + b, 0) * 100) / 100;
   if (paid > 0) {
-    return await apiError("apiErr.writeOffPartPaid", 409, { amount: formatMoney(paid, orders[0].currency ?? "MXN") });
+    return await writeOffTheRest({ actor, orders, paidBy, paid, tableId, reason, note: text });
   }
 
   const amount = writeOffTotal(orders);
@@ -132,3 +134,55 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   });
   return NextResponse.json({ ok: true, amount: done.amount });
 }
+
+/**
+ * A part-paid table: the waiter asks for the rest, the manager writes it off.
+ * Logged as `written_off` with the amount actually lost, so the corte and
+ * analytics count it once, the same way as any write-off; the order's own
+ * record of what was forgiven is its `order_adjustments` row.
+ */
+async function writeOffTheRest(p: {
+  actor: NonNullable<Awaited<ReturnType<typeof actingFrontOfHouse>>>;
+  orders: Order[]; paidBy: Map<string, number>; paid: number;
+  tableId: string | undefined; reason: string; note: string;
+}): Promise<NextResponse> {
+  const { actor, orders, paidBy, paid, reason, note } = p;
+  const currency = orders[0].currency ?? "MXN";
+  if (orders.some(o => (o.currency ?? "MXN") !== currency)) return await apiError("apiErr.writeOffChanged", 409);
+  const expectedCents = owedCents(orders, paidBy);
+  const lost = expectedCents / 100;
+  const label = orders[0].table_label ?? "";
+  const detail = logDetail({ table: label, amount: lost.toFixed(2), paid: paid.toFixed(2), kind: "rest", reason, note: note || null });
+
+  if (!MANAGES(actor.role)) {
+    const { error } = await createAdminClient().from("write_off_requests").insert({
+      restaurant_id: actor.restaurantId,
+      table_id: p.tableId ?? orders[0].table_id ?? null,
+      table_label: label,
+      order_ids: orders.map(o => o.id),
+      amount: lost,
+      reason,
+      note: note || null,
+      requested_by: actor.email,
+    });
+    if (error) return await apiError("apiErr.generic", 500);
+    await logEvent({ restaurantId: actor.restaurantId, actor: actor.email, entity: "bill", action: "requested", detail });
+    return NextResponse.json({ pending: true, amount: lost, paid });
+  }
+
+  const done = await applyWriteOffRest({
+    orders, restaurantId: actor.restaurantId, actorEmail: actor.email, reason, note, expectedCents, currency,
+  });
+  if (done.outcome !== "forgiven") {
+    if (done.outcome === "repeat") return NextResponse.json({ ok: true, amount: done.forgivenCents / 100, paid });
+    return await apiError(REST_REFUSAL[done.outcome], done.outcome === "failed" ? 500 : 409);
+  }
+  const amount = (done.forgivenCents + done.writtenOffCents) / 100;
+  await logEvent({
+    restaurantId: actor.restaurantId, actor: actor.email, entity: "bill", action: "written_off",
+    orderIds: done.orderIds,
+    detail: logDetail({ table: label, amount: amount.toFixed(2), paid: paid.toFixed(2), kind: "rest", reason, note: note || null }),
+  });
+  return NextResponse.json({ ok: true, amount, paid });
+}
+

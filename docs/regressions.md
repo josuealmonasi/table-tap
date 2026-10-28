@@ -4895,6 +4895,7 @@ gates and makes no schema changes.
 | Rule | The bug it prevents | What checks it |
 |---|---|---|
 | An unread Connect account stays an error, and only an empty account field may be filled | A read failure or two onboarding calls replaced the merchant and stranded open diner checkouts; Settings called a failed status read disconnected | `stripe-connect-read.spec.ts`, `stripe-connect-payments.spec.tsx`, `stripe-connect.spec.ts` |
+| A part-paid walkout writes off only what nobody paid | #564 refused it outright, so a table that paid MX$80 of MX$100 and left could not be closed | `table-adjustments.spec.tsx`, `write-off-remainder-schema.spec.ts`, api case, dev replay |
 
 `readConnect` throws on a failed read before asking Stripe for another account.
 The first account is saved only while `stripe_account_id` is null, with returned
@@ -5017,3 +5018,22 @@ copy is reused. `user-logs-read-errors.spec.tsx` checks these cases with mocked
 reads; Claude checks the owner activity screen and shared gates at integration.
 The hook keeps its existing fetching approach in this fix. A later SWR
 migration would align its caching and revalidation with the other readers.
+
+## The rest of a part-paid bill (paths audit #5, follow-up)
+
+#564 stopped writing off a part-paid bill as a whole, which logged the money
+that came in as lost. That left a table that paid MX$80 of MX$100 and walked
+out with no way to close. `write_off_remainder_v1` writes off only the rest,
+in one transaction under the money lock:
+- each part-paid order comes down to what was paid and is paid and completed,
+  with an immutable `order_adjustments` row (`forgive`) recording the before,
+  the after and what was forgiven;
+- unpaid orders on the same table are written off whole.
+
+It refuses while a card page is open, a split is live or a payment is
+unattributed. A waiter's ask is stored for the rest and the approval runs the
+same transaction. The loss is logged as `written_off` with `kind=rest` and the
+amount actually lost, so the corte and analytics count it once. Design and
+requirements from Codex's review in the dialogue (topic writeoff). Receipts
+showing original / forgiven / paid are still to come, with the receipts pass.
+

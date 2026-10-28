@@ -609,6 +609,18 @@ dishes on a bill the restaurant has just cancelled.
   `/api/cash-drawer`, for owner, manager and cashier. Card and online money
   has no opening.
 
+## Writing off the rest of a part-paid bill
+
+A whole order is written off only when nothing was paid against it. When part
+of a table's bill was paid and the table walks out, only the rest is written
+off (`write_off_remainder_v1`): each part-paid order comes down to what was
+paid, is marked paid, and keeps an immutable `order_adjustments` row of kind
+`forgive` with its original and resulting totals and the amount forgiven.
+`written_off` keeps meaning "the whole order was forgiven". It is refused
+while a card checkout is open, a split is live, or a payment on the table is
+unattributed. The loss is logged once, as a write-off of the amount nobody
+paid, which is what the corte and analytics total.
+
 ## Split by people, model 2: slots
 
 The divided bill above is model 1. It waits for every phone to join, one share
