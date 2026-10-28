@@ -7817,6 +7817,10 @@ begin
   if exists (select 1 from unnest(v_request.order_ids) o(id)
     where public.retained_order_coverage(p_restaurant, o.id) > 0) then return 'part_paid'; end if;
 
+  -- Orders a live split has frozen are paid by its slots: lowering their total
+  -- under a held card attempt left the charge unallocatable (split audit #1).
+  if exists (select 1 from bill_splits b where b.restaurant_id = p_restaurant and b.status = 'locked'
+    and b.order_ids && v_request.order_ids) then return 'split'; end if;
   update orders set written_off = true, write_off_reason = v_request.reason,
     write_off_note = v_request.note, written_off_by = p_actor, written_off_at = now(), status = 'completed'
    where id = any(v_request.order_ids) and restaurant_id = p_restaurant
@@ -7860,6 +7864,10 @@ begin
   -- for a table that had gone and the diner's phone still offered "follow your
   -- order ORD-09BB" three times over, on a table the floor had cleared for the
   -- next party.
+  -- Orders a live split has frozen are paid by its slots: lowering their total
+  -- under a held card attempt left the charge unallocatable (split audit #1).
+  if exists (select 1 from bill_splits b where b.restaurant_id = p_restaurant and b.status = 'locked'
+    and b.order_ids && p_orders) then return jsonb_build_object('outcome', 'split'); end if;
   with done as (
     update orders set written_off = true, write_off_reason = p_reason, write_off_note = p_note,
       written_off_by = p_actor, written_off_at = now(), status = 'completed'
@@ -7907,6 +7915,10 @@ begin
   -- already collected (paths audit #2). The guard would raise; this says why.
   if exists (select 1 from unnest(v_request.order_ids) o(id)
     where public.retained_order_coverage(p_restaurant, o.id) > 0) then return 'part_paid'; end if;
+  -- Orders a live split has frozen are paid by its slots: lowering their total
+  -- under a held card attempt left the charge unallocatable (split audit #1).
+  if exists (select 1 from bill_splits b where b.restaurant_id = p_restaurant and b.status = 'locked'
+    and b.order_ids && v_request.order_ids) then return 'split'; end if;
   select * into v_coupon from coupons
    where restaurant_id = p_restaurant and upper(code) = upper(v_request.code) for update;
   if not found or not v_coupon.active
@@ -7967,6 +7979,10 @@ begin
    where id = any(p_orders) and restaurant_id = p_restaurant
      and paid = false and written_off = false and status not in ('cancelled', 'pending_payment')
      and coupon_code is null and account_id is null;
+  -- Orders a live split has frozen are paid by its slots: lowering their total
+  -- under a held card attempt left the charge unallocatable (split audit #1).
+  if exists (select 1 from bill_splits b where b.restaurant_id = p_restaurant and b.status = 'locked'
+    and b.order_ids && p_orders) then return 'split'; end if;
   if v_count = 0 or v_count <> cardinality(p_orders) or v_total <= 0 then return 'changed'; end if;
   if p_amount is null or p_amount <= 0 or p_amount > v_total then return 'changed'; end if;
   if exists (select 1 from unnest(p_orders) o(id)
@@ -11266,7 +11282,13 @@ begin
     from bill_split_checkout_slots where checkout_id = p_checkout;
   if v_slots is null then return jsonb_build_object('outcome', 'gone'); end if;
 
-  if v_split.status <> 'locked' or p_charged_cents < v_amount or exists (select 1 from bill_split_slots
+  -- What the frozen orders can still take. A discount or write-off since the
+  -- slots were frozen (refused now, but a split from before) must not turn a
+  -- charge into a rollback that records nothing (split audit #1).
+  select coalesce(sum(greatest(o.total - public.retained_order_coverage(p_restaurant, o.id), 0)), 0) into v_left
+    from orders o where o.id = any(v_split.order_ids) and not o.paid and not o.written_off
+      and o.account_id is null and o.status not in ('cancelled', 'pending_payment');
+  if v_split.status <> 'locked' or p_charged_cents < v_amount or round(v_left * 100) < v_amount or exists (select 1 from bill_split_slots
       where split_id = v_split.id and share_no = any(v_slots)
         and (reserved_checkout_id is distinct from p_checkout or payment_id is not null)) then
     select t.label into v_label from table_sessions ts left join restaurant_tables t on t.id = ts.table_id
@@ -11313,3 +11335,33 @@ begin
 end; $$;
 revoke all on function public.settle_split_slots_v1(uuid, uuid, text, int) from public, anon, authenticated;
 grant execute on function public.settle_split_slots_v1(uuid, uuid, text, int) to service_role;
+
+-- Retires a card attempt on slots after Stripe positively refused or expired
+-- it: its unpaid slots, its coupon and its fee reservation, in one
+-- transaction. Three separate calls could stop halfway (slots freed, fee still
+-- held, attempt open), and every retry then met its own immutable slot record
+-- and gave up (split audit #3).
+create or replace function public.retire_split_attempt_v1(p_restaurant uuid, p_checkout uuid)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare v_checkout diner_checkouts%rowtype; v_session uuid; v_released int := 0;
+begin
+  perform public.lock_restaurant_money(p_restaurant);
+  select * into v_checkout from diner_checkouts where id = p_checkout and restaurant_id = p_restaurant for update;
+  if not found then return jsonb_build_object('outcome', 'gone'); end if;
+  if v_checkout.status = 'paid' then return jsonb_build_object('outcome', 'paid'); end if;
+  if v_checkout.split_id is not null then
+    select session_id into v_session from bill_splits where id = v_checkout.split_id;
+    perform pg_advisory_xact_lock(hashtextextended(v_session::text, 0));
+    perform 1 from bill_split_slots where split_id = v_checkout.split_id order by share_no for update;
+    update bill_split_slots set reserved_checkout_id = null
+     where split_id = v_checkout.split_id and reserved_checkout_id = p_checkout and payment_id is null;
+    get diagnostics v_released = row_count;
+  end if;
+  -- Coupon back, fee reservation released, attempt expired: what finishing an
+  -- unpaid attempt already does, now in the same transaction as the slots.
+  perform public.finish_diner_checkout(p_checkout, false);
+  return jsonb_build_object('outcome', 'retired', 'released', v_released);
+end; $$;
+revoke all on function public.retire_split_attempt_v1(uuid, uuid) from public, anon, authenticated;
+grant execute on function public.retire_split_attempt_v1(uuid, uuid) to service_role;
+

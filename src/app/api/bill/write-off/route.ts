@@ -118,6 +118,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   if (done.outcome === "part_paid") {
     return await apiError("apiErr.writeOffPartPaid", 409, { amount: formatMoney(done.paid, orders[0].currency ?? "MXN") });
   }
+  if (done.outcome === "split") return await apiError("apiErr.billSplitLive", 409);
   if (done.outcome === "nothing") return await apiError("apiErr.nothingToWriteOff", 409);
   if (done.outcome === "failed") return await apiError("apiErr.generic", 500);
 

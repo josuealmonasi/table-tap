@@ -61,3 +61,20 @@ it("money is allocated at once, and the close never invents a pay method", () =>
   expect(body("close_divided_bill_v3")).toContain("pay_method = case when cardinality(v_methods) = 1 then v_methods[1] end");
   expect(sql).toContain("create trigger guard_split_checkout_slot before update on bill_split_checkout_slots");
 });
+
+it("split audit #1: no discount or write-off lowers orders a live split has frozen, and settlement never raises on them", () => {
+  for (const name of ["apply_bill_discount", "approve_discount_request_v2", "write_off_orders", "approve_write_off_request_v2"]) {
+    expect(body(name), name).toMatch(/b\.status = 'locked'\s+and b\.order_ids && /);
+  }
+  // A charge the frozen orders can no longer take is owed back, recorded.
+  expect(body("settle_split_slots_v1")).toContain("or round(v_left * 100) < v_amount or exists");
+});
+
+it("split audit #3: retiring a refused attempt frees its slots, coupon and fee in one transaction", () => {
+  const retire = body("retire_split_attempt_v1");
+  expect(retire).toContain("perform public.lock_restaurant_money(p_restaurant);");
+  expect(retire).toContain("and reserved_checkout_id = p_checkout and payment_id is null");
+  expect(retire).toContain("perform public.finish_diner_checkout(p_checkout, false);");
+  expect(sql).toContain("revoke all on function public.retire_split_attempt_v1(uuid, uuid) from public, anon, authenticated;");
+  expect(drop).toContain("drop function if exists public.retire_split_attempt_v1(uuid, uuid);");
+});

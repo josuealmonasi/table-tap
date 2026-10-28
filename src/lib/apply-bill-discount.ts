@@ -2,7 +2,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import type { Order } from "@/lib/types";
 
 /** What a staff discount came to. */
-export type DiscountOutcome = "applied" | "part_paid" | "changed" | "failed";
+export type DiscountOutcome = "applied" | "part_paid" | "split" | "changed" | "failed";
 
 /**
  * Reserves the use and writes it across the bill.
@@ -32,5 +32,5 @@ export async function applyToOrders(
     p_amount: amount,
   });
   if (error) return "failed";
-  return data === "applied" || data === "part_paid" ? data : "changed";
+  return data === "applied" || data === "part_paid" || data === "split" ? data : "changed";
 }

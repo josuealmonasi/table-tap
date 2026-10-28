@@ -110,6 +110,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   // Paid in part since it was asked for: the request stays pending, and the
   // floor collects the rest (paths audit #5).
   if (outcome === "part_paid") return await apiError("apiErr.writeOffPartPaidLater", 409);
+  if (outcome === "split") return await apiError("apiErr.billSplitLive", 409);
   if (outcome !== "approved") return await apiError("apiErr.approvalChanged", 409);
   await closeSessionsFor(orders, "written_off");
 
