@@ -43,6 +43,7 @@ and that a new party cannot see the previous party's waiting phones.
 | An unresolved attempt shows and locks the request it will send again (S20b) | Reopened forms showed blank values, edited carts lost food, and cash resent a hidden account sale |
 | An account sale retries its frozen cart and reference (S20 K3) | A lost reply charged the same sale to an account twice |
 | Pay-later and waiter retries claim one order before stock (S20 K4) | Retrying an unseen ticket took another portion and sent another ticket |
+| Pay-now retries share one pending order and its open payment page (Paths #3) | A lost reply with the same reference opened two payable orders and sent two tickets | `checkout-paynow-retry.spec.ts` (route), `s20-client-retry.spec.ts` (the menu resends its reference) |
 | A withdrawal retry names its original shift and movement (S20 K5) | A lost reply took the same cash out twice, sometimes from a newer shift |
 | Purchase, waste and count retries keep their saved movement (S20 K6) | A retry added a delivery twice or counted over a later delivery |
 | A blind close names the reviewed shift and its saved close (S20 K9) | An old count closed a newer shift after the first answer was lost |
@@ -5017,3 +5018,30 @@ copy is reused. `user-logs-read-errors.spec.tsx` checks these cases with mocked
 reads; Claude checks the owner activity screen and shared gates at integration.
 The hook keeps its existing fetching approach in this fix. A later SWR
 migration would align its caching and revalidation with the other readers.
+## Paths #3 — a pay-now retry keeps its first payment page
+
+The phone's reference and the pending order had to agree, but only deferred
+orders saved that reference. Sending a pay-now request again after a lost reply
+created another order and another payable Stripe page. The pending insert now
+saves the reference and request scope under the existing unique index. A retry
+reads that order before claiming a coupon or stock and returns its open page
+from the restaurant's Stripe account. A racing insert gives back only its own
+coupon, stock and fee before reading the winner. Each order also gives Stripe
+its own stable session key.
+
+`checkout-paynow-retry.spec.ts` runs the route and card-session builder against
+an in-memory unique index and mocked Stripe. It checks sequential and racing
+retries, changed details, an opening or completed page, tenant boundaries,
+read failures, unchanged no-reference behavior and byte-identical deferred
+scopes. An expired page is refused while its order exists. Once the existing
+abandon handler deletes that order, the reference can create one new order;
+renewing the same order is a later improvement. Claude's live gates still need
+to verify the actual unique-index race and expiry webhook cleanup.
+
+The menu never sent a reference for a card payment, so the server half alone
+changed nothing for a diner. `useCheckout` now gives each card payment one,
+kept across sends that had no answer and let go on the same rule as a pay-later
+intent (`refusalSettles`). Unlike pay-later, the body is built afresh each time:
+a cart trimmed after a sold-out refusal must not be charged as it was, and a
+cart changed after a lost reply is told so (409). Claude finished this after
+Codex hit its usage limit.

@@ -89,11 +89,18 @@ export async function openCardSession(
         ...(p.fee.cents > 0 ? { application_fee_amount: p.fee.cents } : {}),
       },
     },
-    { stripeAccount: p.stripeAccount },
+    // One pending order owns one payment page, even if Stripe retries a POST.
+    { stripeAccount: p.stripeAccount, idempotencyKey: `checkout-${p.orderId}` },
   );
   await recordDinerCheckout(session, {
     restaurantId: p.restaurantId, stripeAccount: p.stripeAccount, currency: p.currency,
     amountCents: p.amountCents, orderIds: [p.orderId],
   }, () => stripe.checkout.sessions.expire(session.id, {}, { stripeAccount: p.stripeAccount }));
   return session;
+}
+
+/** A card session as Stripe has it now, for a retry of the request that opened it. */
+export async function readCardSession(sessionId: string, stripeAccount: string): Promise<{ status: string | null; url: string | null }> {
+  const session = await stripe.checkout.sessions.retrieve(sessionId, {}, { stripeAccount });
+  return { status: session.status, url: session.url };
 }
