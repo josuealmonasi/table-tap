@@ -2269,3 +2269,49 @@ in sales. The SQL promotion CHECK requires strictly positive tier prices.
 - Coupons search codes and filter active, expired or paused; expired follows the server's start/end boundaries, including codes that have not started.
 - Saved sales open awaiting approval with a pending-only count and 30-second refresh; approved history reads stable pages of 20 while preserving manager approval and cashier upload.
 - Diner receipts offer email or print/save through the existing receipt renderer and print stylesheet; browser printing can save PDF without sending email or writing a receipt timestamp.
+
+
+### Split by people, model 2 — server pass (2026-10-28)
+
+The server provides `/api/split/start`, `/resize` and `/cancel` for an approved
+sitting member or front of house. Start takes `restaurantId`, `tableId`,
+`sessionId`, `shares` (2–20), `expectedCents`, saved `currency` and a UUID `ref`.
+It uses the server-read plan's flat fee; SQL caps the frozen fee budget at 5%
+of food principal. Parts exist immediately, regardless of phone count. Only
+the proposer or authorised staff resizes/cancels, with `splitId` and `revision`.
+There is no automatic model-2 split expiry. The first accepted attempt or
+collection freezes the size permanently; food cancellation uses refunds.
+
+`/api/split/pay` retains the legacy claim path and dispatches model 2 to grouped
+slots. Its body adds `revision`, unique zero-based `slots`, `expectedCents` and
+optional `tipCents` (default zero, at most the selected parts). It creates a
+durable attempt, reserves every selected part, then creates Stripe Checkout.
+The amount is the parts plus the new tip. The application fee is the sum of
+their frozen fee slices, reserved through the existing monthly cap. Below the
+card minimum, parts must be combined or collected by staff; tips never inflate
+that minimum or the fee base. Coupons must be applied before the split.
+Staff-opened tables support model 2. The original attempt's tip, fee and expiry
+survive retries. A browser return or lost answer never frees parts.
+
+`/api/split/collect` is shared by the future Pedidos and Cuentas abiertas part
+selectors. It accepts the sitting scope, split/revision, selected slots,
+`expectedCents`, `currency`, optional `tipCents`, `method` (`cash` or own-terminal
+`card`) and a stable `ref` (at most 100 characters). The trusted staff identity
+supplies the collector; kitchen and foreign restaurants are refused. It writes
+through `collect_split_slots_v1`, with the existing coverage-based sitting close.
+The full and partial table collectors explain the SQL `split` refusal in both
+languages. SQL settlement preserves actual methods for corte, shifts and
+deposits, including a mixed-method close with no invented order pay method.
+
+Connected webhooks authenticate the stored session and dispatch model-2 paid
+attempts to the slot settlement writer; a late incompatible charge becomes a
+refund owed. Positive expiry or provider refusal releases only its reservation.
+`pnpm money` now checks slots, immutable checkout links, attempts, receipts,
+fee slices and allocations. API and attack cases cover the new routes and
+concurrency/role boundaries. Those shared gates are run by the release owner.
+
+Legacy split creation/join/read/payment remains available for existing screens.
+The diner split card, shared staff part selector, progress in Bills and Cuentas
+abiertas, visible revision-checked cancellation in both staff entry points,
+and payment-based receipts are pass 2; receipts wait for #567. Server pass 1
+does not claim those controls are present on screen.

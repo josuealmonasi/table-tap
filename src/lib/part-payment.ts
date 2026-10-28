@@ -37,7 +37,7 @@ export async function record(
   method: "cash" | "card",
   ref: string,
   requested = taken.amount,
-): Promise<{ wrote: boolean; refused: boolean; covered: boolean; landed: number }> {
+): Promise<{ wrote: boolean; refused: boolean; covered: boolean; landed: number; split?: boolean }> {
   // The first sitting is credited with the gratuity it is ABOUT to receive:
   // the transaction puts it on the oldest order, and splitting the
   // money against totals that do not include it yet spills the tip into the
@@ -87,6 +87,7 @@ export async function record(
     return { wrote: false, refused: false, covered: false, landed: 0 };
   }
   for (const outcome of (data ?? []) as { taken: number; outcome: string }[]) {
+    if (outcome.outcome === "split") return { wrote, refused, covered, landed: landedTotal, split: true };
     if (outcome.outcome === "written") {
       wrote = true;
       landedTotal = round2(landedTotal + Number(outcome.taken ?? 0));

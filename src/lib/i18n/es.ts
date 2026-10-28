@@ -1347,6 +1347,13 @@ foundingLeftBody: "Quien contrata ahora conserva este precio de suscripción mie
     requestsFailed: "No pudimos revisar si hay otros teléfonos esperando entrar. Lo intentaremos de nuevo en unos segundos.",
   },
   apiErr: {
+    splitCollectSlots: "Esta cuenta está dividida. Elige las partes que vas a cobrar.",
+    splitChanged: "La cuenta cambió. Revisa las partes.",
+    splitFrozen: "Alguien ya empezó a pagar. Ya no se puede cambiar ni cancelar esta división.",
+    splitSlotPaying: "Alguien ya está pagando esa parte. Elige otra parte.",
+    splitCombineSlots: "Elige más partes para pagar con tarjeta o pide al mesero que cobre esta parte.",
+    splitRequestChanged: "Este pago ya se envió con otras partes o cantidades. Revisa la cuenta.",
+    splitGone: "Esta división ya no está disponible. Revisa cuánto falta por pagar.",
     comboNotCheaper: "El combo debe costar menos que comprar los platillos por separado ({regular}).",
     tierNotCheaper: "Comprar {qty} ya cuesta {regular}. Pon un precio menor para la promoción.",
     accountCurrency: "Esta cuenta debe en otra moneda. Cobra primero ese saldo o paga este pedido en efectivo o con tarjeta.",

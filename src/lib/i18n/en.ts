@@ -1353,6 +1353,13 @@ foundingLeftBody: "Subscribe now and keep this subscription price for as long as
     requestsFailed: "Could not check for other phones waiting to join. We’ll check again in a few seconds.",
   },
   apiErr: {
+    splitCollectSlots: "This bill is divided. Choose the parts you are collecting.",
+    splitChanged: "The bill changed. Check the parts again.",
+    splitFrozen: "Someone has already started paying. This split can no longer be changed or cancelled.",
+    splitSlotPaying: "Someone is already paying that part. Choose another part.",
+    splitCombineSlots: "Choose more parts to pay by card, or ask your waiter to collect this part.",
+    splitRequestChanged: "This payment was already sent with different parts or amounts. Check the bill.",
+    splitGone: "This split is no longer available. Check what is left to pay.",
     comboNotCheaper: "The combo must cost less than buying the dishes separately ({regular}).",
     tierNotCheaper: "Buying {qty} already costs {regular}. Set a lower deal price.",
     accountCurrency: "This account owes in another currency. Collect that balance first, or pay for this order by cash or card.",

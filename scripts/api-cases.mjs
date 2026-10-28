@@ -1,3 +1,4 @@
+import { splitSlotCases } from "./api-cases/split-slots.mjs";
 // ============================================================================
 // One case per endpoint: the request that SHOULD work.
 //
@@ -43,6 +44,7 @@ export function cases(fx) {
     ...couponValidationCases(fx),
     ...loyaltyCases(fx),
     ...splitsCases(fx),
+    ...splitSlotCases(fx),
     ...checkoutCardCases(fx),
     ...cashCases(fx),
     ...ingredientsCases(fx),

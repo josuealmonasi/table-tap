@@ -1,3 +1,4 @@
+import { settleSplitSlots } from "@/lib/split-slots-lifecycle";
 import { finishDinerCheckout } from "@/lib/diner-attempt";
 import { closeSessionsFor } from "@/lib/table-session";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -51,6 +52,7 @@ export async function settleCheckout(session: Stripe.Checkout.Session, context: 
   await takeFee(session, { feeId: meta.fee_id, feeCents: meta.fee_cents, restaurantId: meta.restaurant_id });
 
   if (session.metadata?.account_checkout) await settleAccountCheckout(session);
+  else if (session.metadata?.split_model === "2") await settleSplitSlots(session);
   else if (session.metadata?.split_id) await settleSplitShare(session);
   else if ((session.metadata?.settle_order_ids ?? "").trim()) await settleBill(session);
   else if (session.metadata?.order_id) await settleOrder(session);

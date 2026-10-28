@@ -100,6 +100,7 @@ async function collect(req: NextRequest): Promise<NextResponse> {
   // Legacy sitting attachment also belongs to the reviewed transaction.
   const result = await recordReviewed(actor, { tableId: body.tableId, expected: Number(body.expected), currency: body.currency }, taken.amount, taken.tip, method!, ref);
   const { wrote, refused, covered, landed } = result;
+  if (result.split) return await apiError("apiErr.splitCollectSlots", 409, undefined, { code: "split" });
   if (result.paying) return await apiError("apiErr.accountBillPaying", 409);
   if (result.changed) return await apiError("apiErr.collectionBalanceChanged", 409,
     { owed: formatMoney(result.owed ?? before.owed, body.currency) }, { owed: result.owed, currency: body.currency, code: "balance_changed" });

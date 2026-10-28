@@ -17,5 +17,5 @@ export async function recordReviewed(actor: Actor, review: ReviewedCollection, a
   if (error) throw new Error(`Could not record the reviewed collection: ${error.message}`);
   const r = data as { outcome: string; amount: number; tip: number; owed: number; currency: string };
   return { wrote: r.outcome === "written", refused: r.outcome === "duplicate", covered: false,
-    changed: r.outcome === "changed", paying: r.outcome === "paying", landed: Number(r.amount ?? 0), tip: Number(r.tip ?? 0), owed: Number(r.owed), currency: r.currency };
+    split: r.outcome === "split", changed: r.outcome === "changed", paying: r.outcome === "paying", landed: Number(r.amount ?? 0), tip: Number(r.tip ?? 0), owed: Number(r.owed), currency: r.currency };
 }

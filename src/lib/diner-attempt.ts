@@ -1,3 +1,5 @@
+import { prepareSplitSlots } from "@/lib/split-slots-attempt";
+import { releaseSplitSlots } from "@/lib/split-slots-lifecycle";
 import { randomUUID } from "node:crypto";
 import type Stripe from "stripe";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -21,15 +23,30 @@ interface AttemptRecord {
 
 async function deliver(stripe: Stripe, attempt: AttemptRecord): Promise<Stripe.Checkout.Session> {
   const options = { stripeAccount: attempt.stripe_account_id };
+  await prepareSplitSlots(attempt);
   // The full request is durable too: a retry must not change its tip, fee or expiry.
-  const session = attempt.stripe_session_id
-    ? await stripe.checkout.sessions.retrieve(attempt.stripe_session_id, {}, options)
-    : await stripe.checkout.sessions.create(attempt.stripe_params, { ...options, idempotencyKey: attempt.idempotency_key });
+  let session: Stripe.Checkout.Session;
+  try {
+    session = attempt.stripe_session_id
+      ? await stripe.checkout.sessions.retrieve(attempt.stripe_session_id, {}, options)
+      : await stripe.checkout.sessions.create(attempt.stripe_params, { ...options, idempotencyKey: attempt.idempotency_key });
+  } catch (error) {
+    if (attempt.stripe_params?.metadata?.split_model === "2" && !attempt.stripe_session_id && stripeRefusedOutright(error)) {
+      await releaseSplitSlots(attempt.restaurant_id, attempt.id);
+      await releaseFee(String(attempt.stripe_params.metadata?.fee_id ?? ""));
+      await finishAttempt(attempt.id, false);
+    }
+    throw error;
+  }
   await recordDinerCheckout(session, {
     restaurantId: attempt.restaurant_id, stripeAccount: attempt.stripe_account_id,
     currency: attempt.currency, amountCents: attempt.amount_cents, orderIds: attempt.order_ids, attemptId: attempt.id,
   }, () => stripe.checkout.sessions.expire(session.id, {}, options));
   if (session.status === "expired") {
+    if (attempt.stripe_params?.metadata?.split_model === "2") {
+      await releaseSplitSlots(attempt.restaurant_id, attempt.id);
+      await releaseFee(String(attempt.stripe_params.metadata?.fee_id ?? ""));
+    }
     await finishAttempt(attempt.id, false);
     throw new DinerAttemptExpired("Checkout expired; the bill can be quoted again");
   }
@@ -78,7 +95,7 @@ export async function openDinerAttempt(stripe: Stripe, params: Stripe.Checkout.S
   } catch (error) {
     // A timeout can still have created a payable session. Keep its scope and
     // coupon reserved; the next request repeats the exact persisted request.
-    if (attempt.id === id && !attempt.stripe_session_id && stripeRefusedOutright(error)) {
+    if (attempt.id === id && attempt.stripe_params.metadata?.split_model !== "2" && !attempt.stripe_session_id && stripeRefusedOutright(error)) {
       await finishAttempt(attempt.id, false);
       await releaseFee(String(attempt.stripe_params.metadata?.fee_id ?? ""));
     }

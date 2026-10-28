@@ -34,6 +34,12 @@ and that a new party cannot see the previous party's waiting phones.
 | A duplicate refund tracks customer completion and fee completion separately (S11 I5) | A failed fee return disappeared behind an already-refunded customer payment |
 | A duplicate refund keeps its original charge currency everywhere (S11 I9) | Changing the menu currency relabelled money owed back and the approval amount |
 |---|---|
+| Slot activity keeps the old unpaid tip inside a part (split model 2) | Logging only the new tip understated the gratuity already collected in the frozen part |
+| Slot collections and the cashier activity show the same money (split model 2) | A cash slot reached the receipt ledger without reaching the cashier drawer log |
+| A slot split reads slots rather than legacy phone claims (split model 2) | One phone saw no payable part even though every slot already existed |
+| A slot checkout reserves its exact parts before Stripe and keeps them after a lost reply (split model 2) | A payable page could exist without owning the parts it would settle |
+| Slot webhooks use the verified attempt, including expiry and refunds owed (split model 2) | A slot charge reached the legacy claim writer or an expiry kept its parts held |
+| Whole-table collectors preserve the divided-bill refusal (split model 2) | Staff were told a generic failure or another card payment instead of which parts to collect |
 | Deletion preserves collected offline receipts and unfinished fee returns (Audit L3, S25b) | Deleting a restaurant erased unapproved cash and the fee still owed after a refund |
 | A saved reference names the same subject and request (Audit L4, S25b) | A milk purchase reference returned another ingredient's purchase, and a replay logged paid twice |
 | A retry key is cleared only on success or an explicit no-write result (Audit L5, S25b) | A frozen retry forgot the lost MX$100 purchase and added it again after unfreezing |
@@ -5017,3 +5023,63 @@ copy is reused. `user-logs-read-errors.spec.tsx` checks these cases with mocked
 reads; Claude checks the owner activity screen and shared gates at integration.
 The hook keeps its existing fetching approach in this fix. A later SWR
 migration would align its caching and revalidation with the other readers.
+
+## A slot split and its reader agree on parts (split model 2)
+
+`currentSplit` read every division through `bill_split_claims`. Model 2 has
+slots immediately and allows one phone to pay several: those two places no
+longer described the same bill. It now returns the revision, saved currency,
+freeze flag and paid/held parts from slots, without exposing another phone's
+checkout. Expiry-on-read remains legacy-only. `split-slots-state.spec.ts`
+failed before the change and passes alongside the legacy reader case.
+
+## A payable page owns exactly its reserved parts (split model 2)
+
+The durable diner attempt and the slot owner must agree before Stripe sees a
+request. The attempt is saved first, its exact parts reserved second, and its
+saved Stripe request sent last. A timeout keeps both the fee and the parts;
+a retry repeats the saved request, including its tip. Only a positive provider
+expiry or refusal releases its slots. A definite selection refusal retires an
+attempt only when it has no immutable slot links. Frozen revision, cents and
+fee slices are checked before charging. `split-slots-attempt.spec.ts` failed
+before the reservation hook and passes now; `split-slots-pay.spec.ts` checks
+staff-opened tables, grouped fees, tips and both currencies.
+
+## A slot charge and its receipt agree on the attempt (split model 2)
+
+The connected webhook sent every split charge to the legacy single-claim
+writer. It now sends verified model-2 payments to `settle_split_slots_v1` with
+the persisted attempt id and actual charged cents. Only settled, duplicate or
+refund-due results acknowledge paid money; failures retry. Positive provider
+expiry/refusal releases that attempt's slots. The legacy branch stays intact.
+`split-slots-lifecycle.spec.ts` reproduced the missing settlement and release
+calls before the fix. `split-slots-money.spec.ts` checks missing receipts,
+wrong amounts, fees, allocation scope and a full late-charge refund obligation.
+
+## A whole-table refusal tells staff to collect the parts (split model 2)
+
+SQL refuses ordinary whole-table collection after a divided bill has a paid
+or held part. Its TypeScript readers discarded `split`, so Pedidos and Cuentas
+abiertas reported a generic failure or the unrelated card-payment message.
+Both callers now return the same bilingual instruction with `code: split`.
+The older batch reader preserves it too. `split-slots-collection.spec.ts`
+failed before the fix. `split-slots-collect-route.spec.ts` checks exact cents,
+method, trusted collector, retries and each refusal from the slot writer.
+
+## A slot receipt and its cashier activity agree (split model 2)
+
+The slot writer records the receipt, while the cashier activity feeds the
+existing drawer readers. The new route must do both just like partial table
+collection: log the actual amount, tip, saved currency, method and remaining
+balance, with `collected` or `paid` as appropriate. It logs only new receipts,
+so a retry does not count cash twice. The two activity assertions in
+`split-slots-collect-route.spec.ts` failed before the log was added; the
+repeated-collection assertion keeps the second activity out. Fixture cleanup
+removes only activity bearing that fixture's unique table label.
+
+## A slot activity and its receipt agree on old unpaid tips (split model 2)
+
+The activity reads its amount and tip from the receipt, including the unpaid
+old gratuities inside the frozen parts. Logging only the new `tip_cents`
+would understate collected tips. That extra case also failed before the
+receipt-based log and passes in `split-slots-collect-route.spec.ts`.
