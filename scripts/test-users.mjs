@@ -40,7 +40,10 @@ export const TEST_USERS = [
 export const TEAM_LOGINS = [
   { email: "manager1@tabletap.dev", role: "manager", restaurant: "Test Restaurant 1" },
   { email: "kitchen1@tabletap.dev", role: "kitchen", restaurant: "Test Restaurant 1" },
-  { email: "owner2@tabletap.dev", role: "owner", restaurant: "Test Restaurant 1" },
+  // A second owner, on Casa: Carta's two-person team limit is already taken by
+  // manager1 and kitchen1 above, and the staff ceiling refused a third, which
+  // failed every `pnpm db:reset` before the platform admin was linked.
+  { email: "owner2@tabletap.dev", role: "owner", restaurant: "Test Restaurant 3" },
   { email: "manager2@tabletap.dev", role: "manager", restaurant: "Test Restaurant 2" },
   { email: "kitchen2@tabletap.dev", role: "kitchen", restaurant: "Test Restaurant 2" },
 ];
