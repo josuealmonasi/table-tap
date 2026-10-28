@@ -831,10 +831,16 @@ export async function seedMock(pg) {
     );
     const split = started.r;
     if (split.outcome !== "started") throw new Error(`demo split did not start: ${JSON.stringify(split)}`);
+    // Shaped like the real card path's attempt: the split, part 0's exact
+    // amount and the split metadata. A placeholder one cent with no split was
+    // rightly reported by `pnpm money` as a frozen amount that disagrees.
+    const { rows: [first] } = await pg.query(
+      "select amount_cents from bill_split_slots where split_id = $1 and share_no = 0", [split.split]);
     const { rows: [attempt] } = await pg.query(
-      `insert into diner_checkouts (restaurant_id, stripe_account_id, livemode, currency, amount_cents, metadata, order_ids, status)
-       values ($1, 'acct_demo_walked_off', false, $2, 1, '{"demo": "walked off"}', $3, 'open') returning id`,
-      [rid, debt.currency, debt.order_ids],
+      `insert into diner_checkouts (restaurant_id, stripe_account_id, livemode, currency, amount_cents, metadata, order_ids, status, split_id)
+       values ($1, 'acct_demo_walked_off', false, $2, $4,
+         jsonb_build_object('demo', 'walked off', 'split_id', $6::text, 'split_model', '2', 'settle_tip', '0'), $3, 'open', $5::uuid) returning id`,
+      [rid, debt.currency, debt.order_ids, first.amount_cents, split.split, String(split.split)],
     );
     await pg.query("select public.reserve_split_slots_v1($1, $2, $3, null, '{0}', $4)", [rid, split.split, split.revision, attempt.id]);
     await pg.query("select public.release_split_slots_v1($1, $2)", [rid, attempt.id]);

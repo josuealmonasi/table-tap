@@ -21,8 +21,10 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     const member = await tableMember(req, restaurantId, tableId, sessionId, true);
     if (!member) return await apiError("apiErr.tableJoin", 403);
     const db = createAdminClient();
+    // bill_splits has no table column: a split belongs to its sitting, and the
+    // membership check above already tied that sitting to this table.
     const { data: splits, error } = await db.from("bill_splits").select("id, status")
-      .eq("restaurant_id", restaurantId).eq("table_id", tableId).eq("session_id", sessionId).eq("model_version", 2);
+      .eq("restaurant_id", restaurantId).eq("session_id", sessionId).eq("model_version", 2);
     if (error || !splits) return await apiError("apiErr.ordersLoad", 503);
     if (!splits.length) return NextResponse.json({ split: false, payments: [] });
     const { data: slots, error: slotError } = await db.from("bill_split_slots").select("payment_id, split_id, share_no")
