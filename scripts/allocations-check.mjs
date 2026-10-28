@@ -34,6 +34,12 @@ export async function checkPaymentAllocations() {
     await reject("update payment_allocations set amount=1 where payment_id=$1", [p.id], /immutable/);
     await reject("select settle_orders_v2($1,$2,'cash','cashier',null)", [r.id, ids], /not_owed/);
     await reject("update orders set total=99,tip=-1 where id=$1", [ids[1]], /adjustment/);
+    // A writer that never opted in is checked too (paths audit #2, #4, #5).
+    await db.query("select set_config('tabletap.allocation_writer','',true)");
+    await reject("update orders set written_off=true where id=$1", [ids[1]], /adjustment/);
+    await reject("update orders set total=total-10 where id=$1", [ids[1]], /adjustment/);
+    await db.query("update orders set status='preparing' where id=$1", [ids[1]]);
+    await db.query("select set_config('tabletap.allocation_writer','v1',true)");
     await defer();
     const args = [r.id, shares[0].order_id];
     const { rows: [cancel] } = await db.query("select prepare_order_refund($1,$2,'manager','[]',false,null,null,null) result", args);

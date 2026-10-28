@@ -4789,6 +4789,7 @@ release gates. These local tests do not apply or validate the deployed schema.
 | A shift opened during a close starts after it | An open waiting on a close kept its transaction-start time, so one sale fell in both shifts | `cash-shift-open.spec.ts`, dev probe of `open_cash_shift` |
 | A staff discount lands whole or not at all, and never under collected money | Totals written with no lock, failed writes ignored, redemption logged anyway; a part-paid bill cut below what it had paid | `table-adjustments.spec.tsx`, dev probe of `apply_bill_discount` |
 | Repricing service decides and writes under the money lock | A collection between the read and the write; the stale write lowered a total with money against it | `service-reprice.spec.ts` (rules in the SQL), dev probe of `reprice_open_service` |
+| The allocation guard checks every order writer, not only those that opt in | Three direct writers lowered or forgave covered orders past an opt-in guard | `allocation-review.spec.ts`, `allocations-check.mjs` (non-opted-in writes refused; a status move allowed) |
 
 ### A scanned collection and a refreshed bill list have separate lifetimes
 
@@ -4970,4 +4971,17 @@ with MX$110 allocated, and the stale write set the total back to MX$100 with
 the money still against it. `reprice_open_service` now reads and writes in one
 transaction under the money lock, with the same rules, plus retained coverage
 checked directly.
+
+## A guard that only guarded writers who asked (paths audit #2, #4, #5)
+
+`guard_allocated_order` refuses changing an order that has money against it
+without the matching adjustment. It returned at once unless the writer had set
+`tabletap.allocation_writer = 'v1'`, so the three direct writers above were
+never checked, and the legacy `cancel_order` can still cancel a covered order
+with no refund obligation. With those three moved into locked functions, the
+guard now checks every writer (Codex found the `cancel_order` case; agreed in
+the dialogue). An update that changes nothing it protects, such as the kitchen
+moving a ticket along, returns before the coverage read. `check_paid_coverage`
+stays gated as it was. The api gate's allocation checks now try the refused
+writes without the flag.
 

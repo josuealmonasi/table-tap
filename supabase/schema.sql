@@ -6143,12 +6143,26 @@ $$;
 revoke all on function public.retained_order_coverage(uuid, uuid) from public, anon, authenticated;
 grant execute on function public.retained_order_coverage(uuid, uuid) to service_role;
 
+-- Every writer, not only the ones that say so (paths audit #2, #4, #5).
+--
+-- This used to return at once unless the writer had set
+-- tabletap.allocation_writer = 'v1', so a direct update was never checked: a
+-- staff discount, a service reprice and a write-off each lowered or forgave an
+-- order with money already against it, and the legacy cancel_order can still
+-- cancel one with no refund obligation. Those three now run as locked
+-- functions, and the guard checks everyone. Legacy payments with no
+-- allocations read as no coverage, so old data cannot be refused by it.
 create or replace function public.guard_allocated_order()
 returns trigger language plpgsql security definer set search_path = public as $$
 declare v_covered numeric;
 begin
-  if current_setting('tabletap.allocation_writer', true) is distinct from 'v1' then return new; end if;
   if pg_trigger_depth() > 1 then return new; end if;
+  -- Nothing it protects changed, which is a kitchen moving a ticket along:
+  -- no coverage read on every board update.
+  if new.total is not distinct from old.total and new.tip is not distinct from old.tip
+    and new.written_off is not distinct from old.written_off
+    and new.account_id is not distinct from old.account_id
+    and (new.status is not distinct from old.status or new.status <> 'cancelled') then return new; end if;
   v_covered := public.retained_order_coverage(old.restaurant_id, old.id);
   if v_covered > 0 and (new.written_off or new.account_id is distinct from old.account_id
     or ((new.total <> old.total or new.tip <> old.tip)
