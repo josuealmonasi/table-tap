@@ -8,6 +8,8 @@ import { useToast } from "@/components/ui/Toast";
 import { type Order, type Restaurant } from "@/lib/types";
 import { useT } from "@/lib/i18n/context";
 import Breadcrumb from "@/components/layout/Breadcrumb";
+import OrderHistory from "./OrderHistory";
+import OrderReturnsPanel from "./OrderReturnsPanel";
 import OrderCard from "./OrderCard";
 import { BOARD_COLUMNS, columnOrders } from "@/lib/order-flow";
 import { useRouter } from "next/navigation";
@@ -57,11 +59,11 @@ interface OrdersBoardProps {
 /**
  * Kitchen dashboard: the live order grid.
  *
- * The history moved to Analytics. They lived together behind a tab, and they
- * are different jobs: the live one is watched every minute during service,
- * the history is searched by order code when somebody asks about one.
- * Sharing a screen meant the kitchen could land in last month's data in the
- * middle of service.
+ * The live queue stays first, watched every minute during service. Managers
+ * also get completed history below it, to find a sale by code and return
+ * money without cancelling food already served. The kitchen never reads
+ * that history or its amounts. Keeping history outside the live columns
+ * prevents a lookup from replacing the pass in the middle of service.
  */
 export default function OrdersBoard({
   restaurant,
@@ -248,6 +250,10 @@ export default function OrdersBoard({
             })}
           </div>
         )}
+        {canApprove && !kitchen && <>
+          <OrderReturnsPanel restaurantId={restaurant.id} />
+          <OrderHistory restaurantId={restaurant.id} currency={restaurant.currency} canReturn />
+        </>}
       </div>
     </div>
   );

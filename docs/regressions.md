@@ -34,6 +34,15 @@ and that a new party cannot see the previous party's waiting phones.
 | A duplicate refund tracks customer completion and fee completion separately (S11 I5) | A failed fee return disappeared behind an already-refunded customer payment |
 | A duplicate refund keeps its original charge currency everywhere (S11 I9) | Changing the menu currency relabelled money owed back and the approval amount |
 |---|---|
+| Completed returns preserve the eaten sale and its exact component plan (Returns 7b) | Cancelling served food would release stock, while the return route had no preparation boundary |
+| A return reference keeps its exact reviewed request (Returns 7b) | A lost full-return reply could not replay after the retained total reached zero |
+| Card discovery precedes attempts and only outstanding money is sent (Returns 7b) | A manual 40 was ignored before asking Stripe for another 100, or accepted as the whole promise |
+| An expired unknown refund key never authorizes a new POST (Returns 7b) | A provider key can expire while its successful refund remains undiscovered |
+| Sales keep their day and returns use an exclusive completion window (Returns 7b) | Reducing the live total rewrote yesterday's revenue, and midnight could count twice |
+| Receipts distinguish original, returned, pending and retained money (Returns 7b) | One completed card part looked like the whole mixed return, and paid slots borrowed the table's total |
+| A reprint carries the financial version already issued (Returns 7b) | A later return or provider failure changed the second copy, and the staff dialog dropped its version |
+| Pedidos offers completed-sale returns only to managers (Returns 7b) | Completed orders had no return action, and sharing history with the kitchen would expose money |
+
 | This phone can continue its own held parts (split audit 2) | A lost reservation answer left every part disabled before any Stripe page existed |
 | A receipt and its activity share one identity (split audit 4) | A failed balance read skipped the log and duplicate collection retries never repaired it |
 | A refused or expired slot attempt retires whole (split audit 3) | Separate slot and fee releases stranded an open attempt after one cleanup failed |
@@ -5394,3 +5403,77 @@ the remaining parts are paid. It never substitutes the table's dishes or
 current currency. Both language cases failed when the route required an order.
 Kitchen and unauthenticated callers are refused before financial reads, and a
 payment cannot be sent to the kitchen printer.
+
+
+## Completed returns preserve the sale (Returns 7b)
+
+The order and the return plan have to agree without cancelling a meal already
+served. `returns-components.spec.ts` exercises mixed principal/tip receipts,
+forgiveness followed by a full return, service exhaustion and duplicate-payment
+refusal through the preparation RPC. The route never rewrites orders, coupons or
+stock itself. These mocked answers do not prove the database's component rules;
+Claude owns the SQL and transaction gates.
+
+## One request per return reference (Returns 7b)
+
+The reviewed snapshot and its retry have to agree even when the first answer
+was lost. `returns-references.spec.ts` checks identical and conflicting refs,
+stale distinct refs and replay after zero. `order-return.spec.tsx` checks the
+reason requirement and an unchanged body/reference after a lost reply. Closing
+the dialog does not discard its request; an explicit discard remains available.
+
+## Actual card coverage before another POST (Returns 7b)
+
+The provider's refunds and the saved promise have to agree. Discovery runs
+before `start_refund_attempt`, pages every refund and records verified saved
+manual attribution first. `returns-provider.spec.ts` checks manual 40 plus app
+60, unassigned manual review, sequential operation keys, foreign currency and
+legacy exact cancellation recovery. `returns-boundary.spec.ts` verifies that a
+manager cannot substitute client-reported provider amounts or another charge.
+An operation-only partial tag is never proof the whole promise was returned.
+
+## Expired unknown provider keys (Returns 7b)
+
+The saved attempt and Stripe's finite key lifetime have to agree. After 23 hours,
+an unknown attempt without durable provider evidence stays pending for review;
+it cannot POST again on the assumption that no refund was found. The expired-key
+case in `returns-provider.spec.ts` fails if a second POST becomes possible.
+This never holds up selling, collecting, navigation or signing out.
+
+## Original sales and dated returns (Returns 7b)
+
+The reduced live bill and historical sales readers have to agree about which
+day earned the sale. `returns-reporting.spec.ts` and `returns-readers.spec.ts`
+restore immutable components for analytics/products/average tickets, preserve
+forgiveness, and date each completed operation separately across local midnight.
+An exact upper-bound timestamp belongs only to the next day. Pending and failed
+operations do not leave a drawer; imported log deductions remain deduplicated.
+A reduction racing a read asks for retry instead of inventing a new sale total.
+
+## Return amounts on every receipt (Returns 7b)
+
+The reserved plan and the receipt have to agree without calling an unfinished
+cash part returned. `returns-reporting.spec.ts` and
+`returns-receipt-source.spec.ts` cover original/completed/pending/retained totals,
+methods, manual partial coverage and slot-payment allocations. The same renderer
+feeds plain text, email and print. A failed financial read cannot issue a
+plausible-looking receipt with missing return money.
+
+## Issued copies stay issued (Returns 7b)
+
+The first receipt and its reprint have to agree even after another return or a
+provider failure. A signed financial version preserves the issued amounts and
+outcomes; the reader verifies restaurant, receipt identity and currency.
+`returns-receipt-source.spec.ts` rejects tampering and cross-tenant reuse.
+`return-reprint.spec.tsx` reproduces the staff dialog dropping its version and
+checks that it resends the issued copy, resetting it only for a different order.
+
+## Completed-sale return action (Returns 7b)
+
+The role that can see a return and the role that can authorize it have to agree.
+Only owners/managers get completed history and returns on Pedidos; cashiers,
+waiters and kitchen cannot prepare, attribute or finish through the API.
+`order-return.spec.tsx`, `returns-boundary.spec.ts` and the updated access
+invariant cover the screen and server boundary. The API cases prepare/replay a
+private completed cash/terminal sale and confirm its payout twice. The layout
+list names both return dialogs; Claude runs it and inspects 390/1280 screenshots.

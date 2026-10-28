@@ -317,10 +317,11 @@ dishes on a bill the restaurant has just cancelled.
   settled by card at its terminal, and a table's bill paid online in one go.
   The payment stays on the ledger, where `pnpm money` already expects it of a
   cancelled order. `payments.amount` must be above zero, so the handback is
-  not a negative payment: every paid cancel writes one `refunded` line per
-  amount given back — `order=… amount=… method=… collector=…` — naming who TOOK
-  the money, and the corte takes it out of that person's drawer, or off the
-  online total when nobody did. The write that moves the order to `cancelled`
+  not a negative payment: typed refund operations reserve the original
+  allocations, and the corte deducts each one only after completion, from the
+  confirmed payout drawer or the online total. Historical `refunded` log lines
+  remain readable and are not counted twice when a typed import names them.
+  The write that moves the order to `cancelled`
   is conditional on the status it read, so of two cancels racing only one
   writes a handback or puts stock back. Without the write-off rule the ledger was right and
   every screen showing live work was wrong: the pass kept tickets for a table
@@ -2425,3 +2426,61 @@ write-off event identified by `operation_ref`. The event must equal forgiveness
 plus whole-order losses from the same transaction, actor, restaurant and
 currency; ambiguous whole-order membership fails. Cancel adjustments retain
 their cancellation meaning. Whole orders do not yet carry an operation ID.
+
+
+## Returns on completed sales
+
+An owner or manager can find a completed, paid sale in Pedidos or Analytics
+and choose **Devolver / Return**. The amount is positive, no greater than the
+retained total, and a reason is required. The sale stays paid and completed;
+its meal, stock, coupon use, account and split history do not reopen.
+Forgiveness stays a loss: only money actually collected can be returned.
+
+`POST /api/order-refunds` prepares with `action: prepare`, a UUID reference,
+integer cents and the exact total/tip/service snapshot the manager reviewed.
+Tenant and actor come from current membership. `return_on_order_v1` alone
+reserves the complete plan and lowers the live components. It reduces principal
+before tip, sharing food and service in cents, with food winning a tie. A saved
+reference replays the same request even after a full return reaches zero;
+a changed request conflicts. The form keeps the exact request after a lost
+reply and across closing and reopening the dialog. Another sale, payment or
+sign-out never waits for a return or provider review.
+
+Pending operations remain visible on Pedidos and in Bills. Cash and the
+restaurant's own terminal require explicit confirmation after giving money
+back, naming the original collector's drawer or the manager's. The original
+collector remains recorded separately. Execution uses
+`finish_refund_operation_v2`; the older cancellation preparation stays supported.
+A duplicate charge remains on `refunds_due` and never reduces the sale.
+
+Before a Stripe POST, discovery pages the original account's charge refunds
+and checks saved app attempts, explicit manual attribution and duplicate-refund
+evidence. Unattributed manual refunds need review. A manager can name an
+existing Stripe refund, but the server retrieves its amount, status, intent and
+currency from Stripe before `record_order_return_coverage_v1`. A saved manual
+40 against a promise of 100 permits a new attempt for only 60. Each attempt
+uses its saved operation-scoped key and original account/currency. Unresolved
+requests keep their exact body; an expired unknown key cannot authorize another
+POST. Fee completion remains separate through charge-wide recovery.
+
+Sales analytics and product contribution restore every immutable return delta
+before computing the original sale on its original day. Forgiveness is not
+restored as earnings. A separate return total uses each operation's completion
+date with half-open local-day bounds. Pending promises show their outstanding
+amount separately. Corte, collected-today, cash-shift cutoffs and signed terminal
+deposit manifests continue reading completed typed operations without duplicate
+legacy log deductions. Partial provider coverage does not complete an operation.
+
+Email, plain text, thermal print and staff reprints show original, returned,
+pending and retained amounts, methods and original currency. Slot receipts
+follow their own payment allocations. Verified partial coverage is shown as
+partial, never the whole promise. Issued return versions carry a signed
+financial copy, scoped to their restaurant and receipt, so a later return or
+provider failure cannot rewrite paper already issued. Legacy versions continue
+to reconstruct the original bill. Return copies have no expiry; they use the
+existing server signing secret and need the same secret for later verification.
+
+The completed-sale API cases and both dialog openers are registered for Claude's
+integration and browser gates. Unit RPC fixtures verify the TypeScript boundary;
+real transaction races, SQL enforcement and 390/1280 screenshots remain release
+checks owned by Claude.

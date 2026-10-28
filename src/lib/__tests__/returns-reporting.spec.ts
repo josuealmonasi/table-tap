@@ -57,3 +57,10 @@ describe("a return keeps the sale and has its own completion day", () => {
     }
   });
 });
+
+it("uses an exclusive upper bound so an exact-midnight return belongs to one day", async () => {
+  fixture.tables.refund_operations = [{ id: "midnight", restaurant_id: "r1", currency: "MXN", source: "cash", amount: 10,
+    status: "succeeded", completed_at: "2026-10-29T06:00:00Z", payout_actor: "manager" }];
+  expect(await returnedAdjustments("r1", "2026-10-28T06:00:00Z", "2026-10-29T06:00:00Z", "MXN")).toEqual([]);
+  expect(await returnedAdjustments("r1", "2026-10-29T06:00:00Z", "2026-10-30T06:00:00Z", "MXN")).toHaveLength(1);
+});

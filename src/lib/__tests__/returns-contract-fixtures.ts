@@ -22,6 +22,8 @@ export function returnFixture() {
     const q = {
       select: () => q, order: () => q,
       eq: (key: string, value: unknown) => { filters.push(row => row[key] === value); return q; },
+      in: (key: string, values: unknown[]) => { filters.push(row => values.includes(row[key])); return q; },
+      lt: (key: string, value: string) => { filters.push(row => String(row[key]) < value); return q; },
       neq: (key: string, value: unknown) => { filters.push(row => row[key] !== value); return q; },
       is: (key: string, value: unknown) => { filters.push(row => (row[key] ?? null) === value); return q; },
       gte: (key: string, value: string) => { filters.push(row => String(row[key]) >= value); return q; },

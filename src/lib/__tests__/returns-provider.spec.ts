@@ -11,7 +11,7 @@ vi.mock("@/lib/refunds/fee", () => ({ syncReturnedFee: syncFee }));
 import { executeOrderRefund } from "@/lib/refunds/operations";
 
 const attempt = (operation: string, amount = 100) => ({ id: `${operation}-attempt-1`, operation_id: operation,
-  operation_status: "pending", attempt_no: 1, amount, currency: "MXN", stripe_account_id: "acct_1",
+  operation_status: "pending", attempt_no: 1, amount, outstanding_cents: Math.round(amount * 100), created_at: new Date().toISOString(), currency: "MXN", stripe_account_id: "acct_1",
   stripe_payment_intent: "pi_1", idempotency_key: `return-${operation}-1` });
 let fixture: ReturnType<typeof returnFixture>;
 beforeEach(() => {
@@ -28,7 +28,11 @@ describe("card returns keep operation identity and actual customer coverage", ()
   it("gives two sequential returns on one charge their own first-attempt key", async () => {
     fixture.tables.refund_operations.forEach(row => { row.amount = 30; });
     rpc.mockImplementation(async (name, args) => ({ data: name === "start_refund_attempt" ? attempt(args.p_operation, 30)
-      : name === "finish_refund_operation_v2" ? { outcome: "completed", outstanding_cents: 0 } : true, error: null }));
+      : name === "finish_refund_operation_v2" ? (() => {
+        (fixture.tables.refund_attempts ??= []).push({ ...attempt(args.p_operation, 30), restaurant_id: "r1", origin: "app",
+          stripe_refund_id: args.p_refunds[0].id });
+        return { outcome: "completed", outstanding_cents: 0 };
+      })() : true, error: null }));
     let serial = 0;
     const { client, calls } = fakeStripe({ currency: "mxn", create: async () => ({ id: `re_${++serial}`, status: "succeeded", currency: "mxn", payment_intent: "pi_1" }) });
     expect(await executeOrderRefund("r1", "return-one", "manager", client)).toBe(true);
@@ -84,4 +88,40 @@ describe("card returns keep operation identity and actual customer coverage", ()
     const callsInOrder = rpc.mock.calls.map(([name]) => name);
     expect(callsInOrder.indexOf("record_order_return_coverage_v1")).toBeLessThan(callsInOrder.indexOf("start_refund_attempt"));
   });
+
+  it("does not use an operation-only partial tag as proof of the whole return", async () => {
+    rpc.mockImplementation(async name => ({ data: name === "start_refund_attempt" ? attempt("return-one") : true, error: null }));
+    const made = [{ id: "re_partial", amount: 4000, currency: "mxn", payment_intent: "pi_1", status: "succeeded",
+      metadata: { refund_operation: "return-one" } }] as unknown as Stripe.Refund[];
+    const { client, calls } = fakeStripe({ currency: "mxn", made });
+    expect(await executeOrderRefund("r1", "return-one", "manager", client)).toBe(false);
+    expect(calls.create).not.toHaveBeenCalled();
+    expect(rpc).not.toHaveBeenCalledWith("finish_refund_operation", expect.anything());
+  });
+
+  it("does not create again when an unknown POST's saved key has expired", async () => {
+    rpc.mockResolvedValue({ data: { ...attempt("return-one"), created_at: "2020-01-01T00:00:00Z" }, error: null });
+    const { client, calls } = fakeStripe({ currency: "mxn" });
+    expect(await executeOrderRefund("r1", "return-one", "manager", client)).toBe(false);
+    expect(calls.create).not.toHaveBeenCalled();
+  });
+
+  it("refuses provider evidence in another currency before booking completion", async () => {
+    rpc.mockImplementation(async name => ({ data: name === "start_refund_attempt" ? attempt("return-one") : true, error: null }));
+    const { client } = fakeStripe({ currency: "mxn", create: async () => ({ id: "re_wrong", amount: 10000,
+      currency: "usd", payment_intent: "pi_1", status: "succeeded" }) });
+    expect(await executeOrderRefund("r1", "return-one", "manager", client)).toBe(false);
+    expect(syncFee).not.toHaveBeenCalled();
+  });
+});
+
+it("recovers an exact legacy cancellation tag without mistaking a partial for the whole promise", async () => {
+  fixture.tables.refund_attempts = [{ ...attempt("return-one"), restaurant_id: "r1", origin: "app", idempotency_key: "cancel-original" }];
+  rpc.mockImplementation(async name => ({ data: name === "start_refund_attempt" ? { ...attempt("return-one"), idempotency_key: "cancel-original" }
+    : { outcome: "completed", outstanding_cents: 0 }, error: null }));
+  const made = [{ id: "re_legacy", amount: 10000, currency: "mxn", payment_intent: "pi_1", status: "succeeded",
+    metadata: { refund_operation: "return-one" } }] as unknown as Stripe.Refund[];
+  const { client, calls } = fakeStripe({ currency: "mxn", made });
+  expect(await executeOrderRefund("r1", "return-one", "manager", client)).toBe(true);
+  expect(calls.create).not.toHaveBeenCalled();
 });

@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import type { ReceiptVersion } from "@/lib/receipt";
+import { useRef, useState } from "react";
 import { Modal } from "@/components/ui/Modal";
 import { useLocale, useT } from "@/lib/i18n/context";
 import { useToast } from "@/components/ui/Toast";
@@ -43,6 +44,8 @@ export default function OrderDetailDialog({
   const { locale } = useLocale();
   const toast = useToast();
   const [busy, setBusy] = useState<"kitchen" | "receipt" | null>(null);
+  const issued = useRef<{ orderId: string; version?: ReceiptVersion }>({ orderId: order.id });
+  if (issued.current.orderId !== order.id) issued.current = { orderId: order.id };
   const placed = new Date(order.created_at);
 
   /**
@@ -55,16 +58,18 @@ export default function OrderDetailDialog({
   async function print(to: "kitchen" | "receipt"): Promise<void> {
     if (busy || (to === "receipt" && !money)) return;
     setBusy(to);
+    const copy = issued.current;
     try {
       const res = await fetch("/api/orders/print", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ orderId: order.id, to }),
+        body: JSON.stringify({ orderId: order.id, to, ...(to === "receipt" ? { version: copy.version } : {}) }),
       });
       const data = (await res.json().catch(() => ({}))) as {
         queued?: boolean;
         html?: string;
         error?: string;
+        version?: ReceiptVersion;
       };
       if (!res.ok) {
         toast(data.error ?? t("done.networkError"), "error");
@@ -74,6 +79,9 @@ export default function OrderDetailDialog({
         toast(t("orders.sentToKitchen"));
         return;
       }
+      // Keep the version this print issued, even if another return completes
+      // before the person asks for a second copy in this dialog.
+      if (issued.current === copy && data.version) copy.version = data.version;
       const w = window.open("", "_blank", "width=380,height=640");
       if (!w) {
         // A blocked pop-up must not look like a printed ticket.

@@ -1,3 +1,5 @@
+import type { ReturnComponents } from "@/lib/return-components";
+import { receiptReturnRows, type ReceiptReturn } from "@/lib/receipt-returns";
 import { receiptCents } from "@/lib/receipt-amount";
 import { formatMoney } from "@/lib/format";
 import { lineUnitPrice, orderCode, type OrderLineItem } from "@/lib/types";
@@ -15,6 +17,8 @@ export interface ReceiptOrder {
   created_at: string;
   pay_method?: string | null;
   forgiveness?: ReceiptForgiveness;
+  return_components?: ReturnComponents;
+  returns?: ReceiptReturn[];
 }
 
 export interface ReceiptForgiveness {
@@ -29,9 +33,11 @@ export interface ReceiptForgiveness {
 }
 
 /** Keep the adjustments this copy included, so a later loss cannot rewrite it. */
-export interface ReceiptVersion { adjustmentIds: string[] }
+export interface ReceiptVersion { adjustmentIds: string[]; returnCopy?: string; slotCopy?: string }
 
 export interface SlotReceiptPayment {
+  return_components?: ReturnComponents;
+  returns?: ReceiptReturn[];
   id: string;
   amount: number | string;
   tip: number | string;
@@ -84,18 +90,19 @@ export function buildReceipt(
   const code = payment ? `PAY-${payment.id.slice(0, 8).toUpperCase()}` : orderCode(order.id);
   const sum = (pick: (o: ReceiptOrder) => number) => orders.reduce((n, o) => n + pick(o), 0);
   const discount = sum(o => num(o.discount));
-  const service = payment ? 0 : sum(o => num(o.forgiveness?.previous_service_fee ?? o.service_fee));
-  const tip = payment ? num(payment.tip) : sum(o => num(o.forgiveness?.previous_tip ?? o.tip));
+  const service = payment ? 0 : sum(o => num(o.forgiveness?.previous_service_fee ?? (num(o.service_fee) + num(o.return_components?.service_fee))));
+  const tip = payment ? num(payment.tip) : sum(o => num(o.forgiveness?.previous_tip ?? (num(o.tip) + num(o.return_components?.tip))));
   const gross = sum(o => num(o.subtotal)) + discount;
-  const paid = payment ? num(payment.amount) : sum(o => num(o.total));
+  const paid = payment ? num(payment.amount) - num(payment.return_components?.total) : sum(o => num(o.total));
   const forgiven = sum(o => num(o.forgiveness?.forgiven));
   const original = sum(o => receiptCents(o.forgiveness?.previous_total ?? o.total)) / 100;
-  const totalLabel = t(forgiven > 0 || payment ? "receipt.paid" : "totals.total");
+  const returnRows = receiptReturnRows(payment ? [{ ...payment, total: paid }] : orders, t);
+  const totalLabel = t(returnRows.length ? "receipt.retained" : forgiven > 0 || payment ? "receipt.paid" : "totals.total");
 
   // Parts already include old gratuities. Show their principal once and the
   // receipt's full tip once; adding that tip to the frozen parts counts it twice.
   const lines = payment ? [{ label: t("receipt.parts", { parts: payment.slots.map(n => n + 1).join(", ") }),
-    amount: paid - tip }] : orders.flatMap(o =>
+    amount: num(payment.amount) - tip }] : orders.flatMap(o =>
     (o.items ?? []).map(item => ({
       label: `${item.qty}× ${item.name}`,
       amount: lineUnitPrice(item) * item.qty,
@@ -117,6 +124,8 @@ export function buildReceipt(
     rows.push([t("receipt.originalBill"), formatMoney(original, cur)]);
     rows.push([t("receipt.forgiven"), `−${formatMoney(forgiven, cur)}`]);
   }
+
+  rows.push(...returnRows);
 
   // Stamped in the restaurant's own time, not the server's. Left to the
   // server, a receipt for an eight o'clock dinner in Mexico City comes out of

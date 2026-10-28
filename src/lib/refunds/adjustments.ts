@@ -11,7 +11,7 @@ export async function returnedAdjustments(restaurantId: string, from: string, to
     let q = db.from("refund_operations").select("source, amount, payout_actor")
       .eq("restaurant_id", restaurantId).eq("status", "succeeded").is("historical_log_id", null).gte("completed_at", from);
     if (currency) q = q.eq("currency", currency);
-    if (to) q = q.lte("completed_at", to);
+    if (to) q = q.lt("completed_at", to);
     return q.order("id").range(a, b);
   }, "the completed order returns");
   return rows.map(r => ({ action: "refunded", detail: logDetail({
