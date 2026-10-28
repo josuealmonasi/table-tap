@@ -16,9 +16,10 @@ it("runs under the money lock and is callable by the server only", () => {
   expect(drop).toContain(`drop function if exists public.${fn};`);
 });
 
-it("forgives only what part-paid orders still owe, and never while money could still arrive", () => {
+it("forgives only what part-paid orders still owe, writes unpaid ones off whole, and never while money could still arrive", () => {
   const f = body("write_off_remainder_v1");
-  expect(f).toContain("if o.covered <= 0 then return jsonb_build_object('outcome', 'unpaid'");
+  expect(f).toContain("if o.covered <= 0 then v_whole := v_whole + round(o.total * 100)::int;");
+  expect(f).toContain("update orders set written_off = true, write_off_reason = p_reason");
   expect(f).toContain("if v_owed <> p_expected_cents then");
   for (const refusal of ["'unresolved'", "'paying'", "'split'"]) expect(f).toContain(refusal);
   // The order ends at what was paid, paid and completed: completed does not restock.

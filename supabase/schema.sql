@@ -11412,9 +11412,10 @@ drop trigger if exists guard_order_adjustment on order_adjustments;
 create trigger guard_order_adjustment before update on order_adjustments
   for each row when (old.kind = 'forgive') execute function public.guard_order_adjustment();
 
--- Forgives what part-paid orders still owe. Only orders with money against
--- them: a wholly unpaid order is a whole write-off (`write_off_orders`), and
--- one with no money is answered `unpaid` so the route can send it there.
+-- Writes a walked-out table off in one transaction: orders with money against
+-- them are forgiven the rest (an adjustment each), orders with none are written
+-- off whole, exactly as `write_off_orders` does. One ask, one approval, one
+-- outcome, so a failure between the two kinds cannot leave half of it done.
 create or replace function public.write_off_remainder_v1(
   p_restaurant uuid, p_orders uuid[], p_expected_cents int, p_currency text,
   p_actor text, p_reason text, p_note text, p_ref uuid, p_request uuid
@@ -11422,6 +11423,7 @@ create or replace function public.write_off_remainder_v1(
 declare
   o record;
   v_owed int := 0;
+  v_whole int := 0;
   v_count int;
   v_adjustment uuid;
   v_tip numeric;
@@ -11439,8 +11441,9 @@ begin
   perform set_config('tabletap.allocation_scope', '', true);
 
   if exists (select 1 from order_adjustments where restaurant_id = p_restaurant and operation_ref = p_ref) then
-    if (select array_agg(order_id order by order_id) from order_adjustments where restaurant_id = p_restaurant and operation_ref = p_ref)
-      is distinct from (select array_agg(x order by x) from unnest(p_orders) x) then
+    -- Unpaid orders written off whole carry no adjustment: the adjusted ones
+    -- must be among this request's, not all of them.
+    if not ((select array_agg(order_id) from order_adjustments where restaurant_id = p_restaurant and operation_ref = p_ref) <@ p_orders) then
       return jsonb_build_object('outcome', 'conflict');
     end if;
     return jsonb_build_object('outcome', 'repeat', 'forgiven_cents',
@@ -11467,13 +11470,23 @@ begin
   end if;
   for o in select x.id, x.total, x.tip, x.currency, public.retained_order_coverage(p_restaurant, x.id) as covered
     from orders x where x.id = any(p_orders) order by x.id loop
-    if o.covered <= 0 then return jsonb_build_object('outcome', 'unpaid', 'order', o.id); end if;
-    v_owed := v_owed + round((o.total - o.covered) * 100)::int;
+    if o.covered <= 0 then v_whole := v_whole + round(o.total * 100)::int;
+    else v_owed := v_owed + round((o.total - o.covered) * 100)::int; end if;
   end loop;
-  if v_owed <> p_expected_cents then return jsonb_build_object('outcome', 'changed', 'owed_cents', v_owed); end if;
+  if v_owed + v_whole <> p_expected_cents then
+    return jsonb_build_object('outcome', 'changed', 'owed_cents', v_owed + v_whole);
+  end if;
 
   for o in select x.id, x.total, x.tip, public.retained_order_coverage(p_restaurant, x.id) as covered
     from orders x where x.id = any(p_orders) order by x.id loop
+    if o.covered <= 0 then
+      -- Nothing was paid: the whole order is the loss, as write_off_orders records it.
+      update orders set written_off = true, write_off_reason = p_reason, write_off_note = nullif(btrim(p_note), ''),
+        written_off_by = p_actor, written_off_at = now(), status = 'completed'
+       where id = o.id and restaurant_id = p_restaurant;
+      v_ids := v_ids || o.id;
+      continue;
+    end if;
     -- The tip that was actually paid stays the tip; the forgiven part is the rest.
     select coalesce(sum(a.tip), 0) - coalesce((select sum(r.tip) from refund_allocations r
       join payment_allocations pa on pa.id = r.allocation_id where pa.order_id = o.id), 0)
@@ -11496,7 +11509,7 @@ begin
     update write_off_requests set status = 'approved', decided_by = p_actor, decided_at = now()
      where id = p_request and restaurant_id = p_restaurant and status = 'pending';
   end if;
-  return jsonb_build_object('outcome', 'forgiven', 'forgiven_cents', v_owed, 'orderIds', to_jsonb(v_ids),
+  return jsonb_build_object('outcome', 'forgiven', 'forgiven_cents', v_owed, 'written_off_cents', v_whole, 'orderIds', to_jsonb(v_ids),
     'sessions', coalesce(to_jsonb(v_sessions), '[]'::jsonb));
 end; $$;
 revoke all on function public.write_off_remainder_v1(uuid, uuid[], int, text, text, text, text, uuid, uuid) from public, anon, authenticated;
