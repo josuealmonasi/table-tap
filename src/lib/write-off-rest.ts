@@ -15,9 +15,18 @@ export async function coverageByOrder(restaurantId: string, orderIds: string[]):
   return paid;
 }
 
-/** What a table still owes, in cents: the rest of part-paid orders and the whole of unpaid ones. */
+/**
+ * What a table still owes, in cents: the rest of part-paid orders and the whole
+ * of unpaid ones. Each amount is rounded to cents before subtracting, exactly
+ * as write_off_remainder_v1 counts them: subtracting first gave 67 cents for an
+ * unscaled 2.675 less 2.00 where Postgres gave 68 (write-off audit #8).
+ */
 export function owedCents(orders: Pick<Order, "id" | "total">[], paid: Map<string, number>): number {
-  return orders.reduce((sum, o) => sum + Math.round((Number(o.total) - (paid.get(o.id) ?? 0)) * 100), 0);
+  return orders.reduce((sum, o) => {
+    const covered = paid.get(o.id) ?? 0;
+    const total = Math.round(Number(o.total) * 100);
+    return sum + (covered <= 0 ? total : Math.max(total - Math.round(covered * 100), 0));
+  }, 0);
 }
 
 export type RestOutcome =

@@ -115,13 +115,8 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     });
     if (done.outcome !== "forgiven") return await apiError(REST_REFUSAL[done.outcome] ?? "apiErr.generic", done.outcome === "failed" ? 500 : 409);
     const lost = (done.forgivenCents + done.writtenOffCents) / 100;
-    await logEvent({
-      restaurantId: actor.restaurantId, actor: actor.email, entity: "bill", action: "written_off",
-      orderIds: done.orderIds,
-      detail: logDetail({ table: request.table_label ?? "", amount: lost.toFixed(2), paid: paid.toFixed(2), kind: "rest",
-        reason: request.reason, requestedBy: request.requested_by, note: request.note ?? null }),
-      targetEmail: request.requested_by,
-    });
+    // The loss is recorded by write_off_remainder_v1 itself, in the same
+    // transaction: a log written here could fail after the commit (write-off audit #2).
     return NextResponse.json({ ok: true, approved: true, amount: lost, paid });
   }
 

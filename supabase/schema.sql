@@ -11393,10 +11393,16 @@ alter table order_adjustments add column if not exists reason text;
 alter table order_adjustments add column if not exists note text;
 alter table order_adjustments add column if not exists operation_ref uuid;
 alter table order_adjustments add column if not exists request_id uuid;
+-- The service charge comes down with the food it was charged on, so reports
+-- never show a service component larger than what was kept (audit #5).
+alter table order_adjustments add column if not exists previous_service_fee numeric;
+alter table order_adjustments add column if not exists resulting_service_fee numeric;
 alter table order_adjustments drop constraint if exists order_adjustments_forgive_check;
 alter table order_adjustments add constraint order_adjustments_forgive_check check (kind <> 'forgive' or (
   resulting_total is not null and resulting_tip is not null and forgiven is not null and forgiven > 0
-  and forgiven = round(forgiven, 2) and resulting_total >= 0 and previous_total - resulting_total = forgiven
+  and forgiven = round(forgiven, 2) and resulting_total >= 0
+  -- Rounded: older orders can carry unscaled totals such as 2.675 (audit #8).
+  and round(previous_total - resulting_total, 2) = forgiven
   and currency in ('MXN', 'USD') and reason is not null and operation_ref is not null));
 create unique index if not exists order_adjustments_forgive_once on order_adjustments (restaurant_id, operation_ref, order_id)
   where operation_ref is not null;
@@ -11404,12 +11410,17 @@ create unique index if not exists order_adjustments_forgive_once on order_adjust
 create or replace function public.guard_order_adjustment()
 returns trigger language plpgsql security definer set search_path = public as $$
 begin
-  if tg_op = 'DELETE' then raise exception 'an order adjustment is a record and stays'; end if;
+  -- A cascade (the restaurant, then its orders, being deleted) runs this one
+  -- level deeper than a statement aimed at the record itself (audit #7).
+  if tg_op = 'DELETE' then
+    if pg_trigger_depth() > 1 then return old; end if;
+    raise exception 'an order adjustment is a record and stays';
+  end if;
   raise exception 'an order adjustment is immutable';
 end $$;
 revoke all on function public.guard_order_adjustment() from public, anon, authenticated;
 drop trigger if exists guard_order_adjustment on order_adjustments;
-create trigger guard_order_adjustment before update on order_adjustments
+create trigger guard_order_adjustment before update or delete on order_adjustments
   for each row when (old.kind = 'forgive') execute function public.guard_order_adjustment();
 
 -- Writes a walked-out table off in one transaction: orders with money against
@@ -11422,13 +11433,19 @@ create or replace function public.write_off_remainder_v1(
 ) returns jsonb language plpgsql security definer set search_path = public as $$
 declare
   o record;
+  v_request write_off_requests%rowtype;
   v_owed int := 0;
   v_whole int := 0;
+  v_rest int;
   v_count int;
   v_adjustment uuid;
   v_tip numeric;
+  v_principal numeric;
+  v_service numeric;
   v_ids uuid[] := '{}';
   v_sessions uuid[];
+  v_label text;
+  v_paid numeric := 0;
 begin
   if p_orders is null or cardinality(p_orders) = 0 or cardinality(p_orders) <> (select count(distinct x) from unnest(p_orders) x)
     or p_expected_cents is null or p_expected_cents <= 0 or p_currency not in ('MXN', 'USD')
@@ -11440,14 +11457,22 @@ begin
   perform public.backfill_payment_allocations(p_restaurant);
   perform set_config('tabletap.allocation_scope', '', true);
 
-  if exists (select 1 from order_adjustments where restaurant_id = p_restaurant and operation_ref = p_ref) then
-    -- Unpaid orders written off whole carry no adjustment: the adjusted ones
-    -- must be among this request's, not all of them.
-    if not ((select array_agg(order_id) from order_adjustments where restaurant_id = p_restaurant and operation_ref = p_ref) <@ p_orders) then
-      return jsonb_build_object('outcome', 'conflict');
-    end if;
+  -- The same operation answered twice: its record is the answer.
+  if exists (select 1 from user_logs where id = p_ref) then
     return jsonb_build_object('outcome', 'repeat', 'forgiven_cents',
-      (select round(sum(forgiven) * 100) from order_adjustments where restaurant_id = p_restaurant and operation_ref = p_ref));
+      coalesce((select round(sum(forgiven) * 100) from order_adjustments where restaurant_id = p_restaurant and operation_ref = p_ref), 0));
+  end if;
+
+  -- An approval decides its request first, under a lock: a request another
+  -- manager rejected meanwhile forgives nothing (audit #1). Same orders, same
+  -- amount the waiter asked for, still pending.
+  if p_request is not null then
+    select * into v_request from write_off_requests where id = p_request and restaurant_id = p_restaurant for update;
+    if not found or v_request.status <> 'pending' then return jsonb_build_object('outcome', 'gone'); end if;
+    if (select array_agg(x order by x) from unnest(v_request.order_ids) x) is distinct from (select array_agg(x order by x) from unnest(p_orders) x)
+      or round(v_request.amount * 100) <> p_expected_cents then
+      return jsonb_build_object('outcome', 'changed');
+    end if;
   end if;
 
   perform 1 from orders where id = any(p_orders) and restaurant_id = p_restaurant order by id for update;
@@ -11468,23 +11493,33 @@ begin
     and b.session_id in (select session_id from orders where id = any(p_orders))) then
     return jsonb_build_object('outcome', 'split');
   end if;
-  for o in select x.id, x.total, x.tip, x.currency, public.retained_order_coverage(p_restaurant, x.id) as covered
-    from orders x where x.id = any(p_orders) order by x.id loop
+  -- In cents the way the screen counts them, so an unscaled legacy total
+  -- (2.675) agrees with the route (audit #8).
+  for o in select x.id, x.total, public.retained_order_coverage(p_restaurant, x.id) as covered
+    from orders x where x.id = any(p_orders) loop
     if o.covered <= 0 then v_whole := v_whole + round(o.total * 100)::int;
-    else v_owed := v_owed + round((o.total - o.covered) * 100)::int; end if;
+    else v_owed := v_owed + greatest(round(o.total * 100)::int - round(o.covered * 100)::int, 0); end if;
+    v_paid := v_paid + greatest(o.covered, 0);
   end loop;
   if v_owed + v_whole <> p_expected_cents then
     return jsonb_build_object('outcome', 'changed', 'owed_cents', v_owed + v_whole);
   end if;
 
-  for o in select x.id, x.total, x.tip, public.retained_order_coverage(p_restaurant, x.id) as covered
+  for o in select x.id, x.total, x.tip, x.service_fee, public.retained_order_coverage(p_restaurant, x.id) as covered
     from orders x where x.id = any(p_orders) order by x.id loop
+    v_ids := v_ids || o.id;
     if o.covered <= 0 then
       -- Nothing was paid: the whole order is the loss, as write_off_orders records it.
       update orders set written_off = true, write_off_reason = p_reason, write_off_note = nullif(btrim(p_note), ''),
         written_off_by = p_actor, written_off_at = now(), status = 'completed'
        where id = o.id and restaurant_id = p_restaurant;
-      v_ids := v_ids || o.id;
+      continue;
+    end if;
+    v_rest := round(o.total * 100)::int - round(o.covered * 100)::int;
+    if v_rest <= 0 then
+      -- Fully covered already, its last cent on another order of the table
+      -- (largest-remainder allocation): settled, with nothing to forgive (audit #4).
+      update orders set paid = true, status = 'completed' where id = o.id and restaurant_id = p_restaurant;
       continue;
     end if;
     -- The tip that was actually paid stays the tip; the forgiven part is the rest.
@@ -11492,25 +11527,43 @@ begin
       join payment_allocations pa on pa.id = r.allocation_id where pa.order_id = o.id), 0)
       into v_tip from payment_allocations a where a.order_id = o.id;
     v_tip := round(least(greatest(v_tip, 0), o.tip), 2);
+    -- The service charge comes down with the food, in proportion (audit #5).
+    v_principal := o.total - o.tip;
+    v_service := case when v_principal <= 0 then 0
+      else round(least(coalesce(o.service_fee, 0) * (round(o.covered, 2) - v_tip) / v_principal, round(o.covered, 2) - v_tip), 2) end;
+    v_service := greatest(v_service, 0);
     insert into order_adjustments (restaurant_id, order_id, kind, previous_total, previous_tip, actor,
-      resulting_total, resulting_tip, forgiven, currency, reason, note, operation_ref, request_id)
-    values (p_restaurant, o.id, 'forgive', o.total, o.tip, p_actor, round(o.covered, 2), v_tip, o.total - round(o.covered, 2),
-      p_currency, p_reason, nullif(btrim(p_note), ''), p_ref, p_request)
+      resulting_total, resulting_tip, forgiven, currency, reason, note, operation_ref, request_id,
+      previous_service_fee, resulting_service_fee)
+    values (p_restaurant, o.id, 'forgive', o.total, o.tip, p_actor, round(o.covered, 2), v_tip, v_rest / 100.0,
+      p_currency, p_reason, nullif(btrim(p_note), ''), p_ref, p_request, coalesce(o.service_fee, 0), v_service)
     returning id into v_adjustment;
     perform set_config('tabletap.forgive_writer', v_adjustment::text, true);
-    update orders set total = round(o.covered, 2), tip = v_tip, paid = true, status = 'completed'
+    update orders set total = round(o.covered, 2), tip = v_tip, service_fee = v_service, paid = true, status = 'completed'
      where id = o.id and restaurant_id = p_restaurant;
-    v_ids := v_ids || o.id;
   end loop;
   perform set_config('tabletap.forgive_writer', '', true);
+
+  -- The loss, written with the change itself: the corte and analytics read
+  -- it from here, and a log written afterwards could fail and leave the loss
+  -- uncounted (audit #2). Its id is the operation, so it is written once.
+  select table_label into v_label from orders where id = any(v_ids) and table_label is not null limit 1;
+  insert into user_logs (id, restaurant_id, actor_email, entity, action, detail)
+  values (p_ref, p_restaurant, p_actor, 'bill', 'written_off', concat_ws(' ',
+    case when v_label is not null then 'table=' || replace(v_label, ' ', '_') end,
+    'amount=' || trim(to_char((v_owed + v_whole) / 100.0, 'FM9999999990.00')),
+    'paid=' || trim(to_char(round(v_paid, 2), 'FM9999999990.00')),
+    'currency=' || p_currency, 'kind=rest', 'reason=' || replace(p_reason, ' ', '_'),
+    case when v_request.requested_by is not null then 'requestedBy=' || v_request.requested_by end));
+
   select array_agg(distinct session_id) filter (where session_id is not null) into v_sessions
     from orders where id = any(v_ids);
   if p_request is not null then
     update write_off_requests set status = 'approved', decided_by = p_actor, decided_at = now()
      where id = p_request and restaurant_id = p_restaurant and status = 'pending';
   end if;
-  return jsonb_build_object('outcome', 'forgiven', 'forgiven_cents', v_owed, 'written_off_cents', v_whole, 'orderIds', to_jsonb(v_ids),
-    'sessions', coalesce(to_jsonb(v_sessions), '[]'::jsonb));
+  return jsonb_build_object('outcome', 'forgiven', 'forgiven_cents', v_owed, 'written_off_cents', v_whole,
+    'orderIds', to_jsonb(v_ids), 'sessions', coalesce(to_jsonb(v_sessions), '[]'::jsonb));
 end; $$;
 revoke all on function public.write_off_remainder_v1(uuid, uuid[], int, text, text, text, text, uuid, uuid) from public, anon, authenticated;
 grant execute on function public.write_off_remainder_v1(uuid, uuid[], int, text, text, text, text, uuid, uuid) to service_role;
