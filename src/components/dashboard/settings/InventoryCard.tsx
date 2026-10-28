@@ -89,7 +89,8 @@ export default function InventoryCard({
               inputMode="numeric"
               style={{ maxWidth: 110 }}
               value={limit}
-              disabled={saving}
+              // Not disabled while a save runs: leaving the field above starts
+              // one, and disabling this threw the cursor out of it (pnpm dialogs).
               onChange={e => setLimit(e.target.value)}
               onBlur={commitLimit}
             />
