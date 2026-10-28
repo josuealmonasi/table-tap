@@ -46,12 +46,12 @@ it("does not replace a history page with a late response from the previous page"
   expect(host.textContent).toContain("ORD-1111"); expect(host.textContent).not.toContain("ORD-2222");
 });
 
-it("refuses a reply for another restaurant and keeps the last good list (Codex's review)", async () => {
+it("refuses a reply for another restaurant and clears this one's list (Codex's review)", async () => {
   await mount();
   await act(async () => { await vi.advanceTimersByTimeAsync(0); });
   expect(host.textContent).toContain("1111");
   state.fetch.mockImplementation(async () => Response.json({ restaurantId: "other", sales: [row("9999-other")] }));
   await act(async () => { await vi.advanceTimersByTimeAsync(31_000); });
   expect(host.textContent).not.toContain("9999");
-  expect(host.textContent).toContain("1111");
+  expect(host.textContent).not.toContain("1111");
 });

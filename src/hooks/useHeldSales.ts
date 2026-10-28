@@ -6,6 +6,9 @@ import { readDashboardJson } from "@/lib/dashboard-read";
 
 interface HeldPage { restaurantId?: string; sales: QueuedOfflineSale[]; hasMore?: boolean }
 
+/** The session now belongs to another restaurant: this tab's list is no longer its to show. */
+class OtherRestaurant extends Error {}
+
 /** A failed read keeps SWR's last good list, like every other dashboard read. */
 async function readSales([, restaurantId, view, page]: [string, string, string, number]): Promise<HeldPage> {
   const url = view === "history" ? `/api/pos/recover?view=history&page=${page}` : "/api/pos/recover";
@@ -13,8 +16,9 @@ async function readSales([, restaurantId, view, page]: [string, string, string, 
   // The page's content sits outside the session-scoped cache, so a tab left
   // open across a sign-in to another restaurant could cache that restaurant's
   // sales under this one's key (Codex's review of #562). A reply for any other
-  // restaurant is refused: the last good list stays, with the error shown.
-  if (page_.restaurantId !== restaurantId) throw new Error("Held sales answered for another restaurant");
+  // restaurant is refused, and the last good list is cleared rather than kept:
+  // this session may no longer see it.
+  if (page_.restaurantId !== restaurantId) throw new OtherRestaurant("Held sales answered for another restaurant");
   return page_;
 }
 
@@ -25,11 +29,12 @@ export function useHeldSales(restaurantId: string, history: boolean, page: numbe
     refreshInterval: 0, revalidateOnFocus: false, revalidateOnReconnect: false,
   });
   const shown = history ? approved : pending;
+  const signedOut = pending.error instanceof OtherRestaurant || approved.error instanceof OtherRestaurant;
   return {
-    rows: (shown.data?.sales ?? []).filter(row => history ? Boolean(row.approved_at) : !row.approved_at),
-    pendingCount: pending.data?.sales.filter(row => !row.approved_at).length,
+    rows: (signedOut ? [] : shown.data?.sales ?? []).filter(row => history ? Boolean(row.approved_at) : !row.approved_at),
+    pendingCount: signedOut ? undefined : pending.data?.sales.filter(row => !row.approved_at).length,
     loading: shown.isLoading,
-    error: Boolean(shown.error),
+    error: Boolean(shown.error) || signedOut,
     hasMore: approved.data?.hasMore === true,
     reload: () => shown.mutate(),
     refreshPending: () => pending.mutate(),
