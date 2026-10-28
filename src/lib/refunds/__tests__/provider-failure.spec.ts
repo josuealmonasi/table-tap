@@ -75,7 +75,10 @@ it("reverses once, under the money lock, scoped to the restaurant and charge, se
 });
 it("audit P 1: only the latest attempt's refund reopens a row; an old attempt's failure cannot undo a retry", () => {
   const reverse = body("reverse_failed_refund_v2");
-  expect(reverse).toContain("if v_latest = v_attempt and o.status in ('succeeded', 'processing') then");
+  // Returns: an operation reopens only when the failure leaves it short and no
+  // app POST is in flight. A retry that already covered it keeps it closed.
+  expect(reverse).toContain("and (public.refund_operation_progress_v1(o.id)->>'outstanding_cents')::int > 0");
+  expect(reverse).toContain("and not (public.refund_operation_progress_v1(o.id)->>'unresolved')::boolean then");
   expect(reverse).toContain("if v_latest = v_attempt and d.refunded_at is not null then");
 });
 it("audit P 1 / Q 2: a success read after its own failure records the failure on the attempt and never completes", () => {
@@ -138,8 +141,8 @@ it("drops everything it adds", () => {
 
 it("audit R 1: the first attempt of a refund completed before attempts existed carries that refund", () => {
   const start = body("start_refund_attempt");
-  expect(start).toContain("case when a.id is null and o.status = 'succeeded' then o.stripe_refund_id end");
-  expect(start).toContain("case when a.id is null and o.status = 'succeeded' then 'succeeded' end");
+  expect(start).toContain("if a.id is null and o.status = 'succeeded' then");
+  expect(start).toContain("o.stripe_account_id, o.stripe_payment_intent, o.stripe_refund_id, 'succeeded') returning * into a;");
 });
 it("audit R 2: a fee request's amount is accepted only under the epoch it was read in; the writes are granted to no one", () => {
   for (const [fn, args] of [["start_refund_due_fee", "uuid, uuid, text, int"], ["advance_refund_due_fee", "uuid, uuid, jsonb, int, int, int, text"]]) {
