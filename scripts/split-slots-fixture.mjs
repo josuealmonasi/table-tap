@@ -48,7 +48,10 @@ export async function splitSlotFixture(admin, restaurantId, { currency = "MXN", 
     attempts.push(id);
     await rpc("diner_checkout_open", { p_record: { id, restaurant_id: restaurantId, stripe_account_id: "acct_split_fixture",
       currency, livemode: false, amount_cents: b.expectedCents, order_ids: [orderId], payable_order_ids: [],
-      scope_key: `split-fixture:${id}`, idempotency_key: `diner:${id}`, metadata, stripe_params: { mode: "payment", metadata },
+      // The card path's own scope: a made-up key made this phone's split read
+      // throw, so the diner saw no parts at all on every gate (#574).
+      scope_key: member ? `split2:${splitId}:1:${member}:${[...slots].sort((a, b) => a - b).join(",")}` : `split-fixture:${id}`,
+      idempotency_key: `diner:${id}`, metadata, stripe_params: { mode: "payment", metadata },
       entitlements: {}, order_discounts: {}, food_principal: totalCents / 100 } });
     const args = { p_restaurant: restaurantId, p_split: splitId, p_revision: 1, p_member: member, p_slots: slots, p_checkout: id };
     const result = await rpc("reserve_split_slots_v1", args);

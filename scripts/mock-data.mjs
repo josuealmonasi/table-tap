@@ -818,13 +818,19 @@ export async function seedMock(pg) {
   // once, a phone that tried to pay one by card and walked off (its attempt
   // expired and gave the slot back), and the waiter collecting another in
   // cash. Every gate then sees a part-paid split it must not break.
-  const dividing = openBills.find(b => b.sessionId !== openBills[0].sessionId
-    && b.sessionId !== openBills[openBills.length - 1].sessionId);
-  if (dividing) {
-    const { rows: [debt] } = await pg.query(
+  // Big enough that each of three parts clears the card minimum (MX$10 /
+  // US$0.50): a smaller random bill had its card hold refused, kept no slot
+  // record, and failed db:mock now and then.
+  let dividing = null, debt = null;
+  for (const b of openBills) {
+    if (b.sessionId === openBills[0].sessionId || b.sessionId === openBills[openBills.length - 1].sessionId) continue;
+    const { rows: [d] } = await pg.query(
       "select * from public.sitting_split_debt($1, $2, $3, clock_timestamp())",
-      [rid, dividing.sessionId, dividing.table.id],
+      [rid, b.sessionId, b.table.id],
     );
+    if (d && d.debt_cents >= 3 * (d.currency === "USD" ? 50 : 1000)) { dividing = b; debt = d; break; }
+  }
+  if (dividing) {
     const { rows: [started] } = await pg.query(
       "select public.start_bill_split_v2($1, $2, $3, null, 3, $4, $5, gen_random_uuid(), 300) as r",
       [rid, dividing.table.id, dividing.sessionId, debt.debt_cents, debt.currency],
@@ -842,7 +848,8 @@ export async function seedMock(pg) {
          jsonb_build_object('demo', 'walked off', 'split_id', $6::text, 'split_model', '2', 'settle_tip', '0'), $3, 'open', $5::uuid) returning id`,
       [rid, debt.currency, debt.order_ids, first.amount_cents, split.split, String(split.split)],
     );
-    await pg.query("select public.reserve_split_slots_v1($1, $2, $3, null, '{0}', $4)", [rid, split.split, split.revision, attempt.id]);
+    const { rows: [held] } = await pg.query("select public.reserve_split_slots_v1($1, $2, $3, null, '{0}', $4) as r", [rid, split.split, split.revision, attempt.id]);
+    if (held.r?.outcome !== "reserved") throw new Error(`demo split hold was refused: ${JSON.stringify(held.r)}`);
     await pg.query("select public.release_split_slots_v1($1, $2)", [rid, attempt.id]);
     await pg.query("update diner_checkouts set status = 'expired' where id = $1", [attempt.id]);
     // The attempt's own record of what it paid for outlives its reservation.
