@@ -1650,6 +1650,12 @@ foundingLeftBody: "Quien contrata ahora conserva este precio de suscripción mie
     anchorage: "Anchorage",
     honolulu: "Honolulu",
   },
+  change: {
+    received: "Recibido",
+    exact: "Exacto",
+    give: "Cambio: {amount}",
+    short: "Faltan {amount}",
+  },
   common: {
     charactersLeft: "Quedan {count} caracteres",
     discardTitle: "¿Descartar tus cambios?",

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import CashChange from "@/components/dashboard/CashChange";
 import { Modal } from "@/components/ui/Modal";
 import { badgesChanged } from "@/hooks/useBadges";
 import WriteOffDialog from "./WriteOffDialog";
@@ -207,6 +208,7 @@ export default function SettleTableDialog({
       ) : (
         <>
           <SettleBillLines bill={{ ...bill, paid: tableBill(orders ?? [], []).paid }} currency={currency} />
+          <CashChange amount={bill.total} currency={currency} />
 
           <div className="tt-bill-actions">
             <button

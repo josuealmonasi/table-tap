@@ -4522,6 +4522,20 @@ a.tt-btn {
   color: var(--tt-sage);
 }
 
+/* Cash: "Recibido" and the change to hand back (CashChange). It reuses the
+   tip chips, so the amounts read as the same kind of option. */
+.tt-cash-change {
+  display: grid;
+  gap: 8px;
+  margin: 4px 0 12px;
+}
+.tt-cash-change-result {
+  margin: 0;
+  /* Holds its line while empty, so typing does not push the buttons down. */
+  min-height: 1.4em;
+  font-weight: 600;
+}
+
 /* Cart: tip percent chips */
 .tt-tip-row {
   display: flex;

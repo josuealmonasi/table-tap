@@ -5,6 +5,7 @@ import DetailOverlay from "@/components/customer/DetailOverlay";
 import { NAME_MAX, NOTE_MAX } from "@/lib/notes";
 import { formatMoney } from "@/lib/format";
 import TipPicker from "@/components/customer/TipPicker";
+import CashChange from "@/components/dashboard/CashChange";
 import type { PosSaleDetails } from "@/hooks/usePosSaleDetails";
 
 interface PosAskProps {
@@ -91,6 +92,8 @@ export default function PosAsk({
           </label>
         </div>
       )}
+
+      {method === "cash" && <CashChange amount={total} currency={currency} />}
 
       <label className="tt-field">
         <span className="tt-mod-label">{t("pos.customerName")}</span>
