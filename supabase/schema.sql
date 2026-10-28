@@ -11200,3 +11200,90 @@ begin
 end; $$;
 revoke all on function public.close_divided_bill_v3(uuid) from public, anon, authenticated;
 grant execute on function public.close_divided_bill_v3(uuid) to service_role;
+
+-- Stripe says a card attempt on a divided bill was paid: settle exactly the
+-- slots that attempt reserved, once. The tip is whatever was charged above
+-- them. If its slots are no longer its own (released after Stripe said the
+-- attempt had expired, then collected another way) or the split is gone, the
+-- money was taken twice: it becomes a refund owed, tip and fee included
+-- (decision 5), never another slot.
+create or replace function public.settle_split_slots_v1(
+  p_restaurant uuid, p_checkout uuid, p_intent text, p_charged_cents int
+) returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  v_checkout diner_checkouts%rowtype;
+  v_split bill_splits%rowtype;
+  v_slots int[]; v_amount int; v_tip int;
+  v_left numeric; v_old_tip numeric;
+  v_payment uuid; v_label text;
+  v_scope text := coalesce(current_setting('tabletap.allocation_scope', true), '');
+begin
+  if nullif(btrim(p_intent), '') is null or p_charged_cents is null or p_charged_cents <= 0 then
+    return jsonb_build_object('outcome', 'invalid');
+  end if;
+  perform public.lock_restaurant_money(p_restaurant);
+  perform set_config('tabletap.allocation_writer', 'v1', true);
+  perform public.backfill_payment_allocations(p_restaurant);
+  if exists (select 1 from payments where restaurant_id = p_restaurant and stripe_payment_intent = p_intent) then
+    return jsonb_build_object('outcome', 'duplicate');
+  end if;
+  if exists (select 1 from refunds_due where stripe_payment_intent = p_intent) then
+    return jsonb_build_object('outcome', 'refund_due');
+  end if;
+  select * into v_checkout from diner_checkouts where id = p_checkout and restaurant_id = p_restaurant for update;
+  if not found or v_checkout.split_id is null then return jsonb_build_object('outcome', 'gone'); end if;
+  select * into v_split from bill_splits where id = v_checkout.split_id and restaurant_id = p_restaurant;
+  perform pg_advisory_xact_lock(hashtextextended(v_split.session_id::text, 0));
+  select * into v_split from bill_splits where id = v_checkout.split_id for update;
+  perform 1 from bill_split_slots where split_id = v_split.id order by share_no for update;
+  select array_agg(share_no order by share_no), coalesce(sum(amount_cents), 0) into v_slots, v_amount
+    from bill_split_checkout_slots where checkout_id = p_checkout;
+  if v_slots is null then return jsonb_build_object('outcome', 'gone'); end if;
+
+  if v_split.status <> 'locked' or p_charged_cents < v_amount or exists (select 1 from bill_split_slots
+      where split_id = v_split.id and share_no = any(v_slots)
+        and (reserved_checkout_id is distinct from p_checkout or payment_id is not null)) then
+    select t.label into v_label from table_sessions ts left join restaurant_tables t on t.id = ts.table_id
+     where ts.id = v_split.session_id;
+    insert into refunds_due (restaurant_id, stripe_payment_intent, amount, order_ids, table_label, currency, stripe_account_id)
+    values (p_restaurant, p_intent, p_charged_cents / 100.0, v_split.order_ids, v_label, v_checkout.currency, v_checkout.stripe_account_id)
+    on conflict (stripe_payment_intent) do nothing;
+    if found then
+      insert into notifications (restaurant_id, kind, data)
+      values (p_restaurant, 'refund_due', jsonb_build_object('amount', p_charged_cents / 100.0,
+        'currency', v_checkout.currency, 'table', v_label));
+    end if;
+    update diner_checkouts set status = 'paid', stripe_payment_intent = coalesce(stripe_payment_intent, p_intent)
+     where id = p_checkout;
+    return jsonb_build_object('outcome', 'refund_due');
+  end if;
+
+  v_tip := p_charged_cents - v_amount;
+  perform 1 from orders where id = any(v_split.order_ids) and restaurant_id = p_restaurant order by id for update;
+  select coalesce(sum(greatest(o.total - public.retained_order_coverage(p_restaurant, o.id), 0)), 0),
+    coalesce(sum(greatest(o.tip - coalesce((select sum(a.tip) from payment_allocations a where a.order_id = o.id), 0), 0)), 0)
+    into v_left, v_old_tip
+    from orders o where o.id = any(v_split.order_ids) and not o.paid and not o.written_off
+      and o.account_id is null and o.status not in ('cancelled', 'pending_payment');
+  v_old_tip := case when v_left <= 0 then 0 else round((v_amount / 100.0) * least(v_old_tip, v_left) / v_left, 2) end;
+
+  perform set_config('tabletap.allocation_scope', to_json(v_split.order_ids)::text, true);
+  if v_tip > 0 then
+    update orders set tip = round(tip + v_tip / 100.0, 2), total = round(total + v_tip / 100.0, 2)
+     where id = (select id from orders where id = any(v_split.order_ids) and not paid and not written_off
+       and account_id is null and status not in ('cancelled', 'pending_payment') order by created_at, id limit 1);
+  end if;
+  insert into payments (restaurant_id, session_id, amount, tip, method, stripe_payment_intent)
+  values (p_restaurant, v_split.session_id, p_charged_cents / 100.0, round(v_tip / 100.0 + v_old_tip, 2), 'card', p_intent)
+  returning id into v_payment;
+  perform set_config('tabletap.allocation_scope', v_scope, true);
+  perform public.allocate_receipt(v_payment);
+  update bill_split_slots set payment_id = v_payment, paid_at = now(), reserved_checkout_id = null
+   where split_id = v_split.id and share_no = any(v_slots);
+  update diner_checkouts set status = 'paid', stripe_payment_intent = coalesce(stripe_payment_intent, p_intent)
+   where id = p_checkout;
+  perform public.close_divided_bill_v3(v_split.id);
+  return jsonb_build_object('outcome', 'settled', 'payment', v_payment, 'slots', to_jsonb(v_slots), 'tip_cents', v_tip);
+end; $$;
+revoke all on function public.settle_split_slots_v1(uuid, uuid, text, int) from public, anon, authenticated;
+grant execute on function public.settle_split_slots_v1(uuid, uuid, text, int) to service_role;

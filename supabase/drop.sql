@@ -1,3 +1,4 @@
+drop function if exists public.settle_split_slots_v1(uuid, uuid, text, int);
 drop function if exists public.collect_split_slots_v1(uuid, uuid, int, int[], int, text, int, text, text, text);
 drop function if exists public.close_divided_bill_v3(uuid);
 drop function if exists public.reserve_split_slots_v1(uuid, uuid, int, uuid, int[], uuid);
