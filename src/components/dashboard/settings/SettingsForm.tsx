@@ -1,5 +1,7 @@
 "use client";
 
+import { useT } from "@/lib/i18n/context";
+
 import type { Restaurant } from "@/lib/types";
 import type { Role } from "@/lib/membership";
 import { useSettings } from "@/hooks/useSettings";
@@ -42,6 +44,7 @@ export default function SettingsForm({
   printerConfigured = false,
 }: SettingsFormProps) {
   const { saving, save } = useSettings();
+  const t = useT();
   const isOwner = role === "owner";
 
   return (
@@ -56,29 +59,37 @@ export default function SettingsForm({
           />
         </header>
 
-        {/* Cards pair up on desktop instead of stacking down one narrow column. */}
+        {/* What runs the service comes first: pausing orders, kitchen times,
+            the printer, stock alerts, tax. A manager opening this mid-shift
+            is looking for one of those, not for the logo. The restaurant's
+            identity and payment setup follow as their own group. Each group
+            is its own column block, so cards never flow across a heading. */}
+        <h2 className="tt-serif tt-settings-group">{t("settingsGroups.operation")}</h2>
         <div className="tt-cols">
-          {isOwner && (
-            <RestaurantCard restaurant={restaurant} saving={saving} save={save} />
-          )}
-
-          {/* Order matters here: the cards flow down one column and into the
-              next, so keeping a theme together also decides what shares a
-              column. How the place looks comes first — name, logo, cover —
-              then how it takes money and runs. */}
-          {isOwner && <LogoCard restaurant={restaurant} />}
-
-          {isOwner && <CoverCard restaurant={restaurant} />}
-
-          {isOwner && <PaymentsCard />}
-
-          <TaxCard restaurant={restaurant} saving={saving} save={save} />
+          <OrderingCard
+            restaurant={restaurant}
+            isOwner={isOwner}
+            deferredPayAllowed={deferredPayAllowed}
+            deferredPayUnlocksWith={deferredPayUnlocksWith}
+            cardsEnabled={cardsEnabled}
+            saving={saving}
+            save={save}
+          />
 
           {/* The floor's: how long the kitchen should take before a ticket
               warns, on the board everyone in the kitchen is watching. */}
           <TicketTimesCard
             warn={restaurant.ticket_warn_minutes ?? DEFAULT_TICKET_WARN_MINUTES}
             late={restaurant.ticket_late_minutes ?? DEFAULT_TICKET_LATE_MINUTES}
+            save={save}
+          />
+
+          {/* The manager's as well: the kitchen printer is floor equipment, and
+              whoever is running the shift is who turns it off when it jams. */}
+          <PrintingCard
+            autoPrint={restaurant.auto_print_kitchen === true}
+            hasToken={printerConfigured}
+            saving={saving}
             save={save}
           />
 
@@ -92,25 +103,20 @@ export default function SettingsForm({
             save={save}
           />
 
-          {/* The manager's as well: the kitchen printer is floor equipment, and
-              whoever is running the shift is who turns it off when it jams. */}
-          <PrintingCard
-            autoPrint={restaurant.auto_print_kitchen === true}
-            hasToken={printerConfigured}
-            saving={saving}
-            save={save}
-          />
-
-          <OrderingCard
-            restaurant={restaurant}
-            isOwner={isOwner}
-            deferredPayAllowed={deferredPayAllowed}
-            deferredPayUnlocksWith={deferredPayUnlocksWith}
-            cardsEnabled={cardsEnabled}
-            saving={saving}
-            save={save}
-          />
+          <TaxCard restaurant={restaurant} saving={saving} save={save} />
         </div>
+
+        {isOwner && (
+          <>
+            <h2 className="tt-serif tt-settings-group">{t("settingsGroups.restaurant")}</h2>
+            <div className="tt-cols">
+              <RestaurantCard restaurant={restaurant} saving={saving} save={save} />
+              <LogoCard restaurant={restaurant} />
+              <CoverCard restaurant={restaurant} />
+              <PaymentsCard />
+            </div>
+          </>
+        )}
       </div>
     </div>
   );

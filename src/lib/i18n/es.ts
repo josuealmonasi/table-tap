@@ -1665,6 +1665,10 @@ foundingLeftBody: "Quien contrata ahora conserva este precio de suscripción mie
     justNow: "recién",
     placedAt: "Pedido a las {time}",
   },
+  settingsGroups: {
+    operation: "Operación",
+    restaurant: "Tu restaurante",
+  },
   common: {
     charactersLeft: "Quedan {count} caracteres",
     discardTitle: "¿Descartar tus cambios?",

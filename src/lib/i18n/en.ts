@@ -1668,6 +1668,10 @@ foundingLeftBody: "Subscribe now and keep this subscription price for as long as
     justNow: "just now",
     placedAt: "Ordered at {time}",
   },
+  settingsGroups: {
+    operation: "Operation",
+    restaurant: "Your restaurant",
+  },
   common: {
     charactersLeft: "{count} characters left",
     discardTitle: "Discard your changes?",
