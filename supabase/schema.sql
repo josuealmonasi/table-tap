@@ -5635,6 +5635,9 @@ alter table refund_attempts drop constraint if exists refund_attempts_operation_
 alter table refund_attempts add column if not exists origin text not null default 'app';
 alter table refund_attempts add column if not exists currency text;
 alter table refund_attempts add column if not exists attribution_ref uuid;
+-- When this refund was first verified as succeeded. Retries and replays never
+-- move it, so a partial refund is reported on its own day (returns audit 7).
+alter table refund_attempts add column if not exists succeeded_at timestamptz;
 alter table refund_attempts drop constraint if exists refund_attempts_origin_check;
 alter table refund_attempts add constraint refund_attempts_origin_check check (origin in ('app', 'manual')
   and (origin = 'app' or (attribution_ref is not null and stripe_refund_id is not null and provider_status is not null)));
@@ -6114,6 +6117,7 @@ begin
         stripe_account_id, stripe_payment_intent, stripe_refund_id, provider_status)
       values(p_restaurant, o.id, 1, 'return-' || o.id || '-' || 1, o.amount, o.currency,
         o.stripe_account_id, o.stripe_payment_intent, o.stripe_refund_id, 'succeeded') returning * into a;
+    update refund_attempts set succeeded_at = o.completed_at where id = a.id returning * into a;
   end if;
   v_progress := public.refund_operation_progress_v1(o.id);
   v_outstanding := (v_progress->>'outstanding_cents')::int;
@@ -6155,7 +6159,8 @@ begin
   -- one instead of finding this one again for ever (audit Q 2).
   select f.provider_status into v_failed from refund_failures f where f.restaurant_id = p_restaurant and f.stripe_refund_id = p_refund;
   if v_failed is not null then p_status := v_failed; end if;
-  update refund_attempts set stripe_refund_id = p_refund, provider_status = p_status, updated_at = now()
+  update refund_attempts set stripe_refund_id = p_refund, provider_status = p_status, updated_at = now(),
+    succeeded_at = case when p_status = 'succeeded' then coalesce(succeeded_at, now()) else succeeded_at end
     where operation_id = o.id and id = p_attempt;
   update refund_operations set stripe_refund_id = p_refund, provider_status = p_status,
     status = case when p_status = 'succeeded' then 'succeeded' when p_status in ('failed', 'canceled') then 'failed' else 'processing' end,
@@ -11991,9 +11996,9 @@ begin
     if v_cents > v_outstanding then return jsonb_build_object('outcome', 'review'); end if;
     select coalesce(max(attempt_no), 0) + 1 into v_no from refund_attempts where operation_id = o.id and origin = 'manual';
     insert into refund_attempts(restaurant_id, operation_id, origin, attempt_no, idempotency_key, amount, currency,
-        stripe_account_id, stripe_payment_intent, stripe_refund_id, provider_status, attribution_ref)
+        stripe_account_id, stripe_payment_intent, stripe_refund_id, provider_status, attribution_ref, succeeded_at)
       values(p_restaurant, o.id, 'manual', v_no, 'manual-' || o.id || '-' || (r->>'id'), v_cents / 100.0, o.currency,
-        o.stripe_account_id, o.stripe_payment_intent, r->>'id', 'succeeded', p_attribution_ref);
+        o.stripe_account_id, o.stripe_payment_intent, r->>'id', 'succeeded', p_attribution_ref, now());
   end loop;
   return public.complete_refund_operation_v1(o.id, p_actor);
 end $$;
@@ -12046,7 +12051,8 @@ begin
   -- Stripe already told us this refund failed: a late "succeeded" is stale.
   select f.provider_status into v_failed from refund_failures f where f.restaurant_id = p_restaurant and f.stripe_refund_id = r->>'id';
   v_status := coalesce(v_failed, p_status);
-  update refund_attempts set stripe_refund_id = r->>'id', provider_status = v_status, updated_at = now() where id = a.id;
+  update refund_attempts set stripe_refund_id = r->>'id', provider_status = v_status, updated_at = now(),
+    succeeded_at = case when v_status = 'succeeded' then coalesce(succeeded_at, now()) else succeeded_at end where id = a.id;
   update refund_operations set stripe_refund_id = r->>'id', provider_status = v_status,
     status = case when v_status in ('failed', 'canceled') then 'failed' else 'processing' end where id = o.id;
   if v_status in ('failed', 'canceled') then
@@ -12078,7 +12084,8 @@ begin
     or new.stripe_account_id is distinct from old.stripe_account_id or new.stripe_payment_intent is distinct from old.stripe_payment_intent
     or (old.currency is not null and new.currency is distinct from old.currency)
     or new.attribution_ref is distinct from old.attribution_ref
-    or (old.stripe_refund_id is not null and new.stripe_refund_id is distinct from old.stripe_refund_id) then
+    or (old.stripe_refund_id is not null and new.stripe_refund_id is distinct from old.stripe_refund_id)
+    or (old.succeeded_at is not null and new.succeeded_at is distinct from old.succeeded_at) then
     raise exception 'refund attempt request is immutable';
   end if;
   return new;
@@ -12087,3 +12094,51 @@ revoke all on function public.guard_refund_attempt_request_v1() from public, ano
 drop trigger if exists guard_refund_attempt_request on refund_attempts;
 create trigger guard_refund_attempt_request before update or delete on refund_attempts
   for each row execute function public.guard_refund_attempt_request_v1();
+
+-- Every piece of money a refund operation got back to a customer, dated by when
+-- it succeeded (returns audit 7). A card return can finish in several refunds,
+-- app and manual, on different days; each is its own event, once per provider
+-- refund. Cash and terminal are one event at their confirmed completion.
+-- Evidence that cannot be dated fails the read: a report that silently drops
+-- money looks exactly like a quiet day.
+create or replace function public.order_return_events_v1(p_restaurant uuid, p_currency text default null)
+returns table (id text, operation_id uuid, order_id uuid, kind text, source text, currency text, amount_cents int,
+  succeeded_at timestamptz, payout_actor text, confirmed_by text, historical_log_id uuid)
+language plpgsql stable security definer set search_path = public as $$
+begin
+  if exists (
+    select 1 from refund_operations o join refund_attempts a on a.operation_id = o.id and a.restaurant_id = o.restaurant_id
+    where o.restaurant_id = p_restaurant and (p_currency is null or o.currency = p_currency)
+      and a.provider_status = 'succeeded' and a.stripe_refund_id is not null and a.succeeded_at is null
+      and not exists (select 1 from refund_failures f where f.restaurant_id = a.restaurant_id and f.stripe_refund_id = a.stripe_refund_id)
+      -- Before success times were kept: a single refund that proves the whole
+      -- operation is dated by the operation's own completion.
+      and not (o.status = 'succeeded' and o.completed_at is not null and round(a.amount * 100) = round(o.amount * 100)
+        and (select count(distinct b.stripe_refund_id) from refund_attempts b where b.operation_id = o.id
+          and b.provider_status = 'succeeded' and b.stripe_refund_id is not null) = 1)) then
+    raise exception 'a succeeded refund has no success time';
+  end if;
+  return query
+  select distinct on (a.stripe_refund_id) 'refund:' || a.stripe_refund_id, o.id, d.order_id, d.kind, o.source, o.currency,
+      round(a.amount * 100)::int, coalesce(a.succeeded_at, o.completed_at), o.payout_actor, o.confirmed_by, o.historical_log_id
+    from refund_operations o
+    join order_adjustments d on d.id = o.adjustment_id and d.restaurant_id = o.restaurant_id
+    join refund_attempts a on a.operation_id = o.id and a.restaurant_id = o.restaurant_id
+    where o.restaurant_id = p_restaurant and o.source = 'stripe' and (p_currency is null or o.currency = p_currency)
+      and a.provider_status = 'succeeded' and a.stripe_refund_id is not null
+      and not exists (select 1 from refund_failures f where f.restaurant_id = a.restaurant_id and f.stripe_refund_id = a.stripe_refund_id)
+    order by a.stripe_refund_id, a.attempt_no;
+  -- A Stripe operation completed before attempts existed has only its own record.
+  return query
+  select 'operation:' || o.id, o.id, d.order_id, d.kind, o.source, o.currency, round(o.amount * 100)::int,
+      o.completed_at, o.payout_actor, o.confirmed_by, o.historical_log_id
+    from refund_operations o join order_adjustments d on d.id = o.adjustment_id and d.restaurant_id = o.restaurant_id
+    where o.restaurant_id = p_restaurant and (p_currency is null or o.currency = p_currency)
+      and o.status = 'succeeded' and o.completed_at is not null
+      and (o.source in ('cash', 'terminal')
+        or (o.source = 'stripe' and not exists (select 1 from refund_attempts a where a.operation_id = o.id)
+          and o.stripe_refund_id is not null
+          and not exists (select 1 from refund_failures f where f.restaurant_id = o.restaurant_id and f.stripe_refund_id = o.stripe_refund_id)));
+end $$;
+revoke all on function public.order_return_events_v1(uuid, text) from public, anon, authenticated;
+grant execute on function public.order_return_events_v1(uuid, text) to service_role;

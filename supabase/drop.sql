@@ -289,6 +289,7 @@ drop function if exists public.complete_refund_operation_v1(uuid, text);
 drop function if exists public.record_order_return_coverage_v1(uuid, uuid, text, jsonb, uuid);
 drop function if exists public.finish_refund_operation_v2(uuid, uuid, text, jsonb, text, text, uuid);
 drop function if exists public.guard_refund_attempt_request_v1();
+drop function if exists public.order_return_events_v1(uuid, text);
 drop function if exists public.retire_split_attempt_v1(uuid, uuid);
 drop function if exists public.write_off_remainder_v1(uuid, uuid[], int, text, text, text, text, uuid, uuid);
 drop function if exists public.guard_order_adjustment();
