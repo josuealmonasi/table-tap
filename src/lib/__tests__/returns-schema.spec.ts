@@ -17,7 +17,10 @@ describe("the SQL side of the returns contract", () => {
         status: "succeeded", completed_at: "2026-10-28T18:00:00Z" }],
       order_adjustments: [{ id: "adjustment", restaurant_id: "r1", order_id: "o", kind: "return" }],
     };
-    const db = { from: (table: string) => ({ select: () => tables[table] }) };
+    type Rows = Record<string, unknown>[] & { eq: (key: string, value: unknown) => Rows };
+    const query = (rows: Record<string, unknown>[]): Rows =>
+      Object.assign([...rows], { eq: (key: string, value: unknown) => query(rows.filter(r => r[key] === value)) });
+    const db = { from: (table: string) => ({ select: () => query((tables[table] ?? []) as Record<string, unknown>[]) }) };
     const all = async (build: () => unknown) => ({ data: build(), error: null });
     const bad = vi.fn();
     await checkAllocations(db, all, [{ id: "o", restaurant_id: "r1", paid: true, written_off: false, status: "completed", total: 70, tip: 10 }],

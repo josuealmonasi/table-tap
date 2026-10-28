@@ -280,6 +280,9 @@ drop function if exists public.guard_offline_audit() cascade;
 
 drop function if exists public.queue_offline_sale(uuid,uuid,jsonb,text,text,text,text) cascade;
 drop table if exists offline_sale_queue cascade;
+drop function if exists public.return_on_order_v1(uuid, uuid, int, text, text, text, uuid, int, int, int);
+drop function if exists public.retained_order_component_capacity_v1(uuid, uuid);
+drop function if exists public.check_order_return_adjustment_v1();
 drop function if exists public.retire_split_attempt_v1(uuid, uuid);
 drop function if exists public.write_off_remainder_v1(uuid, uuid[], int, text, text, text, text, uuid, uuid);
 drop function if exists public.guard_order_adjustment();
