@@ -5367,6 +5367,8 @@ Existing collection and write-off writers are outside this receipt/checker fix.
 | A return's header names the refund that finished it | A failed first refund stayed on the header and manual completion left it empty, so fee reconciliation and completion evidence missed real refunds | `returns-schema.spec.ts` (audit 4), `loop/returns-probe.cjs` |
 | An offline replay acknowledges what was collected | A return made before the tablet reconnected lowered the total its replay reported, so the device never released the sale | `returns-schema.spec.ts` (audit 6) |
 | An unknown tip breakdown goes to review | A historical receipt without its tip let returns plan principal it did not hold, leaving money nobody could return | `returns-schema.spec.ts` (audit 8) |
+| One bad saved payment cannot blank a diner's split | A held card attempt whose saved scope did not match made the whole split read throw: 500, no parts, nothing to press | `split-slots-resume` (skip and log), `pnpm layout` "diner paid, held and chosen parts" |
+| A promise is judged on the loaded screen | The bill shows "pay at the table" while it still checks for a split; the audit judged it then and reported three bills as explaining nothing | `promise-audit.mjs` waits for the expected words, bounded at 30s |
 
 ### A paid part offers its own receipt once
 
@@ -5599,3 +5601,15 @@ still leaves the customer's return complete. `return-manual-completion.spec.ts`
 first failed four cases, then passed all nine: concurrent success, zero owed,
 null app fields, already completed money, failed fee recovery and unproven
 replies. No provider refund is sent for completed money.
+### One bad saved payment cannot blank a diner's split
+
+The split read and each saved card attempt had to agree on the attempt's
+scope. When one did not, the resume check threw, `/api/split` answered 500,
+and the phone showed "No pudimos leer las partes" with no part to choose and
+no button to press. Only the gates' fixture made such an attempt (a made-up
+scope key), so it failed every layout and dialog run of the diner's divided
+bill; a real phone would have hit it on any attempt saved under an older
+format. A mismatched attempt is now simply not offered for resuming and is
+logged; its parts stay held, so nothing can be paid twice. The fixture now
+writes the card path's own key, and the seed picks a bill large enough for
+three card parts, so its card hold is never refused at random.
