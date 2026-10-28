@@ -921,6 +921,10 @@ foundingLeftBody: "Quien contrata ahora conserva este precio de suscripción mie
     },
   },
   receipt: {
+    originalBill: "Cuenta original",
+    forgiven: "Perdonado por el restaurante",
+    paid: "Pagado",
+    parts: "Partes {parts}",
     askTitle: "¿Quieres tu recibo?",
     askBody: "Te lo mandamos por correo. Nada más — sin cuenta, sin listas.",
     askBodyPrint: "Imprímelo o guárdalo como PDF.",

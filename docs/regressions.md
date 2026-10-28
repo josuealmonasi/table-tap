@@ -5274,3 +5274,72 @@ a mixed set; email did not, so MX$100 and US$10 from the same restaurant went
 out as MX$110. Both deliveries now refuse it, and a failed order read answers
 503 instead of "not found".
 
+
+## Forgiven bills and payment receipts — 2026-10-28
+
+| Rule | Two places that had to agree | Regression coverage |
+|---|---|---|
+| A forgiven receipt explains the original bill and what was paid | The order total came down while email and paper kept the original dishes without the loss | `receipt-forgiveness-route.spec.ts`, `receipt-forgiveness.spec.ts` |
+| Reprinting keeps the financial version that was issued | A later forgiveness silently changed the receipt read from live orders | `receipt-forgiveness-route.spec.ts`, `receipt-version-prompt.spec.tsx` |
+| A slot receipt confirms its payment | One person's parts and tip could be replaced by the whole table's bill | `receipt-forgiveness-route.spec.ts`, `receipt-version-prompt.spec.tsx` |
+| The money check reconciles forgiveness and its single loss event | Coverage at a reduced total passed without checking the adjustment or the operation's whole-order losses | `forgiveness-money.spec.ts`, existing `allocation-money.spec.ts` |
+
+### A forgiven receipt explains the original bill
+
+The saved adjustment and the shared email/paper renderer had to agree. The
+receipt API now reads the typed forgiveness, including the original and
+resulting total, tip and service charge. Original dishes and discounts keep
+their original service and tip; original bill less the restaurant's forgiveness
+equals paid. English and Spanish use the same rows and arithmetic. A failed or
+inconsistent adjustment read issues no unexplained receipt. The print and email
+route cases failed before the fix; bilingual renderer cases check both forms.
+
+### A copy keeps the financial version that was issued
+
+The original copy and the reissue request had to agree. Order receipts now
+return `version.adjustmentIds`: the included immutable forgiveness IDs, or an
+empty list for the original bill. A reissue sends that version and reconstructs
+the original total, tip and service charge from the adjustment when needed.
+Unknown or duplicate version IDs are refused. The receipt prompt shares the
+issued version between email and print, and a different bill starts fresh.
+A version selects saved facts; the caller never supplies money. This preserves
+the financial copy without expiring it or blocking a sale. Legacy callers with
+no saved version ask for today's statement; an explicit empty version asks for
+the original. Full historical HTML, restaurant-name and locale snapshots are
+not added by this change.
+
+### A slot receipt confirms its payment
+
+Paid parts and receipt amounts had to agree. The receipt API accepts the
+immutable payment ID and checks its slot, sitting, restaurant and currency
+links. It lists the numbered parts together at their principal, the ledger's
+full tip and the actual charge, dated when that payment arrived. Old gratuities
+inside the frozen parts are included in that tip, once. Other unpaid parts,
+later dishes, menu currency changes and later forgiveness cannot replace that
+payment with the table's bill. Payment receipts do not mark an entire order as
+emailed. The payment cases failed before the fix and pass while orders remain
+unpaid. `ReceiptPrompt` and `ReceiptPrint` accept a payment identity; wiring the
+diner's slot-return offer and the separate staff reprint route is held for
+Claude's adjacent-file ownership decision.
+
+### The money check follows the forgiveness operation
+
+The reduced paid total, its adjustment and its loss log had to agree. The
+allocation checker now distinguishes `cancel` from `forgive`, checks the rounded
+original-minus-resulting loss, paid state and exact retained total/tip coverage,
+and requires one `bill/written_off` event with `kind=rest` at the operation ID.
+Its amount is the sum of that operation's forgiven amounts and wholly written-off
+orders. Whole orders currently carry no operation ID: the writer's identical
+transaction timestamp, actor, restaurant and currency connect them to the log.
+The checker preserves sub-millisecond timestamp precision and fails ambiguous
+matches rather than counting a whole loss twice. A durable whole-order link
+would require a later SQL change. Whole-only operations are checked too.
+The malformed adjustment, unpaid/uncovered order, missing/duplicate/foreign/wrong
+loss-event and wrong whole-loss cases failed before this check. No live database
+or money gate was run by this worker; Claude owns those checks.
+
+The new forgiveness readers count decimal half-cents as PostgreSQL does: `1.005`
+becomes 101 cents, and `2.675` becomes 268. The two half-cent route/checker cases
+failed before this correction. Table originals round per order before adding,
+so original minus forgiveness equals paid even with several unscaled totals.
+Existing collection and write-off writers are outside this receipt/checker fix.

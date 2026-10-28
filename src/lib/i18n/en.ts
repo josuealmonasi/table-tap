@@ -924,6 +924,10 @@ foundingLeftBody: "Subscribe now and keep this subscription price for as long as
     },
   },
   receipt: {
+    originalBill: "Original bill",
+    forgiven: "Forgiven by the restaurant",
+    paid: "Paid",
+    parts: "Parts {parts}",
     askTitle: "Want your receipt?",
     askBody: "We can email it to you. Nothing else — no account, no list.",
     askBodyPrint: "Print it or save it as a PDF.",

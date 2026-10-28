@@ -2379,3 +2379,34 @@ paid part and requires slot controls while forbidding whole-bill collection.
 These fixture visits run only in development and delete their own requests,
 memberships, attempts, money, orders, sitting and table. The release owner runs
 those browser/database gates; unit tests alone do not claim they passed.
+
+### Receipt versions, forgiven bills and paid split parts (2026-10-28)
+
+The diner receipt API reads `order_adjustments.kind=forgive` and shows the
+original dishes, discount, service charge and tip, then original bill, forgiven
+by the restaurant and paid. The original and resulting service/tip components
+come from the adjustment. Email and browser print/save use the same renderer.
+Order responses carry `version: { adjustmentIds: [...] }`; a reissue supplies
+that version. Empty means the original bill, so later forgiveness cannot change
+its financial values. Omitted means the current statement. Unknown version IDs
+and inconsistent or failed financial reads do not issue a receipt. The prompt
+shares its issued version across email and print. No new table, expiry or
+payment/sign-out restriction is introduced; the version selects saved financial
+facts rather than storing full historical HTML or customer email.
+
+`POST /api/receipt` also accepts `paymentId` for a model-2 slot collection. It
+reads the immutable payment and its paid slots, verifies their restaurant,
+sitting and currency, and shows those numbered parts' principal plus the full
+ledger tip and actual charge. Gratuities already inside frozen parts are not
+added twice. This works before the other parts are paid and uses the payment's
+currency and time, without reading today's order totals. Both receipt components
+accept that payment identity. The existing diner return/offer hook and separate
+staff reprint route still need adjacent integration by their assigned owner;
+they must pass the payment identity or saved order version respectively.
+
+`pnpm money` reconciles each forgiveness's rounded original/resulting amounts,
+paid state and retained principal/tip coverage, and its single `kind=rest`
+write-off event identified by `operation_ref`. The event must equal forgiveness
+plus whole-order losses from the same transaction, actor, restaurant and
+currency; ambiguous whole-order membership fails. Cancel adjustments retain
+their cancellation meaning. Whole orders do not yet carry an operation ID.
