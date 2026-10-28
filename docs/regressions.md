@@ -5351,6 +5351,7 @@ Existing collection and write-off writers are outside this receipt/checker fix.
 | Staff paper includes the restaurant's forgiveness | The diner reader explained the loss, but staff reprints read the reduced order alone | `staff-receipt-reprint.spec.ts`, existing `kitchen-print.spec.ts` |
 | Staff can reprint a paid group of parts | The receipt renderer accepted payments, but the staff route required an order | `staff-receipt-reprint.spec.ts` |
 | A query names a column its table has | The slot-receipt readers filtered `bill_splits` by `table_id`, which it never had; mocked tests passed and every approved phone's receipt list answered 503 | `invariants/database.spec.ts` ("a query names only columns its table has"), `pnpm api` |
+| One bad saved payment cannot blank a diner's split | A held card attempt whose saved scope did not match made the whole split read throw: 500, no parts, nothing to press | `split-slots-resume` (skip and log), `pnpm layout` "diner paid, held and chosen parts" |
 
 ### A paid part offers its own receipt once
 
@@ -5406,3 +5407,16 @@ every approved phone. `pnpm api` found it. A new invariant reads every plain
 `select` and filter on a known table against `schema.sql` (3,160 references
 today) and failed on both lines with the fix reverted. The table now comes from
 the sitting, which the membership check already ties to the table.
+
+### One bad saved payment cannot blank a diner's split
+
+The split read and each saved card attempt had to agree on the attempt's
+scope. When one did not, the resume check threw, `/api/split` answered 500,
+and the phone showed "No pudimos leer las partes" with no part to choose and
+no button to press. Only the gates' fixture made such an attempt (a made-up
+scope key), so it failed every layout and dialog run of the diner's divided
+bill; a real phone would have hit it on any attempt saved under an older
+format. A mismatched attempt is now simply not offered for resuming and is
+logged; its parts stay held, so nothing can be paid twice. The fixture now
+writes the card path's own key, and the seed picks a bill large enough for
+three card parts, so its card hold is never refused at random.
