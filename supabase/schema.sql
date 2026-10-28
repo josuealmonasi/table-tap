@@ -10976,3 +10976,97 @@ begin
 end; $$;
 revoke all on function public.cancel_bill_split_v2(uuid, uuid, int, text) from public, anon, authenticated;
 grant execute on function public.cancel_bill_split_v2(uuid, uuid, int, text) to service_role;
+
+-- A card attempt reserves the slots it pays for: all of them or none
+-- (decision 2). A slot held by another attempt is `taken`; a retry of the
+-- same attempt gets the same reservation back. The first reservation freezes
+-- the split's size (decision 3). Below Stripe's minimum the slots cannot be
+-- paid by card alone (decision 7): combine them or let the floor collect.
+create or replace function public.reserve_split_slots_v1(
+  p_restaurant uuid, p_split uuid, p_revision int, p_member uuid, p_slots int[], p_checkout uuid
+) returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  v_split bill_splits%rowtype;
+  v_checkout diner_checkouts%rowtype;
+  v_amount int;
+  v_fee int;
+  v_count int;
+  v_min int;
+begin
+  if p_slots is null or cardinality(p_slots) = 0 or cardinality(p_slots) <> (select count(distinct s) from unnest(p_slots) s) then
+    return jsonb_build_object('outcome', 'invalid');
+  end if;
+  perform public.lock_restaurant_money(p_restaurant);
+  select * into v_split from bill_splits where id = p_split and restaurant_id = p_restaurant and model_version = 2;
+  if not found then return jsonb_build_object('outcome', 'gone'); end if;
+  perform pg_advisory_xact_lock(hashtextextended(v_split.session_id::text, 0));
+  select * into v_split from bill_splits where id = p_split for update;
+  if v_split.status <> 'locked' then return jsonb_build_object('outcome', 'gone'); end if;
+  if v_split.revision <> p_revision then return jsonb_build_object('outcome', 'stale', 'revision', v_split.revision); end if;
+  if p_member is not null and not exists (select 1 from table_session_members m
+    where m.id = p_member and m.session_id = v_split.session_id and m.status = 'approved') then
+    return jsonb_build_object('outcome', 'forbidden');
+  end if;
+  select * into v_checkout from diner_checkouts where id = p_checkout and restaurant_id = p_restaurant for update;
+  if not found or v_checkout.status <> 'open' or v_checkout.currency is distinct from v_split.currency then
+    return jsonb_build_object('outcome', 'invalid');
+  end if;
+  perform 1 from bill_split_slots where split_id = p_split order by share_no for update;
+  select count(*), coalesce(sum(amount_cents), 0), coalesce(sum(fee_slice_cents), 0) into v_count, v_amount, v_fee
+    from bill_split_slots where split_id = p_split and share_no = any(p_slots);
+  if v_count <> cardinality(p_slots) then return jsonb_build_object('outcome', 'invalid'); end if;
+
+  -- The same attempt asking again: what it already holds, exactly.
+  if not exists (select 1 from bill_split_slots where split_id = p_split and share_no = any(p_slots)
+      and reserved_checkout_id is distinct from p_checkout)
+    and (select count(*) from bill_split_checkout_slots where checkout_id = p_checkout) = cardinality(p_slots) then
+    return jsonb_build_object('outcome', 'repeat', 'amount_cents', v_amount, 'fee_cents', v_fee);
+  end if;
+  if exists (select 1 from bill_split_checkout_slots where checkout_id = p_checkout) then
+    return jsonb_build_object('outcome', 'conflict');
+  end if;
+  if exists (select 1 from bill_split_slots where split_id = p_split and share_no = any(p_slots) and payment_id is not null) then
+    return jsonb_build_object('outcome', 'paid');
+  end if;
+  if exists (select 1 from bill_split_slots where split_id = p_split and share_no = any(p_slots) and reserved_checkout_id is not null) then
+    return jsonb_build_object('outcome', 'taken');
+  end if;
+  -- Stripe's smallest charge: MX$10, US$0.50. (A CASE inside the IF would
+  -- end its condition at the CASE's first THEN.)
+  v_min := case when v_split.currency = 'USD' then 50 else 1000 end;
+  if v_amount < v_min then
+    return jsonb_build_object('outcome', 'below_minimum', 'amount_cents', v_amount);
+  end if;
+
+  update bill_split_slots set reserved_checkout_id = p_checkout where split_id = p_split and share_no = any(p_slots);
+  insert into bill_split_checkout_slots (restaurant_id, checkout_id, split_id, share_no, amount_cents, fee_slice_cents)
+  select p_restaurant, p_checkout, p_split, share_no, amount_cents, fee_slice_cents
+    from bill_split_slots where split_id = p_split and share_no = any(p_slots);
+  update diner_checkouts set split_id = p_split, split_revision = v_split.revision, payer_member_id = p_member
+   where id = p_checkout;
+  update bill_splits set first_payment_attempt_at = coalesce(first_payment_attempt_at, now()) where id = p_split;
+  return jsonb_build_object('outcome', 'reserved', 'amount_cents', v_amount, 'fee_cents', v_fee);
+end; $$;
+revoke all on function public.reserve_split_slots_v1(uuid, uuid, int, uuid, int[], uuid) from public, anon, authenticated;
+grant execute on function public.reserve_split_slots_v1(uuid, uuid, int, uuid, int[], uuid) to service_role;
+
+-- Gives back what an attempt still holds, once Stripe has said it expired or
+-- was refused. Never a slot that was paid, nor one held by another attempt.
+-- The split stays frozen: an attempt was made (decision 3).
+create or replace function public.release_split_slots_v1(p_restaurant uuid, p_checkout uuid)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare v_checkout diner_checkouts%rowtype; v_session uuid; v_released int;
+begin
+  perform public.lock_restaurant_money(p_restaurant);
+  select * into v_checkout from diner_checkouts where id = p_checkout and restaurant_id = p_restaurant;
+  if not found or v_checkout.split_id is null then return jsonb_build_object('outcome', 'gone'); end if;
+  select session_id into v_session from bill_splits where id = v_checkout.split_id;
+  perform pg_advisory_xact_lock(hashtextextended(v_session::text, 0));
+  perform 1 from bill_split_slots where split_id = v_checkout.split_id order by share_no for update;
+  update bill_split_slots set reserved_checkout_id = null
+   where split_id = v_checkout.split_id and reserved_checkout_id = p_checkout and payment_id is null;
+  get diagnostics v_released = row_count;
+  return jsonb_build_object('outcome', 'released', 'released', v_released);
+end; $$;
+revoke all on function public.release_split_slots_v1(uuid, uuid) from public, anon, authenticated;
+grant execute on function public.release_split_slots_v1(uuid, uuid) to service_role;
