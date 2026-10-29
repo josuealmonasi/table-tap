@@ -38,6 +38,26 @@ describe("an unresolved card page blocks every collection and movement of its de
     // The same lock guards opening its diner page: a released checkout gets none.
     expect(latest("diner_checkout_open")).toContain("raise exception 'checkout_unavailable'");
   });
+  it("verification: discounts, write-offs, approvals and ordinary cancellation refuse an open page", () => {
+    for (const fn of ["apply_bill_discount", "write_off_orders", "approve_discount_request", "approve_discount_request_v2",
+      "approve_write_off_request", "approve_write_off_request_v2"]) {
+      expect(latest(fn), fn).toContain("public.whole_bill_card_open_v1(p_restaurant,");
+    }
+    for (const fn of ["cancel_order", "cancel_order_v2"]) {
+      expect(latest(fn), fn).toContain("if not v_order.paid and public.whole_bill_card_open_v1(p_restaurant, array[p_order]) then return false; end if;");
+    }
+  });
+  it("verification: lower-level collectors, held parts, scope and the batch shape", () => {
+    expect(latest("collect_on_sitting")).toContain("public.whole_bill_card_open_v1(p_restaurant,");
+    for (const fn of ["settle_orders", "settle_orders_v2"]) {
+      expect(latest(fn), fn).toContain("x.reserved_checkout_id is not null and x.payment_id is null");
+    }
+    // Only the debt the writer collects can block it.
+    expect(latest("collect_on_sitting_v2")).toContain("not paid and not written_off and account_id is null");
+    expect(latest("collect_on_sittings_v1")).toContain("jsonb_build_array(jsonb_build_object('taken', 0, 'tip', 0, 'outcome', 'paying'))");
+    // A row that reached Stripe is never released as an orphan.
+    expect(latest("release_unreached_account_page_v1")).toContain("a.stripe_session_id is not null");
+  });
   it("repricing skips any order an open page was priced from", () => {
     expect(latest("reprice_open_service")).toContain("c.status = 'open' and o.id = any(c.order_ids)");
   });

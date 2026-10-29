@@ -2655,6 +2655,9 @@ begin
   perform public.lock_restaurant_money(p_restaurant);
   -- One collection at a time per sitting. Everything below reads live.
   perform pg_advisory_xact_lock(hashtextextended(p_session::text, 0));
+  if public.whole_bill_card_open_v1(p_restaurant, array(select id from orders where session_id = p_session and restaurant_id = p_restaurant and not paid and not written_off and account_id is null and status not in ('cancelled', 'pending_payment'))) then
+    return jsonb_build_object('taken', 0, 'tip', 0, 'outcome', 'paying');
+  end if;
 
   select coalesce(sum(total), 0) into v_owed
     from orders
@@ -2760,6 +2763,11 @@ declare
   v_count int;
 begin
   perform public.lock_restaurant_money(p_restaurant);
+  if public.whole_bill_card_open_v1(p_restaurant, p_orders) or exists (select 1 from bill_splits b join bill_split_slots x on x.split_id = b.id
+      where b.restaurant_id = p_restaurant and b.status = 'locked' and b.order_ids && p_orders
+        and x.reserved_checkout_id is not null and x.payment_id is null) then
+    raise exception 'paying';
+  end if;
   if p_method not in ('cash', 'card') then
     raise exception 'settle_orders: unknown method %', p_method;
   end if;
@@ -4977,6 +4985,9 @@ begin
     if not p_expected_paid and public.unresolved_account_page_v1(p_restaurant, v_account.id) then return false; end if;
   end if;
   select * into v_order from orders where id = p_order and restaurant_id = p_restaurant for update;
+  -- An unpaid order on a card page still open may be about to be paid; it is
+  -- not cancelled under it (verification 2). The route reads false as changed.
+  if not v_order.paid and public.whole_bill_card_open_v1(p_restaurant, array[p_order]) then return false; end if;
   if v_order.id is null or v_order.paid is distinct from p_expected_paid
      or v_order.account_id is distinct from p_expected_account then return false; end if;
   update orders set status = 'cancelled', stripe_refund_id = p_refund, cancelled_at = now()
@@ -5421,6 +5432,9 @@ begin
      -- An order moved onto a customer account is the account's debt now.
      and account_id is null;
   if v_count <> cardinality(v_request.order_ids) or round(v_total, 2) <> p_amount then return 'changed'; end if;
+  -- A card page still open on these orders was quoted the current total; the
+  -- debt may not change under it (unresolved-checkout contract, verification 1).
+  if public.whole_bill_card_open_v1(p_restaurant, v_request.order_ids) then return 'paying'; end if;
 
   update orders set written_off = true, write_off_reason = v_request.reason,
     write_off_note = v_request.note, written_off_by = p_actor, written_off_at = now(), status = 'completed'
@@ -5457,6 +5471,9 @@ begin
      and paid = false and written_off = false and status not in ('cancelled', 'pending_payment')
      and coupon_code is null and account_id is null;
   if v_count <> cardinality(v_request.order_ids) or v_total <= 0 then return 'changed'; end if;
+  -- A card page still open on these orders was quoted the current total; the
+  -- debt may not change under it (unresolved-checkout contract, verification 1).
+  if public.whole_bill_card_open_v1(p_restaurant, v_request.order_ids) then return 'paying'; end if;
   select * into v_coupon from coupons
    where restaurant_id = p_restaurant and upper(code) = upper(v_request.code) for update;
   if not found or not v_coupon.active
@@ -6884,7 +6901,7 @@ begin
   -- One collection at a time per sitting. Everything below reads live.
   perform pg_advisory_xact_lock(hashtextextended(p_session::text, 0));
   if public.whole_bill_card_open_v1(p_restaurant, array(select id from orders where session_id = p_session
-      and restaurant_id = p_restaurant and not paid)) then
+      and restaurant_id = p_restaurant and not paid and not written_off and account_id is null and status not in ('cancelled', 'pending_payment'))) then
     return jsonb_build_object('taken', 0, 'tip', 0, 'outcome', 'paying');
   end if;
   -- A divided bill with a slot paid or held is collected by its slots: the
@@ -7020,9 +7037,11 @@ begin
   -- Checked for every sitting before any is written: a later blocked sitting
   -- must not leave an earlier one collected (unresolved-checkout contract).
   if public.whole_bill_card_open_v1(p_restaurant, array(select o.id from orders o
-      where o.restaurant_id = p_restaurant and not o.paid
+      where o.restaurant_id = p_restaurant and not o.paid and not o.written_off and o.account_id is null
+        and o.status not in ('cancelled', 'pending_payment')
         and o.session_id in (select (x->>'session_id')::uuid from jsonb_array_elements(p_shares) x))) then
-    return jsonb_build_object('outcome', 'paying', 'collections', '[]'::jsonb);
+    -- The same shape as each sitting's result, so the caller reads it as one (verification 5).
+    return jsonb_build_array(jsonb_build_object('taken', 0, 'tip', 0, 'outcome', 'paying'));
   end if;
 
   -- Include old positional receipts too. A retry after an older caller's
@@ -7087,7 +7106,12 @@ begin
   perform public.lock_restaurant_money(p_restaurant);
   perform set_config('tabletap.allocation_writer', 'v1', true);
   -- Never settle orders a whole-bill card page may still be paying.
-  if public.whole_bill_card_open_v1(p_restaurant, p_orders) then raise exception 'paying'; end if;
+  -- Nor orders a held split part may be paying (verification 3).
+  if public.whole_bill_card_open_v1(p_restaurant, p_orders) or exists (select 1 from bill_splits b join bill_split_slots x on x.split_id = b.id
+      where b.restaurant_id = p_restaurant and b.status = 'locked' and b.order_ids && p_orders
+        and x.reserved_checkout_id is not null and x.payment_id is null) then
+    raise exception 'paying';
+  end if;
   if p_restaurant is not null then perform public.backfill_payment_allocations(p_restaurant); end if;
   perform set_config('tabletap.allocation_scope', '', true);
   perform set_config('tabletap.allocation_scope', to_json(p_orders)::text, true);
@@ -7770,6 +7794,9 @@ begin
     if not p_expected_paid and public.unresolved_account_page_v1(p_restaurant, v_account.id) then return false; end if;
   end if;
   select * into v_order from orders where id = p_order and restaurant_id = p_restaurant for update;
+  -- An unpaid order on a card page still open may be about to be paid; it is
+  -- not cancelled under it (verification 2). The route reads false as changed.
+  if not v_order.paid and public.whole_bill_card_open_v1(p_restaurant, array[p_order]) then return false; end if;
   if v_order.id is null or v_order.paid is distinct from p_expected_paid
      or v_order.account_id is distinct from p_expected_account then return false; end if;
   update orders set status = 'cancelled', stripe_refund_id = p_refund, cancelled_at = now()
@@ -7916,6 +7943,9 @@ begin
      -- An order moved onto a customer account is the account's debt now.
      and account_id is null;
   if v_count <> cardinality(v_request.order_ids) or round(v_total, 2) <> p_amount then return 'changed'; end if;
+  -- A card page still open on these orders was quoted the current total; the
+  -- debt may not change under it (unresolved-checkout contract, verification 1).
+  if public.whole_bill_card_open_v1(p_restaurant, v_request.order_ids) then return 'paying'; end if;
   -- Part of the bill was paid after it was asked for: writing it off would
   -- report the whole total as lost (paths audit #5). The guard below would
   -- raise; this says why.
@@ -7973,6 +8003,9 @@ begin
   -- under a held card attempt left the charge unallocatable (split audit #1).
   if exists (select 1 from bill_splits b where b.restaurant_id = p_restaurant and b.status = 'locked'
     and b.order_ids && p_orders) then return jsonb_build_object('outcome', 'split'); end if;
+  -- A card page still open on these orders was quoted the current total; the
+  -- debt may not change under it (unresolved-checkout contract, verification 1).
+  if public.whole_bill_card_open_v1(p_restaurant, p_orders) then return jsonb_build_object('outcome', 'paying'); end if;
   with done as (
     update orders set written_off = true, write_off_reason = p_reason, write_off_note = p_note,
       written_off_by = p_actor, written_off_at = now(), status = 'completed'
@@ -8016,6 +8049,9 @@ begin
      and paid = false and written_off = false and status not in ('cancelled', 'pending_payment')
      and coupon_code is null and account_id is null;
   if v_count <> cardinality(v_request.order_ids) or v_total <= 0 then return 'changed'; end if;
+  -- A card page still open on these orders was quoted the current total; the
+  -- debt may not change under it (unresolved-checkout contract, verification 1).
+  if public.whole_bill_card_open_v1(p_restaurant, v_request.order_ids) then return 'paying'; end if;
   -- Paid in part since it was asked for: a lower total would sit under money
   -- already collected (paths audit #2). The guard would raise; this says why.
   if exists (select 1 from unnest(v_request.order_ids) o(id)
@@ -8088,6 +8124,9 @@ begin
   -- under a held card attempt left the charge unallocatable (split audit #1).
   if exists (select 1 from bill_splits b where b.restaurant_id = p_restaurant and b.status = 'locked'
     and b.order_ids && p_orders) then return 'split'; end if;
+  -- A card page still open on these orders was quoted the current total; the
+  -- debt may not change under it (unresolved-checkout contract, verification 1).
+  if public.whole_bill_card_open_v1(p_restaurant, p_orders) then return 'paying'; end if;
   if v_count = 0 or v_count <> cardinality(p_orders) or v_total <= 0 then return 'changed'; end if;
   if p_amount is null or p_amount <= 0 or p_amount > v_total then return 'changed'; end if;
   if exists (select 1 from unnest(p_orders) o(id)
@@ -11773,7 +11812,8 @@ declare a account_checkouts;
 begin
   perform public.lock_restaurant_money(p_restaurant);
   select * into a from account_checkouts where id = p_checkout and restaurant_id = p_restaurant for update;
-  if a.id is null or a.status <> 'open' or a.created_at > now() - interval '10 minutes'
+  -- A row carrying a Stripe session reached Stripe: that needs its provider, not this (verification 4).
+  if a.id is null or a.status <> 'open' or a.stripe_session_id is not null or a.created_at > now() - interval '10 minutes'
     or exists (select 1 from diner_checkouts c where c.restaurant_id = p_restaurant and c.metadata->>'account_checkout' = a.id::text) then
     return false;
   end if;
