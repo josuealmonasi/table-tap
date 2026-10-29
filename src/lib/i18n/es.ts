@@ -1506,6 +1506,7 @@ foundingLeftBody: "Quien contrata ahora conserva este precio de suscripción mie
     splitNotReady: "Todavía falta gente por aceptar la división.",
     splitNotYours: "No tienes una parte en esta división.",
     splitAlreadyPaid: "Tu parte ya está pagada.",
+    splitBillPaying: "Alguien está pagando la cuenta completa en línea. Espera a que termine o se cancele antes de dividirla o cobrar partes.",
     splitAlready: "Ya hay una división en curso en esta mesa.",
     splitFull: "Esa división ya se cerró.",
     splitLocked: "La cuenta ya se dividió: no se puede cancelar.",

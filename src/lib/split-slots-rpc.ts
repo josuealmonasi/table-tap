@@ -13,7 +13,7 @@ const refusals: Record<string, string> = {
   stale: "splitChanged", changed: "splitChanged", frozen: "splitFrozen", taken: "splitSlotPaying",
   reserved: "splitSlotPaying", paid: "splitSlotPaid", below_minimum: "splitCombineSlots",
   conflict: "splitRequestChanged", busy: "splitAlready", nothing: "nothingToSplit", currency: "mixedCurrencies",
-  gone: "splitGone", forbidden: "forbidden", invalid: "invalidRequest",
+  gone: "splitGone", forbidden: "forbidden", invalid: "invalidRequest", paying: "splitBillPaying",
 };
 /** Keep the writer's refusal: a generic failure leaves a cashier guessing about cash. */
 export async function splitResponse(result: SplitOutcome, accepted: string[]): Promise<NextResponse> {

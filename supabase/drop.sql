@@ -281,6 +281,7 @@ drop function if exists public.guard_offline_audit() cascade;
 drop function if exists public.queue_offline_sale(uuid,uuid,jsonb,text,text,text,text) cascade;
 drop table if exists offline_sale_queue cascade;
 drop function if exists public.retire_split_attempt_v1(uuid, uuid);
+drop function if exists public.whole_bill_card_open_v1(uuid, uuid[]);
 drop function if exists public.write_off_remainder_v1(uuid, uuid[], int, text, text, text, text, uuid, uuid);
 drop function if exists public.guard_order_adjustment();
 drop function if exists public.settle_split_slots_v1(uuid, uuid, text, int);
