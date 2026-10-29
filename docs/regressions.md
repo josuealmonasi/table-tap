@@ -40,6 +40,7 @@ and that a new party cannot see the previous party's waiting phones.
 | Selected held parts recover only their own attempts (unresolved pages) | An expired part stayed unavailable; recovering the whole split would touch another diner's page |
 | Expiry matches frozen provenance and keeps full cart cleanup (unresolved pages) | Closing only an attempt could free a quote without returning a pending cart's stock |
 | Card refusals describe an unconfirmed result in both languages (unresolved pages) | Staff were told someone was paying right now when the result was unknown |
+| A refused money action offers a separate payment check (unresolved pages, finding 7) | Staff had to retry a collection or decision just to ask whether its online payment had finished |
 | Write-off confirmations use per-order decimal cents (#576 R4) | Frozen slot totals and binary rounding quoted 2.01 instead of 2.02, or 0.50 instead of 0.51, while the writer required more |
 | Receipt suppression uses discovery begun for the settlement decision (#576 R3) | An earlier unsplit read, or a failed latest read, offered a whole-order receipt after parts paid |
 | Write-off confirms only the unpaid remainder (#574-5) | The open-bill row showed MX$20 left while its confirmation claimed MX$100 lost |
@@ -5840,3 +5841,33 @@ applicable refusals. `unresolved-api-error.spec.ts` checks the shared
 `checkoutCode: checkout_unresolved` while preserving each route's existing
 outcome code and keeping historical attribution separate. The existing split
 message was already correct and is kept.
+
+### A refused money action offers a separate payment check (finding 7)
+
+The refusal and the screen had to agree on the exact payment being checked.
+`checkoutCode` reached the browser, but no screen offered a status-only action:
+staff had to send the collection, transfer or decision again just to ask.
+`CheckPayment` now checks the saved refused scope at `/api/checkout/check` and
+refreshes the balance. It never resends the original action. Selected split
+parts keep their own selection even if staff edit the form afterward; approvals
+use their saved request orders, and account cancellation includes its account.
+The route confines every identity to the signed-in restaurant, with approvals
+still limited to management and no subscription gate on checking past money.
+
+`unresolved-pages.spec.ts` first fails because a paid page and an unbound page
+have no distinct check outcomes. Status checks now distinguish closure, paid
+money waiting for the bill, an unverified answer, and missing payment identity.
+They never reopen an unbound page or record a paid page themselves: the verified
+webhook owns that money. Missing identity asks for a manager; it does not impose
+a new deadline or disable another way to pay or sell.
+
+`split-slots-collection-screen.spec.tsx` first fails because both collection
+doors have no Check payment button. `payment-check-screens.spec.tsx` covers
+collection, account transfer and settlement, discounts, write-offs and both
+approvals in both languages. `cancel-payment-check.spec.tsx` and
+`orders-money-actions.spec.tsx` cover the cancellation preview and POST refusal.
+`payment-check-route.spec.ts` covers all four answers, roles, mixed-tenant
+identities, currency and selected parts. `check-payment.spec.tsx` checks both
+languages, failed reads and duplicate taps. Both layout and dialog sweeps
+register every outcome through Pedidos and Cuentas for every floor role;
+their browser responses are held, so those visits never collect or query Stripe.

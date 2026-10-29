@@ -29,6 +29,7 @@ export default function WriteOffDialog({
   busy,
   error,
   onSubmit,
+  paymentCheck,
 }: {
   open: boolean;
   onClose: () => void;
@@ -41,6 +42,7 @@ export default function WriteOffDialog({
   canApprove: boolean;
   busy: boolean;
   error?: string | null;
+  paymentCheck?: React.ReactNode;
   onSubmit: (reason: WriteOffReason, note: string) => void;
 }) {
   const t = useT();
@@ -97,6 +99,7 @@ export default function WriteOffDialog({
         onChange={e => setNote(e.target.value)}
       />
 
+      {paymentCheck}
       {error && <p className="tt-field-error" role="alert">{error}</p>}
       <div className="tt-bill-actions">
         <button

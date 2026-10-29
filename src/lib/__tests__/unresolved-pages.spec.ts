@@ -114,3 +114,44 @@ it("a selected reservation cannot retire another split's attempt", async () => {
   expect(await pages.resolveCheckoutPages("r1", { checkoutIds: ["attempt"], splitId: "selected" })).toBe("unverified");
   expect(retrieve).not.toHaveBeenCalled(); expect(s.calls).toEqual([]);
 });
+
+it("a status check distinguishes paid money without recording a payment", async () => {
+  retrieve.mockResolvedValue({ id: "cs_saved", status: "complete", payment_status: "paid", mode: "payment",
+    livemode: false, currency: "mxn", amount_total: 10000, metadata: page.metadata });
+  expect(await pages.resolveCheckoutPages("r1", { orderIds: ["o1"] }, true)).toBe("paid");
+  expect(s.calls).toEqual([]);
+});
+
+it("a status check names missing identity and never opens an unbound page", async () => {
+  s.diners = [{ ...page, stripe_session_id: null, scope_key: "scope", created_at: new Date().toISOString() }];
+  expect(await pages.resolveCheckoutPages("r1", { orderIds: ["o1"] }, true)).toBe("missing_identity");
+  expect(resume).not.toHaveBeenCalled(); expect(s.calls).toEqual([]);
+});
+
+it("a status check closes verified expiry through the same unpaid cleanup", async () => {
+  expect(await pages.resolveCheckoutPages("r1", { orderIds: ["o1"] }, true)).toBe("closed");
+  expect(s.calls).toEqual([{ name: "finish_diner_checkout", args: { p_attempt: "attempt", p_paid: false } }]);
+  expect(resume).not.toHaveBeenCalled();
+});
+
+it("an open page or failed provider read cannot become a closed status", async () => {
+  retrieve.mockResolvedValue({ id: "cs_saved", status: "open", payment_status: "unpaid", mode: "payment",
+    livemode: false, currency: "mxn", amount_total: 10000, metadata: page.metadata });
+  expect(await pages.resolveCheckoutPages("r1", { orderIds: ["o1"] }, true)).toBe("unresolved");
+  retrieve.mockRejectedValue(new Error("offline"));
+  expect(await pages.resolveCheckoutPages("r1", { orderIds: ["o1"] }, true)).toBe("unverified");
+  expect(s.calls).toEqual([]);
+});
+
+it("missing connected identity asks for a manager without reading Stripe", async () => {
+  s.diners = [{ ...page, stripe_account_id: null }];
+  expect(await pages.resolveCheckoutPages("r1", { orderIds: ["o1"] }, true)).toBe("missing_identity");
+  expect(retrieve).not.toHaveBeenCalled(); expect(s.calls).toEqual([]);
+});
+
+it("a mismatched paid page cannot tell staff that the customer paid", async () => {
+  retrieve.mockResolvedValue({ id: "cs_wrong", status: "complete", payment_status: "paid", mode: "payment",
+    livemode: false, currency: "mxn", amount_total: 10000, metadata: page.metadata });
+  expect(await pages.resolveCheckoutPages("r1", { orderIds: ["o1"] }, true)).toBe("unverified");
+  expect(s.calls).toEqual([]);
+});

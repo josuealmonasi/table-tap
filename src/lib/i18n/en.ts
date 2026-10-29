@@ -1,6 +1,14 @@
 // English UI strings for the customer-facing screens. This is the source of
 // truth for the message keys; es.ts must mirror its shape (enforced by types).
 export const en = {
+  paymentCheck: {
+    action: "Check payment",
+    checking: "Checking payment…",
+    closed: "The payment page is closed. The balance has been refreshed. You can choose what to do next.",
+    paid: "The customer paid online. We are waiting for it to appear on the bill. Do not collect it again.",
+    unverified: "We could not confirm this payment. Check again in a few minutes; if it stays this way, ask a manager.",
+    missing_identity: "We could not find the payment details needed to check it. Ask a manager to review the payment before collecting again.",
+  },
   slots: {
     printPart: "Print this part",
     resume: "Continue payment",

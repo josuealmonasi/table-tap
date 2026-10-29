@@ -3,6 +3,14 @@ import type { Messages } from "./en";
 // Spanish (Mexico) UI strings. Typed as Messages so a missing or extra key is a
 // compile error.
 export const es: Messages = {
+  paymentCheck: {
+    action: "Revisar pago",
+    checking: "Revisando pago…",
+    closed: "La página de pago está cerrada. Ya actualizamos el saldo. Puedes elegir qué hacer ahora.",
+    paid: "El cliente pagó en línea. Estamos esperando que aparezca en la cuenta. No lo cobres de nuevo.",
+    unverified: "No pudimos confirmar este pago. Revísalo de nuevo en unos minutos; si sigue igual, pide ayuda a un gerente.",
+    missing_identity: "No encontramos los datos del pago necesarios para revisarlo. Pide a un gerente que revise el pago antes de volver a cobrar.",
+  },
   slots: {
     printPart: "Imprimir esta parte",
     resume: "Continuar el pago",

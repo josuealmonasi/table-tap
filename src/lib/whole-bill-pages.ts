@@ -2,16 +2,18 @@ import { matchesDinerCheckout, type DinerCheckoutRecord } from "@/lib/diner-chec
 import { createAdminClient } from "@/lib/supabase/admin";
 import { checkoutOrderIds, checkoutRows, checkoutRowsIn, checkoutScope, type CheckoutPageScope } from "@/lib/checkout-page-scope";
 
-export type CheckoutPageResolution = "closed" | "unresolved" | "unverified";
+export type CheckoutPageResolution = "closed" | "unresolved" | "unverified" | "paid" | "missing_identity";
 interface Page extends Omit<DinerCheckoutRecord, "stripe_session_id" | "stripe_account_id" | "metadata"> {
   id: string; status?: string; stripe_session_id: string | null; stripe_account_id: string | null;
   split_id: string | null; metadata: Record<string, string> | null; scope_key: string | null; created_at: string;
 }
 interface AccountPage { id: string; stripe_session_id: string | null; created_at: string }
 
-async function closePage(restaurantId: string, page: Page): Promise<CheckoutPageResolution> {
-  if (page.status === "paid") return "unresolved";
-  if (!page.stripe_account_id) return "unverified";
+async function closePage(restaurantId: string, page: Page, statusOnly: boolean): Promise<CheckoutPageResolution> {
+  if (page.status === "paid") return statusOnly ? "paid" : "unresolved";
+  if (!page.stripe_account_id) return statusOnly ? "missing_identity" : "unverified";
+  // Checking a payment must never open a payable page, even with a saved key.
+  if (statusOnly && !page.stripe_session_id) return "missing_identity";
   const db = createAdminClient();
   // Loaded only when a page must be read: every split route imports this module.
   const { stripe } = await import("@/lib/stripe");
@@ -32,6 +34,7 @@ async function closePage(restaurantId: string, page: Page): Promise<CheckoutPage
   const session = await stripe.checkout.sessions.retrieve(page.stripe_session_id, {}, { stripeAccount: page.stripe_account_id });
   // A paid page belongs to the verified webhook, even when its answer is late.
   if (!matchesDinerCheckout(session, { ...page, stripe_session_id: page.stripe_session_id, stripe_account_id: page.stripe_account_id, metadata: page.metadata ?? {} })) return "unverified";
+  if (statusOnly && session.payment_status === "paid") return "paid";
   if (session.status !== "expired" || session.payment_status !== "unpaid") return "unresolved";
   if (page.metadata?.order_id) {
     // A pay-now cart still owns stock. Its complete expiry path returns that
@@ -41,7 +44,7 @@ async function closePage(restaurantId: string, page: Page): Promise<CheckoutPage
   } else if (page.metadata?.split_model === "2") {
     const { data, error } = await db.rpc("retire_split_attempt_v1", { p_restaurant: restaurantId, p_checkout: page.id });
     if (error || !["retired", "gone", "paid"].includes(data?.outcome)) return "unverified";
-    if (data.outcome === "paid") return "unresolved";
+    if (data.outcome === "paid") return statusOnly ? "paid" : "unresolved";
   } else {
     const { error } = await db.rpc("finish_diner_checkout", { p_attempt: page.id, p_paid: false });
     if (error) throw new Error("Could not close the unpaid checkout");
@@ -50,7 +53,7 @@ async function closePage(restaurantId: string, page: Page): Promise<CheckoutPage
 }
 
 /** Read the exact saved page and account; time passing is never proof of expiry. */
-export async function resolveCheckoutPages(restaurantId: string, scope: CheckoutPageScope): Promise<CheckoutPageResolution> {
+export async function resolveCheckoutPages(restaurantId: string, scope: CheckoutPageScope, statusOnly = false): Promise<CheckoutPageResolution> {
   try {
     const db = createAdminClient();
     const { checkoutIds, accountId } = scope;
@@ -75,7 +78,7 @@ export async function resolveCheckoutPages(restaurantId: string, scope: Checkout
         || page.metadata?.split_id !== scope.splitId || page.metadata?.split_model !== "2")) return "unverified";
       // A part's own page must not block cash for another part of its split.
       if (scope.includeParts === false && (page.split_id || page.metadata?.split_model === "2")) continue;
-      results.set(page.id, await closePage(restaurantId, page));
+      results.set(page.id, await closePage(restaurantId, page, statusOnly));
     }
     for (const account of accountPages) {
       let page = pages.find(p => p.metadata?.account_checkout === account.id);
@@ -86,6 +89,7 @@ export async function resolveCheckoutPages(restaurantId: string, scope: Checkout
           .eq("restaurant_id", restaurantId).contains("metadata", { account_checkout: account.id }).maybeSingle();
         if (error) return "unverified";
         if (!data) {
+          if (statusOnly) return "missing_identity";
           // No diner attempt was ever saved for it, and one is always saved
           // before Stripe is called: this account page never reached Stripe and
           // cannot have charged. After ten minutes no request can still be about
@@ -101,14 +105,18 @@ export async function resolveCheckoutPages(restaurantId: string, scope: Checkout
         page = data as Page;
       }
       if (account.stripe_session_id && account.stripe_session_id !== page.stripe_session_id) return "unverified";
-      const resolution = results.get(page.id) ?? await closePage(restaurantId, page);
+      const resolution = results.get(page.id) ?? await closePage(restaurantId, page, statusOnly);
       results.set(page.id, resolution);
       if (resolution === "closed") {
         const { releaseAccountCheckout } = await import("@/lib/account-checkout");
         await releaseAccountCheckout(account.id);
       }
     }
-    if (!results.size || [...results.values()].includes("unverified")) return "unverified";
+    if (!results.size) return statusOnly ? "missing_identity" : "unverified";
+    // A paid page is never called closed, even if another page could not be read.
+    if ([...results.values()].includes("paid")) return "paid";
+    if ([...results.values()].includes("missing_identity")) return "missing_identity";
+    if ([...results.values()].includes("unverified")) return "unverified";
     return [...results.values()].includes("unresolved") ? "unresolved" : "closed";
   } catch (err) {
     // Stripe unreachable is not proof the page cannot charge.

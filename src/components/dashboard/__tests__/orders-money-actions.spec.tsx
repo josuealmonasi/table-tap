@@ -1,8 +1,12 @@
 // @vitest-environment jsdom
 import * as React from "react";
+import { act } from "react";
+import { createRoot } from "react-dom/client";
 import { beforeEach, expect, it, vi } from "vitest";
+import CheckPayment from "../CheckPayment";
+import type { PaymentCheckScope } from "@/lib/payment-check";
 import type { Order } from "@/lib/types";
-const state = vi.hoisted(() => ({ cancel: vi.fn(), confirm: vi.fn(), refresh: vi.fn() }));
+const state = vi.hoisted(() => ({ cancel: vi.fn(), confirm: vi.fn(), refresh: vi.fn(), refusal: null as PaymentCheckScope | null }));
 const order: Order = {
   id: "a", restaurant_id: "r1", status: "received", items: [], created_at: "2026-10-27",
   table_id: null, table_label: null, subtotal: 100, service_fee: 0, total: 100, tip: 0,
@@ -12,6 +16,7 @@ const order: Order = {
 vi.mock("@/hooks/useRestaurantOrders", () => ({ useRestaurantOrders: () => ({
   orders: [order], inactiveOrderIds: new Set(), hideInactive: vi.fn(), cancelOrder: state.cancel,
   cancelPlanFor: async () => ({ paid: false }), online: true, pending: 0,
+  checkoutRefusal: state.refusal,
 }) }));
 vi.mock("@/hooks/useBoardStation", () => ({ useBoardStation: () => [null, vi.fn()] }));
 vi.mock("@/hooks/useRefreshWhenPaid", () => ({ useRefreshWhenPaid: vi.fn() }));
@@ -41,7 +46,31 @@ function board(showRevenue = true) {
 }
 beforeEach(() => {
   vi.clearAllMocks(); vi.stubGlobal("React", React);
+  state.refusal = null;
   state.cancel.mockResolvedValue(null); state.confirm.mockResolvedValue(true);
+});
+
+it("the board's refusal checks its order and refreshes without cancelling", async () => {
+  state.refusal = { kind: "orders", orderIds: ["a"] };
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  vi.stubGlobal("fetch", vi.fn().mockResolvedValue(Response.json({ outcome: "closed" })));
+  function findCheck(node: React.ReactNode): React.ReactNode {
+    if (!React.isValidElement<NodeProps>(node)) return null;
+    if (node.type === CheckPayment) return node;
+    for (const child of React.Children.toArray(node.props.children)) {
+      const found = findCheck(child); if (found) return found;
+    }
+    return null;
+  }
+  const host = document.createElement("div"), root = createRoot(host);
+  try {
+    await act(async () => root.render(findCheck(board())));
+    expect(host.querySelector("button")).not.toBeNull();
+    await act(async () => host.querySelector("button")!.click());
+    expect(fetch).toHaveBeenCalledExactlyOnceWith("/api/checkout/check", expect.objectContaining({ body: JSON.stringify(state.refusal) }));
+    expect(state.refresh).toHaveBeenCalledTimes(1);
+    expect(state.cancel).not.toHaveBeenCalled(); expect(state.confirm).not.toHaveBeenCalled();
+  } finally { await act(async () => root.unmount()); vi.unstubAllGlobals(); }
 });
 it("invalidates takings after the board's own successful cancel", async () => {
   const event = vi.fn(); window.addEventListener("tt-orders-takings-changed", event, { once: true });

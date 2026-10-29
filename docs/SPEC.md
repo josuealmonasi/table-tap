@@ -2527,3 +2527,27 @@ The completed-sale API cases and both dialog openers are registered for Claude's
 integration and browser gates. Unit RPC fixtures verify the TypeScript boundary;
 real transaction races, SQL enforcement and 390/1280 screenshots remain release
 checks owned by Claude.
+
+#### Checking an unconfirmed online payment
+
+When a staff collection, account transfer or settlement, divided-bill action,
+discount, write-off, approval or order cancellation returns
+`checkoutCode: checkout_unresolved`, its screen offers **Revisar pago / Check
+payment**. This is a separate status request at `POST /api/checkout/check` for
+the exact refused scope. It refreshes the balance and never resends the original
+collection or decision. The floor roles already allowed on each screen can
+check; approval requests remain management-only. Every identity is checked
+against the signed-in restaurant, independently of the browser's tenant data.
+Checking past money is available even after a subscription ends.
+
+| Check result | What staff see and can do |
+| --- | --- |
+| Confirmed expired and closed | The balance is refreshed; staff choose their next action themselves. |
+| Paid online | The payment is waiting to appear on the bill; do not collect it again. Only the verified webhook records it. |
+| Open, mismatched or unreadable | The payment could not be confirmed; check again later or ask a manager. |
+| No recoverable saved identity | Ask a manager to review the payment before collecting again. A status check never opens a new payable page. |
+
+All four answers and the action are translated in English and Spanish. An
+unconfirmed result does not add a new time limit or block signing out, selling
+or other payment scopes. Closing confirmed expired pages uses the existing
+resolver's expiry cleanup; no SQL or resolver write contract changes are needed.
