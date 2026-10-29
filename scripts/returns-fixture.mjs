@@ -11,10 +11,14 @@ const checked = async promise => {
 export async function returnsFixture(admin, restaurantId, method = "cash") {
   const orderId = randomUUID(), paymentId = randomUUID(), ref = randomUUID();
   const cleanup = async () => {
-    // The order's cascade removes its own immutable return plan; deleting an
-    // adjustment directly would weaken the same guard the case is testing.
-    await checked(admin.from("orders").delete().eq("id", orderId).eq("restaurant_id", restaurantId));
+    // The receipt first: its allocations, and the return's allocations on them,
+    // go with it. Deleting the order first set the receipt's order to null
+    // with its allocations already gone, and the deferred receipt check
+    // refused the cleanup (#575's api gate). The order's cascade then removes
+    // its own immutable return plan; deleting an adjustment directly would
+    // weaken the same guard the case is testing.
     await checked(admin.from("payments").delete().eq("id", paymentId).eq("restaurant_id", restaurantId));
+    await checked(admin.from("orders").delete().eq("id", orderId).eq("restaurant_id", restaurantId));
   };
   try {
     await checked(admin.from("orders").insert({ id: orderId, restaurant_id: restaurantId, table_id: null,
