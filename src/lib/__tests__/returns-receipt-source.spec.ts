@@ -67,3 +67,22 @@ it("keeps a slot receipt on its own payment while showing that payment's returne
   expect(receipt.text).toContain("receipt.returnPending  MX$10.00");
   expect(receipt.text).toContain("receipt.retained  MX$70.00");
 });
+it("shows a paid order cancelled and refunded in full as returned, not as MX$100 owed (sweep 4, finding 1)", async () => {
+  Object.assign(fixture.tables.orders[0], { total: 100, tip: 0, service_fee: 0, paid: true });
+  fixture.tables.order_adjustments = [{ id: "cancel", kind: "cancel", order_id: ORDER, restaurant_id: "r1", currency: null,
+    previous_total: 100, previous_tip: 0, resulting_total: null, resulting_tip: null }];
+  fixture.tables.refund_operations = [{ id: "cash", restaurant_id: "r1", adjustment_id: "cancel", source: "cash", amount: 100,
+    currency: "MXN", status: "succeeded", completed_at: "2026-10-28T12:00:00Z" }];
+  const source = await read();
+  expect(source.orders[0]).toMatchObject({ total: 0, return_components: { total: 100 }, returns: [{ amount: 100 }] });
+  expect(rendered(source.orders)).toContain("MX$100.00");
+  // An issued copy stays what it was.
+  expect((await read({ adjustmentIds: [] })).orders[0].total).toBe(100);
+});
+it("leaves an unpaid cancelled order alone: nothing was given back", async () => {
+  Object.assign(fixture.tables.orders[0], { total: 100, tip: 0, service_fee: 0, paid: false });
+  fixture.tables.order_adjustments = [{ id: "cancel", kind: "cancel", order_id: ORDER, restaurant_id: "r1", currency: null,
+    previous_total: 100, previous_tip: 0, resulting_total: null, resulting_tip: null }];
+  fixture.tables.refund_operations = [];
+  expect((await read()).orders[0].total).toBe(100);
+});
