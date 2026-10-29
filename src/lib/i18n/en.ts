@@ -1515,7 +1515,7 @@ foundingLeftBody: "Subscribe now and keep this subscription price for as long as
     splitNotReady: "Not everyone has agreed to the split yet.",
     splitNotYours: "You do not have a share in this split.",
     splitAlreadyPaid: "Your share is already paid.",
-    splitBillPaying: "Someone is paying the whole bill online right now. Wait for it to finish or be cancelled before dividing it or collecting parts.",
+    splitBillPaying: "There is an online payment for the whole bill that has not been confirmed. Until it is confirmed or expires, the bill cannot be divided or collected in parts. Try again in a few minutes; if it stays this way, ask a manager to check it.",
     splitAlready: "This table is already dividing its bill.",
     splitFull: "That split is already closed.",
     splitLocked: "The bill is already divided and cannot be called off.",

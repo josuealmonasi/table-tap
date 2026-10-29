@@ -19,14 +19,31 @@ export async function closeExpiredWholeBillPages(restaurantId: string, args: Rec
   }
   if (!orderIds.length) return false;
   const { data: pages, error } = await db.from("diner_checkouts")
-    .select("id, stripe_session_id, stripe_account_id, split_id, metadata")
+    .select("id, stripe_session_id, stripe_account_id, split_id, metadata, scope_key, created_at")
     .eq("restaurant_id", restaurantId).eq("status", "open").is("split_id", null).overlaps("order_ids", orderIds);
   if (error || !pages) return false;
   let closed = false;
   // Loaded only when a page must be read: every split route imports this module.
   const { stripe } = await import("@/lib/stripe");
   for (const page of pages) {
-    if (page.metadata?.split_model === "2" || !page.stripe_session_id || !page.stripe_account_id) continue;
+    if (page.metadata?.split_model === "2" || !page.stripe_account_id) continue;
+    if (!page.stripe_session_id) {
+      // Saved, but its Stripe page was never bound (the process stopped
+      // between the two). Resending its saved request returns that same page
+      // while Stripe still keeps the key (24h), binds it, and closes it if it
+      // expired. Older than that, nothing here can prove it never charged.
+      const age = Date.now() - new Date(page.created_at).getTime();
+      if (!page.scope_key || age > 23 * 3600 * 1000) continue;
+      try {
+        const { resumeDinerAttempt } = await import("@/lib/diner-attempt");
+        await resumeDinerAttempt(stripe, restaurantId, page.scope_key);
+        const { data: now } = await db.from("diner_checkouts").select("status").eq("id", page.id).maybeSingle();
+        if (now?.status === "expired") closed = true;
+      } catch (err) {
+        console.error("split: could not resolve an unbound whole-bill card page", err);
+      }
+      continue;
+    }
     try {
       const session = await stripe.checkout.sessions.retrieve(page.stripe_session_id, {}, { stripeAccount: page.stripe_account_id });
       if (session.status !== "expired") continue;

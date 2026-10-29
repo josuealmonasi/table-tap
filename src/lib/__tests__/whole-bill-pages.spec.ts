@@ -1,19 +1,22 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { rpc, retrieve, rows } = vi.hoisted(() => ({ rpc: vi.fn(), retrieve: vi.fn(), rows: { pages: [] as object[] } }));
+const { rpc, retrieve, rows } = vi.hoisted(() => ({ rpc: vi.fn(), retrieve: vi.fn(), rows: { pages: [] as object[], after: "open" } }));
 vi.mock("@/lib/stripe", () => ({ stripe: { checkout: { sessions: { retrieve } } } }));
+const { resume } = vi.hoisted(() => ({ resume: vi.fn() }));
+vi.mock("@/lib/diner-attempt", () => ({ resumeDinerAttempt: resume }));
 vi.mock("@/lib/supabase/admin", () => ({
   createAdminClient: () => {
+    let table = "";
     const chain = (data: unknown) => {
       const q: Record<string, unknown> = {};
       for (const m of ["select", "eq", "is", "overlaps"]) q[m] = () => q;
-      q.maybeSingle = async () => ({ data, error: null });
+      q.maybeSingle = async () => ({ data: table === "diner_checkouts" ? { status: rows.after } : data, error: null });
       q.then = (resolve: (v: unknown) => void) => resolve({ data, error: null });
       return q;
     };
     return {
       rpc,
-      from: (table: string) => table === "bill_splits" ? chain({ order_ids: ["o1"] })
+      from: (name: string) => (table = name) === "bill_splits" ? chain({ order_ids: ["o1"] })
         : table === "diner_checkouts" ? chain(rows.pages) : chain([{ id: "o1" }]),
     };
   },
@@ -51,5 +54,16 @@ describe("a whole-bill card page blocking a divided bill (#576 R1)", () => {
     rpc.mockResolvedValue({ data: { outcome: "paying" }, error: null });
     await splitRpc("reserve_split_slots_v1", { p_restaurant: "r1", p_split: "s1" });
     expect(retrieve).not.toHaveBeenCalled();
+  });
+  it("resolves an unbound page through its saved request, but not one older than a day", async () => {
+    rpc.mockImplementation(async () => ({ data: { outcome: rpc.mock.calls.length > 1 ? "collected" : "paying" }, error: null }));
+    rows.pages = [{ ...page, stripe_session_id: null, scope_key: "k1", created_at: new Date().toISOString() }];
+    rows.after = "expired";
+    expect((await splitRpc("collect_split_slots_v1", { p_restaurant: "r1", p_split: "s1" })).outcome).toBe("collected");
+    expect(resume).toHaveBeenCalledWith(expect.anything(), "r1", "k1");
+    resume.mockClear(); rpc.mockReset(); rpc.mockResolvedValue({ data: { outcome: "paying" }, error: null });
+    rows.pages = [{ ...page, stripe_session_id: null, scope_key: "k1", created_at: new Date(Date.now() - 30 * 3600 * 1000).toISOString() }];
+    expect((await splitRpc("collect_split_slots_v1", { p_restaurant: "r1", p_split: "s1" })).outcome).toBe("paying");
+    expect(resume).not.toHaveBeenCalled();
   });
 });
