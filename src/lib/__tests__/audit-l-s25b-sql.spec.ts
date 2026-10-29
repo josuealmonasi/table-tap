@@ -32,7 +32,7 @@ it("L4 compares a purchase's original packs, ingredient and total before returni
   expect(readFileSync("supabase/drop.sql", "utf8")).toContain("drop function if exists public.record_purchase_once_v2(uuid, uuid, numeric, numeric, text, uuid);");
 });
 
-it.each(["record_waste_once", "record_ingredient_counts_once", "create_cash_withdrawal_once", "close_cash_shift_once"])("L4 %s refuses a changed saved request", name => {
+it.each(["record_waste_once_v2", "record_ingredient_counts_once", "create_cash_withdrawal_once", "close_cash_shift_once"])("L4 %s refuses a changed saved request", name => {
   expect(fn(name)).toContain("errcode = 'PT409'");
   expect(fn(name)).toContain("is distinct from");
 });
@@ -45,7 +45,7 @@ it("L4 account sales compare the saved account and request before answering with
 });
 
 it("L8 all ingredient RPC writes acquire movement lock before row locks and foreign keys", () => {
-  for (const name of ["record_waste", "record_waste_once", "record_purchase", "record_purchase_once", "record_ingredient_counts", "record_ingredient_counts_once"]) {
+  for (const name of ["record_waste_v2", "record_waste_once_v2", "record_purchase", "record_purchase_once", "record_ingredient_counts", "record_ingredient_counts_once"]) {
     const body = fn(name);
     const lock = body.indexOf("perform public.lock_ingredient_movements");
     expect(lock, name).toBeGreaterThan(-1);

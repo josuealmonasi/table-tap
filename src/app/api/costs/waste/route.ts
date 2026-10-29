@@ -61,10 +61,10 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   } catch {
     return await apiError("apiErr.generic", 503);
   }
-  const { data: id, error } = await createAdminClient().rpc(ref ? "record_waste_once" : "record_waste", {
+  const { data: id, error } = await createAdminClient().rpc(ref ? "record_waste_once_v2" : "record_waste_v2", {
     ...(ref ? { p_ref: ref } : {}),
     p_restaurant: actor.restaurantId, p_ingredient: ingredientId, p_item: itemId, p_quantity: quantity,
-    ...(productChoices ? { p_choices: productChoices } : {}),
+    p_choices: productChoices ?? null,
     p_reason: reason, p_note: wasteNote(body.note), p_cost: cost, p_actor: actor.email,
   });
   if (error?.code === "PT409") return await apiError("apiErr.retryConflict", 409);
