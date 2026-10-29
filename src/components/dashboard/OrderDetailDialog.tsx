@@ -5,8 +5,7 @@ import { useRef, useState } from "react";
 import { Modal } from "@/components/ui/Modal";
 import { useLocale, useT } from "@/lib/i18n/context";
 import { useToast } from "@/components/ui/Toast";
-import { printableReceipt } from "@/lib/print-document";
-import { printWhenReady } from "@/lib/print-window";
+import { reserveReceiptPopup } from "@/lib/receipt-popup";
 import { formatMoney, dateLocale } from "@/lib/format";
 import { boardOrderCode, hasOrderMoney, type BoardOrder } from "@/lib/kitchen-ticket";
 import { statusMeta } from "@/lib/order-status";
@@ -57,6 +56,10 @@ export default function OrderDetailDialog({
    */
   async function print(to: "kitchen" | "receipt"): Promise<void> {
     if (busy || (to === "receipt" && !money)) return;
+    const paper = to === "receipt" ? reserveReceiptPopup(reason => {
+      // A blocked pop-up must not look like a printed ticket.
+      toast(t(reason === "blocked" ? "pos.printBlocked" : "receiptPrint.failed"), "error");
+    }) : undefined;
     setBusy(to);
     const copy = issued.current;
     try {
@@ -79,22 +82,15 @@ export default function OrderDetailDialog({
         toast(t("orders.sentToKitchen"));
         return;
       }
+      if (typeof data.html !== "string" || !data.html.trim()) throw new Error("Missing receipt");
       // Keep the version this print issued, even if another return completes
       // before the person asks for a second copy in this dialog.
       if (issued.current === copy && data.version) copy.version = data.version;
-      const w = window.open("", "_blank", "width=380,height=640");
-      if (!w) {
-        // A blocked pop-up must not look like a printed ticket.
-        toast(t("pos.printBlocked"), "error");
-        return;
-      }
-      w.document.write(printableReceipt(data.html ?? "", boardOrderCode(order)));
-      w.document.close();
-      w.focus();
-      printWhenReady(w);
+      paper?.print(data.html, boardOrderCode(order));
     } catch {
-      toast(t("done.networkError"), "error");
+      toast(t(to === "receipt" ? "receiptPrint.failed" : "done.networkError"), "error");
     } finally {
+      paper?.close();
       setBusy(null);
     }
   }

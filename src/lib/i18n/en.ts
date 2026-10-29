@@ -1362,6 +1362,7 @@ foundingLeftBody: "Subscribe now and keep this subscription price for as long as
     askTitle: "Charge {amount}",
     sendToKitchen: "Send to the kitchen",
     printBlocked: "The browser blocked printing. Allow pop-ups for this site.",
+    printFailed: "The sale is saved. We couldn't print the receipt; you can print it again from Orders.",
     noTicket: "The customer does not want a ticket",
     noTicketHint: "Nothing is printed and nothing is emailed. The sale is recorded either way.",
     handedOver: "Handed over. Nothing to wait for.",
