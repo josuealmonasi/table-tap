@@ -7,7 +7,7 @@ import { DEFAULT_TIME_ZONE } from "@/lib/open-menus";
 import { getLocale } from "@/lib/i18n/server";
 import { mailConfigured, sendMail } from "@/lib/mail";
 import { buildReceipt, type ReceiptVersion } from "@/lib/receipt";
-import { readOrderReceipt, readSlotReceipt, ReceiptReadError, type ReceiptSource } from "@/lib/receipt-source";
+import { MAX_RECEIPT_ORDERS, readOrderReceipt, readSlotReceipt, ReceiptReadError, type ReceiptSource } from "@/lib/receipt-source";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isValidEmail, normalizeEmail } from "@/lib/email";
 import { dateLocale } from "@/lib/format";
@@ -65,9 +65,11 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   // request read the whole table and build an enormous email.
   // Read as an array only when it is one: JSON can say anything, and a string
   // here once reached `.filter` and answered 500.
+  // Refused above the cap, never shortened to it: the first 40 of 41 orders
+  // went out by email as the whole bill, MX$10 short (sweep 4, finding 2).
   const ids = (Array.isArray(orderIds) && orderIds.length ? orderIds : [orderId])
-    .filter((v): v is string => typeof v === "string" && v.length > 0)
-    .slice(0, 40);
+    .filter((v): v is string => typeof v === "string" && v.length > 0);
+  if (ids.length > MAX_RECEIPT_ORDERS) return await apiError("receipt.tooManyOrders", 413);
   const address = normalizeEmail(String(email ?? ""));
   if ((!paymentId && ids.length === 0) || (!printing && !isValidEmail(address))) {
     return await apiError("receipt.badEmail", 400);

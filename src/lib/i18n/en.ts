@@ -926,6 +926,7 @@ foundingLeftBody: "Subscribe now and keep this subscription price for as long as
     sentBody: "We sent your receipt to {email}.",
     done: "Done",
     badEmail: "That email doesn't look right.",
+    tooManyOrders: "This bill has too many orders for one receipt. Ask the staff for a receipt per order.",
     failed: "We couldn't send it. Ask your waiter for a printed one.",
     notReady: "Emailed receipts aren't switched on here yet. Ask your waiter for a printed one.",
     subject: "Your receipt · {restaurant} · {code}",

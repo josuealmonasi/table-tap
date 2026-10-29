@@ -923,6 +923,7 @@ foundingLeftBody: "Quien contrata ahora conserva este precio de suscripción mie
     sentBody: "Te mandamos tu recibo a {email}.",
     done: "Listo",
     badEmail: "Ese correo no se ve bien.",
+    tooManyOrders: "Esta cuenta tiene demasiados pedidos para un solo recibo. Pide al personal un recibo por pedido.",
     failed: "No pudimos enviarlo. Pídele a tu mesero uno impreso.",
     notReady: "Los recibos por correo todavía no están activos aquí. Pídele a tu mesero uno impreso.",
     subject: "Tu recibo · {restaurant} · {code}",
