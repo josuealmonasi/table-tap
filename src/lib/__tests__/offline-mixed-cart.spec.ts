@@ -9,7 +9,7 @@ const dish: OrderLineItem = { itemId: "dish", name: "Dish", emoji: "", price: 50
 const combo: OrderLineItem = { itemId: "meal", comboId: "meal", name: "Meal", emoji: "", price: 90, qty: 1, mods: {}, components: [{ itemId: "dish", name: "Dish", emoji: "", qty: 2 }] };
 const promotion: PromotionWithItems = { id: "meal", restaurant_id: "r", kind: "combo", name: "Meal", emoji: "", description: null,
   combo_price: 90, buy_qty: null, pay_qty: null, tiers: null, active: true, sort_order: 0, items: [{ item_id: "dish", qty: 2 }] };
-const dbItem: VerifiableItem = { id: "dish", name: "Dish", emoji: "", price: 50, available: true, discount_pct: 0, modifiers: null, category_id: null };
+const dbItem: VerifiableItem = { id: "dish", name: "Dish", emoji: "", price: 50, available: true, discount_pct: 0, modifiers: null, category_id: null, menu_id: "dinner", is_addon: false, item_addons: [] };
 
 it.each([[dish, combo], [combo, dish]])("accepts an unchanged mixed cart in submission order %#", (...items) => {
   const verified = verifyCart({ items, dbItems: [dbItem], promotions: [promotion], isOnOpenMenu: () => true });

@@ -52,6 +52,10 @@ export interface VerifiableItem {
   discount_pct: number | string | null;
   modifiers: Modifier[] | null;
   category_id: string | null;
+  menu_id: string | null;
+  is_addon: boolean;
+  /** Only the extras this product offers, from its saved links. */
+  item_addons: { addon_id: string }[];
   /** Needs no preparation. Absent on rows fetched before this existed. */
   skips_kitchen?: boolean | null;
   /** Its section, embedded: where the dish is made. Absent = the kitchen. */
@@ -68,8 +72,8 @@ export interface VerifyCartInput {
   promotions: PromotionWithItems[];
   /** Every referenced product and extra, fetched scoped to the restaurant. */
   dbItems: VerifiableItem[];
-  /** Whether a category sits on a menu that is serving right now. */
-  isOnOpenMenu: (categoryId: string | null) => boolean;
+  /** Whether the item's own menu is serving right now. */
+  isOnOpenMenu: (menuId: string | null) => boolean;
   /** Defaults to `MAX_CART_LINES`; the card path has a lower one. */
   maxLines?: number;
 }
@@ -111,23 +115,23 @@ export function verifyCart(input: VerifyCartInput): VerifyCartResult {
     // closing time would otherwise still reach here.
     for (const component of combo.components) {
       const part = priceMap.get(component.itemId);
-      if (!part || !part.available || !isOnOpenMenu(part.category_id)) {
+      if (!part || !part.available || !isOnOpenMenu(part.menu_id)) {
         return { ok: false, rejection: gone(line) };
       }
     }
 
-    const result = verifyCombo(combo, line, clampQty(line.qty), priceMap, removedExtras);
+    const result = verifyCombo(combo, line, clampQty(line.qty), priceMap, removedExtras, isOnOpenMenu);
     if (!result.ok) return result;
     lines.push(result.line);
   }
 
   for (const line of plainLines) {
     const db = priceMap.get(line.itemId);
-    if (!db || !db.available || !isOnOpenMenu(db.category_id)) {
+    if (!db || !db.available || !isOnOpenMenu(db.menu_id)) {
       return { ok: false, rejection: gone(line, db?.name) };
     }
 
-    const verifiedExtras = verifyExtras(line.extras, priceMap, removedExtras);
+    const verifiedExtras = verifyExtras(line.extras, db, priceMap, removedExtras, isOnOpenMenu);
 
     // Checked against the DB's modifiers rather than the client's. The customer
     // screen already disables "Add to cart" for this, but that copy can be
