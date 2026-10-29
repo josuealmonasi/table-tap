@@ -14,9 +14,8 @@ import { NotificationsIcon } from "@/components/ui/icons";
  * policy draw — a warning that a dish is running out is only useful to somebody
  * who can order more of it.
  *
- * Reading one does not remove it. The list is the last ten either way, newest
- * first, and read ones stay so that "what was that about?" has an answer an
- * hour later.
+ * Reading one does not remove it. Unread entries come first; older pages
+ * stay reachable so that "what was that about?" has an answer an hour later.
  */
 export default function NotificationsMenu({ enabled }: { enabled: boolean }) {
   const t = useT();
@@ -24,7 +23,7 @@ export default function NotificationsMenu({ enabled }: { enabled: boolean }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
-  const { notifications, unread, markRead, markAllRead } = useNotifications(enabled);
+  const { notifications, unread, markRead, markAllRead, hasMore, loadingMore, loadMore, loadError, timeZone } = useNotifications(enabled);
 
   useEffect(() => {
     if (!open) return;
@@ -90,7 +89,7 @@ export default function NotificationsMenu({ enabled }: { enabled: boolean }) {
         <div className="tt-user-dropdown tt-notif-dropdown" role="menu">
           <div className="tt-notif-head">
             <strong>{t("notif.title")}</strong>
-            {unread > 0 && (
+            {notifications.some(n => !n.read_at) && (
               <button type="button" className="tt-notif-readall" onClick={markAllRead}>
                 {t("notif.markAllRead")}
               </button>
@@ -121,6 +120,7 @@ export default function NotificationsMenu({ enabled }: { enabled: boolean }) {
                     <span className="tt-notif-text">{sentence(n)}</span>
                     <span className="tt-notif-when tt-muted">
                       {new Date(n.created_at).toLocaleString(dateLocale(locale), {
+                        timeZone,
                         day: "numeric",
                         month: "short",
                         hour: "2-digit",
@@ -131,6 +131,11 @@ export default function NotificationsMenu({ enabled }: { enabled: boolean }) {
                 </li>
               ))}
             </ul>
+          )}
+          {(hasMore || loadError) && (
+            <button type="button" className="tt-notif-readall" onClick={loadMore} disabled={loadingMore}>
+              {t(loadError ? "fallback.retry" : "notif.loadOlder")}
+            </button>
           )}
         </div>
       )}

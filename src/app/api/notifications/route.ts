@@ -2,34 +2,30 @@ import { NextRequest, NextResponse } from "next/server";
 import { apiError } from "@/lib/api-error";
 import { jsonBody } from "@/lib/json-body";
 import { actingManager } from "@/lib/api-guard";
+import { DEFAULT_TIME_ZONE } from "@/lib/open-menus";
+import { notificationCursor, notificationPage } from "@/lib/notification-page";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-/** What the bell shows at once. Older ones stay in the table, not on screen. */
-const SHOWN = 10;
-
 /**
- * GET /api/notifications — the newest few, and how many are unread.
+ * GET /api/notifications — unread first, then older entries, and the unread total.
  *
  * Owner and manager only, which is the same line the table's RLS policy draws:
  * a warning that the last portions are going is only useful to somebody who can
  * order more. Read here with the secret key after the role check, because the
- * unread count has to be counted across all of them rather than the ten shown.
+ * unread count has to be counted across all of them rather than just the page shown.
  */
-export async function GET(): Promise<NextResponse> {
+export async function GET(req?: NextRequest): Promise<NextResponse> {
   const actor = await actingManager();
   if (!actor) return await apiError("apiErr.forbidden", 403);
 
+  const cursor = notificationCursor(req?.nextUrl.searchParams.get("before") ?? null);
+  if (!cursor) return await apiError("apiErr.invalidRequest", 400);
   const db = createAdminClient();
   const [listed, unread] = await Promise.all([
-    db
-      .from("notifications")
-      .select("id, kind, data, read_at, created_at")
-      .eq("restaurant_id", actor.restaurantId)
-      .order("created_at", { ascending: false })
-      .limit(SHOWN),
+    notificationPage(actor.restaurantId, cursor),
     db
       .from("notifications")
       .select("id", { count: "exact", head: true })
@@ -38,14 +34,19 @@ export async function GET(): Promise<NextResponse> {
   ]);
   if (listed.error || unread.error) return await apiError("apiErr.generic", 503);
 
+  const { data: restaurant, error: restaurantError } = await db.from("restaurants")
+    .select("timezone").eq("id", actor.restaurantId).maybeSingle();
+  if (restaurantError || !restaurant) return await apiError("apiErr.generic", 503);
   return NextResponse.json({
-    notifications: listed.data ?? [],
+    timeZone: restaurant.timezone ?? DEFAULT_TIME_ZONE,
+    notifications: listed.notifications,
     unread: unread.count ?? 0,
+    nextCursor: listed.nextCursor,
   });
 }
 
 /**
- * POST /api/notifications — mark one as read, or all of them.
+ * POST /api/notifications — mark one as read, or all the entries shown.
  *
  * Read is a timestamp, and the row stays in the list either way: the point of
  * the bell is that you can go back and see what it told you. Marking something
@@ -59,6 +60,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   const body = await jsonBody<{
     id?: string;
     all?: boolean;
+    ids?: unknown;
     restaurantId?: string;
   }>(req);
   if (!body) return await apiError("apiErr.invalidRequest", 400);
@@ -67,15 +69,23 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   if (body.restaurantId !== undefined && body.restaurantId !== actor.restaurantId) {
     return await apiError("apiErr.forbidden", 403);
   }
-  const { id, all } = body;
-  if (!id && all !== true) return await apiError("apiErr.badRequest", 400);
+  const { id, all, ids } = body;
+  // An unseen refund must stay unread even when the visible page is cleared.
+  if (all === true && (!Array.isArray(ids) || ids.length > 100
+    || ids.some(value => typeof value !== "string" || value.length > 100))) {
+    return await apiError("apiErr.badRequest", 400);
+  }
+  if (all !== true && (typeof id !== "string" || !id || id.length > 100)) return await apiError("apiErr.badRequest", 400);
+
+  if (all === true && (ids as string[]).length === 0) return NextResponse.json({ ok: true });
 
   let query = createAdminClient()
     .from("notifications")
     .update({ read_at: new Date().toISOString() })
     .eq("restaurant_id", actor.restaurantId)
     .is("read_at", null);
-  if (!all) query = query.eq("id", id!);
+  if (all === true) query = query.in("id", ids as string[]);
+  else query = query.eq("id", id!);
 
   const { error } = await query;
   if (error) {

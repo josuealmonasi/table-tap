@@ -25,8 +25,8 @@ vi.mock("@/lib/supabase/admin", () => ({
 }));
 import { POST } from "@/app/api/account/email/route";
 
-const send = () => POST(new NextRequest("http://localhost/api/account/email", {
-  method: "POST", body: JSON.stringify({ c: "ZMYKTJ6GDA2Y", email: "someone@example.com" }),
+const send = (ref = "statement-operation-1") => POST(new NextRequest("http://localhost/api/account/email", {
+  method: "POST", body: JSON.stringify({ c: "ZMYKTJ6GDA2Y", email: "someone@example.com", ref }),
 }));
 
 beforeEach(() => { hits.clear(); sendMail.mockReset(); sendMail.mockResolvedValue({ sent: true }); });
@@ -44,4 +44,18 @@ it("sends an account's statement at most four times a day, from any number of ad
 it("keeps nothing about the recipient in any limit", async () => {
   await send();
   expect([...hits.keys()].some(bucket => bucket.includes("someone") || bucket.includes("example.com"))).toBe(false);
+});
+
+
+it("retries one statement with the same provider key and changes it for an intentional resend", async () => {
+  await send(); await send(); await send("statement-operation-2");
+  const keys = sendMail.mock.calls.map(([mail]) => mail.idempotencyKey);
+  expect(keys[0]).toBe("statement/acct-1/statement-operation-1");
+  expect(keys[1]).toBe(keys[0]); expect(keys[2]).not.toBe(keys[0]);
+});
+
+
+it("requires an operation reference before sending", async () => {
+  expect((await send("")).status).toBe(400);
+  expect(sendMail).not.toHaveBeenCalled();
 });
