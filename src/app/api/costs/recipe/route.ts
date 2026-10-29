@@ -61,6 +61,7 @@ export async function PUT(req: NextRequest): Promise<NextResponse> {
   const { data: count, error } = await db.rpc("replace_recipe", {
     p_restaurant: actor.restaurantId, p_item: itemId, p_lines: lines,
   });
+  if (error?.code === "PT422") return await apiError("apiErr.recipeChoice", 409);
   if (error) return await apiError("apiErr.generic", 500);
   if (count === -1) return await apiError("apiErr.notFound", 404);
   if (count === -2) return await apiError("apiErr.recipeIngredient", 409);

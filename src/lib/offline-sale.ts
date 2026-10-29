@@ -57,6 +57,17 @@ const price = (v: unknown) => {
   return Number.isFinite(n) && n >= 0 && n <= 1_000_000 ? round2(n) : 0;
 };
 
+function offlineMods(raw: unknown): OrderLineItem["mods"] {
+  const mods: Record<string, string | string[]> = {};
+  if (raw && typeof raw === "object") {
+    for (const [k, v] of Object.entries(raw as Record<string, unknown>).slice(0, 20)) {
+      if (typeof v === "string") mods[k.slice(0, 80)] = v.slice(0, 80);
+      else if (Array.isArray(v)) mods[k.slice(0, 80)] = v.filter((x): x is string => typeof x === "string").slice(0, 20).map(x => x.slice(0, 80));
+    }
+  }
+  return mods;
+}
+
 /**
  * The till's own lines, kept as the record of a sale whose dishes the menu no
  * longer has. Names and prices as the till had them, bounded; nothing in them
@@ -69,13 +80,7 @@ export function offlineLines(items: unknown): OrderLineItem[] {
     const l = raw as Record<string, unknown>;
     const qty = Math.trunc(Number(l.qty));
     if (!Number.isFinite(qty) || qty < 1 || qty > 99) return [];
-    const mods: Record<string, string | string[]> = {};
-    if (l.mods && typeof l.mods === "object") {
-      for (const [k, v] of Object.entries(l.mods as Record<string, unknown>).slice(0, 20)) {
-        if (typeof v === "string") mods[k.slice(0, 80)] = v.slice(0, 80);
-        else if (Array.isArray(v)) mods[k.slice(0, 80)] = v.filter((x): x is string => typeof x === "string").slice(0, 20).map(x => x.slice(0, 80));
-      }
-    }
+    const mods = offlineMods(l.mods);
     const extras: OrderExtra[] = Array.isArray(l.extras)
       ? (l.extras as Record<string, unknown>[]).slice(0, 20).map(e => ({
           id: text(e?.id, 64), name: text(e?.name, 80), emoji: text(e?.emoji, 8), price: price(e?.price),
@@ -89,7 +94,7 @@ export function offlineLines(items: unknown): OrderLineItem[] {
           const n = Math.trunc(Number(c?.qty));
           const itemId = text(c?.itemId, 64);
           return itemId && Number.isFinite(n) && n >= 1 && n <= 99
-            ? [{ itemId, name: text(c?.name, 80) || "—", emoji: text(c?.emoji, 8), qty: n }]
+            ? [{ itemId, name: text(c?.name, 80) || "—", emoji: text(c?.emoji, 8), qty: n, mods: offlineMods(c?.mods) }]
             : [];
         })
       : [];

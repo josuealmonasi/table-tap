@@ -12277,3 +12277,40 @@ returns timestamptz language sql stable set search_path = public as $$
 $$;
 revoke all on function public.refund_success_time_v1(jsonb) from public, anon, authenticated;
 grant execute on function public.refund_success_time_v1(jsonb) to service_role;
+
+-- R7-4: menu choices and recipe conditions must change together. Both recipe
+-- saves and product edits hold the product row, so neither can orphan the other.
+create or replace function public.guard_recipe_choices()
+returns trigger language plpgsql security definer set search_path = public as $$
+declare v_name text; v_modifiers jsonb;
+begin
+  if tg_table_name = 'recipe_lines' then
+    select name, modifiers into v_name, v_modifiers from menu_items
+      where id = new.item_id and restaurant_id = new.restaurant_id for update;
+    if new.mod_label is null and new.mod_option is null then return new; end if;
+    if exists (
+      select 1 from jsonb_array_elements(coalesce(v_modifiers, '[]')) m
+      where m->>'label' = new.mod_label and (m->'options') ? new.mod_option
+    ) then return new; end if;
+  else
+    v_name := new.name;
+    if not exists (
+      select 1 from recipe_lines r where r.item_id = new.id and r.restaurant_id = new.restaurant_id
+      and (r.mod_label is not null or r.mod_option is not null)
+      and not exists (
+        select 1 from jsonb_array_elements(coalesce(new.modifiers, '[]')) m
+        where m->>'label' = r.mod_label and (m->'options') ? r.mod_option
+      )
+    ) then return new; end if;
+  end if;
+  raise exception using errcode = 'PT422', message = 'tt_recipe_choice', detail = coalesce(v_name, '');
+end;
+$$;
+revoke all on function public.guard_recipe_choices() from public, anon, authenticated;
+grant execute on function public.guard_recipe_choices() to service_role;
+drop trigger if exists guard_product_recipe_choices on public.menu_items;
+create trigger guard_product_recipe_choices before update of modifiers on public.menu_items
+  for each row when (old.modifiers is distinct from new.modifiers) execute function public.guard_recipe_choices();
+drop trigger if exists guard_line_recipe_choices on public.recipe_lines;
+create trigger guard_line_recipe_choices before insert or update on public.recipe_lines
+  for each row execute function public.guard_recipe_choices();

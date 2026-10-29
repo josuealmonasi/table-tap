@@ -1,7 +1,8 @@
+import { recipeChoicesOffered } from "./recipe-choices";
 import type { Modifier } from "@/lib/types";
 import { lineRevenues, type RevenueOrder } from "@/lib/report-revenue";
 import { itemSalePrice } from "@/lib/pricing";
-import { defaultChoices, dishCost, lineCost, type RecipeBook, type UnitCosts } from "./recipe-cost";
+import { defaultChoices, dishCost, type RecipeBook, type UnitCosts } from "./recipe-cost";
 
 /**
  * What a product leaves, and what a period's sales left.
@@ -48,7 +49,8 @@ export function unitMargin(item: CostedItem, book: RecipeBook, costs: UnitCosts,
   const price = itemSalePrice(Number(item.price), item.discount_pct);
   const net = withoutIva(price, taxPct);
   const fee = price * feeRate;
-  const cost = dishCost(item.id, defaultChoices(item.modifiers), book, costs);
+  const cost = recipeChoicesOffered(book.get(item.id) ?? [], item.modifiers)
+    ? dishCost(item.id, defaultChoices(item.modifiers), book, costs) : null;
   const margin = cost === null ? null : net - cost - fee;
   return {
     itemId: item.id, name: item.name, emoji: item.emoji, isAddon: item.is_addon,
@@ -68,6 +70,8 @@ export function unitMargins(items: CostedItem[], book: RecipeBook, costs: UnitCo
 export interface SoldOrder extends RevenueOrder {
   // What the lines actually came to after every discount is total less service and tip.
   tax_pct: number;
+  /** Frozen ingredient cost for each whole sold line; absent or null is unknown. */
+  ingredient_costs?: (number | null)[];
 }
 
 export interface Contribution {
@@ -81,22 +85,22 @@ export interface Contribution {
   cost: number;
   fees: number;
   contribution: number;
-  /** Every unit sold had a recipe behind it. */
+  /** Every unit sold has a saved ingredient valuation. */
   complete: boolean;
 }
 
 export interface PeriodContribution {
   rows: Contribution[];
   /**
-   * The totals cover only lines whose every dish and extra has a recipe. A
-   * line whose cost is unknown would count as costing nothing, and a menu
-   * that is mostly uncosted would show a margin of nearly everything.
+   * The totals cover only lines whose ingredient valuation was saved. A
+   * line whose cost is unknown would count as costing nothing, and a
+   * period that is mostly uncosted would show a margin of nearly everything.
    */
   revenue: number;
   cost: number;
   fees: number;
   contribution: number;
-  /** Revenue from the lines left out of the totals, for missing a recipe. */
+  /** Revenue from lines left out because their saved ingredient cost is unknown. */
   uncosted: number;
 }
 
@@ -106,7 +110,7 @@ export interface PeriodContribution {
  * An order's own discounts — a promotion, a coupon — are shared across its
  * lines by value, since they were taken off the order as a whole.
  */
-export function periodContribution(orders: SoldOrder[], book: RecipeBook, costs: UnitCosts, feeRate: number): PeriodContribution {
+export function periodContribution(orders: SoldOrder[], feeRate: number): PeriodContribution {
   const byKey = new Map<string, Contribution>();
   const total = { revenue: 0, cost: 0, fees: 0, uncosted: 0 };
   for (const order of orders) {
@@ -116,7 +120,10 @@ export function periodContribution(orders: SoldOrder[], book: RecipeBook, costs:
       const gross = revenues[i];
       const revenue = withoutIva(gross, Number(order.tax_pct) || 0);
       const fees = gross * feeRate;
-      const { cost, complete } = lineCost(line, book, costs);
+      // Today's recipe and supplier price cannot tell us what yesterday used.
+      const saved = order.ingredient_costs?.[i];
+      const complete = typeof saved === "number" && Number.isFinite(saved) && saved >= 0;
+      const cost = complete ? saved : 0;
       const key = line.comboId ? `combo:${line.comboId}` : line.itemId;
       const row = byKey.get(key) ?? {
         key, name: line.name, emoji: line.emoji ?? null, units: 0, revenue: 0, cost: 0, fees: 0, contribution: 0, complete: true,

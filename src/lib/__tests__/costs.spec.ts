@@ -154,13 +154,13 @@ describe("what a product leaves", () => {
 
   it("shares an order's discount across its lines and adds up the period", () => {
     const orders = [{
-      subtotal: 87, tax_pct: 0, // MX$116 of lines with MX$29 off the order
+      ingredient_costs: [28.4], subtotal: 87, tax_pct: 0, // MX$116 of lines with MX$29 off the order
       total: 87, service_fee: 0, tip: 0,
       items: [
         { itemId: "latte", name: "Latte", emoji: "☕", price: 58, qty: 2, mods: { Leche: "Entera" } },
       ] as OrderLineItem[],
     }];
-    const p = periodContribution(orders, book, costs, 0);
+    const p = periodContribution(orders, 0);
     expect(p.revenue).toBeCloseTo(87);
     expect(p.cost).toBeCloseTo(28.4);
     expect(p.contribution).toBeCloseTo(87 - 28.4);
@@ -169,11 +169,11 @@ describe("what a product leaves", () => {
   });
 
   it("keeps sales it cannot cost out of the totals, and names them", () => {
-    const orders = [{ subtotal: 88, total: 88, service_fee: 0, tip: 0, tax_pct: 0, items: [
+    const orders = [{ ingredient_costs: [null, 14.2], subtotal: 88, total: 88, service_fee: 0, tip: 0, tax_pct: 0, items: [
       { itemId: "croissant", name: "Croissant", emoji: "🥐", price: 30, qty: 1, mods: {} },
       { itemId: "latte", name: "Latte", emoji: "☕", price: 58, qty: 1, mods: { Leche: "Entera" } },
     ] as OrderLineItem[] }];
-    const p = periodContribution(orders, book, costs, 0);
+    const p = periodContribution(orders, 0);
     expect(p.uncosted).toBeCloseTo(30);
     expect(p.revenue).toBeCloseTo(58);
     expect(p.contribution).toBeCloseTo(58 - 14.2);

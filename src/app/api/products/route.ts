@@ -7,6 +7,7 @@ import { planLabel } from "@/lib/plan";
 import { frozenBlocks, planBlocks } from "@/lib/plan-guard";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
+import { modifierEditBlocks } from "@/lib/costs/modifier-edit";
 import { uuidOf } from "@/lib/costs/guard";
 
 export const runtime = "nodejs";
@@ -30,6 +31,10 @@ export async function PATCH(req: NextRequest): Promise<NextResponse> {
     return await apiError("apiErr.invalidRequest", 400);
   }
   const changes = Object.fromEntries(Object.entries(input).filter(([key]) => FIELDS.has(key)));
+  if (id && "modifiers" in changes) {
+    const blocked = await modifierEditBlocks(actor.restaurantId, id, changes.modifiers);
+    if (blocked) return blocked;
+  }
   if (body.addonIds !== undefined) {
     const categoryId = body.categoryId == null ? null : uuidOf(body.categoryId);
     if (!id && body.categoryId != null && !categoryId) return await apiError("apiErr.invalidRequest", 400);
@@ -49,6 +54,7 @@ export async function PATCH(req: NextRequest): Promise<NextResponse> {
       p_restaurant: actor.restaurantId, p_product: id, p_addons: body.addonIds, p_changes: changes,
       p_menu: id ? null : menuId, p_category: id ? null : categoryId,
     });
+    if (error?.code === "PT422") return await apiError("apiErr.recipeModifierEdit", 409, { name: error.details });
     if (error?.message.includes("tt_plan_frozen")) return await apiError("plan.frozen", 402);
     if (error?.message.includes("tt_plan_feature")) return (await planBlocks(actor.restaurantId, "inventory")) ?? await apiError("write.createProduct", 409);
     const limit = parsePlanLimit(error?.message);
@@ -65,6 +71,7 @@ export async function PATCH(req: NextRequest): Promise<NextResponse> {
   const db = await createClient();
   const { data, error } = await db.from("menu_items").update(changes)
     .eq("id", id).eq("restaurant_id", actor.restaurantId).eq("is_addon", false).select("id").maybeSingle();
+  if (error?.code === "PT422") return await apiError("apiErr.recipeModifierEdit", 409, { name: error.details });
   if (error) return await apiError("write.updateProduct", 503);
   if (!data) return await apiError("apiErr.notFound", 404);
   return NextResponse.json({ ok: true });
