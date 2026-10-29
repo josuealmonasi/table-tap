@@ -21,14 +21,14 @@ it("K5 withdrawals return a previous movement before checking whether its shift 
   expect(sql).toContain("on conflict (shift_id, request_ref)");
 });
 it("K6 ingredient retries keep the movement-first lock order and return before any new baseline or price", () => {
-  for (const [name, write] of [["record_purchase_once", "insert into ingredient_purchases"], ["record_waste_once", "insert into waste_entries"], ["record_ingredient_counts_once", "insert into ingredient_counts"]]) {
+  for (const [name, write] of [["record_purchase_once", "insert into ingredient_purchases"], ["record_waste_once_v2", "insert into waste_entries"], ["record_ingredient_counts_once", "insert into ingredient_counts"]]) {
     const sql = fn(name);
     expect(sql.indexOf("lock_ingredient_movements")).toBeLessThan(sql.indexOf(write));
     expect(sql.indexOf("if found then return") >= 0 || sql.indexOf("if v_results is not null then return") >= 0).toBe(true);
     expect(sql).toContain("on conflict");
   }
   expect(fn("record_purchase_once").indexOf("lock_ingredient_movements")).toBeLessThan(fn("record_purchase_once").indexOf("for update"));
-  const waste = fn("record_waste_once");
+  const waste = fn("record_waste_once_v2");
   expect(waste.indexOf("lock_ingredient_movements")).toBeLessThan(waste.indexOf("select name into v_name from ingredients"));
   expect(fn("record_ingredient_counts_once")).toContain("'movement_cutoff', movement_cutoff");
 });

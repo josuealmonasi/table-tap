@@ -350,6 +350,6 @@ drop function if exists public.collect_table_reviewed_v1(uuid,uuid,numeric,text,
 drop function if exists public.save_product_addons_v1(uuid, uuid, uuid[], jsonb, uuid, uuid) cascade;
 drop function if exists public.guard_recipe_choices() cascade;
 drop function if exists public.waste_ingredient_usage_v2(uuid, uuid, uuid, numeric, jsonb);
-drop function if exists public.record_waste(uuid, uuid, uuid, numeric, text, text, numeric, text, jsonb);
-drop function if exists public.record_waste_once(uuid, uuid, uuid, numeric, text, text, numeric, text, uuid, jsonb);
+drop function if exists public.record_waste_v2(uuid, uuid, uuid, numeric, text, text, numeric, text, jsonb);
+drop function if exists public.record_waste_once_v2(uuid, uuid, uuid, numeric, text, text, numeric, text, uuid, jsonb);
 drop function if exists public.retire_unsent_refund_attempt_v1(uuid, uuid, uuid, text);

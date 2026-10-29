@@ -4781,13 +4781,12 @@ grant all on ingredient_counts to service_role;
 -- restaurant's (or the ingredient is archived).
 -- `p_choices`: the plate that was made, as an order line has it ({mods,
 -- extras}). Without it a product's waste took the first single choice, whole
--- milk for an oat latte (sweep 7, finding 6). Last and defaulted, so a caller
--- deployed before it still resolves to this function.
+-- milk for an oat latte (sweep 7, finding 6). A new name, so the deployed
+-- signature below keeps serving the code that calls it.
 alter table waste_entries add column if not exists choices jsonb;
-drop function if exists public.record_waste(uuid, uuid, uuid, numeric, text, text, numeric, text);
-create or replace function public.record_waste(
+create or replace function public.record_waste_v2(
   p_restaurant uuid, p_ingredient uuid, p_item uuid, p_quantity numeric,
-  p_reason text, p_note text, p_cost numeric, p_actor text, p_choices jsonb default null
+  p_reason text, p_note text, p_cost numeric, p_actor text, p_choices jsonb
 ) returns uuid language plpgsql security definer set search_path = public as $$
 declare
   v_name text;
@@ -4823,8 +4822,19 @@ begin
   return v_id;
 end;
 $$;
-revoke all on function public.record_waste(uuid, uuid, uuid, numeric, text, text, numeric, text, jsonb) from public, anon, authenticated;
-grant execute on function public.record_waste(uuid, uuid, uuid, numeric, text, text, numeric, text, jsonb) to service_role;
+revoke all on function public.record_waste_v2(uuid, uuid, uuid, numeric, text, text, numeric, text, jsonb) from public, anon, authenticated;
+grant execute on function public.record_waste_v2(uuid, uuid, uuid, numeric, text, text, numeric, text, jsonb) to service_role;
+-- The deployed signature: the same writer, with no choices.
+create or replace function public.record_waste(
+  p_restaurant uuid, p_ingredient uuid, p_item uuid, p_quantity numeric,
+  p_reason text, p_note text, p_cost numeric, p_actor text
+) returns uuid language plpgsql security definer set search_path = public as $$
+begin
+  return public.record_waste_v2(p_restaurant, p_ingredient, p_item, p_quantity, p_reason, p_note, p_cost, p_actor, null);
+end;
+$$;
+revoke all on function public.record_waste(uuid, uuid, uuid, numeric, text, text, numeric, text) from public, anon, authenticated;
+grant execute on function public.record_waste(uuid, uuid, uuid, numeric, text, text, numeric, text) to service_role;
 
 -- A delivery, and the price it came at: when a pack cost something different
 -- this time, that is the ingredient's price now, and the price trigger keeps
@@ -10620,10 +10630,9 @@ $$;
 revoke all on function public.record_purchase_once_v2(uuid, uuid, numeric, numeric, text, uuid) from public, anon, authenticated;
 grant execute on function public.record_purchase_once_v2(uuid, uuid, numeric, numeric, text, uuid) to service_role;
 
-drop function if exists public.record_waste_once(uuid, uuid, uuid, numeric, text, text, numeric, text, uuid);
-create or replace function public.record_waste_once(
+create or replace function public.record_waste_once_v2(
   p_restaurant uuid, p_ingredient uuid, p_item uuid, p_quantity numeric,
-  p_reason text, p_note text, p_cost numeric, p_actor text, p_ref uuid, p_choices jsonb default null
+  p_reason text, p_note text, p_cost numeric, p_actor text, p_ref uuid, p_choices jsonb
 ) returns uuid language plpgsql security definer set search_path = public as $$
 declare w waste_entries; v_id uuid; v_name text; v_stock int;
 begin
@@ -10659,8 +10668,19 @@ begin
   return v_id;
 end;
 $$;
-revoke all on function public.record_waste_once(uuid, uuid, uuid, numeric, text, text, numeric, text, uuid, jsonb) from public, anon, authenticated;
-grant execute on function public.record_waste_once(uuid, uuid, uuid, numeric, text, text, numeric, text, uuid, jsonb) to service_role;
+revoke all on function public.record_waste_once_v2(uuid, uuid, uuid, numeric, text, text, numeric, text, uuid, jsonb) from public, anon, authenticated;
+grant execute on function public.record_waste_once_v2(uuid, uuid, uuid, numeric, text, text, numeric, text, uuid, jsonb) to service_role;
+-- The deployed signature: the same writer, with no choices.
+create or replace function public.record_waste_once(
+  p_restaurant uuid, p_ingredient uuid, p_item uuid, p_quantity numeric,
+  p_reason text, p_note text, p_cost numeric, p_actor text, p_ref uuid
+) returns uuid language plpgsql security definer set search_path = public as $$
+begin
+  return public.record_waste_once_v2(p_restaurant, p_ingredient, p_item, p_quantity, p_reason, p_note, p_cost, p_actor, p_ref, null);
+end;
+$$;
+revoke all on function public.record_waste_once(uuid, uuid, uuid, numeric, text, text, numeric, text, uuid) from public, anon, authenticated;
+grant execute on function public.record_waste_once(uuid, uuid, uuid, numeric, text, text, numeric, text, uuid) to service_role;
 
 create or replace function public.record_ingredient_counts_once(p_restaurant uuid, p_counts jsonb, p_actor text, p_ref uuid)
 returns jsonb language plpgsql security definer set search_path = public as $$

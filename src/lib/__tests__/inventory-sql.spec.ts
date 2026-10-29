@@ -10,7 +10,7 @@ it("records a returned plate as a loss without consuming it again (sweep 7, find
   expect(PRODUCT_ONLY_REASONS).toEqual(["returned"]);
   expect(schema).toContain("check (reason in ('spoiled', 'unsold', 'mistake', 'staff', 'returned') and (reason <> 'returned' or item_id is not null))");
   expect(body("track_ingredient_movement")).toContain("elsif v_kind = 'waste' and v_row->>'reason' = 'returned' then v_usage := '{}'::jsonb;");
-  for (const writer of ["record_waste", "record_waste_once"]) {
+  for (const writer of ["record_waste_v2", "record_waste_once_v2"]) {
     expect(body(writer), writer).toContain("if v_stock is not null and p_reason <> 'returned' then");
   }
 });
@@ -33,7 +33,7 @@ it("keeps a derived pack price to six places (sweep 7, finding 8)", () => {
 
 it("takes a wasted plate's ingredients from the choices it was made with (sweep 7, finding 6)", () => {
   expect(schema).toContain("alter table waste_entries add column if not exists choices jsonb;");
-  for (const writer of ["record_waste", "record_waste_once"]) expect(body(writer), writer).toContain("case when p_item is not null then p_choices end");
+  for (const writer of ["record_waste_v2", "record_waste_once_v2"]) expect(body(writer), writer).toContain("case when p_item is not null then p_choices end");
   expect(body("waste_ingredient_usage_v2")).toContain("'mods', coalesce(p_choices->'mods', '{}'), 'extras', coalesce(p_choices->'extras', '[]')");
   expect(body("track_ingredient_movement")).toContain("waste_ingredient_usage_v2(v_restaurant,");
 });
