@@ -6941,7 +6941,11 @@ a.tt-user-plan:hover {
   text-align: left;
   cursor: pointer;
 }
-.tt-bill-collect { flex: none; margin-left: 12px; }
+/* The label grows to "Actualizando saldo…" while the balance refreshes. As a
+   rigid nowrap button it took the width from the bill beside it, and at 360px
+   the "Dividiendo · 1 de 3 pagadas" badge ran under it (layout gate, #576).
+   It may wrap onto two lines instead, never wider than its share of the row. */
+.tt-bill-collect { flex: none; margin-left: 12px; max-width: 42%; white-space: normal; text-align: center; }
 
 /* What is already paid, on a bill that is still open.
    ---------------------------------------------------
