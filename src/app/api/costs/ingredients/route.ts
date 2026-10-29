@@ -28,12 +28,16 @@ interface IngredientBody {
 
 type Fields = { name: string; pack_size: number; pack_price: number; supplier: string | null; lead_days?: number };
 
-async function fieldsOf(body: IngredientBody, unit: IngredientUnit): Promise<Fields | NextResponse> {
+async function fieldsOf(body: IngredientBody, unit: IngredientUnit, storedPrice?: number): Promise<Fields | NextResponse> {
   const name = ingredientName(body.name);
   if (!name) return await apiError("apiErr.ingredientName", 400);
   const size = packSize(body.packSize, body.packUnit, unit);
   if (size === null) return await apiError(quantityRefusal(body.packSize, "apiErr.packSize"), 400);
-  const price = packPrice(body.packPrice);
+  // A purchase can leave a finer price than anyone types (10,000 one-piece
+  // packs for MX$149 is MX$0.0149 each). Sent back unchanged by the dialog, it
+  // is kept as it is rather than refused for its third decimal (sweep 7, finding 8).
+  const unchanged = storedPrice !== undefined && String(body.packPrice) === String(storedPrice);
+  const price = unchanged ? storedPrice : packPrice(body.packPrice);
   if (price === null) return await apiError("apiErr.packPrice", 400);
   const supplier = supplierName(body.supplier);
   if (supplier === "bad") return await apiError("apiErr.supplierName", 400);
@@ -83,10 +87,10 @@ export async function PATCH(req: NextRequest): Promise<NextResponse> {
   if (!body || !id) return await apiError("apiErr.invalidRequest", 400);
 
   const db = createAdminClient();
-  const { data: current } = await db.from("ingredients").select("unit")
+  const { data: current } = await db.from("ingredients").select("unit, pack_price")
     .eq("id", id).eq("restaurant_id", actor.restaurantId).is("archived_at", null).maybeSingle();
   if (!current) return await apiError("apiErr.notFound", 404);
-  const fields = await fieldsOf(body, current.unit as IngredientUnit);
+  const fields = await fieldsOf(body, current.unit as IngredientUnit, Number(current.pack_price));
   if (fields instanceof NextResponse) return fields;
 
   const { data, error } = await db.from("ingredients").update({ ...fields, updated_by: actor.email })

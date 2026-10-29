@@ -7,7 +7,7 @@ import { useToast } from "@/components/ui/Toast";
 import { formatMoney } from "@/lib/format";
 import { amount, fromShown, inShown } from "@/lib/costs/display";
 import { decimal, type IngredientUnit } from "@/lib/costs/input";
-import { WASTE_REASONS, type WasteReason } from "@/lib/costs/usage";
+import { PRODUCT_ONLY_REASONS, WASTE_REASONS, type WasteReason } from "@/lib/costs/usage";
 import PendingAttempt from "@/components/ui/PendingAttempt";
 import { useCostsSend } from "@/hooks/useCostsSend";
 import { useWhen } from "@/hooks/useWhen";
@@ -98,7 +98,10 @@ export default function WasteRecorder({ choices, today, canSeeCost, currency, ti
           {send.unconfirmed() && <PendingAttempt message={t("pending.waste")} busy={busy} onDiscard={send.discard} />}
           <label className="tt-field">
             <span className="tt-mod-label">{t("waste.what")}</span>
-            <select disabled={busy || pending} className="tt-input" value={picked} onChange={e => setPicked(e.target.value)} required>
+            <select disabled={busy || pending} className="tt-input" value={picked} onChange={e => {
+              setPicked(e.target.value);
+              if (e.target.value.startsWith("ingredient:") && reason && PRODUCT_ONLY_REASONS.includes(reason)) setReason(null);
+            }} required>
               <option value="">{t("waste.choose")}</option>
               <optgroup label={t("waste.ingredients")}>
                 {formChoices.filter(c => c.kind === "ingredient").map(c => <option key={c.id} value={`ingredient:${c.id}`}>{c.label}</option>)}
@@ -118,7 +121,8 @@ export default function WasteRecorder({ choices, today, canSeeCost, currency, ti
           <fieldset className="tt-field tt-waste-reasons">
             <legend className="tt-mod-label">{t("waste.why")}</legend>
             <div className="tt-station-filter" role="radiogroup" aria-label={t("waste.why")}>
-              {WASTE_REASONS.map(r => (
+              {/* An ingredient never left the kitchen, so it cannot be sent back. */}
+              {WASTE_REASONS.filter(r => !picked.startsWith("ingredient:") || !PRODUCT_ONLY_REASONS.includes(r)).map(r => (
                 <button type="button" disabled={busy || pending} key={r} role="radio" aria-checked={reason === r}
                   className={`tt-chip${reason === r ? " tt-chip-on" : ""}`} onClick={() => setReason(r)}>
                   {t(`costs.reason.${r}`)}

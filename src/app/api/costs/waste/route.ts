@@ -8,7 +8,7 @@ import { actingManager, actingStaff } from "@/lib/api-guard";
 import { costsBlocks, uuidOf } from "@/lib/costs/guard";
 import { dishCount, quantityRefusal, recipeQuantity, wasteNote } from "@/lib/costs/input";
 import { defaultChoices, dishCost, recipeBook, unitCosts, type RecipeLine } from "@/lib/costs/recipe-cost";
-import { WASTE_REASONS, type WasteReason } from "@/lib/costs/usage";
+import { PRODUCT_ONLY_REASONS, WASTE_REASONS, type WasteReason } from "@/lib/costs/usage";
 import type { Modifier } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -59,6 +59,8 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   if (quantity === null) return await apiError(quantityRefusal(body.quantity, "apiErr.wasteQuantity"), 400);
   const reason = WASTE_REASONS.includes(body.reason as WasteReason) ? (body.reason as WasteReason) : null;
   if (!reason) return await apiError("apiErr.wasteReason", 400);
+  // Only a dish can come back from a table; an ingredient never left the kitchen.
+  if (ingredientId && PRODUCT_ONLY_REASONS.includes(reason)) return await apiError("apiErr.wasteReason", 400);
 
   const cost = await costOf(actor.restaurantId, ingredientId, itemId, quantity);
   const { data: id, error } = await createAdminClient().rpc(ref ? "record_waste_once" : "record_waste", {
