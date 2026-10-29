@@ -2,11 +2,21 @@ import { NextResponse } from "next/server";
 import { apiError } from "@/lib/api-error";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { SplitOutcome } from "@/lib/split-slots";
+import { closeExpiredWholeBillPages } from "@/lib/whole-bill-pages";
 
-export async function splitRpc(name: string, args: Record<string, unknown>): Promise<SplitOutcome> {
+async function callSplit(name: string, args: Record<string, unknown>): Promise<SplitOutcome> {
   const { data, error } = await createAdminClient().rpc(name, args);
   if (error || !data?.outcome) throw new Error(`Split ${name} failed: ${error?.message ?? "missing outcome"}`);
   return data as SplitOutcome;
+}
+
+export async function splitRpc(name: string, args: Record<string, unknown>): Promise<SplitOutcome> {
+  const result = await callSplit(name, args);
+  // A whole-bill card page refuses the split until it is resolved. One Stripe
+  // already expired is closed here and the call tried once more (#576 R1).
+  if (result.outcome === "paying" && typeof args.p_restaurant === "string"
+    && await closeExpiredWholeBillPages(args.p_restaurant, args)) return await callSplit(name, args);
+  return result;
 }
 
 const refusals: Record<string, string> = {

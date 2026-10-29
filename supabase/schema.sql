@@ -11508,7 +11508,12 @@ begin
     return jsonb_build_object('outcome', 'unresolved');
   end if;
   -- A card page still open could charge after this commits.
-  if exists (select 1 from orders where id = any(p_orders) and card_checkout_at > now() - interval '35 minutes') then
+  -- A card page still open could charge after this commits. Read the pages
+  -- themselves: card_checkout_at is stamped by a divided bill's own part pages
+  -- too and never cleared, so a part paid online refused the walkout for 35
+  -- minutes (#576 verification R2). A held part is refused below.
+  if exists (select 1 from diner_checkouts c where c.restaurant_id = p_restaurant and c.status = 'open'
+      and c.order_ids && p_orders and c.split_id is null and coalesce(c.metadata->>'split_model', '') <> '2') then
     return jsonb_build_object('outcome', 'paying');
   end if;
   -- A divided bill whose last diners walked out (#574 audit 2). A proposal
@@ -11605,13 +11610,15 @@ end; $$;
 revoke all on function public.write_off_remainder_v1(uuid, uuid[], int, text, text, text, text, uuid, uuid) from public, anon, authenticated;
 grant execute on function public.write_off_remainder_v1(uuid, uuid[], int, text, text, text, text, uuid, uuid) to service_role;
 
--- A diner's whole-bill card page opened in the last 35 minutes and not yet
--- paid or expired, on any of these orders. Split parts' pages are not one.
+-- A diner's whole-bill card page not yet paid or expired, on any of these
+-- orders. Split parts' pages are not one. No age limit: a charge Stripe made
+-- whose webhook is late is still open here, and minute 35 proves nothing
+-- (#576 verification R1). Stripe's expiry, the diner's resume, or the split
+-- routes asking Stripe directly close an unpaid page.
 create or replace function public.whole_bill_card_open_v1(p_restaurant uuid, p_orders uuid[])
 returns boolean language sql stable security definer set search_path = public as $$
   select exists (select 1 from diner_checkouts c
     where c.restaurant_id = p_restaurant and c.status = 'open' and c.order_ids && p_orders
-      and c.created_at > now() - interval '35 minutes'
       and c.split_id is null and coalesce(c.metadata->>'split_model', '') <> '2');
 $$;
 revoke all on function public.whole_bill_card_open_v1(uuid, uuid[]) from public, anon, authenticated;

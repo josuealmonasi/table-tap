@@ -5559,3 +5559,16 @@ in both languages, including the split request's reviewed cents.
 `open-bills.spec.ts` covers grouping order and excess coverage;
 `split-write-off-route.spec.ts` mocks the database to check that the writer
 receives exactly 202 or 51 cents for those same confirmations.
+### An open whole-bill card page blocks a divided bill until it is resolved
+
+The split writers and Stripe had to agree on whether a whole-bill page can
+still charge. The first guard counted only pages opened in the last 35
+minutes, so a charge whose webhook arrived late left a still-open page that
+no longer blocked cash for the parts: the table paid twice again (#576
+verification R1). The guard now has no age window; a split route that gets
+`paying` asks Stripe about each open whole-bill page and closes one Stripe
+says expired, exactly as the expiry webhook would, then tries once more. An
+open or paid page, or Stripe being unreachable, keeps the refusal. The
+walkout write-off reads open pages too instead of `card_checkout_at`, which a
+divided bill's own part pages stamp and never clear (R2).
+`whole-bill-pages.spec.ts`, `split-574-sql.spec.ts`.
