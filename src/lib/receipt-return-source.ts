@@ -37,3 +37,27 @@ export async function readReceiptReturns<T extends ReturnOrder>(db: ReturnType<t
       return_components: components, returns };
   });
 }
+
+interface CancelledOrder extends ReturnOrder { paid?: boolean }
+/**
+ * A paid order's cancellation, read as the return of everything left on it.
+ * A fresh receipt read only returns and forgiveness, so an order cancelled and
+ * refunded in full still printed "Total MX$100.00" with no word of the refund
+ * (sweep 4, finding 1). Its refund operations then prove the amount, exactly as
+ * a return's do. An unpaid order had nothing to give back and is left as it was.
+ */
+export async function readCancelReturns(db: ReturnType<typeof createAdminClient>, restaurant: string,
+  orders: CancelledOrder[]): Promise<ReturnAdjustment[]> {
+  const paid = orders.filter(o => o.paid);
+  const found = await everyRowIn<{ id: string; order_id: string; currency: string | null; previous_total: number; previous_tip: number | null }>(
+    paid.map(o => o.id), (ids, a, b) => db.from("order_adjustments")
+      .select("id, order_id, currency, previous_total, previous_tip")
+      .eq("restaurant_id", restaurant).eq("kind", "cancel").in("order_id", ids).order("id").range(a, b), "the sale's cancellation");
+  return found.map(c => {
+    const order = paid.find(o => o.id === c.order_id)!;
+    return { id: c.id, order_id: c.order_id, currency: c.currency ?? order.currency,
+      previous_total: c.previous_total, resulting_total: 0,
+      previous_tip: c.previous_tip ?? Number(order.tip ?? 0), resulting_tip: 0,
+      previous_service_fee: Number(order.service_fee ?? 0), resulting_service_fee: 0 };
+  });
+}

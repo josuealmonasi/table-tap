@@ -9,7 +9,7 @@ vi.mock("@/lib/plan-server", () => ({ getPlan: async () => ({ limits: { allows_o
 vi.mock("@/lib/table-guard", () => ({ tableOf: async () => ({ id: "00000000-0000-4000-8000-0000000000f4" }) }));
 vi.mock("@/lib/checkout/orderable-now", () => ({ orderableNow: async () => ({ closedNow: false }) }));
 vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({ from: (table: string) => {
-  const q = { select: () => q, eq: () => q, limit: async () => ({ data: [] }),
+  const q = { select: () => q, eq: () => q, gte: () => q, limit: async () => ({ data: [] }),
     single: async () => ({ data: table === "restaurants" ? { accepting_orders: true } : { id: "00000000-0000-4000-8000-0000000000f4", label: "1" } }),
     insert: (...args: unknown[]) => { insert(...args); return Promise.resolve({ error: null }); },
   }; return q;

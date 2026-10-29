@@ -14,12 +14,17 @@ import { clearPrivateCache } from "@/lib/private-cache";
  * their own copy, so a change like this one would have had to be remembered in
  * both.
  */
-export async function signOutEverywhere(onHeld?: (count: number) => void): Promise<void> {
+export async function signOutEverywhere(onHeld?: (count: number) => void, canSendHeld = true): Promise<void> {
   // Sales the till rang offline and has not sent live only on this device,
   // and signing out is how a shared tablet gets handed over and cleared.
-  // They are the record of money already taken: they go first.
+  // They are the record of money already taken: they go first — when this
+  // login can send them. One that cannot (moved to the kitchen while the sales
+  // were held) was refused the upload and the sign-out alike, and stayed signed
+  // in for good (sweep 3, finding 2). The sales stay on the device either way;
+  // signing out never touches them, and the next manager reviews them from
+  // Held sales.
   const held = readHeld().length;
-  if (held > 0) {
+  if (held > 0 && canSendHeld) {
     onHeld?.(held);
     return;
   }

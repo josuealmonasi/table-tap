@@ -1,7 +1,7 @@
 import { beforeEach, expect, it, vi } from "vitest";
 import * as React from "react";
 
-const state = vi.hoisted(() => ({ role: "kitchen", reads: [] as string[], filters: [] as unknown[][] }));
+const state = vi.hoisted(() => ({ role: "kitchen", failed: "", reads: [] as string[], filters: [] as unknown[][] }));
 const ticket = { id: "ticket-id", code: "1234", status: "received", items: [], created_at: "2026-10-20" };
 const call = { id: "call-id", kind: "bill", table_label: "8", status: "open" };
 vi.mock("@/lib/membership", () => ({
@@ -19,11 +19,12 @@ vi.mock("@/lib/supabase/server", () => ({ createClient: async () => ({ from: (ta
       data: table === "orders" ? [{ ...ticket, id: "real-order-id", total: 123, paid: true, items: [{ price: 123 }] }]
         : table === "kitchen_tickets" ? [ticket] : table === "kitchen_requests" ? [call]
           : table === "service_requests" ? [{ ...call, table_id: "table-credential" }] : [], count: 0,
+      error: table === state.failed ? { message: "read refused" } : null,
     }).then(resolve) };
   return q;
 } }) }));
 const { default: OrdersPage } = await import("@/app/dashboard/orders/page");
-beforeEach(() => { state.reads.length = 0; state.filters.length = 0; state.role = "kitchen"; vi.stubGlobal("React", React); });
+beforeEach(() => { state.reads.length = 0; state.filters.length = 0; state.role = "kitchen"; state.failed = ""; vi.stubGlobal("React", React); });
 it("seeds the kitchen board with tickets, without order money or diner lookup ids", async () => {
   const page = await OrdersPage();
   const board = page.props.children;
@@ -42,4 +43,13 @@ it.each(["owner", "manager", "waiter", "cashier"])("keeps full orders for %s", a
   expect(state.filters).toContainEqual(["orders", "written_off", false]);
   expect(state.reads).not.toContain("kitchen_tickets");
   expect(page.props.children.props.initialRequests[0].table_id).toBe("table-credential");
+});
+
+it.each(["kitchen_tickets", "kitchen_requests", "orders", "service_requests"])("reports a failed initial %s read to the board", async table => {
+  state.role = table.startsWith("kitchen") ? "kitchen" : "waiter";
+  state.failed = table;
+  const page = await OrdersPage();
+  const props = page.props.children.props;
+  expect(props.ordersReadFailed).toBe(table === "orders" || table === "kitchen_tickets");
+  expect(props.requestsReadFailed).toBe(table === "service_requests" || table === "kitchen_requests");
 });

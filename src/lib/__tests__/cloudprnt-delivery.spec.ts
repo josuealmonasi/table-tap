@@ -21,6 +21,19 @@ beforeEach(() => {
   state.jobs = [job(A), job(B)]; state.failWrite = false; state.beforeClaim = null;
 });
 
+describe("a cancelled order never reaches the kitchen printer (sweep 4, finding 4)", () => {
+  it("is skipped by the queue, which goes on to the next ticket", async () => {
+    state.jobs[0].order_status = "cancelled";
+    expect((await (await POST(request(), ctx)).json()).jobToken).toBe(B);
+  });
+  it("is refused when it was cancelled after the printer was told", async () => {
+    const advertised = (await (await POST(request(), ctx)).json()).jobToken;
+    state.jobs[0].order_status = "cancelled";
+    expect((await fetchCopy(advertised)).status).toBe(404);
+    expect(state.jobs[0].claimed_at).toBeNull();
+  });
+});
+
 describe("CloudPRNT delivery identity", () => {
   it("fetches exactly the advertised delivery, even when another job is older", async () => {
     expect(await (await fetchCopy(B)).text()).toBe(`order-${B}`);

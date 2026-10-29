@@ -56,3 +56,16 @@ it("a failed order read is an error, not a missing order", async () => {
   expect((await request({ orderIds: ["1111-order"], email: "diner@example.com" })).status).toBe(503);
   expect(state.mail).not.toHaveBeenCalled();
 });
+it("emails all 41 orders of a long sitting, never the first 40 as the whole bill (sweep 4, finding 2)", async () => {
+  state.rows = Array.from({ length: 41 }, (_, i) => order(`order-${i}`, { total: 10, tip: 0, service_fee: 0, subtotal: 10, discount: 0 }));
+  expect((await request({ orderIds: state.rows.map(o => o.id), email: "diner@example.com" })).status).toBe(200);
+  expect(state.mail.mock.calls[0][0].html).toContain("410.00");
+  expect((await request({ orderIds: state.rows.map(o => o.id), delivery: "print" })).status).toBe(200);
+});
+it("refuses a receipt over the cap instead of cutting it short", async () => {
+  const ids = Array.from({ length: 101 }, (_, i) => `order-${i}`);
+  const res = await request({ orderIds: ids, email: "diner@example.com" });
+  expect(res.status).toBe(413);
+  expect(await res.json()).toEqual({ error: "receipt.tooManyOrders" });
+  expect(state.mail).not.toHaveBeenCalled();
+});

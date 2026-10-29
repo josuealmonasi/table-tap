@@ -7,3 +7,8 @@
  * is noise. Anyone still waiting taps again, which is one tap.
  */
 export const STALE_REQUEST_HOURS = 8;
+
+/** The board and duplicate check must agree about which raised hands still count. */
+export function serviceRequestCutoff(now = Date.now()): string {
+  return new Date(now - STALE_REQUEST_HOURS * 60 * 60 * 1000).toISOString();
+}

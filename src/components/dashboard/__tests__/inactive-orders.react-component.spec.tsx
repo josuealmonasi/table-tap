@@ -7,10 +7,11 @@ import type { BoardOrder } from "@/lib/kitchen-ticket";
 import type { Order, OrderStatus } from "@/lib/types";
 
 const state = vi.hoisted(() => ({
+  refresh: vi.fn(),
   receive: null as null | ((payload: { new: BoardOrder; eventType: string }) => void),
   toast: vi.fn(), t: (key: string) => key,
 }));
-vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn() }) }));
+vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: state.refresh }) }));
 vi.mock("@/lib/i18n/context", () => ({ useT: () => state.t }));
 vi.mock("@/hooks/useBadges", () => ({ badgesChanged: vi.fn() }));
 vi.mock("@/hooks/useOnline", () => ({ useOnline: () => ({ online: true, markOffline: vi.fn() }) }));
@@ -32,8 +33,9 @@ vi.mock("@/lib/supabase/client", () => ({ createClient: () => {
   const channel = { on: (_kind: unknown, _opts: unknown, receive: typeof state.receive) => {
     state.receive = receive; return channel;
   }, subscribe: () => channel };
-  return { auth: { getSession: async () => ({ data: { session: null } }) },
-    channel: () => channel, removeChannel: vi.fn() };
+  // Signed in: a queued move is sent only under the login that made it.
+  return { auth: { getSession: async () => ({ data: { session: { user: { id: "u1" }, access_token: "t" } } }) },
+    realtime: { setAuth: vi.fn() }, channel: () => channel, removeChannel: vi.fn() };
 } }));
 import OrdersBoard from "../OrdersBoard";
 
@@ -44,9 +46,9 @@ const order = (id: string, status: OrderStatus = "received", written_off = false
   table_id: null, subtotal: 100, service_fee: 0, tip: 0, tax_pct: 0, pay_method: "cash",
   stripe_payment_intent: null, stripe_refund_id: null, table_label: "1", created_at: new Date().toISOString(), items: [], note: null,
 });
-async function render(orders: BoardOrder[], kitchen = false): Promise<void> {
+async function render(orders: BoardOrder[], kitchen = false, failed?: "orders" | "requests"): Promise<void> {
   await act(async () => root.render(<OrdersBoard restaurant={{ id: "r1", currency: "MXN" }}
-    initialOrders={orders} initialRequests={[]} kitchen={kitchen} canCancel={false}
+    initialOrders={orders} initialRequests={[]} ordersReadFailed={failed === "orders"} requestsReadFailed={failed === "requests"} kitchen={kitchen} canCancel={false}
     canMove canSettle={false} isWaiter={false} canApprove={false} showRevenue={!kitchen}
     collectedToday={120} />));
 }
@@ -105,4 +107,17 @@ it("retires a refused offline move on reconnect instead of replaying it forever"
   vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({ inactive: true }), { status: 409 })));
   await render([order("active")]);
   expect(card()).toBeNull(); expect(localStorage.getItem("tt-offline-queue")).toBeNull();
+});
+
+it.each(["orders", "requests"] as const)("shows a retry for a failed %s read without claiming the board is empty", async failed => {
+  await render([], false, failed);
+  expect(container.textContent).toContain(failed === "orders" ? "orders.readFailed" : "orders.requestsReadFailed");
+  expect(container.textContent).not.toContain("orders.noLive");
+  const retry = Array.from(container.querySelectorAll("button")).find(b => b.textContent === "fallback.retry");
+  expect(retry).toBeDefined();
+  state.refresh.mockClear();
+  await act(async () => retry!.click());
+  expect(state.refresh).toHaveBeenCalledOnce();
+  await render([]);
+  expect(container.textContent).toContain("orders.noLive");
 });
