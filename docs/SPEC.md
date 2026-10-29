@@ -1410,7 +1410,11 @@ read immediately.
 Notification read markers update optimistically and reconcile on the next
 poll; their POSTs are not retried automatically. Markers carry the restaurant
 shown in the bell, and the server refuses a different active restaurant.
-Legacy requests still use the authorized actor's restaurant. A forbidden badge
+Legacy requests still use the authorized actor's restaurant. The bell loads 50
+entries per page, unread first, then read history, with a time-and-ID cursor and
+an older-page button. Marking the shown entries sends only their unread IDs;
+unseen pages and new arrivals stay unread. Dates and times use the restaurant's
+time zone, matching receipts. A forbidden badge
 read clears its counts and stops polling. Sign-out or a new identity retires the cache,
 including late responses. Token refresh keeps the same cache; a different
 sign-in needs fresh server membership proof. None of this cache is persisted
@@ -2510,3 +2514,14 @@ The completed-sale API cases and both dialog openers are registered for Claude's
 integration and browser gates. Unit RPC fixtures verify the TypeScript boundary;
 real transaction races, SQL enforcement and 390/1280 screenshots remain release
 checks owned by Claude.
+
+
+**Notification sweep 5: delivery and rollback.** Pending card checkout warnings
+have attempt-owned IDs. If the request returns its stock and deletes the pending
+order, it removes only those warning IDs for that restaurant and item; committed
+sale warnings stay. Staff invitation mail is sent only after a password-less
+login and its guarded membership insert commit. A failed send removes the new
+membership and login, returning the seat. Statement email sends require a client
+operation reference; retries keep it and confirmed sends renew it. The account
+and reference form the Resend idempotency key (provider retention: 24 hours).
+The existing IP, account and restaurant mail rate limits also apply to retries.

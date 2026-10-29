@@ -1,5 +1,6 @@
 "use client";
 
+import { useStatementMail } from "@/hooks/useStatementMail";
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useLocale, useT } from "@/lib/i18n/context";
@@ -36,6 +37,7 @@ interface Statement {
  */
 export default function AccountStatement({ code, paid }: { code: string; paid: boolean }) {
   const t = useT();
+  const sendStatement = useStatementMail(code);
   const { locale } = useLocale();
   const [data, setData] = useState<Statement | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -127,11 +129,7 @@ export default function AccountStatement({ code, paid }: { code: string; paid: b
     setBusy(true);
     setNotice(null);
     try {
-      const res = await fetch("/api/account/email", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ c: code, email }),
-      });
+      const res = await sendStatement(email);
       const d = await res.json().catch(() => ({}));
       setNotice(res.ok ? t("account.mailSent", { email }) : d.error ?? t("apiErr.generic"));
       if (res.ok) setEmail("");

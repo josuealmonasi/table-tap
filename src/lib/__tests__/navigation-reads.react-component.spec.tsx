@@ -19,6 +19,7 @@ function queue(results: ReadResult[]): void {
   // Supabase queries are awaitable even when the last operation is a filter.
   for (const result of results) from.mockReturnValueOnce(Object.assign(Promise.resolve(result), {
     select: vi.fn().mockReturnThis(), eq: vi.fn().mockReturnThis(), in: vi.fn().mockReturnThis(),
+    not: vi.fn().mockReturnThis(), or: vi.fn().mockReturnThis(),
     order: vi.fn().mockReturnThis(), limit: vi.fn().mockReturnThis(), is: vi.fn().mockReturnThis(),
     maybeSingle: vi.fn().mockResolvedValue(result), update: vi.fn().mockReturnThis(),
   }));
@@ -61,7 +62,7 @@ it("keeps an explicit disabled setting empty without counting work", async () =>
 });
 
 it.each([0, 1])("refuses a failed notification read at step %s rather than emptying the bell", async index => {
-  const reads: ReadResult[] = [{ data: [{ id: "notice" }], error: null }, { count: 3, error: null }];
+  const reads: ReadResult[] = [{ data: [{ id: "notice" }], error: null }, { count: 3, error: null }, { data: [], error: null }];
   reads[index] = { data: null, count: null, error: { message: "database unavailable" } };
   queue(reads);
   const response = await notifications();
@@ -70,10 +71,10 @@ it.each([0, 1])("refuses a failed notification read at step %s rather than empty
 });
 
 it("keeps the notification list and its full unread count", async () => {
-  queue([{ data: [{ id: "notice" }], error: null }, { count: 3, error: null }]);
+  queue([{ data: [{ id: "notice" }], error: null }, { count: 3, error: null }, { data: [], error: null }, { data: { timezone: "Asia/Tokyo" }, error: null }]);
   const response = await notifications();
   expect(response.status).toBe(200);
-  expect(await response.json()).toEqual({ notifications: [{ id: "notice" }], unread: 3 });
+  expect(await response.json()).toEqual({ notifications: [{ id: "notice" }], unread: 3, nextCursor: null, timeZone: "Asia/Tokyo" });
 });
 
 it.each([["badges", badges], ["notifications", notifications]] as const)("keeps authorization before %s reads", async (_name, read) => {
@@ -84,7 +85,7 @@ it.each([["badges", badges], ["notifications", notifications]] as const)("keeps 
 
 const markAll = (restaurantId?: string) => markNotifications(new NextRequest("https://test/api/notifications", {
   method: "POST", headers: { "Content-Type": "application/json" },
-  body: JSON.stringify({ all: true, restaurantId }),
+  body: JSON.stringify({ all: true, ids: ["notice"], restaurantId }),
 }));
 
 it("refuses read markers from a bell belonging to a different restaurant", async () => {
