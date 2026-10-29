@@ -5613,3 +5613,14 @@ format. A mismatched attempt is now simply not offered for resuming and is
 logged; its parts stay held, so nothing can be paid twice. The fixture now
 writes the card path's own key, and the seed picks a bill large enough for
 three card parts, so its card hold is never refused at random.
+
+### A deal only ever lowers the bill
+
+The saved deal and today's product price had to agree. Tiered deals were
+priced largest bracket first, and a bracket was applied even when it cost more
+than its units: "2 for MX$180" saved when the dish cost MX$100 charged MX$180
+for two once the dish dropped to MX$80, and four MX$10 items under "2 for 15"
+and "3 for 25" cost 35 instead of two pairs at 30 (Codex sweep 1). The tier
+maths now finds the cheapest combination with single units always allowed at
+their normal price, so no basket is ever dearer than its units, and pricing
+clamps a deal's saving at zero. `promo-math.spec.ts`.
