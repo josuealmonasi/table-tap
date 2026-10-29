@@ -32,7 +32,7 @@ export async function applyWriteOff({
   reason,
   note,
 }: {
-  orders: Order[];
+  orders: Pick<Order, "id">[];
   restaurantId: string;
   actorEmail: string;
   reason: string;

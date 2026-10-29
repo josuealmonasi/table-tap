@@ -23,6 +23,7 @@ export default function WriteOffDialog({
   onClose,
   amount,
   collected = 0,
+  divided = false,
   currency,
   canApprove,
   busy,
@@ -34,6 +35,7 @@ export default function WriteOffDialog({
   /** What cancelling this costs the restaurant. */
   amount: number;
   collected?: number;
+  divided?: boolean;
   currency: string;
   /** Owner or manager: their word is final. A waiter is asking. */
   canApprove: boolean;
@@ -48,14 +50,15 @@ export default function WriteOffDialog({
   const missingNote = noteRequired(reason) && note.trim().length === 0;
 
   return (
-    <Modal open={open} onClose={onClose} maxWidth={440} label={t("writeOff.title")}>
+    <Modal open={open} onClose={onClose} maxWidth={440} label={t(divided ? "writeOff.rest" : "writeOff.title")}>
       <h3 className="tt-serif" style={{ marginTop: 0, marginBottom: 4 }}>
-        {canApprove ? t("writeOff.title") : t("writeOff.askTitle")}
+        {canApprove ? t(divided ? "writeOff.rest" : "writeOff.title") : t("writeOff.askTitle")}
       </h3>
       <p className="tt-muted tt-subline" style={{ fontSize: 13, marginTop: 0 }}>
-        {canApprove ? t("writeOff.body") : t("writeOff.askBody")}
+        {canApprove ? t(divided ? "writeOff.restBody" : "writeOff.body") : t("writeOff.askBody")}
       </p>
 
+      {divided && <p className="tt-muted">{t("writeOff.paidParts")}</p>}
       {collected > 0 && <p className="tt-muted">
         {t("writeOff.retained", { amount: formatMoney(collected, currency) })}
       </p>}
@@ -105,7 +108,7 @@ export default function WriteOffDialog({
           {busy
             ? t("writeOff.sending")
             : canApprove
-              ? t("writeOff.confirm")
+              ? t(divided ? "writeOff.rest" : "writeOff.confirm")
               : t("writeOff.request")}
         </button>
         <button

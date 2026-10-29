@@ -73,3 +73,13 @@ export const REST_REFUSAL: Record<string, string> = {
   invalid: "apiErr.invalidRequest",
   failed: "apiErr.generic",
 };
+
+/** A locked division can lose its unpaid parts even before its first payment. */
+export async function hasLockedSlotSplit(restaurantId: string, orders: { id: string; session_id?: string | null }[]): Promise<boolean | null> {
+  const sessions = [...new Set(orders.map(o => o.session_id).filter((id): id is string => Boolean(id)))];
+  if (!sessions.length) return false;
+  const { data, error } = await createAdminClient().from("bill_splits").select("order_ids")
+    .eq("restaurant_id", restaurantId).eq("model_version", 2).eq("status", "locked").in("session_id", sessions);
+  if (error) return null;
+  return (data ?? []).some(s => s.order_ids.some((id: string) => orders.some(o => o.id === id)));
+}

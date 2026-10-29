@@ -11,7 +11,7 @@ vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({ from: (tabl
   const q: Record<string, unknown> = {};
   for (const op of ["select", "eq", "in", "order"]) q[op] = (...args: unknown[]) => { state.filters.push([table, op, ...args]); return q; };
   const data = table === "bill_splits" ? [{ id: "split", session_id: "session", model_version: 2, revision: 3, status: "locked",
-    shares: 2, amount: 100, proposed_by: "member", currency: "MXN", first_payment_attempt_at: state.stamp }] : [
+    order_ids: ["first", "second"], shares: 2, amount: 100, proposed_by: "member", currency: "MXN", first_payment_attempt_at: state.stamp }] : [
       { share_no: 0, amount_cents: 5000, fee_slice_cents: 150, payment_id: state.paid ? "receipt" : null, reserved_checkout_id: null },
       { share_no: 1, amount_cents: 5000, fee_slice_cents: 150, payment_id: null, reserved_checkout_id: state.held ? "private-checkout" : null },
     ];
@@ -25,7 +25,7 @@ it("gives front of house the paid and held slots without private checkout ids", 
   const res = await GET(request()), body = await res.json();
   expect(res.status).toBe(200);
   expect(body.splits).toEqual([expect.objectContaining({ id: "split", restaurantId: "restaurant", tableId: "table", sessionId: "session", revision: 3,
-    modelVersion: 2, frozen: true, slots: [expect.objectContaining({ paid: true, paying: false }), expect.objectContaining({ paid: false, paying: true })] })]);
+    modelVersion: 2, orderIds: ["first", "second"], frozen: true, slots: [expect.objectContaining({ paid: true, paying: false }), expect.objectContaining({ paid: false, paying: true })] })]);
   expect(JSON.stringify(body.splits)).not.toContain("private-checkout");
   expect(state.filters).toContainEqual(["bill_splits", "eq", "restaurant_id", "restaurant"]);
   expect(state.filters).toContainEqual(["bill_splits", "in", "session_id", ["session"]]);

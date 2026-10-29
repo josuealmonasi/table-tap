@@ -617,9 +617,10 @@ off (`write_off_remainder_v1`): each part-paid order comes down to what was
 paid, is marked paid, and keeps an immutable `order_adjustments` row of kind
 `forgive` with its original and resulting totals and the amount forgiven.
 `written_off` keeps meaning "the whole order was forgiven". It is refused
-while a card checkout is open, a split is live, or a payment on the table is
-unattributed. The loss is logged once, as a write-off of the amount nobody
+while a card checkout is open, a split is a proposal or uses model 1, only
+some split orders are selected, or a payment on the table is unattributed. The loss is logged once, as a write-off of the amount nobody
 paid, which is what the corte and analytics total.
+Staff can forgive a locked model-2 split's whole remainder from Pedidos or Cuentas abiertas when parts remain unpaid and none is held online: paid parts stay paid, later rounds stay separate, waiters/cashiers request approval, and owners/managers decide.
 
 ## Split by people, model 2: slots
 

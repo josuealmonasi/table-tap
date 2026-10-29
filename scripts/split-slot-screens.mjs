@@ -9,7 +9,7 @@ const checked = async query => {
   return data;
 };
 /** Each browser visit owns its table, membership and receipts; none borrows the demo's money. */
-export async function splitScreenFixture(admin, restaurantId, start = true) {
+export async function splitScreenFixture(admin, restaurantId, start = true, holdPart = true) {
   const f = await splitSlotFixture(admin, restaurantId, { totalCents: 11000, shares: 3, start });
   const phones = memberFixture(admin, restaurantId);
   const requestId = randomUUID();
@@ -29,8 +29,10 @@ export async function splitScreenFixture(admin, restaurantId, start = true) {
         p_tip_cents: 0, p_method: "cash", p_actor: "split-screen-fixture", p_ref: b.ref });
       if (result.outcome !== "collected") throw new Error(`screen collection: ${result.outcome}`);
       collectedReceipt = result;
-      const held = await f.hold([1], phones.idFor(f.scope.sessionId, "slot-screen"));
-      if (held.result.outcome !== "reserved") throw new Error(`screen reservation: ${held.result.outcome}`);
+      if (holdPart) {
+        const held = await f.hold([1], phones.idFor(f.scope.sessionId, "slot-screen"));
+        if (held.result.outcome !== "reserved") throw new Error(`screen reservation: ${held.result.outcome}`);
+      }
       await checked(admin.from("service_requests").insert({ id: requestId, restaurant_id: restaurantId,
         table_id: f.scope.tableId, table_label: tableLabel, kind: "pay" }));
     }
@@ -73,16 +75,15 @@ export async function openSplitScreen({ ctx, tab, phase }, { fixture, screen, ba
     await navigate(tab, `${base}/dashboard/bills${promotion ? "" : `?order=${f.orderId}`}`, phase, pending);
     if (promotion) {
       await tab.locator(".tt-bill-open-main").filter({ hasText: f.tableLabel }).click();
-      if (screen.state === "writeoff") await tab.locator(".tt-bill-close").click();
     }
   } else {
     await navigate(tab, `${base}/dashboard/orders`, phase, pending);
     const chip = tab.locator(".tt-request-chip").filter({ hasText: f.tableLabel });
     await chip.getByRole("button", { name: /cobrar|collect/i }).click();
   }
+  if (screen.state === "writeoff") await tab.locator(".tt-bill-close").click();
   await phase("readiness", () => ready(tab, { pending }));
   const target = screen.state === "start" ? ".tt-split select"
-    : screen.state === "promotion" ? ".tt-bill-close"
     : screen.state === "writeoff" ? ".tt-writeoff-amount" : "[data-split-model='2']";
   await tab.locator(target).waitFor({ state: "visible" });
   if (screen.state === "receipt") {

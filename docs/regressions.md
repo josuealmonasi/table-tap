@@ -38,6 +38,7 @@ and that a new party cannot see the previous party's waiting phones.
 | Promotion controls respect a live division (#574-6) | Managers and waiters could offer a discount that the split guard refused |
 | Receipt discovery queues payments independently of a pending card return (#574-7) | Waiting for one webhook permanently swallowed another part's receipt |
 | Receipt suppression follows the divided orders (#574-8) | A historical split hid the receipt for a later ordinary round |
+| A divided-bill walkout can forgive the whole remainder (#574-2) | The writer allowed it but both staff doors offered no matching action; zero-payment requests still used the old writer |
 | Staff paper keeps the collected payment identity (#574-9) | Collecting one part left only a whole-order print control |
 | Remainder quotes and SQL round decimal cents alike (#574-10) | A legacy 1.005 total quoted 50 cents left where SQL required 51 |
 | A split start reference ends with its operation (#574-3) | Cancelling and starting the same division replayed the cancelled split |
@@ -5502,3 +5503,23 @@ uses the existing `receiptCents` conversion for each total and retained amount,
 still rounding before subtracting. `write-off-rest-cents.spec.ts` reproduced
 1.005 less 0.50 as 50 cents; it now quotes SQL's 51, and preserves 2.675 less
 2.00 as 68. No collection rounding policy or SQL is changed.
+
+
+### Staff can forgive a divided-bill walkout (#574-2)
+
+The locked split's writer and the staff's two collection doors had to agree.
+Pedidos and a Cuentas abiertas row now offer “Write off the rest” to owners
+and managers, or a cancellation request to waiters and cashiers, only for a
+locked model-2 split with unpaid parts and no online hold. The confirmation
+says the paid parts stay paid. It names every order of the chosen split and
+quotes only its unpaid parts; later rounds are separate. The existing route
+checks the reviewed cents and uses the remainder writer even before a first
+payment, including when a manager approves a request. Proposals, partial
+split selections, online payments and changed amounts keep their refusal.
+
+`split-write-off.spec.tsx`, `split-write-off-route.spec.ts` and
+`split-slots-staff-read.spec.ts` reproduced the absent control, missing order
+identities and old zero-payment writer before the fixes. They cover both doors,
+roles, states, reviewed request bodies and visible refusals in both languages.
+Layout and dialog lists open the real confirmation through both staff doors,
+with a private paid-part fixture that deliberately leaves no online hold.

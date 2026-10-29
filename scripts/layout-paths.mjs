@@ -212,7 +212,8 @@ export const SPLIT_SCREENS = [
     { name: "divided bill from Cuentas abiertas", role, door: "bills", state: "parts" },
     { name: "part receipt from Pedidos", role, door: "orders", state: "receipt" },
     { name: "part receipt from Cuentas abiertas", role, door: "bills", state: "receipt" },
-    { name: "promotion unavailable on a divided bill", role, door: "bills", state: "promotion" },
-    { name: "write off only the divided bill's remainder", role, door: "bills", state: "writeoff" },
+    { name: "divided-bill actions from the open-bill row", role, door: "bills", state: "promotion" },
+    { name: "write off the divided bill from Pedidos", role, door: "orders", state: "writeoff" },
+    { name: "write off the divided bill from Cuentas abiertas", role, door: "bills", state: "writeoff" },
   ]),
 ];

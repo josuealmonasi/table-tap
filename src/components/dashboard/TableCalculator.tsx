@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useStaffSlotReceipts } from "@/hooks/useStaffSlotReceipts";
 import SlotReceiptPrints from "./SlotReceiptPrints";
 import TableSplitCollection from "./TableSplitCollection";
+import SplitWriteOffDialog from "./SplitWriteOffDialog";
 import type { StaffSlotSplit } from "@/lib/split-slots-staff";
 import { SPLIT_POLL_MS } from "@/lib/poll";
 import CashChange from "@/components/dashboard/CashChange";
@@ -29,6 +30,7 @@ type Balance = Omit<Outstanding, "orders" | "sittings">;
 
 interface TableCalculatorProps {
   open: boolean;
+  canApprove?: boolean;
   onClose: () => void;
   tableId: string;
   tableLabel: string;
@@ -59,6 +61,7 @@ export default function TableCalculator({
   currency: menuCurrency,
   onCollected,
   onDiscount,
+  canApprove = false,
 }: TableCalculatorProps) {
   const t = useT();
   const toast = useToast();
@@ -77,6 +80,7 @@ export default function TableCalculator({
   /** The balance could not be read, so there is no number to collect against. */
   const [lost, setLost] = useState(false);
   const [chosenCurrency, setChosenCurrency] = useState<string | null>(null);
+  const [writingOff, setWritingOff] = useState<StaffSlotSplit | null>(null);
 
   const { receipts, rememberReceipt } = useStaffSlotReceipts(`${open}:${tableId}`);
 
@@ -96,6 +100,7 @@ export default function TableCalculator({
 
   useEffect(() => {
     if (!open) return;
+    setWritingOff(null);
     setBill(null);
     setLost(false);
     setMode("full");
@@ -180,7 +185,8 @@ export default function TableCalculator({
   }
 
   return (
-    <Modal open={open} onClose={onClose} maxWidth={460} label={t("settle.parts")}>
+    <>
+    <Modal open={open && !writingOff} onClose={onClose} maxWidth={460} label={t("settle.parts")}>
       <h3 className="tt-serif" style={{ marginTop: 0, marginBottom: 12 }}>
         {t("settle.partsTitle", { label: tableLabel })}
       </h3>
@@ -217,7 +223,7 @@ export default function TableCalculator({
             </div>
           </div>
 
-          {splits.some(s => s.currency === currency) ? <TableSplitCollection splits={splits.filter(s => s.currency === currency)} remaining={owed} refresh={load} onCollected={onCollected} onReceipt={rememberReceipt} /> : <>
+          {splits.some(s => s.currency === currency) ? <TableSplitCollection canApprove={canApprove} onWriteOff={setWritingOff} splits={splits.filter(s => s.currency === currency)} remaining={owed} refresh={load} onCollected={onCollected} onReceipt={rememberReceipt} /> : <>
           <CollectionAmount
             mode={mode}
             plan={plan}
@@ -278,5 +284,8 @@ export default function TableCalculator({
         </>
       )}
     </Modal>
+    {open && writingOff && <SplitWriteOffDialog split={writingOff} canApprove={canApprove}
+      onClose={() => setWritingOff(null)} onApplied={() => { void load(); onCollected(); }} />}
+    </>
   );
 }
