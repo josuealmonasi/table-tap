@@ -53,5 +53,7 @@ describe("the open bills", () => {
     // Claude's SQL replaces the old window with unresolved rows. TypeScript
     // must not keep a second duration that could authorize repricing later.
     expect(readFileSync("src/lib/service-reprice.ts", "utf8")).not.toContain("CHECKOUT_HOLD_MINUTES");
+    // Any open page, at any age: a late webhook is not proof the quote was not paid.
+    expect(fn).toContain("c.status = 'open' and o.id = any(c.order_ids)");
   });
 });
