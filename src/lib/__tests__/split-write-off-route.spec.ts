@@ -1,3 +1,5 @@
+const resolve = vi.hoisted(() => vi.fn());
+vi.mock("@/lib/whole-bill-pages", () => ({ resolveCheckoutPages: resolve }));
 import { beforeEach, expect, it, vi } from "vitest";
 import { NextRequest, NextResponse } from "next/server";
 const state = vi.hoisted(() => ({ role: "manager", paid: 0, totals: [50, 50], outcome: "forgiven", inserts: [] as unknown[],
@@ -34,7 +36,7 @@ const { POST } = await import("@/app/api/bill/write-off/route");
 const { POST: approve } = await import("@/app/api/bill/write-off/approve/route");
 const request = (body: unknown) => new NextRequest("http://localhost/api/bill/write-off", { method: "POST", body: JSON.stringify(body) });
 const body = () => ({ orderIds: ["first", "second"], expectedCents: (100 - state.paid) * 100, reason: "walkout" });
-beforeEach(() => { state.role = "manager"; state.paid = 0; state.totals = [50, 50]; state.outcome = "forgiven"; state.rpcs = []; state.inserts = []; state.filters = []; });
+beforeEach(() => { resolve.mockReset().mockResolvedValue("unverified"); state.role = "manager"; state.paid = 0; state.totals = [50, 50]; state.outcome = "forgiven"; state.rpcs = []; state.inserts = []; state.filters = []; });
 it.each([0, 50])("uses the remainder writer for a reviewed split with %s paid", async paid => {
   state.paid = paid;
   const res = await POST(request(body()));
@@ -92,4 +94,15 @@ it.each([[[1.005, 1.005], 0, 202], [[1.005], 0.50, 51]] as const)("accepts the c
   const res = await POST(request({ orderIds, expectedCents, reason: "walkout" }));
   expect(res.status).toBe(200);
   expect(state.rpcs).toContainEqual({ name: "write_off_remainder_v1", args: expect.objectContaining({ p_orders: orderIds, p_expected_cents: expectedCents }) });
+});
+
+it.each(["direct", "approval"])("%s write-off keeps the same operation reference and approval after expiry", async kind => {
+  state.paid = 50; state.outcome = "paying";
+  resolve.mockImplementation(async () => { state.outcome = "forgiven"; return "closed"; });
+  const response = kind === "direct" ? await POST(request(body()))
+    : await approve(request({ requestId: "ask", approve: true, reviewedAmount: 50 }));
+  expect(response.status).toBe(200);
+  const writes = state.rpcs.filter(c => c.name === "write_off_remainder_v1");
+  expect(writes).toHaveLength(2); expect(writes[1]).toEqual(writes[0]);
+  expect(writes[0].args).toMatchObject({ p_expected_cents: 5000, p_request: kind === "approval" ? "ask" : null });
 });

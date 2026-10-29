@@ -1,3 +1,4 @@
+import { checkoutPageRpc } from "@/lib/checkout-page-rpc";
 import { NextRequest, NextResponse } from "next/server";
 import { apiError } from "@/lib/api-error";
 import { jsonBody } from "@/lib/json-body";
@@ -38,13 +39,14 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   if (!adjustmentId) {
     const read = await readCancel(db, actor.restaurantId, body.id);
     if ("error" in read) return await apiError(read.error, read.status);
-    const { data, error } = await db.rpc("prepare_order_refund", {
+    const { data, error } = await checkoutPageRpc("prepare_order_refund", {
       p_restaurant: actor.restaurantId, p_order: body.id, p_actor: actor.email,
       p_legacy_demand: await legacyStockDemand(actor.restaurantId, read.order),
       p_expected_paid: read.order.paid, p_expected_account: read.order.account_id ?? null,
       p_expected_hold: read.hold, p_expected_checkout: read.holdId,
     });
     if (error) return await apiError("apiErr.orderCancel", 503);
+    if (data?.outcome === "paying") return await apiError(read.order.account_id ? "apiErr.accountPayingOnline" : "apiErr.accountBillPaying", 409);
     if (data?.outcome === "review") return await apiError("apiErr.attributionRequired", 409);
     if (data?.outcome !== "cancelled") return await apiError("apiErr.cancelChanged", 409);
     adjustmentId = data.adjustment;

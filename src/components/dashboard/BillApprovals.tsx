@@ -1,5 +1,7 @@
 "use client";
 
+import { usePaymentCheck } from "@/hooks/usePaymentCheck";
+
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { badgesChanged } from "@/hooks/useBadges";
@@ -43,6 +45,7 @@ export default function BillApprovals({
   const toast = useToast();
   const router = useRouter();
   const [busy, setBusy] = useState<string | null>(null);
+  const paymentCheck = usePaymentCheck(() => router.refresh());
 
   async function decideWriteOff(requestId: string, approve: boolean, reviewedAmount: number): Promise<void> {
     setBusy(requestId);
@@ -53,6 +56,7 @@ export default function BillApprovals({
         body: JSON.stringify({ requestId, approve, reviewedAmount }),
       });
       const data = await res.json().catch(() => ({}));
+      if (!res.ok) paymentCheck.capture(data, { kind: "approval", requestId, requestKind: "writeOff" });
       toast(res.ok ? t(approve ? "writeOff.done" : "dash.rejected") : (data.error ?? t("done.networkError")), res.ok ? undefined : "error");
       if (res.ok) {
         // One fewer thing waiting on a decision.
@@ -75,6 +79,7 @@ export default function BillApprovals({
         body: JSON.stringify({ requestId, approve, reviewedAmount }),
       });
       const data = await res.json().catch(() => ({}));
+      if (!res.ok) paymentCheck.capture(data, { kind: "approval", requestId, requestKind: "discount" });
       toast(res.ok ? t(approve ? "dash.approved" : "dash.rejected") : (data.error ?? t("done.networkError")), res.ok ? undefined : "error");
       if (res.ok) {
         badgesChanged();
@@ -98,6 +103,7 @@ export default function BillApprovals({
           {t("dash.approvals")}
         </h3>
       </div>
+      {paymentCheck.action}
       {writeOffs.map(r => (
         <div key={r.id} className="tt-bill-row tt-bill-approval tt-bill-writeoff">
           <div className="tt-bill-main">

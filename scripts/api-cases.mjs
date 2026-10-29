@@ -32,6 +32,7 @@ import { staffCases } from "./api-cases/staff.mjs";
 import { webhooksCases } from "./api-cases/webhooks.mjs";
 import { signupCases } from "./api-cases/signup.mjs";
 import { retriesCases } from "./api-cases/retries.mjs";
+import { paymentCheckCases } from "./api-cases/payment-check.mjs";
 
 export function cases(fx) {
   return [
@@ -73,5 +74,6 @@ export function cases(fx) {
     ...adminOwnerCases(fx),
     ...signupCases(fx),
     ...retriesCases(fx),
+    ...paymentCheckCases(fx),
   ];
 }

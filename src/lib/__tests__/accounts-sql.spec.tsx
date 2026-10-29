@@ -51,7 +51,7 @@ describe("account money SQL guards", () => {
       const body = fn(name);
       const accountLock = body.indexOf("from customer_accounts");
       expect(accountLock).toBeGreaterThan(0);
-      const checkoutWrite = body.search(/(?:from account_checkouts[^;]+for update|update account_checkouts)/);
+      const checkoutWrite = body.search(/(?:from account_checkouts[^;]+for update|update account_checkouts|insert into account_checkouts)/);
       expect(accountLock).toBeLessThan(checkoutWrite);
     }
   });

@@ -1,5 +1,7 @@
 "use client";
 
+import { usePaymentCheck } from "@/hooks/usePaymentCheck";
+
 import { useMemo, useState } from "react";
 import CashChange from "@/components/dashboard/CashChange";
 import { Modal } from "@/components/ui/Modal";
@@ -18,6 +20,7 @@ interface SettleAccountDialogProps {
   owed: number;
   currency: string;
   onSettled: () => void;
+  onRefresh?: () => void | Promise<void>;
 }
 
 /**
@@ -26,7 +29,7 @@ interface SettleAccountDialogProps {
  * whether they pay here or on their phone; then cash or the terminal.
  */
 export default function SettleAccountDialog({
-  open, onClose, accountId, name, owed, currency, onSettled,
+  open, onClose, accountId, name, owed, currency, onSettled, onRefresh = onSettled,
 }: SettleAccountDialogProps) {
   const t = useT();
   const toast = useToast();
@@ -36,6 +39,7 @@ export default function SettleAccountDialog({
   const [error, setError] = useState<string | null>(null);
   // One reference per attempt: a second tap is the same payment, not another.
   const ref = useMemo(() => (open ? crypto.randomUUID() : ""), [open]);
+  const paymentCheck = usePaymentCheck(onRefresh, `${open}:${accountId}`);
 
   const tip = tipCustom ?? Math.round(owed * tipPct) / 100;
   const taken = applyPayment(owed, owed, tip);
@@ -53,6 +57,7 @@ export default function SettleAccountDialog({
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
+        paymentCheck.capture(data, { kind: "account", accountId });
         setError(data.error ?? t("apiErr.generic"));
         return;
       }
@@ -88,6 +93,7 @@ export default function SettleAccountDialog({
       <p className="tt-account-settle-total">{t("accounts.settleTotal", { amount: money(owed + safeTip) })}</p>
       {tip > owed && <p className="tt-field-error" role="alert">{t("tip.tooLarge", { max: money(owed) })}</p>}
       <CashChange amount={owed + safeTip} currency={currency} />
+      {paymentCheck.action}
       {error && <p className="tt-field-error" role="alert">{error}</p>}
       <div className="tt-bill-actions">
         <button type="button" className="tt-btn tt-btn-primary tt-btn-lg" style={{ width: "100%" }} disabled={busy || tip > owed} onClick={() => void collect("cash")}>

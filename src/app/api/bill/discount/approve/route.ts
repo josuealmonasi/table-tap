@@ -1,3 +1,4 @@
+import { checkoutPageRpc } from "@/lib/checkout-page-rpc";
 import { NextResponse, type NextRequest } from "next/server";
 import { apiError } from "@/lib/api-error";
 import { jsonBody } from "@/lib/json-body";
@@ -103,12 +104,13 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     return await apiError("apiErr.approvalChanged", 409);
   }
   // Rechecked under the order and request locks: pricing may have changed since this read.
-  const { data: outcome, error } = await db.rpc("approve_discount_request_v2", {
+  const { data: outcome, error } = await checkoutPageRpc("approve_discount_request_v2", {
     p_request: request.id, p_restaurant: actor.restaurantId,
     p_actor: actor.email, p_amount: reviewedAmount,
-  });
+  }, { orderIds: request.order_ids });
   if (error) return await apiError("apiErr.generic", 500);
   // Paid in part since it was asked for (paths audit #2).
+  if (outcome === "paying") return await apiError("apiErr.accountBillPaying", 409);
   if (outcome === "part_paid") return await apiError("apiErr.discountPartPaidLater", 409);
   if (outcome === "split") return await apiError("apiErr.billSplitLive", 409);
   if (outcome !== "approved") return await apiError("apiErr.approvalChanged", 409);

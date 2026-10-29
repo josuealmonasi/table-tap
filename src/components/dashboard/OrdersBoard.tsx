@@ -1,5 +1,6 @@
 "use client";
 
+import CheckPayment from "./CheckPayment";
 import { formatMoney } from "@/lib/format";
 import { useRestaurantOrders } from "@/hooks/useRestaurantOrders";
 import OrdersReadError from "./OrdersReadError";
@@ -87,7 +88,7 @@ export default function OrdersBoard({
 }: OrdersBoardProps) {
   const router = useRouter();
   const t = useT();
-  const { orders, inactiveOrderIds, hideInactive, updateStatus, cancelOrder, cancelPlanFor, online, pending } = useRestaurantOrders(
+  const { checkoutRefusal, orders, inactiveOrderIds, hideInactive, updateStatus, cancelOrder, cancelPlanFor, online, pending } = useRestaurantOrders(
     restaurant.id,
     initialOrders,
     kitchen,
@@ -162,6 +163,7 @@ export default function OrdersBoard({
       <div className="container">
         {/* Before anything else on the page: what the board can and cannot do
             right now, so nobody learns it from a control that fails. */}
+        {checkoutRefusal && <CheckPayment scope={checkoutRefusal} onRefresh={() => { refreshTakings(); router.refresh(); }} />}
         {!online && <OfflineBanner pending={pending} />}
         <header className="tt-dash-head">
           <Breadcrumb

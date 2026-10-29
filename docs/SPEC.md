@@ -399,9 +399,9 @@ dishes on a bill the restaurant has just cancelled.
   alone is every order whose total is already promised: paid, written off,
   cancelled or waiting for its own card payment; with money against it or its
   sitting; being divided; named in a discount or write-off a manager has not
-  decided; or in a card checkout opened in the last 35 minutes
-  (`orders.card_checkout_at`, set by `/api/bill/pay` before the Stripe session
-  exists, which expires after 30).
+  decided; or covered by a saved unresolved card page, at any age and even
+  before its Stripe session ID has been saved. Bulk repricing skips those
+  quotes without asking Stripe about every page.
 - **Our fee on a divided bill is the table's, not each person's.** It is
   computed only when no share has yet been paid and rides on the first one, the
   same way settling a whole table puts it on the first order. Charging it per
@@ -1841,18 +1841,20 @@ lean on who is trusted with what:
   whole balance, the tip on the latest order, the orders marked paid, a
   retried tap answered as the same payment. Online: the statement's "Pagar en
   línea" opens `account_checkout_open()`, which snapshots exactly the orders
-  owed and holds the account against the till for 35 minutes. The
-  hold names its checkout with `checkout_id`; only that checkout's settlement
+  owed and holds that debt against another collection until Stripe confirms
+  expiry or its verified webhook records payment. The hold names its checkout
+  with `checkout_id`; only that checkout's settlement
   or release can clear it. Settlement locks orders before summing what is owed.
   A cancellation rechecks its planned paid state and hold under account/order
   locks; a 409 makes the dialog fetch and confirm a fresh plan. Stripe's
   webhook settles that checkout with `account_checkout_settle()` (once, and a
   failure throws so Stripe retries), and an abandoned session lifts the hold
-  through `account_checkout_release()` — only an open checkout's, and opening
-  a checkout closes the account's dead open ones first, so an expiry Stripe
-  delivers late cannot lift the hold of the checkout being paid now. A card
-  payment whose webhook arrives after the hold ran out, for food the till
-  collected meanwhile, is not booked against that food: what it paid twice is
+  through `account_checkout_release()` — only the named open checkout's, so
+  an expiry Stripe delivers late cannot lift a newer checkout's hold. Neither
+  an old `checkout_until` nor a missing session ID proves that a page expired.
+  New food can still go onto an account while an older frozen checkout is
+  unresolved. A duplicate card payment for food the till collected before
+  this protection shipped is not booked against that food: what it paid twice is
   a refund due (`refunds_due.account_name`), shown in Cuentas abiertas and
   announced on the bell, exactly like a card payment on a settled table.
 - **The statement** is `/cuenta/<code>`: a random twelve-character code (the
@@ -2447,6 +2449,21 @@ each total and retained amount before subtraction, as SQL does. These changes
 do not change collection rounding or add a database function.
 
 
+## Unconfirmed card-page recovery
+
+Every collection, account transfer, cancellation and forgiveness writer checks
+saved unresolved diner/account pages under its money lock, without an age window.
+`whole-bill-pages.ts` resolves the refused scope on its saved connected account:
+confirmed unpaid expiry uses ordinary completion, atomic part retirement, or full
+pay-now abandonment as appropriate. Paid pages wait for the verified webhook;
+open, unreadable, mismatched and unrecoverable unbound pages stay refused.
+An expiry cleanup permits one identical writer retry, preserving the quote,
+reference, currency, tip, selected parts and approval. Only selected held parts
+are recovered for part collection; another free part stays usable. Account state
+on both screens follows unresolved rows, and the card action stays available to
+resume its original page. Staff read that the payment is unconfirmed, to try
+again, then ask a manager. No force-clear action is offered.
+
 ## Returns on completed sales
 
 An owner or manager can find a completed, paid sale in Pedidos or Analytics
@@ -2510,3 +2527,27 @@ The completed-sale API cases and both dialog openers are registered for Claude's
 integration and browser gates. Unit RPC fixtures verify the TypeScript boundary;
 real transaction races, SQL enforcement and 390/1280 screenshots remain release
 checks owned by Claude.
+
+#### Checking an unconfirmed online payment
+
+When a staff collection, account transfer or settlement, divided-bill action,
+discount, write-off, approval or order cancellation returns
+`checkoutCode: checkout_unresolved`, its screen offers **Revisar pago / Check
+payment**. This is a separate status request at `POST /api/checkout/check` for
+the exact refused scope. It refreshes the balance and never resends the original
+collection or decision. The floor roles already allowed on each screen can
+check; approval requests remain management-only. Every identity is checked
+against the signed-in restaurant, independently of the browser's tenant data.
+Checking past money is available even after a subscription ends.
+
+| Check result | What staff see and can do |
+| --- | --- |
+| Confirmed expired and closed | The balance is refreshed; staff choose their next action themselves. |
+| Paid online | The payment is waiting to appear on the bill; do not collect it again. Only the verified webhook records it. |
+| Open, mismatched or unreadable | The payment could not be confirmed; check again later or ask a manager. |
+| No recoverable saved identity | Ask a manager to review the payment before collecting again. A status check never opens a new payable page. |
+
+All four answers and the action are translated in English and Spanish. An
+unconfirmed result does not add a new time limit or block signing out, selling
+or other payment scopes. Closing confirmed expired pages uses the existing
+resolver's expiry cleanup; no SQL or resolver write contract changes are needed.

@@ -1,5 +1,7 @@
 "use client";
 
+import { usePaymentCheck } from "@/hooks/usePaymentCheck";
+
 import { useEffect, useState } from "react";
 import { useStaffSlotReceipts } from "@/hooks/useStaffSlotReceipts";
 import SlotReceiptPrints from "./SlotReceiptPrints";
@@ -119,6 +121,19 @@ export default function SettleTableDialog({
   const selectedOrders = orders?.filter(o => o.currency === currency) ?? null;
   const bill = selectedOrders ? tableBill(selectedOrders, []) : null;
 
+  async function refreshBill(): Promise<void> {
+    try {
+      const res = await fetch(tableId ? `/api/table-bill?tableId=${tableId}` : `/api/table-bill?orderId=${orderId}`);
+      if (!res.ok) throw new Error("Could not refresh the bill");
+      const data = await res.json();
+      if (!Array.isArray(data.orders)) throw new Error("Could not read the refreshed bill");
+      setOrders(data.orders); setSplits(data.splits ?? []); setUnread(false);
+    } catch (error) { setUnread(true); throw error; }
+  }
+  const paymentCheck = usePaymentCheck(refreshBill, `${open}:${tableId}:${orderId}`);
+  const collectionScope = tableId ? { kind: "table" as const, tableId, currency }
+    : { kind: "orders" as const, orderIds: orderId ? [orderId] : [] };
+
   const slotSplits = splits.filter(s => s.currency === currency);
 
   async function writeOff(reason: WriteOffReason, note: string): Promise<void> {
@@ -131,6 +146,7 @@ export default function SettleTableDialog({
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
+        paymentCheck.capture(data, { kind: "orders", orderIds: unpaidOrders(selectedOrders ?? []).map(o => o.id) });
         toast(data.error ?? t("settle.failed"), "error");
         return;
       }
@@ -162,6 +178,7 @@ export default function SettleTableDialog({
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
+        paymentCheck.capture(data, collectionScope);
         toast(data.error ?? t("settle.failed"), "error");
         // Another phone divided it after this sheet opened: offer its parts now.
         if (data.code === "split") setAttempt(n => n + 1);
@@ -197,6 +214,7 @@ export default function SettleTableDialog({
         {t(tableId ? "settle.title" : "settle.titleToGo", { label: tableLabel })}
       </h3>
 
+      {paymentCheck.action}
       <SlotReceiptPrints receipts={receipts} />
 
       {currencies.length > 1 && <div role="group" aria-label={t("settle.currency")}>
@@ -227,7 +245,7 @@ export default function SettleTableDialog({
         <>
           <SettleBillLines bill={{ ...bill, paid: tableBill(orders ?? [], []).paid }} currency={currency} />
           {slotSplits.length > 0 ? <TableSplitCollection canApprove={canApprove} onWriteOff={setWritingOff} splits={slotSplits}
-            remaining={bill.total} refresh={async () => { setAttempt(n => n + 1); }} onCollected={onSettled} onReceipt={rememberReceipt} /> : <>
+            remaining={bill.total} refresh={refreshBill} onCollected={onSettled} onReceipt={rememberReceipt} /> : <>
           <CashChange amount={bill.total} currency={currency} />
 
           <div className="tt-bill-actions">
@@ -297,7 +315,7 @@ export default function SettleTableDialog({
       )}
       </Modal>
       {open && writingOff && <SplitWriteOffDialog split={writingOff} orders={orders ?? []} canApprove={canApprove}
-        onClose={() => setWritingOff(null)} onApplied={() => { setAttempt(n => n + 1); onSettled(); }} />}
+        onRefresh={refreshBill} onClose={() => setWritingOff(null)} onApplied={() => { setAttempt(n => n + 1); onSettled(); }} />}
 
       {tableId && (
         <TableCalculator
@@ -322,6 +340,7 @@ export default function SettleTableDialog({
           amount={bill.total}
           currency={currency}
           label={tableLabel}
+          onRefresh={refreshBill}
           onCharged={() => {
             onSettled();
             onClose();
@@ -336,6 +355,7 @@ export default function SettleTableDialog({
           currency={currency}
           canApprove={canApprove}
           busy={busy}
+          paymentCheck={paymentCheck.action}
           onSubmit={writeOff}
         />
       )}

@@ -1,8 +1,8 @@
-import { createAdminClient } from "@/lib/supabase/admin";
+import { checkoutPageRpc } from "@/lib/checkout-page-rpc";
 import type { Order } from "@/lib/types";
 
 /** What a staff discount came to. */
-export type DiscountOutcome = "applied" | "part_paid" | "split" | "changed" | "failed";
+export type DiscountOutcome = "applied" | "part_paid" | "split" | "changed" | "paying" | "failed";
 
 /**
  * Reserves the use and writes it across the bill.
@@ -25,12 +25,12 @@ export async function applyToOrders(
   amount: number,
   restaurantId: string,
 ): Promise<DiscountOutcome> {
-  const { data, error } = await createAdminClient().rpc("apply_bill_discount", {
+  const { data, error } = await checkoutPageRpc("apply_bill_discount", {
     p_restaurant: restaurantId,
     p_orders: orders.map(o => o.id),
     p_coupon: couponId,
     p_amount: amount,
   });
   if (error) return "failed";
-  return data === "applied" || data === "part_paid" || data === "split" ? data : "changed";
+  return data === "applied" || data === "part_paid" || data === "split" || data === "paying" ? data : "changed";
 }
