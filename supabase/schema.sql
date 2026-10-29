@@ -3894,10 +3894,11 @@ begin
 
   perform 1 from orders where id = any(p_orders) order by id for update;
 
-  -- A card checkout open on any of them: the diner is paying it right now.
-  if exists (select 1 from orders where id = any(p_orders)
-              and card_checkout_at is not null and card_checkout_at > now() - interval '35 minutes'
-              and paid = false) then
+  -- A whole-bill card page not yet paid or expired on any of them, at any
+  -- age: Stripe may have charged it with the webhook still on its way. The
+  -- 35-minute window let a late charge be moved onto an account too
+  -- (unresolved-checkout contract).
+  if public.whole_bill_card_open_v1(p_restaurant, p_orders) then
     return jsonb_build_object('outcome', 'paying');
   end if;
 
@@ -3992,7 +3993,9 @@ begin
                                     where restaurant_id = p_restaurant and client_ref = p_ref) then
     return jsonb_build_object('outcome', 'duplicate');
   end if;
-  if v_account.checkout_until is not null and v_account.checkout_until > now() then
+  -- The account's own card checkout, open at any age: checkout_until only
+  -- ever said when the page should have ended, not whether it charged.
+  if public.unresolved_account_page_v1(p_restaurant, p_account) then
     return jsonb_build_object('outcome', 'paying');
   end if;
 
@@ -4040,7 +4043,9 @@ begin
   select * into v_account from customer_accounts
    where id = p_account and restaurant_id = p_restaurant for update;
   if v_account.id is null then return jsonb_build_object('outcome', 'missing'); end if;
-  if v_account.checkout_until is not null and v_account.checkout_until > now() then
+  -- The account's own card checkout, open at any age: checkout_until only
+  -- ever said when the page should have ended, not whether it charged.
+  if public.unresolved_account_page_v1(p_restaurant, p_account) then
     return jsonb_build_object('outcome', 'paying');
   end if;
   perform 1 from orders where account_id = p_account and paid = false
@@ -4057,7 +4062,7 @@ begin
   -- expiry arriving late (Stripe retries for days) finds nothing to release.
   -- Releasing it lifted the hold of the checkout opened now, and the till
   -- could collect the account while the customer was paying it by card.
-  update account_checkouts set status = 'expired' where account_id = p_account and status = 'open';
+  -- No blanket expiry: an open page here is refused above until Stripe resolves it.
   v_tip := least(v_tip, v_owed);
   insert into account_checkouts (restaurant_id, account_id, order_ids, amount, tip, fee)
   values (p_restaurant, p_account, v_ids, v_owed, v_tip, greatest(coalesce(p_fee, 0), 0)) returning id into v_id;
@@ -4969,7 +4974,7 @@ begin
        or v_account.checkout_id is distinct from p_expected_checkout then
       return false;
     end if;
-    if not p_expected_paid and v_account.checkout_until > now() then return false; end if;
+    if not p_expected_paid and public.unresolved_account_page_v1(p_restaurant, v_account.id) then return false; end if;
   end if;
   select * into v_order from orders where id = p_order and restaurant_id = p_restaurant for update;
   if v_order.id is null or v_order.paid is distinct from p_expected_paid
@@ -6811,6 +6816,10 @@ begin
   perform set_config('tabletap.allocation_scope', '', true);
   -- One collection at a time per sitting. Everything below reads live.
   perform pg_advisory_xact_lock(hashtextextended(p_session::text, 0));
+  if public.whole_bill_card_open_v1(p_restaurant, array(select id from orders where session_id = p_session
+      and restaurant_id = p_restaurant and not paid)) then
+    return jsonb_build_object('taken', 0, 'tip', 0, 'outcome', 'paying');
+  end if;
   -- A divided bill with a slot paid or held is collected by its slots: the
   -- cancel below would free a paid slot (split contract, decision 5).
   if exists(select 1 from bill_splits b join bill_split_slots s on s.split_id = b.id
@@ -6941,6 +6950,13 @@ begin
   for v_session in select (s->>'session_id')::uuid from jsonb_array_elements(p_shares) s order by 1 loop
     perform pg_advisory_xact_lock(hashtextextended(v_session::text, 0));
   end loop;
+  -- Checked for every sitting before any is written: a later blocked sitting
+  -- must not leave an earlier one collected (unresolved-checkout contract).
+  if public.whole_bill_card_open_v1(p_restaurant, array(select o.id from orders o
+      where o.restaurant_id = p_restaurant and not o.paid
+        and o.session_id in (select (x->>'session_id')::uuid from jsonb_array_elements(p_shares) x))) then
+    return jsonb_build_object('outcome', 'paying', 'collections', '[]'::jsonb);
+  end if;
 
   -- Include old positional receipts too. A retry after an older caller's
   -- partial commit must finish that handful, never collect its first share
@@ -7003,6 +7019,8 @@ declare
 begin
   perform public.lock_restaurant_money(p_restaurant);
   perform set_config('tabletap.allocation_writer', 'v1', true);
+  -- Never settle orders a whole-bill card page may still be paying.
+  if public.whole_bill_card_open_v1(p_restaurant, p_orders) then raise exception 'checkout_unresolved'; end if;
   if p_restaurant is not null then perform public.backfill_payment_allocations(p_restaurant); end if;
   perform set_config('tabletap.allocation_scope', '', true);
   perform set_config('tabletap.allocation_scope', to_json(p_orders)::text, true);
@@ -7367,10 +7385,11 @@ begin
 
   perform 1 from orders where id = any(p_orders) order by id for update;
 
-  -- A card checkout open on any of them: the diner is paying it right now.
-  if exists (select 1 from orders where id = any(p_orders)
-              and card_checkout_at is not null and card_checkout_at > now() - interval '35 minutes'
-              and paid = false) then
+  -- A whole-bill card page not yet paid or expired on any of them, at any
+  -- age: Stripe may have charged it with the webhook still on its way. The
+  -- 35-minute window let a late charge be moved onto an account too
+  -- (unresolved-checkout contract).
+  if public.whole_bill_card_open_v1(p_restaurant, p_orders) then
     return jsonb_build_object('outcome', 'paying');
   end if;
 
@@ -7476,7 +7495,9 @@ begin
                                     where restaurant_id = p_restaurant and client_ref = p_ref) then
     return jsonb_build_object('outcome', 'duplicate');
   end if;
-  if v_account.checkout_until is not null and v_account.checkout_until > now() then
+  -- The account's own card checkout, open at any age: checkout_until only
+  -- ever said when the page should have ended, not whether it charged.
+  if public.unresolved_account_page_v1(p_restaurant, p_account) then
     return jsonb_build_object('outcome', 'paying');
   end if;
 
@@ -7525,7 +7546,9 @@ begin
   select * into v_account from customer_accounts
    where id = p_account and restaurant_id = p_restaurant for update;
   if v_account.id is null then return jsonb_build_object('outcome', 'missing'); end if;
-  if v_account.checkout_until is not null and v_account.checkout_until > now() then
+  -- The account's own card checkout, open at any age: checkout_until only
+  -- ever said when the page should have ended, not whether it charged.
+  if public.unresolved_account_page_v1(p_restaurant, p_account) then
     return jsonb_build_object('outcome', 'paying');
   end if;
   perform 1 from orders where account_id = p_account and paid = false
@@ -7542,7 +7565,7 @@ begin
   -- expiry arriving late (Stripe retries for days) finds nothing to release.
   -- Releasing it lifted the hold of the checkout opened now, and the till
   -- could collect the account while the customer was paying it by card.
-  update account_checkouts set status = 'expired' where account_id = p_account and status = 'open';
+  -- No blanket expiry: an open page here is refused above until Stripe resolves it.
   v_tip := least(v_tip, v_owed);
   insert into account_checkouts (restaurant_id, account_id, order_ids, amount, tip, fee)
   values (p_restaurant, p_account, v_ids, v_owed, v_tip, greatest(coalesce(p_fee, 0), 0)) returning id into v_id;
@@ -7677,7 +7700,7 @@ begin
        or v_account.checkout_id is distinct from p_expected_checkout then
       return false;
     end if;
-    if not p_expected_paid and v_account.checkout_until > now() then return false; end if;
+    if not p_expected_paid and public.unresolved_account_page_v1(p_restaurant, v_account.id) then return false; end if;
   end if;
   select * into v_order from orders where id = p_order and restaurant_id = p_restaurant for update;
   if v_order.id is null or v_order.paid is distinct from p_expected_paid
@@ -8052,9 +8075,10 @@ begin
      where o.restaurant_id = p_restaurant and o.paid = false and o.account_id is null
        and o.written_off = false and o.status not in ('cancelled', 'pending_payment')
        and o.stripe_session_id is null and o.service_fee > 0
-       -- A card checkout opened in the last 35 minutes was priced from this
-       -- total (CHECKOUT_HOLD_MINUTES: 30 for the session, five for the webhook).
-       and (o.card_checkout_at is null or o.card_checkout_at <= now() - interval '35 minutes')
+       -- Any card page still open was priced from this total, at any age; it
+       -- is repriced only once Stripe has resolved it (unresolved-checkout contract).
+       and not exists (select 1 from diner_checkouts c where c.restaurant_id = p_restaurant
+         and c.status = 'open' and o.id = any(c.order_ids))
        -- Money against the order or its sitting.
        and public.retained_order_coverage(p_restaurant, o.id) = 0
        and not exists (select 1 from payments p where p.order_id = o.id)
@@ -10554,7 +10578,9 @@ begin
   if v_owed <> p_expected then
     return jsonb_build_object('outcome','changed','owed',v_owed,'currency',p_currency);
   end if;
-  if exists(select 1 from orders where id = any(v_ids) and card_checkout_at > now() - interval '35 minutes') then
+  -- An unresolved whole-bill card page at any age (unresolved-checkout contract):
+  -- minute 36 of a charge whose webhook is late is not proof nothing was paid.
+  if public.whole_bill_card_open_v1(p_restaurant, v_ids) then
     return jsonb_build_object('outcome','paying');
   end if;
   if exists(select 1 from orders where id = any(v_ids) and session_id is null) then
@@ -10632,7 +10658,9 @@ begin
     end if;
     return (select jsonb_build_object('outcome','duplicate','amount',amount,'tip',tip,'currency',currency) from payments where restaurant_id = p_restaurant and client_ref = p_ref);
   end if;
-  if v_account.checkout_until is not null and v_account.checkout_until > now() then
+  -- The account's own card checkout, open at any age: checkout_until only
+  -- ever said when the page should have ended, not whether it charged.
+  if public.unresolved_account_page_v1(p_restaurant, p_account) then
     return jsonb_build_object('outcome', 'paying');
   end if;
 
@@ -10687,7 +10715,9 @@ begin
   select * into v_account from customer_accounts
    where id = p_account and restaurant_id = p_restaurant for update;
   if v_account.id is null then return jsonb_build_object('outcome', 'missing'); end if;
-  if v_account.checkout_until is not null and v_account.checkout_until > now() then
+  -- The account's own card checkout, open at any age: checkout_until only
+  -- ever said when the page should have ended, not whether it charged.
+  if public.unresolved_account_page_v1(p_restaurant, p_account) then
     return jsonb_build_object('outcome', 'paying');
   end if;
   perform 1 from orders where restaurant_id = p_restaurant and currency = p_currency and account_id = p_account and paid = false
@@ -10704,7 +10734,7 @@ begin
   -- expiry arriving late (Stripe retries for days) finds nothing to release.
   -- Releasing it lifted the hold of the checkout opened now, and the till
   -- could collect the account while the customer was paying it by card.
-  update account_checkouts set status = 'expired' where account_id = p_account and status = 'open';
+  -- No blanket expiry: an open page here is refused above until Stripe resolves it.
   v_tip := least(v_tip, v_owed);
   insert into account_checkouts (restaurant_id, account_id, order_ids, amount, tip, fee)
   values (p_restaurant, p_account, v_ids, v_owed, v_tip, greatest(coalesce(p_fee, 0), 0)) returning id into v_id;
@@ -11623,3 +11653,15 @@ returns boolean language sql stable security definer set search_path = public as
 $$;
 revoke all on function public.whole_bill_card_open_v1(uuid, uuid[]) from public, anon, authenticated;
 grant execute on function public.whole_bill_card_open_v1(uuid, uuid[]) to service_role;
+
+-- A customer account's card checkout not yet paid or expired, at any age, or
+-- the diner page opened for it. Its checkout_until only ever said when the page
+-- should have ended; it never proved the page did not charge.
+create or replace function public.unresolved_account_page_v1(p_restaurant uuid, p_account uuid)
+returns boolean language sql stable security definer set search_path = public as $$
+  select exists (select 1 from account_checkouts a where a.restaurant_id = p_restaurant and a.account_id = p_account and a.status = 'open')
+    or exists (select 1 from diner_checkouts c join account_checkouts a on a.id::text = c.metadata->>'account_checkout'
+      where c.restaurant_id = p_restaurant and a.restaurant_id = p_restaurant and a.account_id = p_account and c.status = 'open');
+$$;
+revoke all on function public.unresolved_account_page_v1(uuid, uuid) from public, anon, authenticated;
+grant execute on function public.unresolved_account_page_v1(uuid, uuid) to service_role;

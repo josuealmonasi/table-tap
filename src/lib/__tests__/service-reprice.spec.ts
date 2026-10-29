@@ -16,7 +16,7 @@ const state = vi.hoisted(() => ({ answer: { data: 2 as unknown, error: null as {
 vi.mock("@/lib/supabase/admin", () => ({
   createAdminClient: () => ({ rpc: async (name: string, args: unknown) => { state.calls.push({ name, args }); return state.answer; } }),
 }));
-const { repriceOpenService, CHECKOUT_HOLD_MINUTES } = await import("@/lib/service-reprice");
+const { repriceOpenService } = await import("@/lib/service-reprice");
 const sql = readFileSync("supabase/schema.sql", "utf8");
 const fn = sql.split("create or replace function public.reprice_open_service(")[1]!.split("end; $$;")[0]!;
 
@@ -50,6 +50,7 @@ describe("the open bills", () => {
       "o.stripe_session_id is null",
       "o.account_id is null",
     ]) expect(fn, rule).toContain(rule);
-    expect(fn).toContain(`now() - interval '${CHECKOUT_HOLD_MINUTES} minutes'`);
+    // Any open page, at any age: a late webhook is not proof the quote was not paid.
+    expect(fn).toContain("c.status = 'open' and o.id = any(c.order_ids)");
   });
 });
