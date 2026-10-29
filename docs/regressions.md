@@ -34,6 +34,9 @@ and that a new party cannot see the previous party's waiting phones.
 | A duplicate refund tracks customer completion and fee completion separately (S11 I5) | A failed fee return disappeared behind an already-refunded customer payment |
 | A duplicate refund keeps its original charge currency everywhere (S11 I9) | Changing the menu currency relabelled money owed back and the approval amount |
 |---|---|
+| An extra belongs to its plate and can be sold now (Sweep 2 finding 2) | A dinner cart bought a closed-lunch steak as an extra without its required choices; combo extras bypassed the same saved links |
+| Each item's own menu decides availability (Sweep 2 finding 3) | An uncategorized item from a closed menu, or one shown under an open menu's section, was still sold |
+| Every icon-group write shares the desk freeze (Sweep 2 finding 4) | Creating and editing stopped on a frozen subscription while deleting still worked |
 | A manual-only completion needs no app attempt (Returns verification 3) | A manager finished the return between discovery and start, but the executor required app account fields and answered incomplete |
 | A manual return keeps its provider date when attributed later (Returns V6) | Discovering Monday's successful manual refund on Tuesday moved its money into Tuesday's reports |
 | Completed returns preserve the eaten sale and its exact component plan (Returns 7b) | Cancelling served food would release stock, while the return route had no preparation boundary |
@@ -5613,3 +5616,50 @@ format. A mismatched attempt is now simply not offered for resuming and is
 logged; its parts stay held, so nothing can be paid twice. The fixture now
 writes the card path's own key, and the seed picks a bill large enough for
 three card parts, so its card hold is never refused at random.
+
+
+## Extras belong to a plate, not just to a restaurant (Sweep 2 finding 2)
+
+The extras a dish offers and the extras the server accepted had to agree.
+Checkout and POS fetched prices but never checked the product's saved links,
+the extra flag, its menu, or required choices. A closed-lunch steak could ride
+along with dinner as an extra without anyone choosing how to cook it.
+
+`verifiedLines` now reads the saved links with each restaurant-scoped item.
+`verifyExtras` checks those links, the extra flag, availability, its own open
+menu and required choices for plain dishes and every combo plate. Extras carry
+no choices, so one that now needs an answer follows the existing extras-changed
+confirmation: remove that extra and let the rest of the cart be ordered.
+Legacy combo extras saved only on the parent go to a plate that offers them.
+Waiter orders use the same verification; offline price comparison reads the
+same fields while preserving its existing closed/sold-out waiver and manager
+approval path for changed sales.
+
+`sale-menu-verification.spec.ts` first reproduced the closed-lunch steak and
+checks each rule on plain lines, combo parents and combo components.
+`cart-integrity.spec.ts` keeps combo price, stock and ticket copies in agreement.
+
+## A section does not open an item's menu (Sweep 2 finding 3)
+
+The item's own menu and the availability check had to agree. The check instead
+followed its category, treating a missing category as always open. A closed-menu
+item could be sold uncategorized or under another menu's section.
+
+`orderableNow` now checks menu ids directly. `verifyCart` passes each product's
+and combo component's saved `menu_id`, as `verifyExtras` does for extras.
+An item without an open menu cannot be sold. `sale-menu-verification.spec.ts`
+checks closed-menu items with no category and with an open menu's category,
+open uncategorized items, and closed combo components.
+
+## Deleting an icon group is desk work too (Sweep 2 finding 4)
+
+The subscription freeze and every icon-group write had to agree. POST and
+PATCH checked the freeze but DELETE forgot it. `freeze.spec.ts` first reproduced
+a successful deletion on a frozen restaurant.
+
+All three handlers now run through `deskMutation`, which resolves a manager
+and checks the freeze before reading a body or reaching the database. Use that
+shared wrapper for new unconditional manager desk writes. Payments, sign-out
+and floor work keep their existing guards. The spec checks every verb refuses
+before database access, and that an open desk can still delete only its own
+group without claiming another restaurant's group was deleted.
