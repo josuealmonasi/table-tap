@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { useToast } from "@/components/ui/Toast";
 import { useT } from "@/lib/i18n/context";
+import { serviceRequestCutoff } from "@/lib/service-requests";
 import type { BoardRequest } from "@/lib/kitchen-ticket";
 
 /** Short double-beep so staff notice a table calling without watching. */
@@ -34,8 +35,16 @@ export function useServiceRequests(
   restaurantId: string,
   initialRequests: BoardRequest[],
   kitchen = false,
+  readFailed = false,
 ) {
   const [requests, setRequests] = useState<BoardRequest[]>(initialRequests);
+  const [now, setNow] = useState<number | null>(null);
+  // A board left open through service must age calls out just like a fresh read.
+  useEffect(() => {
+    setNow(Date.now());
+    const timer = setInterval(() => setNow(Date.now()), 30_000);
+    return () => clearInterval(timer);
+  }, []);
   const toast = useToast();
   const t = useT();
 
@@ -43,8 +52,8 @@ export function useServiceRequests(
   // and never corrected, so a request answered elsewhere — or settled through
   // the till — kept asking on this screen until a full reload.
   useEffect(() => {
-    setRequests(initialRequests);
-  }, [initialRequests]);
+    if (!readFailed) setRequests(initialRequests);
+  }, [initialRequests, readFailed]);
 
   useEffect(() => {
     const supabase = createClient();
@@ -132,5 +141,7 @@ export function useServiceRequests(
     }
   }
 
-  return { requests, markDone };
+  return { requests: now === null ? requests : requests.filter(r =>
+    r.status === "open" && Date.parse(r.created_at) >= Date.parse(serviceRequestCutoff(now)),
+  ), markDone };
 }

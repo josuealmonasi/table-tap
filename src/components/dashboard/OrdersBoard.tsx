@@ -2,6 +2,7 @@
 
 import { formatMoney } from "@/lib/format";
 import { useRestaurantOrders } from "@/hooks/useRestaurantOrders";
+import OrdersReadError from "./OrdersReadError";
 import OfflineBanner from "@/components/dashboard/OfflineBanner";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { useToast } from "@/components/ui/Toast";
@@ -28,6 +29,8 @@ interface OrdersBoardProps {
   restaurant: Pick<Restaurant, "id" | "currency" | "ticket_warn_minutes" | "ticket_late_minutes">;
   initialOrders: BoardOrder[];
   snapshotReadAt?: number;
+  ordersReadFailed?: boolean;
+  requestsReadFailed?: boolean;
   kitchen?: boolean;
   initialRequests: BoardRequest[];
   /** Cancelling triggers refunds, so only the owner gets the button. */
@@ -69,6 +72,8 @@ export default function OrdersBoard({
   restaurant,
   initialOrders,
   snapshotReadAt = 0,
+  ordersReadFailed = false,
+  requestsReadFailed = false,
   initialRequests,
   canCancel,
   canMove,
@@ -167,7 +172,7 @@ export default function OrdersBoard({
           />
           <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
             <div className="tt-stat">
-              <strong className="tt-accent">{activeCount}</strong>
+              <strong className="tt-accent">{ordersReadFailed ? "—" : activeCount}</strong>
               <span>{t("orders.active")}</span>
             </div>
             {showRevenue && !kitchen && (
@@ -186,12 +191,15 @@ export default function OrdersBoard({
             raised hand is the thing that gets answered first. */}
         {hasStations && <StationFilter station={station} onChange={setStation} />}
 
+        {(ordersReadFailed || requestsReadFailed) && <OrdersReadError orders={ordersReadFailed} requests={requestsReadFailed} />}
+
         <ServiceRequestsBar
           kitchen={kitchen}
           restaurantId={restaurant.id}
           canSettle={canSettle}
           canApprove={canApprove}
           initialRequests={initialRequests}
+          readFailed={requestsReadFailed}
           currency={restaurant.currency}
           onSettled={() => { refreshTakings(); router.refresh(); }}
           // Only for whoever carries the plate. The pass put it there, so a
@@ -205,7 +213,7 @@ export default function OrdersBoard({
         />
 
 
-        {live.length === 0 ? (
+        {live.length === 0 && (ordersReadFailed || requestsReadFailed) ? null : live.length === 0 ? (
           <div className="tt-empty">
             <EmptyIcon size={44} className="tt-empty-icon" />
             <strong>{t("orders.noLive")}</strong>

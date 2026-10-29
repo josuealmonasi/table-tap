@@ -34,6 +34,11 @@ and that a new party cannot see the previous party's waiting phones.
 | A duplicate refund tracks customer completion and fee completion separately (S11 I5) | A failed fee return disappeared behind an already-refunded customer payment |
 | A duplicate refund keeps its original charge currency everywhere (S11 I9) | Changing the menu currency relabelled money owed back and the approval amount |
 |---|---|
+| A retried financial operation writes one activity row (Sweep 1 #8) | One saved withdrawal, shift close, waste entry or count appeared two or more times after a lost reply |
+| A floor ticket without a stage button still names its actual stage (Sweep 1 #7) | A waiter saw “Listo” on new and preparing food because only the kitchen could advance it |
+| A call expires for deduplication and the board together (Sweep 1 #6) | An eight-hour-old call disappeared on reload but swallowed the diner’s next tap; an open board kept it forever |
+| A failed Pedidos feed says so and offers retry (Sweep 1 #5) | A refused first orders or calls read became an empty board saying nobody was waiting |
+| Membership polls release their running latch after a stalled read (Sweep 1 #4) | One unanswered admission read stopped every later poll on the staff board and diner phone |
 | A manual-only completion needs no app attempt (Returns verification 3) | A manager finished the return between discovery and start, but the executor required app account fields and answered incomplete |
 | A manual return keeps its provider date when attributed later (Returns V6) | Discovering Monday's successful manual refund on Tuesday moved its money into Tuesday's reports |
 | Completed returns preserve the eaten sale and its exact component plan (Returns 7b) | Cancelling served food would release stock, while the return route had no preparation boundary |
@@ -5624,3 +5629,68 @@ and "3 for 25" cost 35 instead of two pairs at 30 (Codex sweep 1). The tier
 maths now finds the cheapest combination with single units always allowed at
 their normal price, so no basket is ever dearer than its units, and pricing
 clamps a deal's saving at zero. `promo-math.spec.ts`.
+
+## An admission read that stopped the clock (Sweep 1 #4)
+
+The next poll and the previous read had to agree about when a read ends. A
+connection that never answered kept `running` true forever. Both membership
+pollers now abort a read after twenty seconds, including its response body,
+and cancel it on teardown. The serialized diner reader also releases its
+queue, and waiting for another tab’s Web Lock has the same deadline. Other interval hooks have no matching running latch.
+`membership-timeout.spec.tsx` stalls each reader, checks cancellation and the
+next poll, and checks teardown; the existing membership tests retain slow-read
+serialization and last-good data coverage.
+
+
+## Nobody waiting, or a read that failed (Sweep 1 #5)
+
+The server read and the board's empty message had to agree about whether
+there was an answer. Supabase returned an error, but Pedidos discarded it and
+painted empty lists. Both kitchen and floor feeds now carry their failure to
+the board, which offers Retry in both languages and never claims there are no
+live orders while either feed has failed. Available tickets remain usable; a
+failed calls refresh keeps the last good list. `kitchen-orders-page.spec.tsx`
+refuses each initial feed; `inactive-orders.react-component.spec.tsx` checks the
+error, retry click and successful recovery.
+
+
+## The raised hand nobody could see (Sweep 1 #6)
+
+The duplicate check and the board had to agree about which open calls still
+count. Pedidos loaded eight hours, but the route matched all time, so an old
+call hidden from staff made a new tap say success without calling anybody.
+Both now use `serviceRequestCutoff`; the live calls list also ages out every
+thirty seconds, including late realtime inserts. The existing eight-hour
+window stays the same and never prevents a fresh call.
+`service-request-expiry.spec.ts` checks one millisecond before, at and after
+the cutoff; `service-request-expiry.spec.tsx` keeps a board open across it.
+
+
+## Listo before the food was ready (Sweep 1 #7)
+
+The stage badge and the footer had to agree about the food. A waiter cannot
+start preparation, so the missing button fell through to a green “Listo”.
+That fallback now uses the same stage label and colour as the badge. Existing
+English and Spanish stage names cover it; ready tickets still offer delivery
+and kitchen tickets still offer preparation. `order-card-stage.spec.tsx`
+renders both languages and checks those permissions as well as the footer.
+
+
+## One withdrawal, three lines in the drawer (Sweep 1 #8)
+
+The saved operation and its activity had to agree about what a retry means.
+Withdrawal, shift-close, waste and count RPCs replay their saved result, but
+the routes appended another log every time. Their activity now has a stable
+UUID derived from restaurant, entity, action and operation identity, inserted
+with `onConflict: "id", ignoreDuplicates: true`. Concurrent retries cannot
+append or replace the first line. A failed log stays best-effort, so money
+operations still succeed and a retry can repair the missing line. No schema
+change is needed; previously duplicated rows are not rewritten.
+
+`financial-activity-retry.spec.ts` exercises each route through the real
+logger with a mocked database, including concurrent retries, a failed log,
+another actor's replay, distinct operations and restaurant separation. The
+purchase retry already logs in its SQL transaction; account collections and
+POS/table orders skip duplicate results, split-slot receipts already use their
+receipt id, and terminal deposits refuse an already marked day before logging.
+Those do not append activity on a successful replay.
