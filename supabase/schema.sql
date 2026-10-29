@@ -4327,6 +4327,9 @@ create unique index if not exists orders_stock_reservation_idx
 -- Numeric recounts do the same; only trusted sale, waste and return functions
 -- keep the generation. Browser callers cannot give themselves that exemption.
 alter table menu_items add column if not exists stock_epoch int not null default 0;
+-- When the current generation began: a sale made before it is already
+-- reflected in the count (sweep 6, finding 2). Null: never counted since.
+alter table menu_items add column if not exists stock_epoch_at timestamptz;
 create or replace function public.stock_tracking_epoch()
 returns trigger language plpgsql set search_path = public as $$
 begin
@@ -4338,6 +4341,7 @@ begin
        and current_setting('tabletap.stock_recount', true) = 'on'
        and current_user not in ('anon', 'authenticated')) then
     new.stock_epoch := old.stock_epoch + 1;
+    new.stock_epoch_at := now();
   else
     new.stock_epoch := old.stock_epoch;
   end if;
@@ -8929,7 +8933,7 @@ create or replace function public.record_offline_sale(
   p_at timestamptz, p_terminal text, p_demand jsonb,
   p_manager text, p_reason text, p_original_at text, p_authority text
 ) returns jsonb language plpgsql security definer set search_path = public as $$
-declare v_ticket jsonb; q offline_sale_queue%rowtype;
+declare v_ticket jsonb; q offline_sale_queue%rowtype; v_demand jsonb; v_counted text[];
 begin
   perform public.lock_restaurant_money(p_restaurant);
   select * into q from offline_sale_queue where pos_ref = p_ref for update;
@@ -8974,9 +8978,18 @@ begin
     end if;
     return v_ticket;
   end if;
+  -- A dish counted after the sale was made already left its portions out of
+  -- the count: the shelf held eight when the manager counted eight. Taking
+  -- the sale's two off again showed six (sweep 6, finding 2). The money and
+  -- the order are recorded either way; only that dish's stock is left as counted.
+  select coalesce(jsonb_agg(d.value) filter (where m.stock_epoch_at is null or m.stock_epoch_at <= p_at), '[]'::jsonb),
+         coalesce(array_agg(d.value->>'item_id') filter (where m.stock_epoch_at > p_at), '{}')
+    into v_demand, v_counted
+    from jsonb_array_elements(coalesce(p_demand, '[]'::jsonb)) d
+    left join menu_items m on m.id = (d.value->>'item_id')::uuid and m.restaurant_id = p_restaurant;
   perform set_config('tabletap.offline_queue_writer', p_ref::text, true);
   v_ticket := public.ring_pos_sale_v2(p_restaurant, p_ref, p_order, p_method, p_actor,
-    'completed', p_at, p_terminal, p_demand, false, 0);
+    'completed', p_at, p_terminal, v_demand, false, 0);
   if v_ticket->>'outcome' <> 'settled' then return v_ticket; end if;
   perform set_config('tabletap.offline_audit_writer', p_ref::text, true);
   update orders set offline_collector = p_actor, offline_authority = p_authority,
@@ -8985,6 +8998,10 @@ begin
     where id = p_ref and restaurant_id = p_restaurant;
   insert into user_logs(restaurant_id,actor_email,entity,action,detail)
     values(p_restaurant,p_actor,'bill','paid','code=ORD-' || upper(left(p_ref::text,4)) || ' amount=' || to_char((p_order->>'total')::numeric,'FM999999990.00') || ' currency=' || (p_order->>'currency') || ' method=' || p_method);
+  if cardinality(v_counted) > 0 then
+    insert into user_logs(restaurant_id,actor_email,entity,action,detail)
+      values(p_restaurant,p_actor,'stock','offline_counted','code=ORD-' || upper(left(p_ref::text,4)) || ' items=' || array_to_string(v_counted, ','));
+  end if;
   if p_manager is not null then
     insert into user_logs(restaurant_id,actor_email,entity,action,detail)
       values(p_restaurant,p_manager,'order','offline_recovered','code=ORD-' || upper(left(p_ref::text,4)) || ' note=' || replace(p_reason,' ','_'));
@@ -9577,7 +9594,7 @@ begin
     return jsonb_build_object('outcome', 'refundDue');
   end if;
   if exists (select 1 from refund_attempts where restaurant_id = p_restaurant
-      and (provider_status is null or provider_status not in ('succeeded', 'failed', 'canceled')))
+      and (provider_status is null or provider_status not in ('succeeded', 'failed', 'canceled', 'never_sent')))
     or exists (select 1 from refund_due_attempts where restaurant_id = p_restaurant
       and (provider_status is null or provider_status not in ('succeeded', 'failed', 'canceled')))
     or exists (select 1 from diner_checkouts where restaurant_id = p_restaurant and status = 'open')
@@ -12162,8 +12179,9 @@ returns jsonb language sql stable security definer set search_path = public as $
         where a.operation_id = o.id and a.provider_status = 'succeeded' and a.stripe_refund_id is not null
           and not exists (select 1 from refund_failures f where f.restaurant_id = a.restaurant_id and f.stripe_refund_id = a.stripe_refund_id)
         order by a.stripe_refund_id, a.attempt_no, a.id) z), 0) end,
+    -- `never_sent`: saved, its key expired, and Stripe holds no refund for it.
     'unresolved', exists (select 1 from refund_attempts a where a.operation_id = o.id and a.origin = 'app'
-      and (a.provider_status is null or a.provider_status not in ('succeeded', 'failed', 'canceled'))))
+      and (a.provider_status is null or a.provider_status not in ('succeeded', 'failed', 'canceled', 'never_sent'))))
   from refund_operations o where o.id = p_operation;
 $$;
 revoke all on function public.refund_operation_progress_v1(uuid) from public, anon, authenticated;
@@ -12534,3 +12552,30 @@ create trigger guard_product_recipe_choices before update of modifiers on public
 drop trigger if exists guard_line_recipe_choices on public.recipe_lines;
 create trigger guard_line_recipe_choices before insert or update on public.recipe_lines
   for each row execute function public.guard_recipe_choices();
+-- ── A refund attempt saved but never sent (sweep 6, finding 1) ──
+-- The process died between saving an app attempt and calling Stripe. Its
+-- idempotency key expires after 24 hours, so resending it could create a
+-- second refund, and the executor rightly refused — for ever: the obligation
+-- stayed open with controls that could not finish it. The caller has just read
+-- Stripe's own list of the charge's refunds (a list, not a search: complete and
+-- current) and found none for this attempt, and no request can still be in
+-- flight a day later. So the attempt never reached Stripe. It is retired, and
+-- the next start opens a new attempt with a new key for what is still owed.
+create or replace function public.retire_unsent_refund_attempt_v1(p_restaurant uuid, p_operation uuid, p_attempt uuid, p_actor text)
+returns boolean language plpgsql security definer set search_path = public as $$
+declare o refund_operations; a refund_attempts;
+begin
+  perform public.lock_restaurant_money(p_restaurant);
+  select * into o from refund_operations where id = p_operation and restaurant_id = p_restaurant for update;
+  if o.id is null or o.source <> 'stripe' or o.status = 'succeeded' then return false; end if;
+  select * into a from refund_attempts where operation_id = o.id and origin = 'app' order by attempt_no desc limit 1 for update;
+  -- Only the latest attempt, never answered, and past the key's lifetime.
+  if a.id is distinct from p_attempt or a.stripe_refund_id is not null or a.provider_status is not null
+    or a.created_at > now() - interval '24 hours' then return false; end if;
+  update refund_attempts set provider_status = 'never_sent', updated_at = now(),
+    last_error = 'No refund on the charge after its key expired; retired by ' || coalesce(nullif(btrim(p_actor), ''), 'system')
+    where id = a.id;
+  return true;
+end $$;
+revoke all on function public.retire_unsent_refund_attempt_v1(uuid, uuid, uuid, text) from public, anon, authenticated;
+grant execute on function public.retire_unsent_refund_attempt_v1(uuid, uuid, uuid, text) to service_role;

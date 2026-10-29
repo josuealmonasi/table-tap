@@ -352,3 +352,4 @@ drop function if exists public.guard_recipe_choices() cascade;
 drop function if exists public.waste_ingredient_usage_v2(uuid, uuid, uuid, numeric, jsonb);
 drop function if exists public.record_waste(uuid, uuid, uuid, numeric, text, text, numeric, text, jsonb);
 drop function if exists public.record_waste_once(uuid, uuid, uuid, numeric, text, text, numeric, text, uuid, jsonb);
+drop function if exists public.retire_unsent_refund_attempt_v1(uuid, uuid, uuid, text);
