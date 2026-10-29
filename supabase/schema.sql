@@ -12277,3 +12277,45 @@ returns timestamptz language sql stable set search_path = public as $$
 $$;
 revoke all on function public.refund_success_time_v1(jsonb) from public, anon, authenticated;
 grant execute on function public.refund_success_time_v1(jsonb) to service_role;
+
+-- ── A dish, its section, its menu and its extras belong to one restaurant ──
+-- Routes checked ownership of the row they wrote, not of what it pointed at: a
+-- manager could PATCH a dish's category_id to another restaurant's section,
+-- and checkout then took that section's kitchen station (Codex sweep 2,
+-- finding 5). The database now refuses any mismatch, whoever writes it.
+-- Each replaces the single-column reference above and takes over its delete
+-- action. Kept side by side, the two references made every embed of a dish's
+-- section or menu ambiguous to the API, and checkout could not read the menu
+-- at all (Train A gate, 2026-10-29).
+-- Deferred: a restaurant's delete reaches these rows by more than one path, and
+-- a reference checked mid-cascade refused it (the split references, 2026-10-28).
+-- Only the check is deferred; a cascade or set-null still runs at once.
+create unique index if not exists menus_restaurant_id_key on menus (restaurant_id, id);
+create unique index if not exists categories_restaurant_id_key on categories (restaurant_id, id);
+alter table categories drop constraint if exists categories_menu_same_restaurant;
+alter table categories add constraint categories_menu_same_restaurant
+  foreign key (restaurant_id, menu_id) references menus (restaurant_id, id) on delete cascade deferrable initially deferred;
+alter table categories drop constraint if exists categories_menu_id_fkey;
+alter table menu_items drop constraint if exists menu_items_menu_same_restaurant;
+alter table menu_items add constraint menu_items_menu_same_restaurant
+  foreign key (restaurant_id, menu_id) references menus (restaurant_id, id) on delete cascade deferrable initially deferred;
+alter table menu_items drop constraint if exists menu_items_menu_id_fkey;
+alter table menu_items drop constraint if exists menu_items_category_same_restaurant;
+alter table menu_items add constraint menu_items_category_same_restaurant
+  foreign key (restaurant_id, category_id) references categories (restaurant_id, id)
+  on delete set null (category_id) deferrable initially deferred;
+alter table menu_items drop constraint if exists menu_items_category_id_fkey;
+
+create or replace function public.check_item_addon_restaurant()
+returns trigger language plpgsql security definer set search_path = public as $$
+begin
+  if (select restaurant_id from menu_items where id = new.product_id)
+     is distinct from (select restaurant_id from menu_items where id = new.addon_id) then
+    raise exception 'an extra belongs to another restaurant';
+  end if;
+  return new;
+end $$;
+revoke all on function public.check_item_addon_restaurant() from public, anon, authenticated;
+drop trigger if exists check_item_addon_restaurant on item_addons;
+create trigger check_item_addon_restaurant before insert or update on item_addons
+  for each row execute function public.check_item_addon_restaurant();
