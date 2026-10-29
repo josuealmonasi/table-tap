@@ -132,3 +132,14 @@ describe("held sales and a login that cannot send them (sweep 3, finding 2)", ()
     expect(assign).toHaveBeenCalledWith("/login");
   });
 });
+
+describe("the navbar's held-sales rule", () => {
+  it("is TAKES_COUNTER_ORDERS for every role, without importing the server's membership reads", async () => {
+    vi.doMock("@/lib/current-user", () => ({ currentUser: vi.fn() }));
+    vi.doMock("@/lib/supabase/admin", () => ({ createAdminClient: vi.fn() }));
+    const { ROLES, TAKES_COUNTER_ORDERS } = await import("@/lib/membership");
+    const { sendsHeldSales } = await import("@/hooks/useSignOut");
+    for (const role of ROLES) expect(sendsHeldSales(role), role).toBe(TAKES_COUNTER_ORDERS(role));
+    expect(sendsHeldSales("admin")).toBe(false);
+  });
+});
