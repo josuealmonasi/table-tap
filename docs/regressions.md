@@ -5765,3 +5765,17 @@ open or paid page, or Stripe being unreachable, keeps the refusal. The
 walkout write-off reads open pages too instead of `card_checkout_at`, which a
 divided bill's own part pages stamp and never clear (R2).
 `whole-bill-pages.spec.ts`, `split-574-sql.spec.ts`.
+
+What a receipt, a corte or a printer says had to agree with the money behind
+it (sweep 4). A paid order cancelled and refunded in full still printed
+"Total MX$100.00": a fresh receipt read returns and forgiveness but not a
+cancellation, which is now read as the return of what was left, proved by its
+refund operations like any return (`returns-receipt-source.spec.ts`). The
+receipt route kept the first 40 of a sitting's orders and emailed them as the
+whole bill, MX$10 short at 41; it now takes up to 100 and refuses more, never
+cutting the bill (`receipt-print-route.spec.ts`). The printed corte showed
+each shift in the restaurant's current currency while the shift's record used
+its own; both use the shift's now (`corte-print.spec.ts`). And a cancelled
+order's job stayed in the printer queue, so a printer coming back online
+printed the cancelled meal as an ordinary ticket; the queue skips it and the
+fetch refuses it (`cloudprnt-delivery.spec.ts`).
