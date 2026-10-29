@@ -5943,3 +5943,48 @@ its own; both use the shift's now (`corte-print.spec.ts`). And a cancelled
 order's job stayed in the printer queue, so a printer coming back online
 printed the cancelled meal as an ordinary ticket; the queue skips it and the
 fetch refuses it (`cloudprnt-delivery.spec.ts`).
+## Print sweep 4
+
+| Rule | Two places that had to agree | Regression coverage |
+|---|---|---|
+| A slow receipt read keeps its click and cannot undo a sale (print sweep 4, finding 5) | The browser popup and the completed sale | `pos-receipt-popup.spec.tsx`, `return-reprint.spec.tsx` |
+| Statement mail includes payments, returns and zero debt (print sweep 4, finding 6) | The statement screen and the emailed copy | `account-mail.spec.ts` |
+| Kitchen paper keeps whole graphemes and strips commands (print sweep 4, finding 7) | A person's name or note and the printer's text boundary | `ticket.spec.ts` |
+
+### The same statement by email (print sweep 4, finding 6)
+
+The statement screen and its email had to agree about earlier payments,
+returns and what remains to pay. The email dropped both history sections and
+left an empty amount when the last debt disappeared. It now includes the same
+payment dates, amounts, methods and return amounts/statuses, with an explicit
+zero when no balance remains. Saved currencies stay separate and an unknown
+payment currency stays unknown. `account-mail.spec.ts` first failed on missing
+history and zero debt in both languages; it also checks HTML escaping for
+names, extras, return labels and the link. No new statement fields are exposed.
+
+### Whole characters and safe kitchen notes (print sweep 4, finding 7)
+
+The wrapping code and the printer had to agree about a character. UTF-16
+slices tore emoji and combining marks at the roll's edge. Wrapping and
+centring now count graphemes with `Intl.Segmenter`. Every name, option and
+note passes through the text boundary before wrapping: C0 except newline,
+DEL, C1 and bidi override/isolate controls cannot reach the printer. Ordinary
+RTL letters remain. `ticket.spec.ts` first failed on a 47-character name plus
+an emoji and an ESC inside a note; it also checks joined emoji, flags and accents.
+
+### Printing cannot turn a sale into a failed sale (print sweep 4, finding 5)
+
+The click and the receipt response had to agree about the same browser window.
+Staff and POS now reserve it before waiting, including the possible paper
+fallback for an email. Failed reads close unused paper and show a message;
+emailed receipts close it too. A blocked, closed or unusable popup cannot
+interrupt a completed sale or turn it back into a held sale. The order stays
+reprintable. Declining a receipt reserves no window, and kitchen printing
+continues through the configured printer without a browser popup.
+
+`pos-receipt-popup.spec.tsx` and `return-reprint.spec.tsx` first failed the
+slow-response and failure paths. They now check the reservation, cleanup,
+email fallback, reprint version and sale result, including English/Spanish
+failure copy and offline sales. The product choice is to finish selling even
+when paper fails. Claude checks the popup and toast on Orders, Analytics and
+POS, including a slow response and the browser's popup blocker.

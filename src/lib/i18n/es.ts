@@ -1357,6 +1357,7 @@ foundingLeftBody: "Quien contrata ahora conserva este precio de suscripción mie
     askTitle: "Cobrar {amount}",
     sendToKitchen: "Enviar a la cocina",
     printBlocked: "El navegador bloqueó la impresión. Permite las ventanas emergentes.",
+    printFailed: "La venta quedó guardada. No pudimos imprimir el recibo; puedes volver a imprimirlo desde Pedidos.",
     noTicket: "El cliente no quiere ticket",
     noTicketHint: "No se imprime ni se envía nada. La venta queda registrada igual.",
     handedOver: "Entregado. No hay nada que esperar.",
