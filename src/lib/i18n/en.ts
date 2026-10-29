@@ -2,6 +2,7 @@
 // truth for the message keys; es.ts must mirror its shape (enforced by types).
 export const en = {
   slots: {
+    printPart: "Print this part",
     resume: "Continue payment",
     resumeParts: "Parts {parts} · {amount}",
     couponFirst: "To divide with this coupon, ask the waiter to apply it to the bill first. You can still pay the bill online with it.",
@@ -930,6 +931,7 @@ foundingLeftBody: "Subscribe now and keep this subscription price for as long as
     notFiscal: "This receipt is not a tax invoice (CFDI). If you need one, ask the restaurant.",
   },
   writeOff: {
+    retained: "The {amount} already collected stays paid. Only the amount still owed is cancelled.",
     title: "Cancel the bill",
     askTitle: "Request cancellation",
     body: "The table stops owing and the amount is recorded as a loss. Your name and the reason are kept.",
@@ -1761,6 +1763,8 @@ stillOpen: "Other open bills",
     billRequestCta: "Ask a manager to approve",
     billApplied: "{amount} off — the table sees it now",
     billRequested: "Sent for approval",
+    billSplitDiscount: "This bill is being divided. Finish or cancel the division before applying a promotion.",
+    billCollectedDiscount: "Part of this bill has already been paid. Collect the rest without a new promotion.",
     billAlreadyDiscounted: "A promotion is already on this bill.",
     approvals: "Discounts waiting for you",
     approvalAsk: "{who} asks to apply {code} — {amount} off",

@@ -2409,7 +2409,10 @@ sets a baseline; old payments are not offered on a first visit. Each payment
 is offered once per tab. Simultaneous payments wait their turn, and unshown
 receipts survive a refresh. Failed reads preserve the previous observation.
 The bill sheet and tracker wait while a receipt is open. Receipt memory never
-blocks paying, selling or signing out.
+blocks paying, selling or signing out. Newly observed payments queue even while
+a returning card payment is still pending. Ordinary receipt offers exclude only
+the orders covered by a split, so a later round in the same sitting can still
+get its receipt; an unread payment discovery waits before making that choice.
 
 `POST /api/orders/print` accepts exactly one of `orderId` or `paymentId` for a
 staff receipt. Both are scoped to the staff restaurant before reading its
@@ -2417,7 +2420,10 @@ financial facts. Order reprints use the same forgiveness reader and return the
 issued version; callers can pass that version on reissue. Payment reprints use
 the immutable payment and paid parts without borrowing whole-order totals.
 Kitchen paper still requires an order and cannot return either money receipt.
-Existing bilingual receipt copy is reused; no new customer wording is added.
+Both staff collection doors keep the returned payment identity, including on a
+duplicate retry, and offer “Print this part” with its charged amount after the
+last live part disappears. The control stays until that collection dialog
+closes. Receipt documents reuse the existing bilingual copy.
 
 `pnpm money` reconciles each forgiveness's rounded original/resulting amounts,
 paid state and retained principal/tip coverage, and its single `kind=rest`
@@ -2425,3 +2431,15 @@ write-off event identified by `operation_ref`. The event must equal forgiveness
 plus whole-order losses from the same transaction, actor, restaurant and
 currency; ambiguous whole-order membership fails. Cancel adjustments retain
 their cancellation meaning. Whole orders do not yet carry an operation ID.
+
+### Split screen corrections (#574 audit, 2026-10-28)
+
+The staff and diner readers treat any paid or held part, as well as a first
+payment attempt, as frozen. A successful cancellation or fresh read with no
+live split ends the phone's start reference; uncertain retries keep it.
+Cuentas abiertas reads proposed and locked divisions and explains why a live
+split or existing collection cannot take another promotion. The write-off
+confirmation shows only the remaining loss and explains that collected money
+stays paid. Remainder quotes use the existing decimal-cent conversion, rounding
+each total and retained amount before subtraction, as SQL does. These changes
+do not change collection rounding or add a database function.

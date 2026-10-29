@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useStaffSlotReceipts } from "@/hooks/useStaffSlotReceipts";
+import SlotReceiptPrints from "./SlotReceiptPrints";
 import TableSplitCollection from "./TableSplitCollection";
 import type { StaffSlotSplit } from "@/lib/split-slots-staff";
 import { SPLIT_POLL_MS } from "@/lib/poll";
@@ -86,6 +88,8 @@ export default function SettleTableDialog({
   const [toAccount, setToAccount] = useState(false);
   const [selectedCurrency, setSelectedCurrency] = useState<string | null>(null);
   const [ref] = useState(newRef);
+
+  const { receipts, rememberReceipt } = useStaffSlotReceipts(`${open}:${restaurantId}:${tableId}:${orderId}`);
 
   useEffect(() => { setOrders(null); setSplits([]); setUnread(false); }, [open, restaurantId, tableId, orderId]);
 
@@ -191,6 +195,8 @@ export default function SettleTableDialog({
         {t(tableId ? "settle.title" : "settle.titleToGo", { label: tableLabel })}
       </h3>
 
+      <SlotReceiptPrints receipts={receipts} />
+
       {currencies.length > 1 && <div role="group" aria-label={t("settle.currency")}>
         <p className="tt-muted">{t("settle.mixed")}</p>
         {currencies.map(c => <button key={c} className="tt-tip-chip" disabled={busy} onClick={() => setSelectedCurrency(c)}>
@@ -219,7 +225,7 @@ export default function SettleTableDialog({
         <>
           <SettleBillLines bill={{ ...bill, paid: tableBill(orders ?? [], []).paid }} currency={currency} />
           {slotSplits.length > 0 ? <TableSplitCollection splits={slotSplits}
-            remaining={bill.total} refresh={async () => { setAttempt(n => n + 1); }} onCollected={onSettled} /> : <>
+            remaining={bill.total} refresh={async () => { setAttempt(n => n + 1); }} onCollected={onSettled} onReceipt={rememberReceipt} /> : <>
           <CashChange amount={bill.total} currency={currency} />
 
           <div className="tt-bill-actions">

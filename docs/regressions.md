@@ -34,6 +34,14 @@ and that a new party cannot see the previous party's waiting phones.
 | A duplicate refund tracks customer completion and fee completion separately (S11 I5) | A failed fee return disappeared behind an already-refunded customer payment |
 | A duplicate refund keeps its original charge currency everywhere (S11 I9) | Changing the menu currency relabelled money owed back and the approval amount |
 |---|---|
+| Write-off confirms only the unpaid remainder (#574-5) | The open-bill row showed MX$20 left while its confirmation claimed MX$100 lost |
+| Promotion controls respect a live division (#574-6) | Managers and waiters could offer a discount that the split guard refused |
+| Receipt discovery queues payments independently of a pending card return (#574-7) | Waiting for one webhook permanently swallowed another part's receipt |
+| Receipt suppression follows the divided orders (#574-8) | A historical split hid the receipt for a later ordinary round |
+| Staff paper keeps the collected payment identity (#574-9) | Collecting one part left only a whole-order print control |
+| Remainder quotes and SQL round decimal cents alike (#574-10) | A legacy 1.005 total quoted 50 cents left where SQL required 51 |
+| A split start reference ends with its operation (#574-3) | Cancelling and starting the same division replayed the cancelled split |
+| The split readers and money writer agree on frozen parts (#574-4) | Cash-paid or held parts left forbidden resize and cancel controls visible |
 | This phone can continue its own held parts (split audit 2) | A lost reservation answer left every part disabled before any Stripe page existed |
 | A receipt and its activity share one identity (split audit 4) | A failed balance read skipped the log and duplicate collection retries never repaired it |
 | A refused or expired slot attempt retires whole (split audit 3) | Separate slot and fee releases stranded an open attempt after one cleanup failed |
@@ -5421,3 +5429,76 @@ format. A mismatched attempt is now simply not offered for resuming and is
 logged; its parts stay held, so nothing can be paid twice. The fixture now
 writes the card path's own key, and the seed picks a bill large enough for
 three card parts, so its card hold is never refused at random.
+
+### A split start ends when its operation ends (#574-3)
+
+The phone's retry reference and the split's lifetime had to agree. A successful
+cancellation retires the reference even if the next read fails; a fresh read
+with no live split retires it too. Lost replies and failed reads keep it, so
+retrying uncertain work still names the same operation. The failing cases in
+`split-slots-client.spec.tsx` now pass for cancellation and a later empty read.
+
+### Paid and held parts freeze both readers (#574-4)
+
+The staff and diner readers had to agree with the writer's refusal. Cash can
+pay a part without setting the first card-attempt timestamp. Both readers now
+also freeze for any paid or held part, through the same helper. The previously
+failing paid-only and held-only cases in `split-slots-state.spec.ts` and
+`split-slots-staff-read.spec.ts` pass; untouched parts remain changeable.
+
+### Write-off confirms the remaining loss (#574-5)
+
+The open-bill row and its write-off confirmation had to agree. The promotion
+dialog now passes `remainingBill(bill)`, with the existing collection shown as
+money that stays paid. `bill-discount-574.spec.tsx` first reproduced MX$100
+shown for an MX$20 remainder, then passed with the MX$80 retained explanation
+in both languages. The request and manager paths use the same confirmation.
+
+### Promotions respect the live division (#574-6)
+
+The older promotion form and the split guard had to agree. Cuentas abiertas
+now reads proposed as well as locked divisions. A live split or an existing
+collection replaces the promotion picker and its apply/request button with a
+plain explanation. Write-off remains reachable, including on discounted bills.
+`bill-discount-574.spec.tsx` reproduced both forbidden offers before the fix;
+it now checks that neither role can submit one and that write-off still opens.
+
+### A pending card receipt does not swallow another payment (#574-7)
+
+The list of seen payments and the receipt queue had to agree. Newly observed
+payments now enter the queue whether or not the returning card payment has
+arrived. `slot-receipt-offer.spec.tsx` reproduced a cash receipt lost while
+waiting for a webhook; the cash receipt and later card receipt now each get
+one turn without replacing the receipt already visible.
+
+### A later round gets its own receipt (#574-8)
+
+The receipt poll and the orders just paid had to agree. The endpoint returns
+the order ids covered by divisions, including completed ones. The ordinary
+receipt offer excludes those orders rather than suppressing a whole sitting
+forever. It waits through a failed discovery read before deciding. The failing
+later-round case in `slot-receipt-offer.spec.tsx` now passes, alongside a mixed
+bill, split-only closure and delayed discovery. `slot-receipt-payments-route.spec.ts`
+checks the completed split's order ids and preserves approved-sitting scoping.
+
+### Staff can print the part they just collected (#574-9)
+
+The collection result and its print control had to agree on the payment id.
+Both staff doors keep the receipt after the live split disappears and expose
+“Print this part” with its charged amount, through the payment reprint route.
+The existing activity read supplies the original payment id on duplicate
+retries, even if logging later fails; activity still cannot block collection.
+`split-slots-collection-screen.spec.tsx` first failed without the control and
+now checks both doors and languages, disappearance of the split and a tip
+counted once. `split-slots-collect-route.spec.ts` reproduced the retry's missing
+id and now verifies it. Layout and dialog lists include these receipt states,
+plus the promotion refusal and remainder confirmation, for every collector.
+Their browser fixture reuses a paid receipt without collecting more money.
+
+### Remainder quotes use decimal cents (#574-10)
+
+The JavaScript quote and SQL's numeric rounding had to agree. `owedCents` now
+uses the existing `receiptCents` conversion for each total and retained amount,
+still rounding before subtracting. `write-off-rest-cents.spec.ts` reproduced
+1.005 less 0.50 as 50 cents; it now quotes SQL's 51, and preserves 2.675 less
+2.00 as 68. No collection rounding policy or SQL is changed.

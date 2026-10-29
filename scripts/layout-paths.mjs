@@ -210,5 +210,9 @@ export const SPLIT_SCREENS = [
   ...["owner", "manager", "waiter", "cashier"].flatMap(role => [
     { name: "divided bill from Pedidos", role, door: "orders", state: "parts" },
     { name: "divided bill from Cuentas abiertas", role, door: "bills", state: "parts" },
+    { name: "part receipt from Pedidos", role, door: "orders", state: "receipt" },
+    { name: "part receipt from Cuentas abiertas", role, door: "bills", state: "receipt" },
+    { name: "promotion unavailable on a divided bill", role, door: "bills", state: "promotion" },
+    { name: "write off only the divided bill's remainder", role, door: "bills", state: "writeoff" },
   ]),
 ];

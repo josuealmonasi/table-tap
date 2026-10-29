@@ -3,11 +3,12 @@
 import type { JSX } from "react";
 import { useState } from "react";
 import { useT } from "@/lib/i18n/context";
+import type { CollectedSlotReceipt } from "@/hooks/useStaffSlotReceipts";
 import SplitCollection from "./SplitCollection";
 import type { StaffSlotSplit } from "@/lib/split-slots-staff";
 
 interface Props {
-  splits: StaffSlotSplit[]; remaining: number; refresh: () => Promise<void>; onCollected: () => void;
+  splits: StaffSlotSplit[]; remaining: number; refresh: () => Promise<void>; onCollected: () => void; onReceipt: (receipt: CollectedSlotReceipt) => void;
 }
 /** Older sittings can owe too. Choose one division before choosing its parts. */
 export default function TableSplitCollection({ splits, ...props }: Props): JSX.Element | null {

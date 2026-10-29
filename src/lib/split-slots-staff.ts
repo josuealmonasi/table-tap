@@ -1,5 +1,5 @@
 import { createAdminClient } from "@/lib/supabase/admin";
-import { splitSlots } from "@/lib/split-slots-state";
+import { splitSlots, splitFrozen } from "@/lib/split-slots-state";
 import type { SplitState } from "@/lib/split-service";
 import type { SplitScope } from "@/lib/split-slots";
 
@@ -18,7 +18,7 @@ export async function staffSlotSplits(restaurantId: string, tableId: string,
     const slots = await splitSlots(restaurantId, split.id);
     return { restaurantId, tableId, sessionId: split.session_id, id: split.id, modelVersion: 2,
       revision: split.revision, shares: split.shares, amount: Number(split.amount), status: split.status as SplitState["status"],
-      proposedBy: split.proposed_by, currency: split.currency, frozen: Boolean(split.first_payment_attempt_at),
+      proposedBy: split.proposed_by, currency: split.currency, frozen: splitFrozen(split.first_payment_attempt_at, slots),
       slots, joined: slots.filter(s => s.paid).length, mine: null, ownSince: 0,
       outstanding: slots.filter(s => !s.paid).reduce((sum, s) => sum + s.amountCents, 0) / 100 };
   }));

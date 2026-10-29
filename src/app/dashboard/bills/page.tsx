@@ -133,7 +133,7 @@ export default async function BillsPage() {
       .from("bill_splits")
       .select("id, session_id, shares, model_version, currency, order_ids, bill_split_claims(paid_at, amount), bill_split_slots(payment_id)")
       .eq("restaurant_id", r.id)
-      .eq("status", "locked"),
+      .in("status", ["proposed", "locked"]),
     "the bills being divided",
   );
 

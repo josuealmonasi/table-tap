@@ -9,11 +9,12 @@ import { formatMoney } from "@/lib/format";
 import { useT } from "@/lib/i18n/context";
 import { tipFor } from "@/lib/pricing";
 import { newRef } from "@/lib/collection-ref";
+import type { CollectedSlotReceipt } from "@/hooks/useStaffSlotReceipts";
 import type { StaffSlotSplit } from "@/lib/split-slots-staff";
 
-interface Props { split: StaffSlotSplit; remaining: number; refresh: () => Promise<void>; onCollected: () => void }
+interface Props { split: StaffSlotSplit; remaining: number; refresh: () => Promise<void>; onCollected: () => void; onReceipt: (receipt: CollectedSlotReceipt) => void }
 /** Both staff doors choose the same parts and send the same reviewed cents. */
-export default function SplitCollection({ split, remaining, refresh, onCollected }: Props): JSX.Element {
+export default function SplitCollection({ split, remaining, refresh, onCollected, onReceipt }: Props): JSX.Element {
   const t = useT();
   const [selected, setSelected] = useState<number[]>([]);
   const [tipPct, setTipPct] = useState(0);
@@ -48,6 +49,8 @@ export default function SplitCollection({ split, remaining, refresh, onCollected
       const data = await res.json().catch(() => ({}));
       if (!res.ok) setError(data.error ?? t("settle.failed"));
       else {
+        if (!cancel && typeof data.payment === "string") onReceipt({ paymentId: data.payment,
+          amountCents: Number(data.amount_cents ?? cents + Math.round(tip * 100)), currency });
         setSelected([]); setTipPct(0); setTipCustom(null); request.current = null;
         onCollected();
       }

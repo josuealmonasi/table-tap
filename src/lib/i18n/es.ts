@@ -4,6 +4,7 @@ import type { Messages } from "./en";
 // compile error.
 export const es: Messages = {
   slots: {
+    printPart: "Imprimir esta parte",
     resume: "Continuar el pago",
     resumeParts: "Partes {parts} · {amount}",
     couponFirst: "Para dividir con este cupón, pídele al mesero que lo aplique primero a la cuenta. También puedes pagar la cuenta en línea con él.",
@@ -927,6 +928,7 @@ foundingLeftBody: "Quien contrata ahora conserva este precio de suscripción mie
     notFiscal: "Este recibo no es un comprobante fiscal (CFDI). Si necesitas factura, pídesela al restaurante.",
   },
   writeOff: {
+    retained: "Los {amount} ya cobrados se conservan. Solo se cancela lo que falta por pagar.",
     title: "Cancelar la cuenta",
     askTitle: "Solicitar cancelación",
     body: "La mesa queda sin deuda y el monto se registra como pérdida. Queda tu nombre y el motivo.",
@@ -1758,6 +1760,8 @@ stillOpen: "Otras cuentas abiertas",
     billRequestCta: "Pedir aprobación a un gerente",
     billApplied: "{amount} de descuento — la mesa ya lo ve",
     billRequested: "Enviado para aprobación",
+    billSplitDiscount: "Esta cuenta se está dividiendo. Termina o cancela la división antes de aplicar una promoción.",
+    billCollectedDiscount: "Ya se pagó parte de esta cuenta. Cobra el resto sin agregar otra promoción.",
     billAlreadyDiscounted: "Esta cuenta ya tiene una promoción.",
     approvals: "Descuentos esperando tu aprobación",
     approvalAsk: "{who} pide aplicar {code} — {amount} de descuento",

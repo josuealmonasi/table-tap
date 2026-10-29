@@ -22,6 +22,7 @@ export default function WriteOffDialog({
   open,
   onClose,
   amount,
+  collected = 0,
   currency,
   canApprove,
   busy,
@@ -32,6 +33,7 @@ export default function WriteOffDialog({
   onClose: () => void;
   /** What cancelling this costs the restaurant. */
   amount: number;
+  collected?: number;
   currency: string;
   /** Owner or manager: their word is final. A waiter is asking. */
   canApprove: boolean;
@@ -54,6 +56,9 @@ export default function WriteOffDialog({
         {canApprove ? t("writeOff.body") : t("writeOff.askBody")}
       </p>
 
+      {collected > 0 && <p className="tt-muted">
+        {t("writeOff.retained", { amount: formatMoney(collected, currency) })}
+      </p>}
       <div className="tt-writeoff-amount tt-row">
         <span className="tt-muted">{t("writeOff.amount")}</span>
         <strong style={{ fontSize: 18 }}>{formatMoney(amount, currency)}</strong>

@@ -22,11 +22,15 @@ function admin() {
 }
 beforeEach(() => {
   vi.clearAllMocks(); state.fail = false; state.tables = [];
-  state.rpc.mockResolvedValue({ outcome: "collected" }); state.hold.mockResolvedValue({ result: { outcome: "reserved" } });
+  state.rpc.mockResolvedValue({ outcome: "collected", payment: "receipt", amount_cents: 3668, tip_cents: 0 }); state.hold.mockResolvedValue({ result: { outcome: "reserved" } });
 });
 it("registers the diner and both staff doors for every collector, never kitchen", () => {
   expect(SPLIT_SCREENS.filter(s => s.role === "diner")).toHaveLength(2);
-  for (const role of ["owner", "manager", "waiter", "cashier"]) expect(SPLIT_SCREENS.filter(s => s.role === role).map(s => "door" in s ? s.door : undefined)).toEqual(["orders", "bills"]);
+  for (const role of ["owner", "manager", "waiter", "cashier"]) expect(SPLIT_SCREENS.filter(s => s.role === role && s.state === "parts").map(s => "door" in s ? s.door : undefined)).toEqual(["orders", "bills"]);
+  for (const role of ["owner", "manager", "waiter", "cashier"]) {
+    expect(SPLIT_SCREENS.filter(s => s.role === role && s.state === "receipt").map(s => "door" in s ? s.door : undefined)).toEqual(["orders", "bills"]);
+    for (const state of ["promotion", "writeoff"]) expect(SPLIT_SCREENS.some(s => s.role === role && s.state === state)).toBe(true);
+  }
   expect(SPLIT_SCREENS.some(s => s.role === "kitchen")).toBe(false);
 });
 it("cleans only the private browser fixture's request, membership and money", async () => {

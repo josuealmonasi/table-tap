@@ -1,3 +1,4 @@
+import { receiptCents } from "@/lib/receipt-amount";
 import { randomUUID } from "node:crypto";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { closeSessionsFor } from "@/lib/table-session";
@@ -10,7 +11,7 @@ export async function coverageByOrder(restaurantId: string, orderIds: string[]):
   for (const id of orderIds) {
     const { data, error } = await db.rpc("retained_order_coverage", { p_restaurant: restaurantId, p_order: id });
     if (error) return null;
-    paid.set(id, Math.round(Number(data ?? 0) * 100) / 100);
+    paid.set(id, receiptCents(Number(data ?? 0)) / 100);
   }
   return paid;
 }
@@ -24,8 +25,8 @@ export async function coverageByOrder(restaurantId: string, orderIds: string[]):
 export function owedCents(orders: Pick<Order, "id" | "total">[], paid: Map<string, number>): number {
   return orders.reduce((sum, o) => {
     const covered = paid.get(o.id) ?? 0;
-    const total = Math.round(Number(o.total) * 100);
-    return sum + (covered <= 0 ? total : Math.max(total - Math.round(covered * 100), 0));
+    const total = receiptCents(o.total);
+    return sum + (covered <= 0 ? total : Math.max(total - receiptCents(covered), 0));
   }, 0);
 }
 

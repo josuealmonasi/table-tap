@@ -1,6 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { useStaffSlotReceipts } from "@/hooks/useStaffSlotReceipts";
+import SlotReceiptPrints from "./SlotReceiptPrints";
 import TableSplitCollection from "./TableSplitCollection";
 import type { StaffSlotSplit } from "@/lib/split-slots-staff";
 import { SPLIT_POLL_MS } from "@/lib/poll";
@@ -75,6 +77,8 @@ export default function TableCalculator({
   /** The balance could not be read, so there is no number to collect against. */
   const [lost, setLost] = useState(false);
   const [chosenCurrency, setChosenCurrency] = useState<string | null>(null);
+
+  const { receipts, rememberReceipt } = useStaffSlotReceipts(`${open}:${tableId}`);
 
   const load = useCallback(async () => {
     try {
@@ -181,6 +185,8 @@ export default function TableCalculator({
         {t("settle.partsTitle", { label: tableLabel })}
       </h3>
 
+      <SlotReceiptPrints receipts={receipts} />
+
       {lost ? (
         <><p className="tt-muted">{t("settle.failed")}</p><button type="button" className="tt-btn tt-btn-ghost" onClick={load}>{t("settle.retry")}</button></>
       ) : !bill ? (
@@ -211,7 +217,7 @@ export default function TableCalculator({
             </div>
           </div>
 
-          {splits.some(s => s.currency === currency) ? <TableSplitCollection splits={splits.filter(s => s.currency === currency)} remaining={owed} refresh={load} onCollected={onCollected} /> : <>
+          {splits.some(s => s.currency === currency) ? <TableSplitCollection splits={splits.filter(s => s.currency === currency)} remaining={owed} refresh={load} onCollected={onCollected} onReceipt={rememberReceipt} /> : <>
           <CollectionAmount
             mode={mode}
             plan={plan}
