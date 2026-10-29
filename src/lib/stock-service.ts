@@ -79,6 +79,11 @@ export async function releaseStock(
  * Failing to write one must never fail the order: the diner has paid, the
  * kitchen needs the ticket, and a missing bell entry is not worth losing that
  * over.
+ *
+ * But it is tried again, and a last failure is logged. The insert's own error
+ * was never read, so a refused write was taken as done; and the sale cannot
+ * raise it later, because a retried sale answers from the order it already
+ * rang and the next sale is already below the line (sweep 5, finding 4).
  */
 export async function raiseStockNotifications(
   restaurantId: string,
@@ -86,17 +91,23 @@ export async function raiseStockNotifications(
 ): Promise<void> {
   if (warnings.length === 0) return;
 
-  try {
-    await createAdminClient()
-      .from("notifications")
-      .insert(
-        warnings.map(w => ({
-          restaurant_id: restaurantId,
-          kind: w.kind,
-          data: { itemId: w.itemId, name: w.name, stock: w.stock },
-        })),
-      );
-  } catch {
-    // Deliberately swallowed — see above.
+  const rows = warnings.map(w => ({
+    restaurant_id: restaurantId,
+    kind: w.kind,
+    data: { itemId: w.itemId, name: w.name, stock: w.stock },
+  }));
+  let failure: unknown = null;
+  for (let attempt = 0; attempt < STOCK_ALERT_ATTEMPTS; attempt++) {
+    try {
+      const { error } = await createAdminClient().from("notifications").insert(rows);
+      if (!error) return;
+      failure = error;
+    } catch (error) {
+      failure = error;
+    }
   }
+  // Never thrown — see above — but never silent either.
+  console.error(`Stock alert for restaurant ${restaurantId} was not saved`, failure);
 }
+
+const STOCK_ALERT_ATTEMPTS = 3;
