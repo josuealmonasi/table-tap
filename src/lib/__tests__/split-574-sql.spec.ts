@@ -19,6 +19,8 @@ describe("#574 audit: splits and the money paths around them", () => {
     // A part's own page is not a whole-bill hold, or one card part would block cash for another.
     expect(open).toContain("coalesce(c.metadata->>'split_model', '') <> '2'");
     expect(open).toContain("c.status = 'open'");
+    // No age window: a late webhook must not make an unresolved page collectible (R1).
+    expect(open).not.toContain("interval '35 minutes'");
   });
   it("2: a walked-out divided bill is forgiven whole, and the split ends", () => {
     const off = definition("write_off_remainder_v1");
@@ -26,5 +28,7 @@ describe("#574 audit: splits and the money paths around them", () => {
     expect(off).toContain("s.reserved_checkout_id is not null and s.payment_id is null");
     expect(off).toContain("not (v_split.order_ids <@ p_orders)");
     expect(off.indexOf("update bill_splits set status = 'done' where id = any(v_ended)")).toBeGreaterThan(0);
+    // Open pages, not a part's stale card_checkout_at (R2).
+    expect(off).not.toContain("card_checkout_at > now() - interval '35 minutes'");
   });
 });
