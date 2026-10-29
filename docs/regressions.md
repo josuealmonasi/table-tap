@@ -49,6 +49,11 @@ and that a new party cannot see the previous party's waiting phones.
 | Expiry matches frozen provenance and keeps full cart cleanup (unresolved pages) | Closing only an attempt could free a quote without returning a pending cart's stock |
 | Card refusals describe an unconfirmed result in both languages (unresolved pages) | Staff were told someone was paying right now when the result was unknown |
 | A refused money action offers a separate payment check (unresolved pages, finding 7) | Staff had to retry a collection or decision just to ask whether its online payment had finished |
+| Every unread bell entry stays reachable (notify sweep 5-5) | The badge counted an old refund that the newest-ten list could never show |
+| Statement retries name the same email send (notify sweep 5-7) | A lost reply sent another copy from a second request |
+| Bell times follow the restaurant clock (notify sweep 5-8) | The same event appeared on different days on staff devices |
+| Staff seats commit before invite mail (notify sweep 5-6) | An insert failed after the waiter already received a dead invitation |
+| Failed card checkouts return their own bell warnings (notify sweep 5-3) | Stock returned while the sold-out message stayed behind |
 | Write-off confirmations use per-order decimal cents (#576 R4) | Frozen slot totals and binary rounding quoted 2.01 instead of 2.02, or 0.50 instead of 0.51, while the writer required more |
 | Receipt suppression uses discovery begun for the settlement decision (#576 R3) | An earlier unsplit read, or a failed latest read, offered a whole-order receipt after parts paid |
 | Write-off confirms only the unpaid remainder (#574-5) | The open-bill row showed MX$20 left while its confirmation claimed MX$100 lost |
@@ -6101,3 +6106,57 @@ identities, currency and selected parts. `check-payment.spec.tsx` checks both
 languages, failed reads and duplicate taps. Both layout and dialog sweeps
 register every outcome through Pedidos and Cuentas for every floor role;
 their browser responses are held, so those visits never collect or query Stripe.
+
+## Failed card stock warnings (notify sweep 5-3)
+
+The pending reservation and its bell entry must agree. A refused Stripe session
+returned the portions but left the sold-out warning. Pending card warnings now
+have attempt-owned IDs; only after the pending order and its claims return does
+cleanup delete those IDs, restaurant and item together. Committed sale warnings
+stay. `checkout/__tests__/route.spec.ts` reproduces the refusal and checks both
+other-sale and other-restaurant warnings survive, while a successful checkout
+keeps its warning.
+
+
+## Staff membership before mail (notify sweep 5-6)
+
+The seat writer and the invitation sender must agree. Create the password-less
+login without mail, commit its membership through the existing seat guard, then
+send the Supabase invitation. A failed send removes its membership first, then
+deletes only that new login; its cascade also returns the seat if the first
+cleanup failed. `staff-seat-limit.spec.ts`
+reproduces the last-seat race; `staff-invite-order.spec.ts` checks send ordering,
+returned and thrown mail failures, and protection of existing accounts.
+
+
+## Reachable unread notifications (notify sweep 5-5)
+
+The badge count and the bell list must agree. Newer read warnings hid an older
+unread refund behind a ten-row limit. The bell now pages 50 entries at a time,
+unread first, with a time-and-ID cursor so matching timestamps do not hide rows.
+The read button sends only the displayed unread IDs, never an unrestricted
+restaurant-wide update. New arrivals and unloaded pages remain unread.
+`notification-pagination.spec.ts` checks ordering, cursor boundaries, restaurant
+scope and bounded updates; `dashboard-session.react-component.spec.tsx` checks
+that the optimistic badge subtracts only loaded entries. The menu spec checks
+both languages' older-page and read buttons.
+
+## One statement email per retry (notify sweep 5-7)
+
+The customer's send action and the provider request must agree. A lost answer
+used to send a second email. `useStatementMail` keeps its operation reference
+through thrown requests and failed replies, changes it for a different recipient
+or account, and clears it after success so an intentional resend is new.
+The route requires that reference and passes an account-scoped key to Resend's
+`Idempotency-Key` header. All existing rate limits still apply, including to
+retries. Resend retains keys for 24 hours; this is provider deduplication within
+that window, not a permanent sent-mail record. `statement-mail.spec.tsx`,
+`account-mail-limits.spec.ts` and `mail-idempotency.spec.ts` cover both ends.
+
+## Restaurant-local bell timestamps (notify sweep 5-8)
+
+The restaurant clock and its bell must agree. A manager in another time zone
+saw a warning on the wrong day. The authorized bell response now includes the
+restaurant's time zone, with the same default used for receipts, and the menu
+uses it for both date and time. `notifications-menu.spec.tsx` checks English and
+Spanish across midnight; the pagination spec checks the API supplies the zone.

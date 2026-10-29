@@ -15,7 +15,7 @@ vi.mock("@/lib/i18n/server", () => ({ getLocale: async () => "es" }));
 let admissionStatus = "approved";
 const step = {
   openSession: vi.fn(async (): Promise<string | null> => "sitting-1"),
-  reserveStock: vi.fn(async () => ({ ok: true, short: [], low: [], reservationId: "reservation-1" })),
+  reserveStock: vi.fn(async () => ({ ok: true, short: [], low: [] as typeof soldOut[], reservationId: "reservation-1" })),
   insertOrder: vi.fn(async (): Promise<{ data: { id: string } | null; error: unknown }> => ({
     data: { id: "order-1" },
     error: null,
@@ -28,6 +28,8 @@ const step = {
 const releaseCoupon = vi.fn<(id: string) => Promise<void>>(async () => undefined);
 const releaseStock = vi.fn<(restaurantId: string, lines: unknown) => Promise<void>>(async () => undefined);
 const deleteOrder = vi.fn(async () => ({ error: null }));
+const notices: Record<string, unknown>[] = [];
+const soldOut = { itemId: "t1", name: "Taco", stock: 0, kind: "out_of_stock" as const };
 
 const restaurant = {
   id: "r1", currency: "MXN", service_pct: 0, service_enabled: false, accepting_orders: true,
@@ -73,7 +75,10 @@ vi.mock("@/lib/table-membership", () => ({ requestTableMember: async () => ({
 vi.mock("@/lib/stock-service", () => ({
   reserveStock: () => step.reserveStock(),
   releaseStock: (r: string, lines: unknown) => releaseStock(r, lines),
-  raiseStockNotifications: () => step.notify(),
+  raiseStockNotifications: async () => {
+    await step.notify();
+    notices.push({ id: "attempt", restaurant_id: "r1", data: { itemId: "t1" } });
+  },
 }));
 vi.mock("@/lib/checkout/app-fee", () => ({ checkoutFee: async () => ({ id: null, cents: 0 }) }));
 vi.mock("@/lib/platform-fee", () => ({
@@ -90,6 +95,22 @@ vi.mock("@/lib/checkout/cart-error", () => ({
 vi.mock("@/lib/supabase/admin", () => ({
   createAdminClient: () => ({
     from: (table: string) => {
+      if (table === "notifications") {
+        const filters: Record<string, unknown> = {};
+        const q = {
+          eq: (key: string, value: unknown) => { filters[key] = value; return q; },
+          insert: async (rows: Record<string, unknown>[]) => { await step.notify(); notices.push(...rows); return { error: null }; },
+          delete: () => q,
+          then: (resolve: (value: unknown) => void) => {
+            for (let i = notices.length - 1; i >= 0; i--) {
+              if (Object.entries(filters).every(([key, value]) => key === "data->>itemId"
+                ? (notices[i].data as { itemId: string }).itemId === value : notices[i][key] === value)) notices.splice(i, 1);
+            }
+            return Promise.resolve({ error: null }).then(resolve);
+          },
+        };
+        return q;
+      }
       if (table === "restaurants") {
         const q = { select: () => q, eq: () => q, single: async () => ({ data: restaurant, error: null }) };
         return q;
@@ -124,6 +145,7 @@ const boom = () => {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  notices.length = 0;
   admissionStatus = "approved";
   step.openSession.mockImplementation(async () => "sitting-1");
   step.reserveStock.mockImplementation(async () => ({ ok: true, short: [], low: [], reservationId: "reservation-1" }));
@@ -151,7 +173,7 @@ describe("a checkout that dies halfway gives back what it had claimed", () => {
   });
 
   it("removes a card order that died before Stripe was asked", async () => {
-    step.notify.mockImplementation(async () => boom());
+    step.logCoupon.mockImplementation(async () => boom());
     expect((await checkout()).status).toBe(500);
     expect(deleteOrder).toHaveBeenCalledTimes(1);
     expect(releaseCoupon).toHaveBeenCalledTimes(1);
@@ -215,4 +237,21 @@ describe("admission before a new table order", () => {
     expect((await checkout({ payLater: true })).status).toBe(200);
     expect(step.insertOrder).toHaveBeenCalledOnce();
   });
+});
+
+
+it("removes only this failed card attempt's stock alert after returning its stock", async () => {
+  notices.push({ id: "committed-sale", restaurant_id: "r1", data: { itemId: "t1" } },
+    { id: "other-restaurant", restaurant_id: "r2", data: { itemId: "t1" } });
+  step.reserveStock.mockResolvedValue({ ok: true, short: [], low: [soldOut], reservationId: "reservation-1" });
+  step.openCard.mockRejectedValue({ code: "amount_too_small" });
+  expect((await checkout()).status).toBe(400);
+  expect(releaseStock).toHaveBeenCalledOnce();
+  expect(notices.map(n => n.id)).toEqual(["committed-sale", "other-restaurant"]);
+});
+
+it("keeps the stock alert when Stripe takes responsibility for the card order", async () => {
+  step.reserveStock.mockResolvedValue({ ok: true, short: [], low: [soldOut], reservationId: "reservation-1" });
+  expect((await checkout()).status).toBe(200);
+  expect(notices).toHaveLength(1);
 });
