@@ -5777,4 +5777,9 @@ itself mounted in the others, account statement included; a dashboard tab now
 leaves for the sign-in screen, or reloads for a fresh check of a new login.
 Deleting a visit card left its code saved on the phone, so the menu's
 "My card" kept opening a card that no longer existed
-(`loyalty-device.spec.ts`).
+(`loyalty-device.spec.ts`). A token refresh renewed the offline window from
+the page's own restaurant and role, so a demoted manager's pages stayed
+renewable while the tab was open; the server now reads the membership again
+(`service-worker-registrar.spec.tsx`). And a cashier moved to the kitchen with
+sales held could neither send them nor sign out; a login that cannot send them
+now signs out and leaves them for a manager (`sign-out.spec.tsx`).
