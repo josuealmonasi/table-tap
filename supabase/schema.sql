@@ -4125,7 +4125,12 @@ begin
     if found then
       insert into notifications (restaurant_id, kind, data)
       values (v_checkout.restaurant_id, 'refund_due',
-              jsonb_build_object('amount', v_twice, 'currency', (select currency from restaurants where id = v_checkout.restaurant_id),
+              -- The obligation's own currency, never today's menu: a US$ account
+              -- page paid after the switch to pesos rang "MX$100 to refund" (sweep 5, finding 1).
+              jsonb_build_object('amount', v_twice, 'currency', coalesce(
+                (select currency from refunds_due where stripe_payment_intent = p_intent),
+                (select currency from diner_checkouts where restaurant_id = v_checkout.restaurant_id and stripe_payment_intent = p_intent),
+                (select currency from restaurants where id = v_checkout.restaurant_id)),
                                  'account', v_account.name));
     end if;
   end if;
@@ -7684,7 +7689,12 @@ begin
     if found then
       insert into notifications (restaurant_id, kind, data)
       values (v_checkout.restaurant_id, 'refund_due',
-              jsonb_build_object('amount', v_twice, 'currency', (select currency from restaurants where id = v_checkout.restaurant_id),
+              -- The obligation's own currency, never today's menu: a US$ account
+              -- page paid after the switch to pesos rang "MX$100 to refund" (sweep 5, finding 1).
+              jsonb_build_object('amount', v_twice, 'currency', coalesce(
+                (select currency from refunds_due where stripe_payment_intent = p_intent),
+                (select currency from diner_checkouts where restaurant_id = v_checkout.restaurant_id and stripe_payment_intent = p_intent),
+                (select currency from restaurants where id = v_checkout.restaurant_id)),
                                  'account', v_account.name));
     end if;
   end if;
