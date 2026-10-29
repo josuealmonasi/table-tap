@@ -905,6 +905,11 @@ foundingLeftBody: "Subscribe now and keep this subscription price for as long as
     },
   },
   receipt: {
+    original: "Original sale",
+    returned: "Returned",
+    returnPending: "Still to return",
+    retained: "Kept from the sale",
+
     originalBill: "Original bill",
     forgiven: "Forgiven by the restaurant",
     paid: "Paid",
@@ -979,6 +984,8 @@ foundingLeftBody: "Subscribe now and keep this subscription price for as long as
     title: "Order status",
     backToMenu: "Back to menu",
     yourItems: "Your items",
+    returned: "Returned",
+    returnPending: "Still to return",
     totalPaid: "Total paid",
     stepReceived: "Order Received",
     stepPreparing: "Preparing",
@@ -1081,6 +1088,29 @@ foundingLeftBody: "Subscribe now and keep this subscription price for as long as
   },
 
   returns: {
+    completedPeriod: "Returned in this period",
+    reportHelp: "Sales stay on the day they were made. Returns count on the day each payment is given back. Pending returns have not left the drawer yet.",
+
+    manualTitle: "Already refunded in Stripe?",
+    manualHelp: "Paste the refund ID only when its full amount belongs to this return. Refunds shared between sales need a review.",
+    manualConfirm: "Confirm that the whole Stripe refund belongs to this return. No new money will be sent.",
+    manualId: "Stripe refund ID",
+    manualSave: "Use this refund",
+    manualRecorded: "The refund was recorded. Check the return to send only what is still owed.",
+    alreadyReturned: "Already returned: {amount}",
+    unconfirmed: "We could not confirm this return. Send the same request again to find out.",
+
+    action: "Return",
+    resume: "Continue return",
+    order: "Return on {code}",
+    saleKept: "The sale stays completed. Only the amount kept from it changes.",
+    upTo: "You can return up to {amount}.",
+    amount: "Amount to return",
+    reason: "Reason",
+    prepare: "Prepare return",
+    prepared: "The return is ready. Confirm each payment below after giving it back.",
+    readError: "Could not read the pending returns. You can keep taking payments.",
+
     myDrawer: "My drawer",
     payoutDrawer: "Money returned from",
 
@@ -1393,6 +1423,12 @@ foundingLeftBody: "Subscribe now and keep this subscription price for as long as
     attributionChanged: "The attribution no longer fits the receipt or its orders. Refresh and check the amounts, including the tip.",
     refundPending: "The provider has not confirmed the return. It remains outstanding; check again later.",
     refundReviewRequired: "This historical payment needs manager attribution before a return can be recorded.",
+    duplicateRefundUseDue: "Return the extra payment from Payments to return. The sale keeps its amount.",
+    returnConflict: "This return was already requested with different details. Check the saved return before trying again.",
+    returnChanged: "The amount left on this sale changed. Open it again before choosing how much to return.",
+    returnCapacity: "Choose an amount above zero and no more than what is left on the sale.",
+    returnSplit: "Finish or cancel the divided bill before returning money on this sale.",
+    returnIneligible: "Money can be returned here after a paid sale is completed. Account sales need to be reviewed in Accounts.",
     posUnsettled: "The sale is not confirmed yet. It stays on this device and is sent again by itself.",
     posOtherRestaurant: "You are signed in to a different restaurant now. The sale stays on this device until this restaurant signs in again.",
     posMismatch: "The menu's price changed while you were charging. The sale stays on this device and is recorded at what you charged.",

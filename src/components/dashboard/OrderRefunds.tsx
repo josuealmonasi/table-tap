@@ -1,5 +1,7 @@
 "use client";
 
+import { mutate } from "swr";
+import ManualReturnAttribution from "./ManualReturnAttribution";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useT } from "@/lib/i18n/context";
@@ -34,6 +36,7 @@ export default function OrderRefunds({ refunds }: Props) {
       });
       const data = await res.json();
       toast(!res.ok ? data.error : t(data.completed ? "returns.done" : "returns.pending"), !res.ok ? "error" : undefined);
+      await mutate(key => Array.isArray(key) && key[0] === "/api/order-refunds");
       router.refresh();
     } catch { toast(t("done.networkError"), "error"); }
     finally { setBusy(null); }
@@ -44,7 +47,9 @@ export default function OrderRefunds({ refunds }: Props) {
     <p className="tt-muted">{t("returns.intro")}</p>
     {refunds.map(row => <div key={row.id} className="tt-bill-row tt-bill-approval">
       <div className="tt-bill-main">
-        <strong>{formatMoney(Number(row.amount), row.currency)}</strong>
+        <strong>{formatMoney(row.outstanding_cents === undefined ? Number(row.amount) : row.outstanding_cents / 100, row.currency)}</strong>
+        {row.outstanding_cents !== undefined && row.outstanding_cents < Math.round(Number(row.amount) * 100)
+          && <span className="tt-muted tt-bill-sub">{t("returns.alreadyReturned", { amount: formatMoney(Number(row.amount) - row.outstanding_cents / 100, row.currency) })}</span>}
         <span className="tt-muted tt-bill-sub">{t(`returns.${row.source}`)} · {t(`returns.${row.status}`)}</span>
       </div>
       <div className="tt-bill-actions-row" style={{ flexWrap: "wrap" }}>
@@ -60,6 +65,7 @@ export default function OrderRefunds({ refunds }: Props) {
           ? <span className="tt-muted tt-bill-sub">{t("returns.reviewHelp")}</span>
           : <button className="tt-btn tt-btn-primary tt-btn-sm" disabled={busy === row.id}
             onClick={() => void finish(row)}>{t(row.source === "stripe" ? "returns.check" : "returns.returned")}</button>}
+        {row.source === "stripe" && <ManualReturnAttribution operationId={row.id} onRecorded={() => router.refresh()} />}
       </div>
     </div>)}
   </section>;

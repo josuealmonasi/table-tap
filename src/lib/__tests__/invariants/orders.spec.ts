@@ -158,7 +158,7 @@ describe("a sale is handed back once", () => {
     expect(src).not.toContain('action: "refunded"');
     const executor = read("src/lib/refunds/operations.ts");
     expect(executor).toContain('rpc("start_refund_attempt"');
-    expect(executor).toContain('rpc("finish_refund_operation"');
+    expect(executor).toContain('rpc("finish_refund_operation_v2"');
     expect(executor).toContain('refund_application_fee: true');
     const sql = read("supabase/schema.sql");
     expect(sql).toContain("status in ('received', 'preparing')");

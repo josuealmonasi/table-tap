@@ -60,7 +60,8 @@ describe("PR1 schema review regressions", () => {
     expect(attribution).toContain("p.allocation_origin = 'legacy'");
     expect(attribution).toContain("import_historical_return");
     expect(definition(schema, "import_historical_return")).toContain("historical_log_id");
-    expect(readFileSync("src/lib/refunds/adjustments.ts", "utf8")).toContain('is("historical_log_id", null)');
+    expect(readFileSync("src/lib/refunds/adjustments.ts", "utf8")).toContain("excludeHistorical: true");
+    expect(readFileSync("src/lib/refunds/events.ts", "utf8")).toContain('if (filters.excludeHistorical) query = query.is("historical_log_id", null)');
   });
   it("leaves unproven historical currency unknown and checks attribution and returns", () => {
     const backfill = definition(schema, "backfill_payment_allocations");

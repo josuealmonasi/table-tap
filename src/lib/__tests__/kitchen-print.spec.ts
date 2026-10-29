@@ -12,9 +12,10 @@ vi.mock("@/lib/i18n/server", () => ({ getLocale: async () => "en" }));
 vi.mock("@/lib/receipt", () => ({ buildReceipt: () => ({ html: "receipt with money" }) }));
 vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({ from: (table: string) => {
   state.reads.push(table);
-  const q = { select: () => q, eq: (key: string, value: unknown) => { state.filters.push([key, value]); return q; },
+  let offset = 0;
+  const q = { range: (start: number) => { offset = start; return q; }, select: () => q, eq: (key: string, value: unknown) => { state.filters.push([key, value]); return q; },
     in: () => q, order: () => q,
-    then: (resolve: (value: unknown) => unknown) => Promise.resolve({ data: table === "orders" ? [{ id: "real-order-id", restaurant_id: "r1", currency: "MXN" }] : [], error: null }).then(resolve),
+    then: (resolve: (value: unknown) => unknown) => Promise.resolve({ data: table === "orders" && offset === 0 ? [{ id: "real-order-id", restaurant_id: "r1", currency: "MXN" }] : [], error: null }).then(resolve),
     maybeSingle: async () => ({ data: table === "orders" ? { id: "real-order-id" }
       : { print_token: "printer", name: "Bistro" }, error: null }),
     upsert: async (row: object) => { state.queued++; state.jobs.push(row); return { error: null }; } };

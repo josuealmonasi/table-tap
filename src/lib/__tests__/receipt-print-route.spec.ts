@@ -9,9 +9,10 @@ vi.mock("@/lib/rate-limit", () => ({ isRoomLimited: async () => false, isTableLi
 vi.mock("@/lib/mail", () => ({ mailConfigured: () => true, sendMail: state.mail }));
 vi.mock("@/lib/api-error", () => ({ apiError: async (error: string, status: number) => Response.json({ error }, { status }) }));
 vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({ from: (table: string) => {
-  const q = { select: () => q, in: () => q, eq: () => q, update: (data: unknown) => { state.writes(data); return q; },
-    order: async () => (state.readError ? { data: null, error: state.readError } : { data: state.rows, error: null }), single: async () => ({ data: { name: "Bistro", timezone: "America/Mexico_City" } }) };
-  Object.assign(q, { then: (resolve: (value: unknown) => unknown) => Promise.resolve({ data: table === "order_adjustments" ? [] : state.rows, error: null }).then(resolve) });
+  let offset = 0;
+  const q = { range: (start: number) => { offset = start; return q; }, select: () => q, in: () => q, eq: () => q, update: (data: unknown) => { state.writes(data); return q; },
+    order: () => q, single: async () => ({ data: { name: "Bistro", timezone: "America/Mexico_City" } }) };
+  Object.assign(q, { then: (resolve: (value: unknown) => unknown) => Promise.resolve({ data: table === "order_adjustments" ? [] : state.rows.slice(offset), error: state.readError }).then(resolve) });
   return q;
 } }) }));
 import { POST } from "@/app/api/receipt/route";

@@ -1,4 +1,5 @@
 import { createAdminClient } from "@/lib/supabase/admin";
+import { withReturnComponents } from "@/lib/return-components";
 import { feesKeptSince } from "@/lib/report-fees";
 import { everyRow } from "@/lib/paged";
 import type { Modifier } from "@/lib/types";
@@ -56,8 +57,8 @@ export async function readCosts(restaurantId: string, now = new Date()): Promise
     everyRow<PriceChange>((a, b) => db.from("ingredient_prices")
       .select("ingredient_id, previous_cost, unit_cost, created_at")
       .eq("restaurant_id", restaurantId).gte("created_at", since).order("id").range(a, b), "the price changes"),
-    everyRow<SoldOrder>((a, b) => db.from("orders")
-      .select("items, total, service_fee, tip, tax_pct")
+    everyRow<SoldOrder & { id: string; currency: string }>((a, b) => db.from("orders")
+      .select("id, currency, items, total, service_fee, tip, tax_pct")
       .eq("restaurant_id", restaurantId).eq("currency", restaurant.data.currency).eq("paid", true).neq("status", "cancelled")
       .gte("created_at", since).order("id").range(a, b), "the period's sales"),
     everyRow<FeePayment>((a, b) => db.from("payments")
@@ -89,7 +90,7 @@ export async function readCosts(restaurantId: string, now = new Date()): Promise
     recipes: lines,
     products,
     margins: unitMargins(products, book, costs, fees.rate, taxPct),
-    period: periodContribution(orders, book, costs, fees.rate),
+    period: periodContribution(await withReturnComponents(db, restaurantId, orders), book, costs, fees.rate),
     fees,
     unverifiedFees: platformFees.unverified,
     rises: priceRises(changes, typed, products, book, costs, fees.rate, taxPct),

@@ -45,6 +45,18 @@ and that a new party cannot see the previous party's waiting phones.
 | Remainder quotes and SQL round decimal cents alike (#574-10) | A legacy 1.005 total quoted 50 cents left where SQL required 51 |
 | A split start reference ends with its operation (#574-3) | Cancelling and starting the same division replayed the cancelled split |
 | The split readers and money writer agree on frozen parts (#574-4) | Cash-paid or held parts left forbidden resize and cancel controls visible |
+
+| A manual-only completion needs no app attempt (Returns verification 3) | A manager finished the return between discovery and start, but the executor required app account fields and answered incomplete |
+| A manual return keeps its provider date when attributed later (Returns V6) | Discovering Monday's successful manual refund on Tuesday moved its money into Tuesday's reports |
+| Completed returns preserve the eaten sale and its exact component plan (Returns 7b) | Cancelling served food would release stock, while the return route had no preparation boundary |
+| A return reference keeps its exact reviewed request (Returns 7b) | A lost full-return reply could not replay after the retained total reached zero |
+| Card discovery precedes attempts and only outstanding money is sent (Returns 7b) | A manual 40 was ignored before asking Stripe for another 100, or accepted as the whole promise |
+| An expired unknown refund key never authorizes a new POST (Returns 7b) | A provider key can expire while its successful refund remains undiscovered |
+| Sales keep their day and returns use an exclusive completion window (Returns 7b) | Reducing the live total rewrote yesterday's revenue, and midnight could count twice |
+| Receipts distinguish original, returned, pending and retained money (Returns 7b) | One completed card part looked like the whole mixed return, and paid slots borrowed the table's total |
+| A reprint carries the financial version already issued (Returns 7b) | A later return or provider failure changed the second copy, and the staff dialog dropped its version |
+| Pedidos offers completed-sale returns only to managers (Returns 7b) | Completed orders had no return action, and sharing history with the kitchen would expose money |
+
 | This phone can continue its own held parts (split audit 2) | A lost reservation answer left every part disabled before any Stripe page existed |
 | A receipt and its activity share one identity (split audit 4) | A failed balance read skipped the log and duplicate collection retries never repaired it |
 | A refused or expired slot attempt retires whole (split audit 3) | Separate slot and fee releases stranded an open attempt after one cleanup failed |
@@ -5362,6 +5374,11 @@ Existing collection and write-off writers are outside this receipt/checker fix.
 | Staff paper includes the restaurant's forgiveness | The diner reader explained the loss, but staff reprints read the reduced order alone | `staff-receipt-reprint.spec.ts`, existing `kitchen-print.spec.ts` |
 | Staff can reprint a paid group of parts | The receipt renderer accepted payments, but the staff route required an order | `staff-receipt-reprint.spec.ts` |
 | A query names a column its table has | The slot-receipt readers filtered `bill_splits` by `table_id`, which it never had; mocked tests passed and every approved phone's receipt list answered 503 | `invariants/database.spec.ts` ("a query names only columns its table has"), `pnpm api` |
+| One provider refund pays one obligation | A manual refund attributed to a return was also counted by the duplicate-charge coverage writer; both closed with half the money back | `returns-schema.spec.ts` (audit 1), `loop/returns-probe.cjs` |
+| No manual attribution while an app refund is in flight | A manual MX$40 attributed mid-POST let the app's saved MX$100 still leave: MX$140 for a MX$100 promise | `returns-schema.spec.ts` (audit 2), `loop/returns-probe.cjs` |
+| A return's header names the refund that finished it | A failed first refund stayed on the header and manual completion left it empty, so fee reconciliation and completion evidence missed real refunds | `returns-schema.spec.ts` (audit 4), `loop/returns-probe.cjs` |
+| An offline replay acknowledges what was collected | A return made before the tablet reconnected lowered the total its replay reported, so the device never released the sale | `returns-schema.spec.ts` (audit 6) |
+| An unknown tip breakdown goes to review | A historical receipt without its tip let returns plan principal it did not hold, leaving money nobody could return | `returns-schema.spec.ts` (audit 8) |
 | One bad saved payment cannot blank a diner's split | A held card attempt whose saved scope did not match made the whole split read throw: 500, no parts, nothing to press | `split-slots-resume` (skip and log), `pnpm layout` "diner paid, held and chosen parts" |
 | A promise is judged on the loaded screen | The bill shows "pay at the table" while it still checks for a split; the audit judged it then and reported three bills as explaining nothing | `promise-audit.mjs` waits for the expected words, bounded at 30s |
 
@@ -5409,6 +5426,79 @@ current currency. Both language cases failed when the route required an order.
 Kitchen and unauthenticated callers are refused before financial reads, and a
 payment cannot be sent to the kitchen printer.
 
+
+## Completed returns preserve the sale (Returns 7b)
+
+The order and the return plan have to agree without cancelling a meal already
+served. `returns-components.spec.ts` exercises mixed principal/tip receipts,
+forgiveness followed by a full return, service exhaustion and duplicate-payment
+refusal through the preparation RPC. The route never rewrites orders, coupons or
+stock itself. These mocked answers do not prove the database's component rules;
+Claude owns the SQL and transaction gates.
+
+## One request per return reference (Returns 7b)
+
+The reviewed snapshot and its retry have to agree even when the first answer
+was lost. `returns-references.spec.ts` checks identical and conflicting refs,
+stale distinct refs and replay after zero. `order-return.spec.tsx` checks the
+reason requirement and an unchanged body/reference after a lost reply. Closing
+the dialog does not discard its request; an explicit discard remains available.
+
+## Actual card coverage before another POST (Returns 7b)
+
+The provider's refunds and the saved promise have to agree. Discovery runs
+before `start_refund_attempt`, pages every refund and records verified saved
+manual attribution first. `returns-provider.spec.ts` checks manual 40 plus app
+60, unassigned manual review, sequential operation keys, foreign currency and
+legacy exact cancellation recovery. `returns-boundary.spec.ts` verifies that a
+manager cannot substitute client-reported provider amounts or another charge.
+An operation-only partial tag is never proof the whole promise was returned.
+
+## Expired unknown provider keys (Returns 7b)
+
+The saved attempt and Stripe's finite key lifetime have to agree. After 23 hours,
+an unknown attempt without durable provider evidence stays pending for review;
+it cannot POST again on the assumption that no refund was found. The expired-key
+case in `returns-provider.spec.ts` fails if a second POST becomes possible.
+This never holds up selling, collecting, navigation or signing out.
+
+## Original sales and dated returns (Returns 7b)
+
+The reduced live bill and historical sales readers have to agree about which
+day earned the sale. `returns-reporting.spec.ts` and `returns-readers.spec.ts`
+restore immutable components for analytics/products/average tickets, preserve
+forgiveness, and date each completed operation separately across local midnight.
+An exact upper-bound timestamp belongs only to the next day. Pending and failed
+operations do not leave a drawer; imported log deductions remain deduplicated.
+A reduction racing a read asks for retry instead of inventing a new sale total.
+
+## Return amounts on every receipt (Returns 7b)
+
+The reserved plan and the receipt have to agree without calling an unfinished
+cash part returned. `returns-reporting.spec.ts` and
+`returns-receipt-source.spec.ts` cover original/completed/pending/retained totals,
+methods, manual partial coverage and slot-payment allocations. The same renderer
+feeds plain text, email and print. A failed financial read cannot issue a
+plausible-looking receipt with missing return money.
+
+## Issued copies stay issued (Returns 7b)
+
+The first receipt and its reprint have to agree even after another return or a
+provider failure. A signed financial version preserves the issued amounts and
+outcomes; the reader verifies restaurant, receipt identity and currency.
+`returns-receipt-source.spec.ts` rejects tampering and cross-tenant reuse.
+`return-reprint.spec.tsx` reproduces the staff dialog dropping its version and
+checks that it resends the issued copy, resetting it only for a different order.
+
+## Completed-sale return action (Returns 7b)
+
+The role that can see a return and the role that can authorize it have to agree.
+Only owners/managers get completed history and returns on Pedidos; cashiers,
+waiters and kitchen cannot prepare, attribute or finish through the API.
+`order-return.spec.tsx`, `returns-boundary.spec.ts` and the updated access
+invariant cover the screen and server boundary. The API cases prepare/replay a
+private completed cash/terminal sale and confirm its payout twice. The layout
+list names both return dialogs; Claude runs it and inspects 390/1280 screenshots.
 ### A query names a column its table has
 
 The code and the schema had to agree on a column. The slot-receipt list and
@@ -5420,6 +5510,109 @@ every approved phone. `pnpm api` found it. A new invariant reads every plain
 today) and failed on both lines with the fix reverted. The table now comes from
 the sitting, which the membership check already ties to the table.
 
+## Returns audit #575 — legacy attempt currency
+
+| Rule | Two places that had to agree | Regression coverage |
+|---|---|---|
+| A saved return survives the currency column deploy | Old attempts had no currency while their operations retained the charge currency | `returns-provider.spec.ts`: pre-deploy null-currency attempt |
+
+The attempt and its operation had to agree about the original charge. A null
+attempt currency now falls back only to its operation, never today's restaurant
+currency. Provider IDs and exact legacy tags still recover the saved outcome
+without another POST. No backfill is needed; a conflicting saved currency is
+still refused.
+
+## Returns audit #575 — forgiveness followed by returns
+
+| Rule | Two places that had to agree | Regression coverage |
+|---|---|---|
+| A forgiven bill can later return money | The forgiveness snapshot stayed fixed while the order and retained allocations came down | `forgiveness-money.spec.ts`: forgiveness followed by returns |
+
+The saved forgiveness and today's retained coverage had to agree after returns.
+The checker now subtracts that order's immutable return deltas from the
+forgiveness result, including tips. It still verifies the original loss and its
+single event unchanged. Partial and full returns no longer report a false
+coverage failure.
+
+## Returns audit #575 — replay the collected sale
+
+| Rule | Two places that had to agree | Regression coverage |
+|---|---|---|
+| A replay after a return leaves the device | The replay used the retained bill while the device remembered the original collection | `pos-return-replay.spec.ts` |
+
+The server's repeated ticket and the device's saved charge had to agree. After
+checking tenant, method, currency, paid state and account request scope, the
+TypeScript reader now uses `pos_ticket`, the same ticket reader as the atomic
+writers. It must return the original collection after partial or full returns.
+The device still refuses contradictory amounts; it never silently drops money.
+The SQL correction to `pos_ticket(uuid, uuid)` is owned by Claude and must ship
+with this reader. Mocked replay tests are not database proof.
+
+## Returns audit #575 — the tracker shows paid and returned money
+
+| Rule | Two places that had to agree | Regression coverage |
+|---|---|---|
+| Total paid stays the amount the diner paid | Return preparation lowered the order while the tracker kept its paid label | `tracker-return-source.spec.ts`, `tracker-returns.spec.tsx` |
+
+The tracker and receipt had to agree about money already returned and still to
+return. The tracker now reads the receipt's verified coverage, restores the
+original paid amount and shows separate returned and pending amounts. English
+and Spanish are covered through `TrackerBody`, including a manual partial
+return. A failed financial read asks for retry instead of inventing amounts.
+
+## Returns audit #575 — each successful refund has its own date
+
+| Rule | Two places that had to agree | Regression coverage |
+|---|---|---|
+| Reports date money when each refund succeeds | The receipt counted a successful manual partial while analytics and corte waited for final operation completion | `return-event-dates.spec.ts`, updated `returns-readers.spec.ts`, `returns-reporting.spec.ts`, `shift-return-trail.spec.ts` |
+
+The receipt's verified coverage and dated reports had to agree. Analytics,
+corte, collected-today adjustments and the shift trail now read individual
+successful amounts from `order_return_events_v1`, including manual partials.
+Completing the remainder tomorrow cannot move today's returned money into
+tomorrow. Dated reports use an exclusive end; the shift trail keeps its existing
+inclusive closing instant. Imported log deductions stay excluded from typed
+corte/trail deductions, and cancellation money stays outside completed-sale
+return analytics. A failed event read cannot become a zero-refund day.
+
+The new SQL read and durable per-refund success timestamps are prerequisites,
+not implemented or applied by this TypeScript worker. The exact contract and
+legacy evidence rules are in `docs/returns-audit-ts-handoff.md`.
+### Returns: one refund, one obligation (returns audit 1, 2, 4, 6, 8)
+
+Codex audited #575 read-only and every one of these was two places that had to
+agree. The duplicate-charge writer and the return writer each counted manual
+refunds on the same charge, so one refund could close two debts; it now skips a
+refund a return owns, as the return writer already skipped a due's. A manual
+refund attributed while an app refund was in flight let both leave; attribution
+now waits for the app's outcome. The return header kept a failed first refund
+and was left empty by manual completion, so fee reconciliation never matched;
+completion stamps the latest refund that still counts and the reconciler matches
+any of an operation's succeeded refunds. An offline replay after a return now
+acknowledges the collected amount. A receipt that never recorded its tip goes to
+a person before any plan is made.
+
+### Returns V6 — a manual refund keeps its provider date
+
+Stripe's successful manual refund and the report's day had to agree. Manual
+attribution now sends `refund.created` as epoch seconds in `succeeded_at` only
+when Stripe reports success. Pending manual evidence carries no date. App
+attempts still send no date, including recovery after a pending response, so
+SQL uses the verification time. `return-success-time.spec.ts` checks the RPC
+payloads; SQL keeps the first saved date and caps future evidence at now.
+
+### Returns verification 3 — manual-only completion needs no app attempt
+
+The saved operation and the executor's reply had to agree. A manager could
+finish the whole return with manual refunds after discovery, before start took
+its lock. Start correctly made no app attempt, but the executor checked that
+missing attempt's account before recognizing completion. It answered incomplete
+and missed immediate fee recovery. Completion now comes first, using the
+operation's saved charge and account for fee recovery. A failed fee lookup
+still leaves the customer's return complete. `return-manual-completion.spec.ts`
+first failed four cases, then passed all nine: concurrent success, zero owed,
+null app fields, already completed money, failed fee recovery and unproven
+replies. No provider refund is sent for completed money.
 ### One bad saved payment cannot blank a diner's split
 
 The split read and each saved card attempt had to agree on the attempt's

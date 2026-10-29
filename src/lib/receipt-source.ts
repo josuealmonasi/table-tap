@@ -1,3 +1,7 @@
+import { readReturnAdjustments, returnComponents, verifyReturnedOrder } from "@/lib/return-components";
+import { readReceiptReturns } from "@/lib/receipt-return-source";
+import { slotReceiptReturns } from "@/lib/slot-receipt-returns";
+import { sealSlotVersion, openSlotVersion, sealReceiptVersion, openReceiptVersion } from "@/lib/receipt-version";
 import { receiptCents as cents } from "@/lib/receipt-amount";
 import type { createAdminClient } from "@/lib/supabase/admin";
 import type { ReceiptForgiveness, ReceiptOrder, ReceiptVersion, SlotReceiptPayment } from "@/lib/receipt";
@@ -18,6 +22,22 @@ export class ReceiptReadError extends Error {
 
 /** Select only a known version of the bill; never take financial values from the phone. */
 async function orderVersion(db: Database, orders: StoredOrder[], version: ReceiptVersion | undefined): Promise<ReceiptSource> {
+  if (version?.returnCopy !== undefined) {
+    const saved = openReceiptVersion(version.returnCopy, orders[0].restaurant_id, orders);
+    if (!saved) throw new ReceiptReadError(404);
+    return { orders: saved, restaurantId: orders[0].restaurant_id, tableId: orders[0].table_id, version };
+  }
+  const returns = await readReturnAdjustments(db, orders[0].restaurant_id, orders.map(o => o.id));
+  const restored = orders.map(order => {
+    const matching = returns.filter(a => a.order_id === order.id);
+    if (matching.some(a => a.currency !== order.currency)) throw new ReceiptReadError(503);
+    if (!matching.length) return order;
+    verifyReturnedOrder(order, matching);
+    const components = returnComponents(matching);
+    return { ...order, total: (cents(order.total) + cents(components.total)) / 100,
+      tip: (cents(order.tip ?? 0) + cents(components.tip)) / 100,
+      service_fee: (cents(order.service_fee ?? 0) + cents(components.service_fee)) / 100 };
+  });
   const { data, error } = await db.from("order_adjustments")
     .select("id, restaurant_id, order_id, currency, previous_total, resulting_total, forgiven, previous_tip, resulting_tip, previous_service_fee, resulting_service_fee")
     .eq("restaurant_id", orders[0].restaurant_id).eq("kind", "forgive").in("order_id", orders.map(o => o.id));
@@ -26,7 +46,7 @@ async function orderVersion(db: Database, orders: StoredOrder[], version: Receip
   const ids = version?.adjustmentIds ?? adjustments.map(a => a.id).sort();
   if (!Array.isArray(ids) || ids.length > orders.length || ids.some(id => typeof id !== "string" || !adjustments.some(a => a.id === id))
     || new Set(ids).size !== ids.length) throw new ReceiptReadError(404);
-  const result = orders.map(order => {
+  let result: ReceiptOrder[] = restored.map(order => {
     const matching = adjustments.filter(a => a.order_id === order.id);
     if (matching.length > 1) throw new ReceiptReadError(503);
     const a = matching[0];
@@ -44,7 +64,12 @@ async function orderVersion(db: Database, orders: StoredOrder[], version: Receip
     // A copy issued before forgiveness keeps its original fee and tip too.
     return { ...order, total: a.previous_total, tip: a.previous_tip, service_fee: a.previous_service_fee };
   });
-  return { orders: result, restaurantId: orders[0].restaurant_id, tableId: orders[0].table_id, version: { adjustmentIds: ids } };
+  const receiptVersion: ReceiptVersion = { adjustmentIds: ids };
+  if (!version && returns.length) {
+    result = await readReceiptReturns(db, orders[0].restaurant_id, result, returns);
+    receiptVersion.returnCopy = sealReceiptVersion(orders[0].restaurant_id, result);
+  }
+  return { orders: result, restaurantId: orders[0].restaurant_id, tableId: orders[0].table_id, version: receiptVersion };
 }
 
 export async function readOrderReceipt(db: Database, ids: string[], printing: boolean, orderIds: unknown, version?: ReceiptVersion): Promise<ReceiptSource> {
@@ -79,7 +104,7 @@ export async function readOrderReceipt(db: Database, ids: string[], printing: bo
 }
 
 /** A slot receipt names money received, even while the other parts are unpaid. */
-export async function readSlotReceipt(db: Database, id: string, restaurantId?: string): Promise<ReceiptSource> {
+export async function readSlotReceipt(db: Database, id: string, restaurantId?: string, version?: ReceiptVersion): Promise<ReceiptSource> {
   let query = db.from("payments")
     .select("id, restaurant_id, session_id, amount, tip, currency, created_at").eq("id", id);
   if (restaurantId) query = query.eq("restaurant_id", restaurantId);
@@ -108,6 +133,13 @@ export async function readSlotReceipt(db: Database, id: string, restaurantId?: s
     || charged - tip > frozen || slots.some(s => !Number.isInteger(s.share_no) || s.share_no < 0 || s.share_no > 19
       || !Number.isSafeInteger(s.amount_cents) || s.amount_cents <= 0)
     || new Set(slots.map(s => s.share_no)).size !== slots.length) throw new ReceiptReadError(503);
-  return { orders: [], restaurantId: payment.restaurant_id, tableId: sitting?.table_id ?? null,
-    payment: { ...payment, slots: slots.map(s => s.share_no).sort((a, b) => a - b) } };
+  let receipt: SlotReceiptPayment = { ...payment, slots: slots.map(s => s.share_no).sort((a, b) => a - b) };
+  if (version?.slotCopy !== undefined) {
+    const saved = openSlotVersion(version.slotCopy, payment.restaurant_id, receipt);
+    if (!saved) throw new ReceiptReadError(404);
+    receipt = saved;
+  } else if (version === undefined) receipt = await slotReceiptReturns(db, payment.restaurant_id, receipt);
+  else if (version.returnCopy || !Array.isArray(version.adjustmentIds) || version.adjustmentIds.length) throw new ReceiptReadError(404);
+  const issued = version ?? { adjustmentIds: [], ...(receipt.returns?.length ? { slotCopy: sealSlotVersion(payment.restaurant_id, receipt) } : {}) };
+  return { orders: [], restaurantId: payment.restaurant_id, tableId: sitting?.table_id ?? null, payment: receipt, version: issued };
 }

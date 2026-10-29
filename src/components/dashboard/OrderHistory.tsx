@@ -8,6 +8,7 @@ import { useOrderHistory } from "@/hooks/useOrderHistory";
 import { useLocale, useT } from "@/lib/i18n/context";
 import { LogRowsSkeleton } from "@/components/ui/DashSkeletons";
 import { SearchIcon } from "@/components/ui/icons";
+import OrderReturn from "./OrderReturn";
 import OrderDetailDialog from "./OrderDetailDialog";
 
 /** What was on the order, short enough to sit on one line. */
@@ -28,9 +29,11 @@ function summarise(order: Order): string {
 export default function OrderHistory({
   restaurantId,
   currency,
+  canReturn = false,
 }: {
   restaurantId: string;
   currency: string;
+  canReturn?: boolean;
 }) {
   const t = useT();
   const { locale } = useLocale();
@@ -79,8 +82,8 @@ export default function OrderHistory({
 
       {!loading &&
         orders.map(order => (
+          <div key={order.id}>
           <button
-            key={order.id}
             type="button"
             className="tt-log-row tt-hist-row"
             onClick={() => setOpen(order)}
@@ -121,6 +124,8 @@ export default function OrderHistory({
               </span>
             </span>
           </button>
+          {canReturn && <OrderReturn order={order} onPrepared={retry} />}
+          </div>
         ))}
 
       {pages > 1 && (

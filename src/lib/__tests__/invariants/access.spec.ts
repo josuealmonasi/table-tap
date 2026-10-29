@@ -96,9 +96,9 @@ describe("every public endpoint has a ceiling", () => {
 
 describe("each module sits behind the right guard", () => {
   // A module moved from one screen to another inherits that screen's audience.
-  // The history moved out of the orders board — which the kitchen can open —
-  // and into analytics; the activity log moved out of staff, which only the
-  // owner can open, and into bills, which a waiter can open. Getting the host
+  // The history is in analytics and the manager-only returns section of the
+  // orders board; the activity log moved out of staff, which only the owner
+  // can open, and into bills, which a waiter can open. Getting the host
   // right is the whole permission story, and nothing in the types says so.
   const HOSTED_BY = {
     OrderHistory: "src/components/dashboard/analytics/AnalyticsView.tsx",
@@ -111,14 +111,20 @@ describe("each module sits behind the right guard", () => {
   });
 
   it("does not leave the old host rendering it too", () => {
-    // Two copies is how one of them keeps an audience it lost.
+    // The activity log must not keep an audience it lost. Returns deliberately
+    // put history back on Pedidos, behind its own manager predicate.
     const old = {
-      OrderHistory: "src/components/dashboard/OrdersBoard.tsx",
       UserLogs: "src/components/dashboard/staff/StaffPanel.tsx",
     };
     for (const [mod, file] of Object.entries(old)) {
       expect(read(file), `${file} still renders ${mod}`).not.toMatch(new RegExp(`<${mod}[\\s/>]`));
     }
+  });
+
+  it("keeps completed-sale returns behind the board's manager predicate", () => {
+    const board = read("src/components/dashboard/OrdersBoard.tsx");
+    expect(board).toMatch(/canApprove && !kitchen && <>\s*<OrderReturnsPanel[^>]*\/>\s*<OrderHistory[^>]*canReturn/);
+    expect(read("src/app/dashboard/orders/page.tsx")).toContain("canApprove={MANAGES(membership.role)}");
   });
 
   it("gates the activity log with exactly what its RLS policy allows", () => {

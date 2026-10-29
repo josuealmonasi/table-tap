@@ -84,3 +84,31 @@ it("matches PostgreSQL's cents at a binary half-cent such as 1.005", async () =>
   tables.orders = []; tables.user_logs[0].detail = "kind=rest amount=0.01 currency=MXN";
   await check(); expect(bad).not.toHaveBeenCalled();
 });
+
+it.each([30, 80])("accepts forgiveness followed by returns of %s, preserving the loss event", async amount => {
+  orders[0].total = 80 - amount;
+  tables.order_adjustments.push({ id: "return-adjustment", restaurant_id: "r", order_id: "o", kind: "return",
+    previous_total: 80, resulting_total: 80 - amount, previous_tip: 0, resulting_tip: 0, currency: "MXN" });
+  tables.refund_allocations = [{ allocation_id: "a", operation_id: "return-operation", amount, tip: 0 }];
+  tables.refund_operations = [{ id: "return-operation", restaurant_id: "r", adjustment_id: "return-adjustment",
+    source: "cash", amount, tip: 0, status: "succeeded", completed_at: "2026-10-29T12:00:00Z" }];
+  await check(); expect(bad).not.toHaveBeenCalled();
+});
+
+it("subtracts multiple return and tip deltas only from the forgiven order they belong to", async () => {
+  orders[0].total = 45; orders[0].tip = 5;
+  payments[0].tip = 10; tables.payment_allocations[0].tip = 10;
+  Object.assign(tables.order_adjustments[0], { previous_tip: 10, resulting_tip: 10 });
+  tables.order_adjustments.push(
+    { id: "r1", restaurant_id: "r", order_id: "o", kind: "return", previous_total: 80, resulting_total: 60, previous_tip: 10, resulting_tip: 5 },
+    { id: "r2", restaurant_id: "r", order_id: "o", kind: "return", previous_total: 60, resulting_total: 45, previous_tip: 5, resulting_tip: 5 },
+    { id: "other", restaurant_id: "r", order_id: "other", kind: "return", previous_total: 100, resulting_total: 0, previous_tip: 0, resulting_tip: 0 },
+  );
+  tables.refund_allocations = [{ allocation_id: "a", operation_id: "op1", amount: 20, tip: 5 },
+    { allocation_id: "a", operation_id: "op2", amount: 15, tip: 0 }];
+  tables.refund_operations = [{ id: "op1", source: "cash", amount: 20, tip: 5, status: "succeeded", completed_at: "2026-10-29T12:00:00Z" },
+    { id: "op2", source: "cash", amount: 15, tip: 0, status: "succeeded", completed_at: "2026-10-30T12:00:00Z" }];
+  await check(); expect(bad).not.toHaveBeenCalled();
+  orders[0].total = 46;
+  await check(); expect(bad).toHaveBeenCalledWith("forgiven order o lacks resulting coverage");
+});

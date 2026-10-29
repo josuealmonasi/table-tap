@@ -90,10 +90,14 @@ export async function existingTicket(
   if (data.status === "pending_payment" || (!data.paid && !approved)) {
     return await apiError("apiErr.posUnsettled", 409, undefined, { held: true });
   }
-  return NextResponse.json({
-    orderId: data.id, code: orderCode(data.id as string), total: Number(data.total),
-    settled: true, repeat: true, currency: data.currency, method: data.pay_method,
-    handedOver: data.status === "completed",
-    ...(approved ? { onAccount: { name: (data.customer_accounts as unknown as { name: string } | null)?.name } } : {}),
+  // A return lowers the live order. Replay the original collected ticket so
+  // the device can remove its copy without mistaking the return for lost cash.
+  const { data: ticket, error: ticketError } = await db.rpc("pos_ticket", {
+    p_restaurant: restaurantId, p_ref: posRef,
   });
+  if (ticketError || !ticket) return await apiError("apiErr.orderCreate", 503);
+  if (ticket.outcome !== "settled" || ticket.settled !== true) {
+    return await apiError("apiErr.posUnsettled", 409, undefined, { held: true });
+  }
+  return NextResponse.json({ ...ticket, code: orderCode(ticket.orderId) });
 }
