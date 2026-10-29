@@ -84,6 +84,9 @@ export default function OpenBillRow({
                 {t("dash.billsWaiting", { time: waited(bill.since, now) })}
               </>
             )}
+            {/* Said here, where the line can wrap: as the button's label it
+                grew the rigid button and crushed the badge at 360px (#576). */}
+            {updating && <> · <span role="status">{t("settle.updatingBalance")}</span></>}
           </span>
         </span>
         {bill.discounted && (
@@ -101,9 +104,10 @@ export default function OpenBillRow({
           type="button"
           className="tt-btn tt-btn-primary tt-btn-sm tt-bill-collect"
           disabled={updating}
+          aria-busy={updating}
           onClick={() => onCollect(bill)}
         >
-          {t(updating ? "settle.updatingBalance" : "dash.collect")}
+          {t("dash.collect")}
         </button>
       )}
     </div>
