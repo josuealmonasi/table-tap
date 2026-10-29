@@ -5704,3 +5704,11 @@ lock committed afterwards with a recorded time before the cutoff, so the
 close's reconstruction included a receipt the close never counted and
 reported its expected cash as inconsistent (Codex sweep 1). `recorded_at`
 now defaults to `clock_timestamp()`. `close-receipt-time.spec.ts`.
+### The payment ledger is management's to read
+
+The table's policy and the app's own role checks had to agree. Every money
+screen reads payments on the server with the secret key, behind a role check
+(the takings route refuses a cashier), yet the policy let any waiter or
+cashier select the whole ledger directly: every collector's receipts, amounts
+and tips (Codex sweep 2). Only managers and owners read it now; `pnpm rls`
+asserts a cashier cannot, where it used to assert the opposite.

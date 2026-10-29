@@ -2415,9 +2415,15 @@ drop policy if exists "team reads payments" on payments;
 -- time through.
 drop policy if exists "team reads payments" on payments;
 drop policy if exists "the floor reads payments" on payments;
-create policy "the floor reads payments"
+-- Management only, now. Every screen that shows money reads it on the server
+-- with the secret key, behind its own role check, so the floor never needed
+-- the table itself; but this policy let any waiter or cashier select every
+-- collector's receipts for the restaurant directly, while the takings route
+-- refused them (Codex sweep 2). Owners pass through has_role.
+drop policy if exists "management reads payments" on payments;
+create policy "management reads payments"
   on payments for select
-  using (has_role(restaurant_id, array['manager', 'waiter', 'cashier']));
+  using (has_role(restaurant_id, array['manager']));
 
 revoke all on payments from anon;
 grant select on payments to authenticated;
