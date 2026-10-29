@@ -1956,6 +1956,8 @@ badgesHint: "Muestra cuántas cosas esperan acción en cada sección. Aplica a t
     pageOf: "Página {page} de {pages}",
   },
   orders: {
+    readFailed: "No pudimos cargar los pedidos en vivo. Intenta de nuevo.",
+    requestsReadFailed: "No pudimos cargar las llamadas de las mesas. Intenta de nuevo.",
     refundPendingMessage: "Cancela el pedido y registra lo que se debe devolver. El proveedor confirma los reembolsos a tarjeta. Confirma por separado las devoluciones en efectivo o terminal en Cuentas.",
     refundPendingDone: "Pedido cancelado. Consulta el estado de la devolución en Cuentas.",
     notPaid: "No pagado",

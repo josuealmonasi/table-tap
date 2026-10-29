@@ -289,8 +289,9 @@ export default function OrderCard({
               {money?.stripe_refund_id ? t("orders.refunded") : ""}
             </span>
           ) : (
-            <span style={{ color: "var(--tt-success)", fontSize: 13, fontWeight: 700 }}>
-              {t("orders.done")}
+            // No stage button does not mean ready: a waiter cannot advance food still cooking.
+            <span style={{ color: meta.color, fontSize: 13, fontWeight: 700 }}>
+              {t(meta.labelKey)}
             </span>
           )}
         </div>
