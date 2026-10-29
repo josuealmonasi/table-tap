@@ -5613,3 +5613,12 @@ format. A mismatched attempt is now simply not offered for resuming and is
 logged; its parts stay held, so nothing can be paid twice. The fixture now
 writes the card path's own key, and the seed picks a bill large enough for
 three card parts, so its card hold is never refused at random.
+
+### The payment ledger is management's to read
+
+The table's policy and the app's own role checks had to agree. Every money
+screen reads payments on the server with the secret key, behind a role check
+(the takings route refuses a cashier), yet the policy let any waiter or
+cashier select the whole ledger directly: every collector's receipts, amounts
+and tips (Codex sweep 2). Only managers and owners read it now; `pnpm rls`
+asserts a cashier cannot, where it used to assert the opposite.
