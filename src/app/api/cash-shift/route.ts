@@ -66,6 +66,7 @@ export async function POST(req: NextRequest) {
     if (error) return await apiError("apiErr.generic", 500);
     if (!data) return await apiError("apiErr.shiftChanged", 409);
     await logEvent({
+      operationKey: `shift:${shiftId.toLowerCase()}`,
       restaurantId: actor.restaurantId, actor: actor.email, entity: "cash", action: "closed",
       detail: logDetail({ counted: counted.toFixed(2), expected: Number(data.expected).toFixed(2),
         difference: Number(data.difference).toFixed(2), currency: data.currency }),

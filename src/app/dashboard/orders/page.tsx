@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { STALE_REQUEST_HOURS } from "@/lib/service-requests";
+import { serviceRequestCutoff } from "@/lib/service-requests";
 import { createClient } from "@/lib/supabase/server";
 import { getMembership, MANAGES, MOVES_ORDERS, SETTLES, TAKES_COUNTER_ORDERS } from "@/lib/membership";
 import { getPlan } from "@/lib/plan-server";
@@ -64,7 +64,7 @@ export default async function OrdersPage() {
   // forever, so the board was carrying taps from weeks earlier — a chip asking
   // for a waiter at a table that emptied on Tuesday teaches the floor to
   // ignore the row. A diner still waiting will tap again.
-  const shiftStart = new Date(Date.now() - STALE_REQUEST_HOURS * 60 * 60 * 1000);
+  const shiftStart = serviceRequestCutoff();
 
   // Today's takings: what arrived in the ledger since the restaurant's
   // midnight, net of what went back, the same figure the corte signs for.
@@ -101,7 +101,7 @@ export default async function OrdersPage() {
       .select("*")
       .eq("restaurant_id", r.id)
       .eq("status", "open")
-      .gte("created_at", shiftStart.toISOString())
+      .gte("created_at", shiftStart)
       .order("created_at", { ascending: false }),
     // Money, not orders: a partial collection, a split share and an old
     // account settled today never make a paid order created today.
@@ -122,6 +122,8 @@ export default async function OrdersPage() {
       <OrdersBoard
         restaurant={{ id: r.id, currency: r.currency, ticket_warn_minutes: r.ticket_warn_minutes, ticket_late_minutes: r.ticket_late_minutes }}
         initialOrders={(orders as BoardOrder[]) ?? []}
+        ordersReadFailed={Boolean(ordersRes.error)}
+        requestsReadFailed={Boolean(requestsRes.error)}
         snapshotReadAt={ordersRes.error ? undefined : snapshotReadAt}
         kitchen={kitchen}
         initialRequests={(requests as BoardRequest[]) ?? []}

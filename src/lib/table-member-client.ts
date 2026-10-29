@@ -1,5 +1,6 @@
 "use client";
 
+import { membershipDeadline } from "@/lib/membership-read";
 import type { JoinState } from "@/lib/table-membership";
 import type { PendingPhone } from "@/lib/table-member-requests";
 
@@ -15,10 +16,11 @@ let reading: Promise<void> = Promise.resolve();
  * could erase the credential whose order just reached the kitchen. Serialize
  * within this page, and across tabs where the browser provides Web Locks.
  */
-export function requestPhoneMembership(restaurantId: string, tableId: string): Promise<PhoneMembership> {
-  async function read(): Promise<PhoneMembership> {
+export function requestPhoneMembership(restaurantId: string, tableId: string, signal?: AbortSignal): Promise<PhoneMembership> {
+  async function read(signal: AbortSignal): Promise<PhoneMembership> {
     try {
       const res = await fetch("/api/table-membership", {
+        signal,
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ restaurantId, tableId }),
       });
@@ -30,8 +32,10 @@ export function requestPhoneMembership(restaurantId: string, tableId: string): P
       throw new Error("Could not check admission", { cause });
     }
   }
-  const run = async (): Promise<PhoneMembership> => typeof navigator !== "undefined" && navigator.locks
-    ? await navigator.locks.request("tt-table-member", read) : await read();
+  const run = (): Promise<PhoneMembership> => membershipDeadline(async attemptSignal =>
+    typeof navigator !== "undefined" && navigator.locks
+      ? await navigator.locks.request("tt-table-member", { signal: attemptSignal }, () => read(attemptSignal))
+      : await read(attemptSignal), signal);
   const next = reading.then(run, run);
   reading = next.then(() => {}, () => {});
   return next;

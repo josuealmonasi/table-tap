@@ -1968,6 +1968,8 @@ badgesHint: "Shows how many things are waiting in each section. Applies to the w
     pageOf: "Page {page} of {pages}",
   },
   orders: {
+    readFailed: "Could not load live orders. Try again.",
+    requestsReadFailed: "Could not load table calls. Try again.",
     refundPendingMessage: "Cancel this order and record what must be returned. Card refunds are confirmed by the provider. Confirm cash and terminal returns separately in Bills.",
     refundPendingDone: "Order cancelled. Check Bills for the return status.",
     notPaid: "Unpaid",

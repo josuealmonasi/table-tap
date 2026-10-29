@@ -13,6 +13,7 @@ import SettleTableDialog from "./SettleTableDialog";
 interface ServiceRequestsBarProps {
   restaurantId: string;
   initialRequests: BoardRequest[];
+  readFailed?: boolean;
   kitchen?: boolean;
   currency: string;
   /** Only the floor settles bills — the kitchen sees the chip, not the money. */
@@ -37,6 +38,7 @@ export default function ServiceRequestsBar({
   restaurantId,
   canSettle,
   initialRequests,
+  readFailed = false,
   currency,
   onSettled,
   canApprove,
@@ -46,7 +48,7 @@ export default function ServiceRequestsBar({
 }: ServiceRequestsBarProps) {
   const t = useT();
   const phones = usePendingPhones(restaurantId, canSettle);
-  const { requests, markDone } = useServiceRequests(restaurantId, initialRequests, kitchen);
+  const { requests, markDone } = useServiceRequests(restaurantId, initialRequests, kitchen, readFailed);
   // The table whose bill the waiter is collecting, if any.
   const [settling, setSettling] = useState<BoardRequest | null>(null);
   const [refreshing, startRefresh] = useTransition();

@@ -71,6 +71,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   if (!id) return await apiError("apiErr.notFound", 404);
   const { data: entry } = await createAdminClient().from("waste_entries").select("name").eq("id", id).maybeSingle();
   await logEvent({
+    operationKey: `waste:${id}`,
     restaurantId: actor.restaurantId, actor: actor.email, entity: "costs", action: "written_off",
     detail: logDetail({ note: `${entry?.name ?? ""} × ${quantity}` }),
   });
