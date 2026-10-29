@@ -30,6 +30,14 @@ describe("an unresolved card page blocks every collection and movement of its de
       expect(latest(fn), fn).not.toContain("update account_checkouts set status = 'expired' where account_id = p_account and status = 'open'");
     }
   });
+  it("an account page that never reached Stripe is released atomically, and cannot get a page afterwards", () => {
+    const release = latest("release_unreached_account_page_v1");
+    expect(release.indexOf("public.lock_restaurant_money(p_restaurant)")).toBeGreaterThan(0);
+    expect(release).toContain("a.created_at > now() - interval '10 minutes'");
+    expect(release).toContain("c.metadata->>'account_checkout' = a.id::text");
+    // The same lock guards opening its diner page: a released checkout gets none.
+    expect(latest("diner_checkout_open")).toContain("raise exception 'checkout_unavailable'");
+  });
   it("repricing skips any order an open page was priced from", () => {
     expect(latest("reprice_open_service")).toContain("c.status = 'open' and o.id = any(c.order_ids)");
   });

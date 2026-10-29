@@ -9007,6 +9007,12 @@ declare
 begin
   v_new := jsonb_populate_record(null::diner_checkouts, p_record);
   perform public.lock_restaurant_money(v_new.restaurant_id);
+  -- An account's page is opened only for its open account checkout: one
+  -- released as never reaching Stripe must not get a live page afterwards.
+  if v_new.metadata ? 'account_checkout' and not exists (select 1 from account_checkouts a
+      where a.id = (v_new.metadata->>'account_checkout')::uuid and a.restaurant_id = v_new.restaurant_id and a.status = 'open') then
+    raise exception 'checkout_unavailable';
+  end if;
   perform public.backfill_payment_allocations(v_new.restaurant_id);
   select * into v_prior from diner_checkouts c
    where c.restaurant_id = v_new.restaurant_id and c.status = 'open'
@@ -11665,3 +11671,24 @@ returns boolean language sql stable security definer set search_path = public as
 $$;
 revoke all on function public.unresolved_account_page_v1(uuid, uuid) from public, anon, authenticated;
 grant execute on function public.unresolved_account_page_v1(uuid, uuid) to service_role;
+
+-- An account checkout saved without any diner attempt never reached Stripe:
+-- the attempt is always saved first. Ten minutes on, no request can still be
+-- about to save one, so it is released instead of blocking the account for
+-- good. Atomic under the money lock with diner_checkout_open, which refuses an
+-- account checkout that is no longer open.
+create or replace function public.release_unreached_account_page_v1(p_restaurant uuid, p_checkout uuid)
+returns boolean language plpgsql security definer set search_path = public as $$
+declare a account_checkouts;
+begin
+  perform public.lock_restaurant_money(p_restaurant);
+  select * into a from account_checkouts where id = p_checkout and restaurant_id = p_restaurant for update;
+  if a.id is null or a.status <> 'open' or a.created_at > now() - interval '10 minutes'
+    or exists (select 1 from diner_checkouts c where c.restaurant_id = p_restaurant and c.metadata->>'account_checkout' = a.id::text) then
+    return false;
+  end if;
+  perform public.account_checkout_release(a.id);
+  return true;
+end $$;
+revoke all on function public.release_unreached_account_page_v1(uuid, uuid) from public, anon, authenticated;
+grant execute on function public.release_unreached_account_page_v1(uuid, uuid) to service_role;

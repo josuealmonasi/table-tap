@@ -7,7 +7,7 @@ interface Page extends Omit<DinerCheckoutRecord, "stripe_session_id" | "stripe_a
   id: string; status?: string; stripe_session_id: string | null; stripe_account_id: string | null;
   split_id: string | null; metadata: Record<string, string> | null; scope_key: string | null; created_at: string;
 }
-interface AccountPage { id: string; stripe_session_id: string | null }
+interface AccountPage { id: string; stripe_session_id: string | null; created_at: string }
 
 async function closePage(restaurantId: string, page: Page): Promise<CheckoutPageResolution> {
   if (page.status === "paid") return "unresolved";
@@ -63,7 +63,7 @@ export async function resolveCheckoutPages(restaurantId: string, scope: Checkout
     const pages = checkoutIds
       ? await checkoutRows<Page>((start, end) => diners().in("id", checkoutIds).order("id").range(start, end))
       : await checkoutRowsIn<Page>(orderIds, (ids, start, end) => diners().overlaps("order_ids", ids).order("id").range(start, end));
-    const accounts = () => db.from("account_checkouts").select("id, stripe_session_id")
+    const accounts = () => db.from("account_checkouts").select("id, stripe_session_id, created_at")
       .eq("restaurant_id", restaurantId).eq("status", "open");
     const accountPages = checkoutIds ? [] : accountId
       ? await checkoutRows<AccountPage>((start, end) => accounts().eq("account_id", accountId).order("id").range(start, end))
@@ -84,7 +84,20 @@ export async function resolveCheckoutPages(restaurantId: string, scope: Checkout
         // diner attempt can supply it; today's restaurant connection cannot.
         const { data, error } = await db.from("diner_checkouts").select("*")
           .eq("restaurant_id", restaurantId).contains("metadata", { account_checkout: account.id }).maybeSingle();
-        if (error || !data) return "unverified";
+        if (error) return "unverified";
+        if (!data) {
+          // No diner attempt was ever saved for it, and one is always saved
+          // before Stripe is called: this account page never reached Stripe and
+          // cannot have charged. After ten minutes no request can still be about
+          // to save one, so it is released rather than blocking the account for
+          // good (a crash between the two writes left exactly this).
+          const { data: released, error: releaseError } = await db.rpc("release_unreached_account_page_v1",
+            { p_restaurant: restaurantId, p_checkout: account.id });
+          if (releaseError) return "unverified";
+          if (!released) return "unresolved";
+          results.set(`account:${account.id}`, "closed");
+          continue;
+        }
         page = data as Page;
       }
       if (account.stripe_session_id && account.stripe_session_id !== page.stripe_session_id) return "unverified";
