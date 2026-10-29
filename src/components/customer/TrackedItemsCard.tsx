@@ -2,6 +2,7 @@
 
 import { formatMoney } from "@/lib/format";
 import { lineUnitPrice, type OrderLineItem } from "@/lib/types";
+import type { TrackedReturnSummary } from "@/lib/order-tracking";
 import { useT } from "@/lib/i18n/context";
 
 /** Read-only summary of what was ordered, shown on the tracking screen. */
@@ -10,12 +11,14 @@ export default function TrackedItemsCard({
   total,
   currency,
   paid = true,
+  returnSummary,
 }: {
   items: OrderLineItem[];
   total: number;
   currency: string;
   /** False on a bill paid at the end or at the till. */
   paid?: boolean;
+  returnSummary?: TrackedReturnSummary;
 }) {
   const t = useT();
   return (
@@ -45,8 +48,18 @@ export default function TrackedItemsCard({
             calling it "Total paid" tells the diner they have already settled
             something they are still going to have to settle. */}
         <span>{t(paid ? "tracker.totalPaid" : "tracker.totalDue")}</span>
-        <span className="tt-price">{formatMoney(total, currency)}</span>
+        <span className="tt-price">{formatMoney(returnSummary?.paid ?? total, currency)}</span>
       </div>
+      {returnSummary && <>
+        <div className="tt-row tt-total">
+          <span>{t("tracker.returned")}</span>
+          <span className="tt-price">{formatMoney(returnSummary.returned, currency)}</span>
+        </div>
+        <div className="tt-row tt-total">
+          <span>{t("tracker.returnPending")}</span>
+          <span className="tt-price">{formatMoney(returnSummary.pending, currency)}</span>
+        </div>
+      </>}
     </div>
   );
 }

@@ -901,6 +901,11 @@ foundingLeftBody: "Quien contrata ahora conserva este precio de suscripción mie
     },
   },
   receipt: {
+    original: "Venta original",
+    returned: "Devuelto",
+    returnPending: "Pendiente por devolver",
+    retained: "Importe que conserva la venta",
+
     originalBill: "Cuenta original",
     forgiven: "Perdonado por el restaurante",
     paid: "Pagado",
@@ -971,6 +976,8 @@ foundingLeftBody: "Quien contrata ahora conserva este precio de suscripción mie
     title: "Estado de tu pedido",
     backToMenu: "Volver al menú",
     yourItems: "Tus platillos",
+    returned: "Devuelto",
+    returnPending: "Pendiente por devolver",
     totalPaid: "Total pagado",
     stepReceived: "Pedido recibido",
     stepPreparing: "Preparando",
@@ -1073,6 +1080,29 @@ foundingLeftBody: "Quien contrata ahora conserva este precio de suscripción mie
   },
 
   returns: {
+    completedPeriod: "Devuelto en este período",
+    reportHelp: "Las ventas conservan su día. Las devoluciones cuentan el día que se entrega cada pago. Lo pendiente todavía no sale de la caja.",
+
+    manualTitle: "¿Ya devolviste en Stripe?",
+    manualHelp: "Pega el ID del reembolso solo si todo su importe corresponde a esta devolución. Si abarca varias ventas, necesita revisión.",
+    manualConfirm: "Confirma que todo el reembolso de Stripe corresponde a esta devolución. No se enviará más dinero.",
+    manualId: "ID del reembolso de Stripe",
+    manualSave: "Usar este reembolso",
+    manualRecorded: "Registramos el reembolso. Revisa la devolución para enviar solo lo que falta.",
+    alreadyReturned: "Ya devuelto: {amount}",
+    unconfirmed: "No pudimos confirmar esta devolución. Envía la misma solicitud otra vez para saber qué pasó.",
+
+    action: "Devolver",
+    resume: "Continuar devolución",
+    order: "Devolver en {code}",
+    saleKept: "La venta sigue completada. Solo cambia el importe que conserva.",
+    upTo: "Puedes devolver hasta {amount}.",
+    amount: "Importe por devolver",
+    reason: "Motivo",
+    prepare: "Preparar devolución",
+    prepared: "La devolución está lista. Confirma cada pago abajo después de devolverlo.",
+    readError: "No pudimos leer las devoluciones pendientes. Puedes seguir cobrando.",
+
     myDrawer: "Mi caja",
     payoutDrawer: "El dinero salió de",
 
@@ -1382,6 +1412,12 @@ foundingLeftBody: "Quien contrata ahora conserva este precio de suscripción mie
     attributionChanged: "La atribución ya no coincide con el cobro o sus pedidos. Actualiza y revisa los importes, incluida la propina.",
     refundPending: "El proveedor aún no confirma la devolución. Sigue pendiente; verifica de nuevo más tarde.",
     refundReviewRequired: "Este pago histórico necesita revisión del gerente antes de registrar una devolución.",
+    duplicateRefundUseDue: "Devuelve el pago de más desde Pagos por devolver. La venta conserva su importe.",
+    returnConflict: "Esta devolución ya se pidió con otros datos. Revisa la devolución guardada antes de intentarlo otra vez.",
+    returnChanged: "Cambió el importe que queda en esta venta. Ábrela de nuevo antes de elegir cuánto devolver.",
+    returnCapacity: "Elige un importe mayor que cero y no mayor de lo que queda en la venta.",
+    returnSplit: "Termina o cancela la cuenta dividida antes de devolver dinero de esta venta.",
+    returnIneligible: "Aquí puedes devolver dinero de una venta pagada y completada. Revisa las ventas a cuenta en Cuentas.",
     posUnsettled: "La venta aún no está confirmada. Sigue en este dispositivo y se enviará de nuevo sola.",
     posOtherRestaurant: "Ahora tienes sesión en otro restaurante. La venta sigue en este dispositivo hasta que este restaurante vuelva a iniciar sesión.",
     posMismatch: "El precio del menú cambió mientras cobrabas. La venta sigue en este dispositivo y se registra por lo que cobraste.",

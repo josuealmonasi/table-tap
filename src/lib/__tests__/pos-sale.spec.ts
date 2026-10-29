@@ -11,7 +11,9 @@ const dbWith = (row: { id: string; total: string; paid?: boolean; status?: strin
     eq: (...a: unknown[]) => (asked.push(a), query),
     maybeSingle: async () => ({ data: row, error: null }),
   };
-  return { db: { from: () => query } as never, asked };
+  return { db: { from: () => query, rpc: async () => ({ error: null, data: row && {
+    outcome: "settled", settled: true, repeat: true, orderId: row.id, total: Number(row.total), handedOver: row.status === "completed",
+  } }) } as never, asked };
 };
 
 describe("a sale the till sends twice", () => {
@@ -20,7 +22,7 @@ describe("a sale the till sends twice", () => {
     const { db, asked } = dbWith({ id, total: "125.50", paid: true, status: "completed" });
     const res = await existingTicket(db, "ref-1", "r");
     expect(asked).toEqual([["pos_ref", "ref-1"], ["restaurant_id", "r"]]);
-    expect(await res?.json()).toEqual({ orderId: id, code: orderCode(id), total: 125.5, settled: true, repeat: true, handedOver: true });
+    expect(await res?.json()).toEqual({ orderId: id, code: orderCode(id), total: 125.5, outcome: "settled", settled: true, repeat: true, handedOver: true });
   });
 
   it("answers nothing when there is no such sale, so it gets rung", async () => {

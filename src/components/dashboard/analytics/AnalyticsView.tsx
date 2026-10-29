@@ -1,5 +1,6 @@
 "use client";
 
+import type { ReturnSummary } from "@/lib/refunds/reporting";
 import Link from "next/link";
 import { formatMoney } from "@/lib/format";
 import { PERIODS, type Analytics, type Period } from "@/lib/analytics";
@@ -26,6 +27,7 @@ export interface RatedDish {
 
 interface AnalyticsViewProps {
   data: Analytics;
+  returnSummary?: ReturnSummary;
   period: Period;
   currency: string;
   restaurantId: string;
@@ -59,6 +61,7 @@ const PERIOD_KEY: Record<string, string> = {
 
 export default function AnalyticsView({
   data,
+  returnSummary,
   period,
   currency,
   restaurantId,
@@ -111,6 +114,13 @@ export default function AnalyticsView({
           <Tile label={t("analytics.avgTicket")} value={money(data.avgTicket)} />
           <Tile label={t("analytics.tips")} value={money(data.tips)} />
         </div>
+
+        {returnSummary && <section className="tt-section">
+          <h3 className="tt-serif">{t("returns.title")}</h3>
+          <p className="tt-muted">{t("returns.reportHelp")}</p>
+          <p>{t("returns.completedPeriod")}: <strong>{money(returnSummary.completed)}</strong></p>
+          <p>{t("receipt.returnPending")}: <strong>{money(returnSummary.pending)}</strong></p>
+        </section>}
 
         {/* The register close, first among the sections: it is the thing a
             manager comes here for at the end of a shift, and unlike everything
@@ -300,7 +310,7 @@ export default function AnalyticsView({
         {/* The history lived behind a tab on the orders board. It is searched
             by code when somebody asks about an order: that is lookup, not
             service. */}
-        <OrderHistory restaurantId={restaurantId} currency={currency} />
+        <OrderHistory restaurantId={restaurantId} currency={currency} canReturn />
       </div>
     </div>
   );

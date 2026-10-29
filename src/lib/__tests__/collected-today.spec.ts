@@ -19,7 +19,8 @@ function query(table: string) {
   };
   return q;
 }
-vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({ from: query }) }));
+vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({ from: query, rpc: (_name: string, args: { p_restaurant: string; p_currency: string | null }) =>
+  query("refund_operations").eq("restaurant_id", args.p_restaurant).eq("currency", args.p_currency).eq("status", "succeeded") }) }));
 const { collectedToday } = await import("@/lib/collected-today");
 
 const midnight = new Date("2026-10-27T06:00:00.000Z");
@@ -56,7 +57,7 @@ it.each(["MXN", "USD"])("%s: takes off what went back, once, and not a duplicate
     { ...refundLog(currency, { amount: "500", method: "cash", collector: "cajero@x" }), created_at: yesterday },
   ];
   state.rows.refund_operations = [
-    at(currency, { status: "succeeded", source: "cash", amount: 10, payout_actor: "cajero@x", completed_at: today, historical_log_id: null }),
+    at(currency, { id: "return", amount_cents: 1000, succeeded_at: today, status: "succeeded", source: "cash", amount: 10, payout_actor: "cajero@x", completed_at: today, historical_log_id: null }),
     at(currency, { status: "pending", source: "cash", amount: 500, payout_actor: "cajero@x", completed_at: today, historical_log_id: null }),
     // Already counted through its original log line: never twice.
     at(currency, { status: "succeeded", source: "cash", amount: 500, payout_actor: "cajero@x", completed_at: today, historical_log_id: "l" }),

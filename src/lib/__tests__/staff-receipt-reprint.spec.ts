@@ -6,13 +6,13 @@ vi.mock("@/lib/api-guard", () => ({ actingStaff: async () => state.role === "non
 vi.mock("@/lib/i18n/server", () => ({ getLocale: async () => state.locale }));
 vi.mock("@/lib/api-error", () => ({ apiError: async (error: string, status: number) => Response.json({ error }, { status }) }));
 vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({ from: (table: string) => {
-  state.reads.push(table); const filters: ((row: Record<string, unknown>) => boolean)[] = [];
+  state.reads.push(table); let offset = 0; const filters: ((row: Record<string, unknown>) => boolean)[] = [];
   const answer = (single = false) => {
-    const rows = (state.tables[table] ?? []).filter(row => filters.every(f => f(row)));
+    const rows = (state.tables[table] ?? []).filter(row => filters.every(f => f(row))).slice(offset);
     return state.errorTable === table ? { data: null, error: { message: "timeout" } } : { data: single ? rows[0] ?? null : rows, error: null };
   };
   const q = { select: () => q, eq: (key: string, value: unknown) => { filters.push(row => row[key] === value); return q; },
-    in: (key: string, values: unknown[]) => { filters.push(row => values.includes(row[key])); return q; }, order: () => q,
+    in: (key: string, values: unknown[]) => { filters.push(row => values.includes(row[key])); return q; }, range: (start: number) => { offset = start; return q; }, order: () => q,
     maybeSingle: async () => answer(true), then: (resolve: (value: unknown) => unknown) => Promise.resolve(answer()).then(resolve) };
   return q;
 } }) }));

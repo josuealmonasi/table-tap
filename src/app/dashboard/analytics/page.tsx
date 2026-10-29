@@ -1,3 +1,4 @@
+import { withReturnComponents } from "@/lib/return-components";
 import { createClient } from "@/lib/supabase/server";
 import { getLocale } from "@/lib/i18n/server";
 import { dateLocale } from "@/lib/format";
@@ -10,6 +11,7 @@ import {
   type AnalyticsOrder,
 } from "@/lib/analytics";
 import AnalyticsView, { type RatedDish } from "@/components/dashboard/analytics/AnalyticsView";
+import { saleReturnSummary } from "@/lib/refunds/reporting";
 import { returnedAdjustments } from "@/lib/refunds/adjustments";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { unwrap } from "@/lib/ordering-data";
@@ -53,9 +55,9 @@ export default async function AnalyticsPage({
   // Every row of the period: one read stops at the server's row cap without
   // saying so, and a month of a busy café read at once is its first thousand
   // orders. A failed page throws to the error screen, like any failed read.
-  const rows = await everyRow<AnalyticsOrder>((a, b) => supabase
+  const rows = await everyRow<AnalyticsOrder & { id: string; currency: string }>((a, b) => supabase
     .from("orders")
-    .select("total, service_fee, tip, created_at, items")
+    .select("id, currency, total, service_fee, tip, created_at, items")
     .eq("restaurant_id", membership.restaurant.id).eq("currency", membership.restaurant.currency)
     .eq("paid", true)
     .neq("status", "cancelled")
@@ -63,8 +65,9 @@ export default async function AnalyticsPage({
     .lt("created_at", end.toISOString())
     .order("id").range(a, b), "the period's sales");
 
+  const returnSummary = await saleReturnSummary(createAdminClient(), membership.restaurant.id, membership.restaurant.currency, start.toISOString(), end.toISOString());
   const locale = await getLocale();
-  const data = computeAnalytics(rows, period, timeZone, new Date(), locale);
+  const data = computeAnalytics(await withReturnComponents(createAdminClient(), membership.restaurant.id, rows), period, timeZone, new Date(), locale);
 
   // The register close is always TODAY, whatever period the charts are showing.
   // A corte is the thing somebody signs at the end of a shift; a corte "for the
@@ -199,6 +202,7 @@ export default async function AnalyticsPage({
     <ConfirmProvider>
     <AnalyticsView
       data={data}
+      returnSummary={returnSummary}
       period={period}
       currency={membership.restaurant.currency}
       restaurantId={membership.restaurant.id}
