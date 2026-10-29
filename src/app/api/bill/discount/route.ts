@@ -105,6 +105,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   }
 
   const applied = await applyToOrders(orders, coupon.id, amount, actor.restaurantId);
+  if (applied === "paying") return await apiError("apiErr.accountBillPaying", 409);
   if (applied === "part_paid") return await apiError("apiErr.discountPartPaid", 409);
   if (applied === "split") return await apiError("apiErr.billSplitLive", 409);
   if (applied === "failed") return await apiError("apiErr.generic", 503);

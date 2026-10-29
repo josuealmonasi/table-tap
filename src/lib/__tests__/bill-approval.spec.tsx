@@ -2,10 +2,11 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { NextRequest, NextResponse } from "next/server";
 import { readFileSync } from "node:fs";
 
-const { state, mutate, rpc, log } = vi.hoisted(() => ({
+const { state, mutate, rpc, log, resolve } = vi.hoisted(() => ({
   state: { amount: 10, total: 1000, missing: false, readError: false },
-  mutate: vi.fn(), rpc: vi.fn(), log: vi.fn(),
+  mutate: vi.fn(), rpc: vi.fn(), log: vi.fn(), resolve: vi.fn(),
 }));
+vi.mock("@/lib/whole-bill-pages", () => ({ resolveCheckoutPages: resolve }));
 vi.mock("@/lib/api-guard", () => ({ actingManager: async () => ({ restaurantId: "r1", email: "manager", role: "manager" }) }));
 vi.mock("@/lib/api-error", () => ({ apiError: async (error: string, status: number) => NextResponse.json({ error }, { status }) }));
 vi.mock("@/lib/activity-log", () => ({ logEvent: log }));
@@ -39,7 +40,7 @@ beforeEach(() => {
   Object.assign(state, { amount: 10, total: 1000, missing: false, readError: false });
   mutate.mockReset().mockResolvedValue(true);
   rpc.mockReset().mockResolvedValue({ data: "approved", error: null });
-  log.mockReset();
+  log.mockReset(); resolve.mockReset().mockResolvedValue("unverified");
 });
 for (const [kind, route] of [["write-off", writeOff], ["discount", discount]] as const) {
   describe(kind, () => {
@@ -105,4 +106,15 @@ it("rechecks the approval amount under order and request locks", () => {
     expect(fn).toContain("cardinality(v_request.order_ids)");
     expect(fn).toContain("restaurant_id = p_restaurant");
   }
+});
+
+it.each([["write-off", writeOff], ["discount", discount]] as const)("%s approval keeps its original request and amount after expiry", async (_kind, route) => {
+  state.amount = state.total = 1000;
+  resolve.mockResolvedValue("closed");
+  rpc.mockImplementation(async (name: string) => name === "retained_order_coverage"
+    ? { data: 0, error: null } : { data: rpc.mock.calls.filter(([n]) => n !== "retained_order_coverage").length > 1 ? "approved" : "paying", error: null });
+  expect((await route(request(1000))).status).toBe(200);
+  const attempts = rpc.mock.calls.filter(([name]) => name !== "retained_order_coverage");
+  expect(attempts).toHaveLength(2); expect(attempts[1]).toEqual(attempts[0]);
+  expect(resolve).toHaveBeenCalledWith("r1", { orderIds: ["o1"] });
 });

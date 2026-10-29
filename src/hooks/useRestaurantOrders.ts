@@ -10,6 +10,7 @@ import { orderChanges, orderReplyTime, reconcileOrders } from "@/components/dash
 import { useToast } from "@/components/ui/Toast";
 import type { OrderStatus } from "@/lib/types";
 import { isPreparationOrder, type BoardOrder } from "@/lib/kitchen-ticket";
+import type { PaymentCheckScope } from "@/lib/payment-check";
 import type { CancelSummary } from "@/lib/cancel-plan";
 
 /** Short, gentle ping so kitchen staff notice a new order without looking. */
@@ -47,6 +48,7 @@ export function useRestaurantOrders(restaurantId: string, initialOrders: BoardOr
   const { remember, protect } = changes;
   // A refused stale tap can retire a card even when its realtime event was missed.
   const [inactiveOrderIds, setInactiveOrderIds] = useState<Set<string>>(new Set());
+  const [checkoutRefusal, setCheckoutRefusal] = useState<PaymentCheckScope | null>(null);
   function hideInactive(id: string): void {
     setInactiveOrderIds(ids => new Set(ids).add(id));
   }
@@ -223,9 +225,11 @@ export function useRestaurantOrders(restaurantId: string, initialOrders: BoardOr
    * dialog promised money back that the cancel then refused to give.
    */
   async function cancelPlanFor(id: string): Promise<CancelSummary | string> {
+    setCheckoutRefusal(null);
     try {
       const res = await fetch(`/api/orders/cancel?id=${encodeURIComponent(id)}`);
       const data = await res.json();
+      setCheckoutRefusal(data.checkoutCode === "checkout_unresolved" ? { kind: "orders", orderIds: [id] } : null);
       return res.ok ? (data as CancelSummary) : (data.error ?? t("apiErr.orderCancel"));
     } catch {
       markOffline();
@@ -245,7 +249,10 @@ export function useRestaurantOrders(restaurantId: string, initialOrders: BoardOr
         body: JSON.stringify({ id }),
       });
       const data = await res.json();
-      if (!res.ok) return { error: data.error ?? t("apiErr.orderCancel"), stale: res.status === 409 };
+      if (!res.ok) {
+        setCheckoutRefusal(data.checkoutCode === "checkout_unresolved" ? { kind: "orders", orderIds: [id] } : null);
+        return { error: data.error ?? t("apiErr.orderCancel"), stale: res.status === 409 && data.checkoutCode !== "checkout_unresolved" };
+      }
       badgesChanged();
       remember(id, orderReplyTime(res));
       setOrders(prev => prev.map(o => (o.id === id ? { ...o, status: "cancelled" } : o)));
@@ -258,5 +265,5 @@ export function useRestaurantOrders(restaurantId: string, initialOrders: BoardOr
     }
   }
 
-  return { orders, inactiveOrderIds, hideInactive, updateStatus, cancelOrder, cancelPlanFor, online, pending: pending.length };
+  return { checkoutRefusal, orders, inactiveOrderIds, hideInactive, updateStatus, cancelOrder, cancelPlanFor, online, pending: pending.length };
 }

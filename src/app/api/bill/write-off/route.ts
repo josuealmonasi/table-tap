@@ -128,6 +128,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     reason,
     note: text,
   });
+  if (done.outcome === "paying") return await apiError("apiErr.writeOffPaying", 409);
   if (done.outcome === "part_paid") {
     return await apiError("apiErr.writeOffPartPaid", 409, { amount: formatMoney(done.paid, orders[0].currency ?? "MXN") });
   }

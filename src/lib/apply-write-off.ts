@@ -1,3 +1,4 @@
+import { checkoutPageRpc } from "@/lib/checkout-page-rpc";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { closeSessionsFor } from "@/lib/table-session";
 import type { Order } from "@/lib/types";
@@ -7,6 +8,7 @@ export type WriteOffOutcome =
   | { outcome: "written_off"; amount: number; orderIds: string[] }
   | { outcome: "part_paid"; paid: number }
   | { outcome: "split" }
+  | { outcome: "paying" }
   | { outcome: "nothing" }
   | { outcome: "failed" };
 
@@ -38,7 +40,7 @@ export async function applyWriteOff({
   reason: string;
   note: string;
 }): Promise<WriteOffOutcome> {
-  const { data, error } = await createAdminClient().rpc("write_off_orders", {
+  const { data, error } = await checkoutPageRpc("write_off_orders", {
     p_restaurant: restaurantId,
     p_orders: orders.map(o => o.id),
     p_actor: actorEmail,
@@ -48,7 +50,7 @@ export async function applyWriteOff({
   if (error || !data) return { outcome: "failed" };
   const result = data as { outcome: string; amount?: number; paid?: number; orderIds?: string[]; sessions?: string[] };
   if (result.outcome === "part_paid") return { outcome: "part_paid", paid: Number(result.paid) };
-  if (result.outcome === "split") return { outcome: "split" };
+  if (result.outcome === "split" || result.outcome === "paying") return { outcome: result.outcome };
   if (result.outcome !== "written_off") return { outcome: "nothing" };
 
   // A table whose debt was cancelled is clear: nobody owes anything on it any

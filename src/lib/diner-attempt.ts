@@ -1,3 +1,4 @@
+import { checkoutPageRpc } from "@/lib/checkout-page-rpc";
 import { prepareSplitSlots } from "@/lib/split-slots-attempt";
 import { retireSplitAttempt } from "@/lib/split-slots-lifecycle";
 import { randomUUID } from "node:crypto";
@@ -51,9 +52,11 @@ async function deliver(stripe: Stripe, attempt: AttemptRecord): Promise<Stripe.C
 }
 
 /** Reopen the same payment page, even when the first response was lost. */
-export async function resumeDinerAttempt(stripe: Stripe, restaurantId: string, scopeKey: string): Promise<Stripe.Checkout.Session | null> {
-  const { data, error } = await createAdminClient().from("diner_checkouts").select("*")
-    .eq("restaurant_id", restaurantId).eq("scope_key", scopeKey).eq("status", "open").maybeSingle();
+export async function resumeDinerAttempt(stripe: Stripe, restaurantId: string, scopeKey: string, attemptId?: string): Promise<Stripe.Checkout.Session | null> {
+  let query = createAdminClient().from("diner_checkouts").select("*")
+    .eq("restaurant_id", restaurantId).eq("scope_key", scopeKey).eq("status", "open");
+  if (attemptId) query = query.eq("id", attemptId);
+  const { data, error } = await query.maybeSingle();
   if (error) throw new Error(`Could not read checkout attempt: ${error.message}`);
   if (!data) return null;
   try { return await deliver(stripe, data as AttemptRecord); }
@@ -74,7 +77,15 @@ export async function openDinerAttempt(stripe: Stripe, params: Stripe.Checkout.S
     entitlements: quote.entitlements ?? {}, order_discounts: quote.discounts ?? {}, coupon_id: quote.couponId ?? null,
     food_principal: quote.foodPrincipal,
   };
-  const { data, error } = await createAdminClient().rpc("diner_checkout_open", { p_record: record });
+  const { data, error } = await checkoutPageRpc("diner_checkout_open", { p_record: record }, {
+    orderIds: record.order_ids, includeParts: params.metadata?.split_model !== "2",
+  });
+  if (data?.outcome === "paying") {
+    // The quote acquired no scope. Sending it to Stripe would open a page
+    // that the database refused to own, alongside the unresolved first one.
+    await releaseFee(String(params.metadata?.fee_id ?? ""));
+    throw new DinerAttemptRejected("Could not open checkout attempt: paying");
+  }
   if (error) {
     // A database timeout can also have committed. Only a SQL error proves
     // rollback; releasing an uncertain fee could reopen the monthly ceiling.

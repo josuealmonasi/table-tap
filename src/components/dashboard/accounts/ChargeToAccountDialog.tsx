@@ -1,5 +1,7 @@
 "use client";
 
+import { usePaymentCheck } from "@/hooks/usePaymentCheck";
+
 import { useState } from "react";
 import { Modal } from "@/components/ui/Modal";
 import { useT } from "@/lib/i18n/context";
@@ -17,6 +19,7 @@ interface ChargeToAccountDialogProps {
   currency: string;
   label: string;
   onCharged: () => void;
+  onRefresh: () => void | Promise<void>;
 }
 
 /**
@@ -25,13 +28,14 @@ interface ChargeToAccountDialogProps {
  * records, with this person's name and this amount on it.
  */
 export default function ChargeToAccountDialog({
-  open, onClose, orderIds, amount, currency, label, onCharged,
+  open, onClose, orderIds, amount, currency, label, onCharged, onRefresh,
 }: ChargeToAccountDialogProps) {
   const t = useT();
   const toast = useToast();
   const [picked, setPicked] = useState<AccountListItem | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const paymentCheck = usePaymentCheck(onRefresh, `${open}:${orderIds.join()}`);
 
   function close(): void {
     setPicked(null);
@@ -51,6 +55,7 @@ export default function ChargeToAccountDialog({
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
+        paymentCheck.capture(data, { kind: "orders", orderIds });
         setError(data.error ?? t("apiErr.generic"));
         return;
       }
@@ -71,6 +76,7 @@ export default function ChargeToAccountDialog({
           <p>
             {t("accounts.chargeConfirm", { amount: formatMoney(amount, currency), name: picked.name })}
           </p>
+          {paymentCheck.action}
           {error && <p className="tt-field-error" role="alert">{error}</p>}
           <div className="tt-prodform-actions">
             <button type="button" className="tt-btn tt-btn-primary" disabled={busy} onClick={() => void charge()}>

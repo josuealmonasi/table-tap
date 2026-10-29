@@ -1,3 +1,4 @@
+import { resolveSelectedSplitPages } from "@/lib/split-page-recovery";
 import { NextResponse } from "next/server";
 import { apiError } from "@/lib/api-error";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -16,6 +17,11 @@ export async function splitRpc(name: string, args: Record<string, unknown>): Pro
   // already expired is closed here and the call tried once more (#576 R1).
   if (result.outcome === "paying" && typeof args.p_restaurant === "string"
     && await closeExpiredWholeBillPages(args.p_restaurant, args)) return await callSplit(name, args);
+  if (["taken", "reserved"].includes(result.outcome) && typeof args.p_restaurant === "string"
+    && typeof args.p_split === "string" && Array.isArray(args.p_slots)
+    && await resolveSelectedSplitPages(args.p_restaurant, args.p_split, args.p_slots) === "closed") {
+    return await callSplit(name, args);
+  }
   return result;
 }
 

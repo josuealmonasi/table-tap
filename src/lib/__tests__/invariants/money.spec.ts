@@ -112,7 +112,7 @@ describe("every route that settles an order records the payment", () => {
     // retry could repair it: every path guards on `paid = false`.
     for (const file of ["src/app/api/table-payment/route.ts", "src/lib/part-payment.ts"]) {
       const src = read(file);
-      expect(src, `${file} no longer settles through settle_orders`).toMatch(/rpc\("settle_orders_v2"/);
+      expect(src, `${file} no longer settles through settle_orders`).toMatch(/(?:rpc|checkoutPageRpc)\("settle_orders_v2"/);
       expect(src, `${file} marks orders paid outside settle_orders`).not.toMatch(/paid:\s*true/);
     }
     // ...and the function does both under one transaction, refusing a bill that changed.

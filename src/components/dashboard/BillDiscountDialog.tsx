@@ -1,5 +1,7 @@
 "use client";
 
+import { usePaymentCheck } from "@/hooks/usePaymentCheck";
+
 import { useState } from "react";
 import { Modal } from "@/components/ui/Modal";
 import { badgesChanged } from "@/hooks/useBadges";
@@ -68,6 +70,7 @@ export default function BillDiscountDialog({
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
+        paymentCheck.capture(data, { kind: "orders", orderIds: bill.orderIds });
         setError(data.error ?? t("apiErr.generic"));
         return;
       }
@@ -83,6 +86,7 @@ export default function BillDiscountDialog({
     }
   }
   const [error, setError] = useState<string | null>(null);
+  const paymentCheck = usePaymentCheck(() => { onApplied(); onClose(); }, `${open}:${bill.key}`);
 
   const discountBlocked = bill.split ? "dash.billSplitDiscount"
     : (bill.collected ?? 0) > 0 ? "dash.billCollectedDiscount"
@@ -112,6 +116,8 @@ export default function BillDiscountDialog({
       });
       const data = await res.json();
       if (!res.ok) {
+        paymentCheck.capture(data, bill.tableId ? { kind: "table", tableId: bill.tableId, currency }
+          : { kind: "orders", orderIds: [bill.orderIds[0]] });
         setError(data.error ?? t("apiErr.generic"));
         return;
       }
@@ -157,6 +163,7 @@ export default function BillDiscountDialog({
               failed={coupons.failed}
               currency={currency}
             />
+            {paymentCheck.action}
             {error && (
               <p className="tt-field-error" style={{ margin: "8px 0 0" }}>
                 {error}
@@ -205,6 +212,7 @@ export default function BillDiscountDialog({
         canApprove={canApprove}
         busy={busy}
         error={error}
+        paymentCheck={paymentCheck.action}
         onSubmit={writeOff}
       />
     </>

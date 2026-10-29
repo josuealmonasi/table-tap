@@ -19,7 +19,7 @@ const split = { id: "split", restaurantId: "restaurant", tableId: "table", sessi
     { shareNo: 1, amountCents: 5000, paid: false, paying: false, feeCents: 0 },
   ] };
 let root: Root, el: HTMLDivElement;
-let reply: { ok: boolean; code?: string; error?: string; settled?: boolean; outcome?: string; payment?: string; amount_cents?: number; tip_cents?: number; owed?: number };
+let reply: { ok: boolean; checkoutCode?: string; code?: string; error?: string; settled?: boolean; outcome?: string; payment?: string; amount_cents?: number; tip_cents?: number; owed?: number };
 const collected = vi.fn();
 beforeEach(() => {
   vi.stubGlobal("React", React); vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
@@ -128,4 +128,35 @@ it("labels the payment print with its total without adding its tip twice", async
   await act(async () => [...el.querySelectorAll("button")].find(b => /Paid cash/.test(b.textContent ?? ""))!.click());
   const print = el.querySelector("[data-slot-receipt-print]");
   expect(print?.textContent).toContain("55.00");
+});
+
+it.each([false, true])("offers a status check for the exact refused parts (calculator=%s)", async calculator => {
+  reply = { ok: false, checkoutCode: "checkout_unresolved", code: "reserved", error: "Unconfirmed" };
+  await render(calculator);
+  await act(async () => el.querySelectorAll<HTMLInputElement>("input[type=checkbox]")[1].click());
+  await act(async () => [...el.querySelectorAll("button")].find(b => /Paid cash/.test(b.textContent ?? ""))!.click());
+  const check = [...el.querySelectorAll("button")].find(b => b.textContent === "Check payment");
+  expect(check).toBeDefined();
+  // Editing the selection must not change what the earlier refusal checks.
+  await act(async () => el.querySelectorAll<HTMLInputElement>("input[type=checkbox]")[1].click());
+  vi.mocked(fetch).mockResolvedValue(Response.json({ outcome: "closed" }));
+  await act(async () => check!.click());
+  const calls = vi.mocked(fetch).mock.calls.filter(([, init]) => init);
+  expect(calls.map(([url]) => url)).toEqual(["/api/split/collect", "/api/checkout/check"]);
+  expect(JSON.parse(calls[1][1]!.body as string)).toEqual({ kind: "split", splitId: "split", slots: [1] });
+  expect(collected).not.toHaveBeenCalled();
+});
+
+it.each([false, true])("checking a refused split cancellation never repeats it (calculator=%s)", async calculator => {
+  reply = { ok: false, checkoutCode: "checkout_unresolved", code: "paying", error: "Unconfirmed" };
+  await render(calculator);
+  await act(async () => [...el.querySelectorAll("button")].find(b => /Stop dividing/.test(b.textContent ?? ""))!.click());
+  vi.mocked(fetch).mockImplementation(async url => url === "/api/checkout/check"
+    ? Response.json({ outcome: "unverified" })
+    : Response.json({ orders: [order], splits: [split], outstanding: { owed: 50, currency: "MXN" } }));
+  await act(async () => [...el.querySelectorAll("button")].find(b => b.textContent === "Check payment")!.click());
+  const calls = vi.mocked(fetch).mock.calls.filter(([, init]) => init);
+  expect(calls.map(([url]) => url)).toEqual(["/api/split/cancel", "/api/checkout/check"]);
+  expect(JSON.parse(calls[1][1]!.body as string)).toEqual({ kind: "split", splitId: "split" });
+  expect(collected).not.toHaveBeenCalled();
 });

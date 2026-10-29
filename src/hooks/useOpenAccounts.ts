@@ -18,6 +18,7 @@ export interface AccountListItem {
   balances?: CurrencyBalance[];
   lastChargeAt: string | null;
   checkout_until: string | null;
+  payingOnline?: boolean;
 }
 
 /**
