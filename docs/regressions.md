@@ -5765,3 +5765,12 @@ open or paid page, or Stripe being unreachable, keeps the refusal. The
 walkout write-off reads open pages too instead of `card_checkout_at`, which a
 divided bill's own part pages stamp and never clear (R2).
 `whole-bill-pages.spec.ts`, `split-574-sql.spec.ts`.
+
+The bell had to agree with what happened (sweep 5). An account page paid by
+card after the till had collected the same debt rang "MX$100 to refund" for a
+US$100 charge: the alert read the restaurant's currency of the day, while the
+refund it announced kept the charge's. Both account writers now name the
+charge's currency (`refund-alert-currency.spec.ts`). And a stock warning
+whose insert was refused was taken as written, because its error was never
+read; the sale cannot raise it again, so the write is now retried and a last
+failure logged (`stock-alert-retry.spec.ts`).
