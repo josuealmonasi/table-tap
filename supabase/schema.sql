@@ -4826,7 +4826,12 @@ alter table payments add constraint payments_terminal_ref_check
 -- Null on rows from before this column, which were recorded when dated; the
 -- default is set separately so adding it rewrites no existing row.
 alter table payments add column if not exists recorded_at timestamptz;
-alter table payments alter column recorded_at set default now();
+-- The moment of the insert, not the transaction's start: a sale that began
+-- before a cash close and waited for the money lock inserted with now() earlier
+-- than the close's cutoff, so the close's reconstruction counted a receipt the
+-- close never saw (Codex sweep 1, finding 3). Writers insert after taking the
+-- lock, so this lands after any close that held it.
+alter table payments alter column recorded_at set default clock_timestamp();
 
 -- How many business days the terminal's bank takes to deposit a day's sales.
 alter table restaurants add column if not exists terminal_settle_days int not null default 1;

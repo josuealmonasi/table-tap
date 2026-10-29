@@ -5613,3 +5613,14 @@ format. A mismatched attempt is now simply not offered for resuming and is
 logged; its parts stay held, so nothing can be paid twice. The fixture now
 writes the card path's own key, and the seed picks a bill large enough for
 three card parts, so its card hold is never refused at random.
+
+### A receipt is recorded when it was written, not when its transaction began
+
+The cash close and its receipts had to agree on which side of the cutoff each
+receipt fell. The close stamps its cutoff with `clock_timestamp()` after taking
+the money lock, but payments defaulted `recorded_at` to `now()`, the
+transaction's start. A POS sale that began before a close and waited for the
+lock committed afterwards with a recorded time before the cutoff, so the
+close's reconstruction included a receipt the close never counted and
+reported its expected cash as inconsistent (Codex sweep 1). `recorded_at`
+now defaults to `clock_timestamp()`. `close-receipt-time.spec.ts`.
