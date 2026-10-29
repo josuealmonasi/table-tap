@@ -153,7 +153,8 @@ describe("an API error reaches the person in their own language", () => {
 
   it("has no route answering with a sentence of its own", () => {
     // Stripe reads the webhook's errors, not a person, so it keeps English.
-    const forMachines = ["src/app/api/webhooks/"];
+    // Cron also answers a machine and logs job names, never customer copy.
+    const forMachines = ["src/app/api/webhooks/", "src/app/api/cron/"];
     const offenders: string[] = [];
 
     for (const file of walkAll("src/app/api").filter(f => f.endsWith("route.ts"))) {
