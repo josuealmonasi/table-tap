@@ -13,7 +13,7 @@ interface PeriodSummaryProps {
 /**
  * The last 30 days in four figures: what was sold without IVA, what went
  * into it, what taking the money cost, and what was left. Sales of products
- * with no recipe are named, because their cost is missing from the figures.
+ * whose old ingredient cost is unknown are named, because it is missing from the figures.
  */
 export default function PeriodSummary({ period, currency }: PeriodSummaryProps) {
   const t = useT();
@@ -40,7 +40,7 @@ export default function PeriodSummary({ period, currency }: PeriodSummaryProps) 
           <span>{t("costs.leftPct", { pct: share })}</span>
         </div>
       </div>
-      {period.uncosted > 0.005 && (
+      {period.rows.some(row => !row.complete) && (
         <p className="tt-costs-warning" role="note">{t("costs.uncosted", { amount: money(period.uncosted) })}</p>
       )}
     </section>

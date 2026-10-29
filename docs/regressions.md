@@ -34,6 +34,7 @@ and that a new party cannot see the previous party's waiting phones.
 | A duplicate refund tracks customer completion and fee completion separately (S11 I5) | A failed fee return disappeared behind an already-refunded customer payment |
 | A duplicate refund keeps its original charge currency everywhere (S11 I9) | Changing the menu currency relabelled money owed back and the approval amount |
 |---|---|
+| Offline combo recovery keeps each component's choices (Inventory R7-5) | The recovered combo used default milk because its component choices were dropped |
 | Write-off confirmations use per-order decimal cents (#576 R4) | Frozen slot totals and binary rounding quoted 2.01 instead of 2.02, or 0.50 instead of 0.51, while the writer required more |
 | Receipt suppression uses discovery begun for the settlement decision (#576 R3) | An earlier unsplit read, or a failed latest read, offered a whole-order receipt after parts paid |
 | Write-off confirms only the unpaid remainder (#574-5) | The open-bill row showed MX$20 left while its confirmation claimed MX$100 lost |
@@ -5765,3 +5766,21 @@ open or paid page, or Stripe being unreachable, keeps the refusal. The
 walkout write-off reads open pages too instead of `card_checkout_at`, which a
 divided bill's own part pages stamp and never clear (R2).
 `whole-bill-pages.spec.ts`, `split-574-sql.spec.ts`.
+
+## Inventory R7-5: recovered combos keep their choices
+
+The offline normalizer and ingredient consumption must agree on each combo
+component, including its choices. `offline-sale.spec.ts` keeps Milk = Oat on
+two offline combos and bounds their choices just like ordinary lines.
+The ingredient ledger had to agree with the shelf (sweep 7). A dish sent back
+and recorded as waste took its 200 ml a second time: its sale had already
+consumed it. A new reason, "sent back by a customer", records the loss and
+its cost and moves no stock, and only a product can have it. Deleting a
+mistaken spill after a recount added it back on top of the count, because the
+correction was dated now; a correction to a waste or purchase record is now
+dated with that record, so the count that already saw the truth absorbs it. A
+recipe saved while its ingredient was being archived attached the hidden
+ingredient at zero cost; the save now holds those ingredients. And a pack
+price derived from a purchase was rounded to cents, valuing 10,000 one-piece
+packs bought for MX$149 at MX$100; it keeps six places, and the ingredient
+dialog sends it back unchanged (`inventory-sql.spec.ts`).

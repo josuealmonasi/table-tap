@@ -4624,6 +4624,13 @@ declare v_count int;
 begin
   perform 1 from menu_items where id = p_item and restaurant_id = p_restaurant for update;
   if not found then return -1; end if;
+  -- Held against an archive running at the same time: checked unlocked, an
+  -- ingredient archived between the check and the insert was attached anyway,
+  -- hidden, and costed at zero (sweep 7, finding 7). The archive's update
+  -- waits for this, or this waits for it and the check below sees it.
+  perform 1 from ingredients where restaurant_id = p_restaurant
+    and id in (select ingredient_id from jsonb_to_recordset(p_lines) as l(ingredient_id uuid))
+    order by id for share;
   if exists (
     select 1 from jsonb_to_recordset(p_lines) as l(ingredient_id uuid)
       left join ingredients i
@@ -4693,6 +4700,11 @@ create table if not exists waste_entries (
   check ((ingredient_id is null) <> (item_id is null))
 );
 create index if not exists waste_entries_recent_idx on waste_entries(restaurant_id, created_at desc);
+-- `returned`: a dish a customer sent back. Its loss is reported; its food
+-- left with the sale, so only a product can be returned.
+alter table waste_entries drop constraint if exists waste_entries_reason_check;
+alter table waste_entries add constraint waste_entries_reason_check
+  check (reason in ('spoiled', 'unsold', 'mistake', 'staff', 'returned') and (reason <> 'returned' or item_id is not null));
 alter table waste_entries enable row level security;
 revoke all on waste_entries from anon;
 revoke all on waste_entries from authenticated;
@@ -4739,9 +4751,14 @@ grant all on ingredient_counts to service_role;
 -- never below zero; reaching zero takes the dish off the way a sale would.
 -- Returns the entry's id, or null when the ingredient or dish is not this
 -- restaurant's (or the ingredient is archived).
-create or replace function public.record_waste(
+-- `p_choices`: the plate that was made, as an order line has it ({mods,
+-- extras}). Without it a product's waste took the first single choice, whole
+-- milk for an oat latte (sweep 7, finding 6). A new name, so the deployed
+-- signature below keeps serving the code that calls it.
+alter table waste_entries add column if not exists choices jsonb;
+create or replace function public.record_waste_v2(
   p_restaurant uuid, p_ingredient uuid, p_item uuid, p_quantity numeric,
-  p_reason text, p_note text, p_cost numeric, p_actor text
+  p_reason text, p_note text, p_cost numeric, p_actor text, p_choices jsonb
 ) returns uuid language plpgsql security definer set search_path = public as $$
 declare
   v_name text;
@@ -4762,17 +4779,30 @@ begin
      where id = p_item and restaurant_id = p_restaurant for update;
   end if;
   if v_name is null then return null; end if;
-  if v_stock is not null then
+  -- A returned plate's portion left with its sale (sweep 7, finding 1).
+  if v_stock is not null and p_reason <> 'returned' then
     update menu_items
        set stock          = greatest(v_stock - ceil(p_quantity)::int, 0),
            available      = case when v_stock - ceil(p_quantity)::int <= 0 then false else available end,
            stock_auto_off = case when v_stock - ceil(p_quantity)::int <= 0 and available then true else stock_auto_off end
      where id = p_item;
   end if;
-  insert into waste_entries (restaurant_id, ingredient_id, item_id, name, quantity, reason, note, cost, recorded_by)
-  values (p_restaurant, p_ingredient, p_item, v_name, p_quantity, p_reason, p_note, p_cost, p_actor)
+  insert into waste_entries (restaurant_id, ingredient_id, item_id, name, quantity, reason, note, cost, recorded_by, choices)
+  values (p_restaurant, p_ingredient, p_item, v_name, p_quantity, p_reason, p_note, p_cost, p_actor,
+    case when p_item is not null then p_choices end)
   returning id into v_id;
   return v_id;
+end;
+$$;
+revoke all on function public.record_waste_v2(uuid, uuid, uuid, numeric, text, text, numeric, text, jsonb) from public, anon, authenticated;
+grant execute on function public.record_waste_v2(uuid, uuid, uuid, numeric, text, text, numeric, text, jsonb) to service_role;
+-- The deployed signature: the same writer, with no choices.
+create or replace function public.record_waste(
+  p_restaurant uuid, p_ingredient uuid, p_item uuid, p_quantity numeric,
+  p_reason text, p_note text, p_cost numeric, p_actor text
+) returns uuid language plpgsql security definer set search_path = public as $$
+begin
+  return public.record_waste_v2(p_restaurant, p_ingredient, p_item, p_quantity, p_reason, p_note, p_cost, p_actor, null);
 end;
 $$;
 revoke all on function public.record_waste(uuid, uuid, uuid, numeric, text, text, numeric, text) from public, anon, authenticated;
@@ -4794,7 +4824,9 @@ begin
   select * into v_ingredient from ingredients
    where id = p_ingredient and restaurant_id = p_restaurant and archived_at is null for update;
   if v_ingredient.id is null then return null; end if;
-  v_pack_price := round(p_total / p_packs, 2);
+  -- Six places: a one-piece pack bought 10,000 at a time costs MX$0.0149;
+  -- two places stored MX$0.01 and valued the lot at MX$100, not MX$149 (sweep 7, finding 8).
+  v_pack_price := round(p_total / p_packs, 6);
   if v_pack_price is distinct from v_ingredient.pack_price then
     update ingredients set pack_price = v_pack_price, updated_by = p_actor where id = p_ingredient;
   end if;
@@ -9808,6 +9840,19 @@ $$;
 revoke all on function public.waste_ingredient_usage(uuid, uuid, uuid, numeric) from public, anon, authenticated;
 grant execute on function public.waste_ingredient_usage(uuid, uuid, uuid, numeric) to service_role;
 
+-- The plate that was made, when the waste says so: its own choices and the
+-- extras that went with it, read exactly as a sale's line is. Without choices
+-- (an older row, an ingredient) it is the rule above (sweep 7, finding 6).
+create or replace function public.waste_ingredient_usage_v2(p_restaurant uuid, p_ingredient uuid, p_item uuid, p_quantity numeric, p_choices jsonb)
+returns jsonb language sql stable security definer set search_path = public as $$
+  select case when p_ingredient is not null or p_choices is null
+    then public.waste_ingredient_usage(p_restaurant, p_ingredient, p_item, p_quantity)
+    else public.sale_ingredient_usage(p_restaurant, jsonb_build_array(jsonb_build_object(
+      'itemId', p_item, 'qty', p_quantity, 'mods', coalesce(p_choices->'mods', '{}'), 'extras', coalesce(p_choices->'extras', '[]')))) end;
+$$;
+revoke all on function public.waste_ingredient_usage_v2(uuid, uuid, uuid, numeric, jsonb) from public, anon, authenticated;
+grant execute on function public.waste_ingredient_usage_v2(uuid, uuid, uuid, numeric, jsonb) to service_role;
+
 -- Existing recipes cannot tell us what an older, already edited recipe was.
 -- Freeze the best evidence left at upgrade, once; never recalculate it later.
 with added as (
@@ -9861,7 +9906,7 @@ begin
         return null;
       end if;
     elsif v_kind = 'waste' then
-      v_changed := (new.ingredient_id, new.item_id, new.quantity) is distinct from (old.ingredient_id, old.item_id, old.quantity);
+      v_changed := (new.ingredient_id, new.item_id, new.quantity, new.reason, new.choices) is distinct from (old.ingredient_id, old.item_id, old.quantity, old.reason, old.choices);
       if not v_changed then return null; end if;
     else
       v_changed := (new.ingredient_id, new.quantity) is distinct from (old.ingredient_id, old.quantity);
@@ -9875,14 +9920,22 @@ begin
   v_usage := v_previous.usage;
   if v_usage is null or v_changed then
     if v_kind = 'sale' then v_usage := public.sale_ingredient_usage(v_restaurant, v_row->'items');
-    elsif v_kind = 'waste' then v_usage := public.waste_ingredient_usage(v_restaurant,
-      (v_row->>'ingredient_id')::uuid, (v_row->>'item_id')::uuid, (v_row->>'quantity')::numeric);
+    -- A plate a customer sent back was consumed by its sale: recorded as a
+    -- loss, it must not take the same 200 ml again (sweep 7, finding 1).
+    elsif v_kind = 'waste' and v_row->>'reason' = 'returned' then v_usage := '{}'::jsonb;
+    elsif v_kind = 'waste' then v_usage := public.waste_ingredient_usage_v2(v_restaurant,
+      (v_row->>'ingredient_id')::uuid, (v_row->>'item_id')::uuid, (v_row->>'quantity')::numeric, v_row->'choices');
     else v_usage := jsonb_build_object(v_row->>'ingredient_id', (v_row->>'quantity')::numeric); end if;
   end if;
   if v_kind = 'sale' then v_active := v_active and v_row->>'status' in ('received', 'preparing', 'ready', 'completed'); end if;
   insert into ingredient_movements(restaurant_id, ingredient_id, quantity, kind, created_at)
     select v_restaurant, key::uuid, sum(quantity), v_kind,
-      case when tg_op = 'INSERT' then (v_row->>'created_at')::timestamptz else clock_timestamp() end from (
+      -- A sale's cancellation is a real event, dated now. Editing or deleting a
+      -- waste or purchase record corrects that record, so it is dated with it:
+      -- dated now, it landed after a recount that had already seen the true
+      -- shelf, and deleting a mistaken 200 ml spill showed 1,200 ml for a
+      -- counted 1,000 (sweep 6/7, finding 2).
+      case when tg_op = 'INSERT' or v_kind <> 'sale' then (v_row->>'created_at')::timestamptz else clock_timestamp() end from (
       select key, value::numeric as quantity from jsonb_each_text(v_usage) where v_active
       union all
       select key, -value::numeric from jsonb_each_text(coalesce(v_previous.usage, '{}')) where coalesce(v_previous.active, false)
@@ -9916,7 +9969,9 @@ begin
   select * into v_ingredient from ingredients
    where id = p_ingredient and restaurant_id = p_restaurant and archived_at is null for update;
   if v_ingredient.id is null then return null; end if;
-  v_pack_price := round(p_total / p_packs, 2);
+  -- Six places: a one-piece pack bought 10,000 at a time costs MX$0.0149;
+  -- two places stored MX$0.01 and valued the lot at MX$100, not MX$149 (sweep 7, finding 8).
+  v_pack_price := round(p_total / p_packs, 6);
   if v_pack_price is distinct from v_ingredient.pack_price then
     update ingredients set pack_price = v_pack_price, updated_by = p_actor where id = p_ingredient;
   end if;
@@ -10434,7 +10489,8 @@ begin
     values(p_restaurant, p_ingredient, p_ref, p_packs, p_packs * i.pack_size, p_total, p_actor)
     on conflict (restaurant_id, request_ref) where request_ref is not null do nothing returning id into v_id;
   if v_id is null then raise exception 'purchase reference changed' using errcode = 'PT409'; end if;
-  v_price := round(p_total / p_packs, 2);
+  -- Six places, as above (sweep 7, finding 8).
+  v_price := round(p_total / p_packs, 6);
   if v_price is distinct from i.pack_price then update ingredients set pack_price = v_price, updated_by = p_actor where id = p_ingredient; end if;
   return v_id;
 end;
@@ -10467,9 +10523,9 @@ $$;
 revoke all on function public.record_purchase_once_v2(uuid, uuid, numeric, numeric, text, uuid) from public, anon, authenticated;
 grant execute on function public.record_purchase_once_v2(uuid, uuid, numeric, numeric, text, uuid) to service_role;
 
-create or replace function public.record_waste_once(
+create or replace function public.record_waste_once_v2(
   p_restaurant uuid, p_ingredient uuid, p_item uuid, p_quantity numeric,
-  p_reason text, p_note text, p_cost numeric, p_actor text, p_ref uuid
+  p_reason text, p_note text, p_cost numeric, p_actor text, p_ref uuid, p_choices jsonb
 ) returns uuid language plpgsql security definer set search_path = public as $$
 declare w waste_entries; v_id uuid; v_name text; v_stock int;
 begin
@@ -10478,8 +10534,8 @@ begin
   perform public.lock_ingredient_movements(p_restaurant);
   select * into w from waste_entries where restaurant_id = p_restaurant and request_ref = p_ref;
   -- Cost is calculated by the server and may change after a delivery.
-  if found and (w.ingredient_id, w.item_id, w.quantity, w.reason, w.note) is distinct from
-     (p_ingredient, p_item, p_quantity, p_reason, p_note) then
+  if found and (w.ingredient_id, w.item_id, w.quantity, w.reason, w.note, w.choices) is distinct from
+     (p_ingredient, p_item, p_quantity, p_reason, p_note, case when p_item is not null then p_choices end) then
     raise exception 'reference belongs to another waste entry' using errcode = 'PT409';
   end if;
   if found then return w.id; end if;
@@ -10491,16 +10547,29 @@ begin
   end if;
   if v_name is null then return null; end if;
   perform set_config('tabletap.stock_movement', 'on', true);
-  insert into waste_entries(restaurant_id, ingredient_id, item_id, request_ref, name, quantity, reason, note, cost, recorded_by)
-    values(p_restaurant, p_ingredient, p_item, p_ref, v_name, p_quantity, p_reason, p_note, p_cost, p_actor)
+  insert into waste_entries(restaurant_id, ingredient_id, item_id, request_ref, name, quantity, reason, note, cost, recorded_by, choices)
+    values(p_restaurant, p_ingredient, p_item, p_ref, v_name, p_quantity, p_reason, p_note, p_cost, p_actor,
+      case when p_item is not null then p_choices end)
     on conflict (restaurant_id, request_ref) where request_ref is not null do nothing returning id into v_id;
   if v_id is null then raise exception 'waste reference changed' using errcode = 'PT409'; end if;
-  if v_stock is not null then
+  -- Its portion left with the sale too.
+  if v_stock is not null and p_reason <> 'returned' then
     update menu_items set stock = greatest(v_stock - ceil(p_quantity)::int, 0),
       available = case when v_stock - ceil(p_quantity)::int <= 0 then false else available end,
       stock_auto_off = case when v_stock - ceil(p_quantity)::int <= 0 and available then true else stock_auto_off end where id = p_item;
   end if;
   return v_id;
+end;
+$$;
+revoke all on function public.record_waste_once_v2(uuid, uuid, uuid, numeric, text, text, numeric, text, uuid, jsonb) from public, anon, authenticated;
+grant execute on function public.record_waste_once_v2(uuid, uuid, uuid, numeric, text, text, numeric, text, uuid, jsonb) to service_role;
+-- The deployed signature: the same writer, with no choices.
+create or replace function public.record_waste_once(
+  p_restaurant uuid, p_ingredient uuid, p_item uuid, p_quantity numeric,
+  p_reason text, p_note text, p_cost numeric, p_actor text, p_ref uuid
+) returns uuid language plpgsql security definer set search_path = public as $$
+begin
+  return public.record_waste_once_v2(p_restaurant, p_ingredient, p_item, p_quantity, p_reason, p_note, p_cost, p_actor, p_ref, null);
 end;
 $$;
 revoke all on function public.record_waste_once(uuid, uuid, uuid, numeric, text, text, numeric, text, uuid) from public, anon, authenticated;
@@ -12277,3 +12346,40 @@ returns timestamptz language sql stable set search_path = public as $$
 $$;
 revoke all on function public.refund_success_time_v1(jsonb) from public, anon, authenticated;
 grant execute on function public.refund_success_time_v1(jsonb) to service_role;
+
+-- R7-4: menu choices and recipe conditions must change together. Both recipe
+-- saves and product edits hold the product row, so neither can orphan the other.
+create or replace function public.guard_recipe_choices()
+returns trigger language plpgsql security definer set search_path = public as $$
+declare v_name text; v_modifiers jsonb;
+begin
+  if tg_table_name = 'recipe_lines' then
+    select name, modifiers into v_name, v_modifiers from menu_items
+      where id = new.item_id and restaurant_id = new.restaurant_id for update;
+    if new.mod_label is null and new.mod_option is null then return new; end if;
+    if exists (
+      select 1 from jsonb_array_elements(coalesce(v_modifiers, '[]')) m
+      where m->>'label' = new.mod_label and (m->'options') ? new.mod_option
+    ) then return new; end if;
+  else
+    v_name := new.name;
+    if not exists (
+      select 1 from recipe_lines r where r.item_id = new.id and r.restaurant_id = new.restaurant_id
+      and (r.mod_label is not null or r.mod_option is not null)
+      and not exists (
+        select 1 from jsonb_array_elements(coalesce(new.modifiers, '[]')) m
+        where m->>'label' = r.mod_label and (m->'options') ? r.mod_option
+      )
+    ) then return new; end if;
+  end if;
+  raise exception using errcode = 'PT422', message = 'tt_recipe_choice', detail = coalesce(v_name, '');
+end;
+$$;
+revoke all on function public.guard_recipe_choices() from public, anon, authenticated;
+grant execute on function public.guard_recipe_choices() to service_role;
+drop trigger if exists guard_product_recipe_choices on public.menu_items;
+create trigger guard_product_recipe_choices before update of modifiers on public.menu_items
+  for each row when (old.modifiers is distinct from new.modifiers) execute function public.guard_recipe_choices();
+drop trigger if exists guard_line_recipe_choices on public.recipe_lines;
+create trigger guard_line_recipe_choices before insert or update on public.recipe_lines
+  for each row execute function public.guard_recipe_choices();
