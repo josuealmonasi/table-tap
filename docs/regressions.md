@@ -60,6 +60,7 @@ and that a new party cannot see the previous party's waiting phones.
 | Locked subscriptions recover from missed events (Recovery R6-6) | Stripe accepted payment while the local restaurant stayed locked or past due |
 | Recovery reports remaining work and its age (Recovery R6-7) | A stuck queue had no scheduled counts or overdue signal |
 | Scheduled subscription snapshots respect later admin moves | An old active snapshot could relink the subscription an admin just removed |
+| Offline combo recovery keeps each component's choices (Inventory R7-5) | The recovered combo used default milk because its component choices were dropped |
 | Write-off confirmations use per-order decimal cents (#576 R4) | Frozen slot totals and binary rounding quoted 2.01 instead of 2.02, or 0.50 instead of 0.51, while the writer required more |
 | Receipt suppression uses discovery begun for the settlement decision (#576 R3) | An earlier unsplit read, or a failed latest read, offered a whole-order receipt after parts paid |
 | Write-off confirms only the unpaid remainder (#574-5) | The open-bill row showed MX$20 left while its confirmation claimed MX$100 lost |
@@ -6227,3 +6228,20 @@ require the expected subscription to remain linked on every revision retry.
 `subscription-sync.spec.ts` first reproduced the unwanted plan write and now
 checks that the scheduled snapshot leaves the admin's move alone. Webhook calls
 still accept a genuinely new subscription.
+## Inventory R7-5: recovered combos keep their choices
+
+The offline normalizer and ingredient consumption must agree on each combo
+component, including its choices. `offline-sale.spec.ts` keeps Milk = Oat on
+two offline combos and bounds their choices just like ordinary lines.
+The ingredient ledger had to agree with the shelf (sweep 7). A dish sent back
+and recorded as waste took its 200 ml a second time: its sale had already
+consumed it. A new reason, "sent back by a customer", records the loss and
+its cost and moves no stock, and only a product can have it. Deleting a
+mistaken spill after a recount added it back on top of the count, because the
+correction was dated now; a correction to a waste or purchase record is now
+dated with that record, so the count that already saw the truth absorbs it. A
+recipe saved while its ingredient was being archived attached the hidden
+ingredient at zero cost; the save now holds those ingredients. And a pack
+price derived from a purchase was rounded to cents, valuing 10,000 one-piece
+packs bought for MX$149 at MX$100; it keeps six places, and the ingredient
+dialog sends it back unchanged (`inventory-sql.spec.ts`).
