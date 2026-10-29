@@ -213,7 +213,8 @@ export function priceCart(input: PriceInput): PricedCart {
       if (!qty || unit === undefined || claimed.has(itemId)) continue;
       claimed.add(itemId);
 
-      const saved = round2(qty * unit - promoCost(promo, qty, unit));
+      // Never below zero: a deal is a discount, never a surcharge (sweep 1).
+      const saved = Math.max(0, round2(qty * unit - promoCost(promo, qty, unit)));
       promoDiscount += saved;
       if (saved > 0) promoSavings[itemId] = { saved, promoName: promo.name };
 
