@@ -56,7 +56,7 @@ export function useReceiptOffer(
   bill: TableBill | null,
   scope?: SplitScope & { dividing?: boolean },
 ): { offering: string[] | null; paymentId: string | null; dismiss: () => void; paidNow: boolean } {
-  const slots = useSlotReceiptOffer(scope);
+  const slots = useSlotReceiptOffer(scope, bill?.settled ?? null);
   const [offering, setOffering] = useState<string[] | null>(null);
   // That money was just settled — the visit card is offered at the same moment.
   const [paidNow, setPaidNow] = useState(false);
@@ -109,7 +109,7 @@ export function useReceiptOffer(
       return;
     }
     // Parts have payment receipts. Closing their bill must not offer the whole table again.
-    // Wait for payment discovery if it trails the bill poll, then exclude only
+    // Wait for a successful discovery begun for this bill, then exclude only
     // the orders covered by parts. A later round still gets its own receipt.
     const splitOrderIds = slots.splitOrderIds;
     if (splitOrderIds === null) return;

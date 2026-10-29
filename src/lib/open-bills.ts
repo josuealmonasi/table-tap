@@ -1,5 +1,7 @@
 import { orderCode, type Order, type OrderLineItem } from "@/lib/types";
 import { unpaidOrders } from "@/lib/table-bill";
+import { receiptCents } from "@/lib/receipt-amount";
+import { owedCents } from "@/lib/write-off-cents";
 import { round2 } from "@/lib/money";
 
 /**
@@ -23,6 +25,8 @@ export interface OpenBill {
   orderIds: string[];
   items: OrderLineItem[];
   total: number;
+  /** The loss SQL will record, rounded per order before its retained coverage. */
+  writeOffCents?: number;
   /** What promotions took off this bill; `total` already has it deducted. */
   discount: number;
   /** A promotion is already on it; a second would discount the same food twice. */
@@ -68,7 +72,10 @@ export function withSplits(
   });
 }
 
-export function openBills(orders: Order[]): OpenBill[] {
+export function openBills(
+  orders: Order[],
+  paid = new Map(orders.map(o => [o.id, Number(o.collected ?? 0)])),
+): OpenBill[] {
   const bills = new Map<string, OpenBill>();
 
   for (const order of unpaidOrders(orders)) {
@@ -79,7 +86,8 @@ export function openBills(orders: Order[]): OpenBill[] {
     if (found) {
       found.orderIds.push(order.id);
       found.items.push(...(order.items ?? []));
-      found.total = round2(found.total + Number(order.total));
+      found.total = (receiptCents(found.total) + receiptCents(order.total)) / 100;
+      found.writeOffCents = (found.writeOffCents ?? 0) + owedCents([order], paid);
       found.discount = round2(found.discount + Number(order.discount ?? 0));
       found.discounted = found.discounted || Boolean(order.coupon_code);
       if (order.created_at < found.since) found.since = order.created_at;
@@ -94,7 +102,8 @@ export function openBills(orders: Order[]): OpenBill[] {
       customerName: order.customer_name ?? null,
       orderIds: [order.id],
       items: [...(order.items ?? [])],
-      total: round2(Number(order.total)),
+      total: receiptCents(order.total) / 100,
+      writeOffCents: owedCents([order], paid),
       discount: round2(Number(order.discount ?? 0)),
       discounted: Boolean(order.coupon_code),
       since: order.created_at,
@@ -119,6 +128,6 @@ export function matchesBill(bill: OpenBill, query: string): boolean {
 }
 
 /** Orders stay unpaid until the last part: the ledger has already covered some of their total. */
-export function remainingBill(bill: Pick<OpenBill, "total" | "collected">): number {
-  return Math.max(0, round2(bill.total - (bill.collected ?? 0)));
+export function remainingBill(bill: Pick<OpenBill, "total" | "collected" | "writeOffCents">): number {
+  return Math.max(0, bill.writeOffCents ?? (receiptCents(bill.total) - receiptCents(bill.collected ?? 0))) / 100;
 }

@@ -5,25 +5,30 @@ import { badgesChanged } from "@/hooks/useBadges";
 import { useT } from "@/lib/i18n/context";
 import { useToast } from "@/components/ui/Toast";
 import type { StaffSlotSplit } from "@/lib/split-slots-staff";
+import { owedCents } from "@/lib/write-off-cents";
+import { unpaidOrders } from "@/lib/table-bill";
+import type { Order } from "@/lib/types";
 import type { WriteOffReason } from "@/lib/write-off";
 import WriteOffDialog from "./WriteOffDialog";
 
 interface Props {
   split: StaffSlotSplit;
+  orders: Order[];
   canApprove: boolean;
   onClose: () => void;
   onApplied: () => void;
 }
 
 /** The chosen division ends together; a later round is a separate loss. */
-export default function SplitWriteOffDialog({ split, canApprove, onClose, onApplied }: Props): JSX.Element {
+export default function SplitWriteOffDialog({ split, orders, canApprove, onClose, onApplied }: Props): JSX.Element {
   const t = useT();
   const toast = useToast();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const sending = useRef(false);
-  const slots = split.slots ?? [];
-  const expectedCents = slots.filter(s => !s.paid).reduce((sum, s) => sum + s.amountCents, 0);
+  // Frozen slots round the pooled bill; write-off rounds each order before its coverage.
+  const dividedOrders = unpaidOrders(orders).filter(o => split.orderIds.includes(o.id));
+  const expectedCents = owedCents(dividedOrders, new Map(dividedOrders.map(o => [o.id, Number(o.collected ?? 0)])));
 
   async function submit(reason: WriteOffReason, note: string): Promise<void> {
     if (sending.current) return;

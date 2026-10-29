@@ -90,3 +90,40 @@ it.each([false, true])("Back returns to collection with one dialog (calculator=%
   expect(button("Write off the rest")).toBeDefined();
   expect(fetch).not.toHaveBeenCalledWith("/api/bill/write-off", expect.anything());
 });
+
+it.each([false, true])("quotes each order's decimal cents rather than frozen slot totals (calculator=%s)", async calculator => {
+  split.slots = [
+    { shareNo: 0, amountCents: 100, paid: false, paying: false },
+    { shareNo: 1, amountCents: 101, paid: false, paying: false },
+  ];
+  vi.mocked(fetch).mockResolvedValue(Response.json({
+    orders: ["first", "second"].map(id => ({ id, total: 1.005, collected: 0, diner: "phone", currency: "MXN", status: "received", items: [] })),
+    splits: [split], outstanding: { owed: 2.01, ordered: 2.01, collected: 0, currency: "MXN" },
+  }));
+  await render(calculator);
+  await act(async () => button("Write off the rest")!.click());
+  expect(host.querySelector(".tt-writeoff-amount strong")?.textContent).toContain("2.02");
+  vi.mocked(fetch).mockResolvedValue(Response.json({ ok: true }));
+  await act(async () => button(text("writeOff.rest"))!.click());
+  const call = vi.mocked(fetch).mock.calls.find(([url]) => url === "/api/bill/write-off");
+  expect(JSON.parse(call![1]!.body as string).expectedCents).toBe(202);
+});
+
+it.each([false, true])("quotes 1.005 less the retained 0.50 as 0.51 (calculator=%s)", async calculator => {
+  split.orderIds = ["first"];
+  split.slots = [
+    { shareNo: 0, amountCents: 50, paid: true, paying: false },
+    { shareNo: 1, amountCents: 50, paid: false, paying: false },
+  ];
+  vi.mocked(fetch).mockResolvedValue(Response.json({
+    orders: [{ id: "first", total: 1.005, collected: 0.50, currency: "MXN", status: "received", items: [] }],
+    splits: [split], outstanding: { owed: 0.50, ordered: 1, collected: 0.50, currency: "MXN" },
+  }));
+  await render(calculator);
+  await act(async () => button("Write off the rest")!.click());
+  expect(host.querySelector(".tt-writeoff-amount strong")?.textContent).toContain("0.51");
+  vi.mocked(fetch).mockResolvedValue(Response.json({ ok: true }));
+  await act(async () => button(text("writeOff.rest"))!.click());
+  const call = vi.mocked(fetch).mock.calls.find(([url]) => url === "/api/bill/write-off");
+  expect(JSON.parse(call![1]!.body as string).expectedCents).toBe(51);
+});

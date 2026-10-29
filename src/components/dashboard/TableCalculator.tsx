@@ -17,14 +17,15 @@ import { tipFor } from "@/lib/pricing";
 import { applyPayment, suggestEqual } from "@/lib/table-balance";
 import { newRef } from "@/lib/collection-ref";
 import CollectionAmount, { type Mode } from "./CollectionAmount";
+import type { Order } from "@/lib/types";
 import type { Outstanding } from "@/lib/table-outstanding";
 
 /**
  * The arithmetic half of an outstanding bill.
  *
- * The rows stay on the server. A divided bill also carries its sitting id
- * to the slot writer, which checks the table and restaurant again: a choice
- * on one table must never collect another table's food.
+ * Order rows stay separate for the write-off quote. A divided bill also
+ * carries its sitting id to the slot writer, which checks the table and
+ * restaurant again: a choice on one table must never collect another table's food.
  */
 type Balance = Omit<Outstanding, "orders" | "sittings">;
 
@@ -81,6 +82,7 @@ export default function TableCalculator({
   const [lost, setLost] = useState(false);
   const [chosenCurrency, setChosenCurrency] = useState<string | null>(null);
   const [writingOff, setWritingOff] = useState<StaffSlotSplit | null>(null);
+  const [orders, setOrders] = useState<Order[]>([]);
 
   const { receipts, rememberReceipt } = useStaffSlotReceipts(`${open}:${tableId}`);
 
@@ -90,6 +92,7 @@ export default function TableCalculator({
       const data = res.ok ? await res.json() : null;
       setBill(data?.outstanding ?? null);
       setSplits(data?.splits ?? []);
+      setOrders(data?.orders ?? []);
       setLost(!data?.outstanding);
     } catch {
       // Offline. Said plainly rather than left spinning: a waiter waiting on a
@@ -102,6 +105,7 @@ export default function TableCalculator({
     if (!open) return;
     setWritingOff(null);
     setBill(null);
+    setOrders([]);
     setLost(false);
     setMode("full");
     setPlan([]);
@@ -284,7 +288,7 @@ export default function TableCalculator({
         </>
       )}
     </Modal>
-    {open && writingOff && <SplitWriteOffDialog split={writingOff} canApprove={canApprove}
+    {open && writingOff && <SplitWriteOffDialog split={writingOff} orders={orders} canApprove={canApprove}
       onClose={() => setWritingOff(null)} onApplied={() => { void load(); onCollected(); }} />}
     </>
   );

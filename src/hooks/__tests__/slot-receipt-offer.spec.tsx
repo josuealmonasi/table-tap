@@ -143,3 +143,32 @@ it("waits for a successful payment discovery before offering a closing bill's or
   fail = false; rows = [paid("last")]; await poll();
   expect(offer.offering).toBeNull();
 });
+
+it("rechecks a pre-split discovery before deciding a newly settled bill's receipt", async () => {
+  let divided = false;
+  vi.mocked(fetch).mockImplementation(async () => Response.json({ payments: rows, split: divided, splitOrderIds: divided ? ["order"] : [] }));
+  bill = { ...tableBill([], []), settled: false, mine: { ...tableBill([], []).mine, orders: [{ id: "order" } as never] } };
+  await render();
+  divided = true; rows = [paid("last")]; bill = tableBill([], []);
+  await render(); await poll();
+  expect(offer.offering).toBeNull(); expect(offer.paymentId).toBe("last");
+  expect(sessionStorage.getItem("tt.receipt.asked")).toBeNull();
+});
+
+it("does not use an earlier successful discovery after the latest read fails", async () => {
+  vi.mocked(fetch).mockImplementation(async () => Response.json({ payments: rows, split: false, splitOrderIds: [] }, { status: fail ? 503 : 200 }));
+  bill = { ...tableBill([], []), settled: false, mine: { ...tableBill([], []).mine, orders: [{ id: "order" } as never] } };
+  await render(); fail = true; await poll(); bill = tableBill([], []); await render();
+  expect(offer.offering).toBeNull();
+  fail = false; await poll(); expect(offer.offering).toEqual(["order"]);
+});
+
+it("rejects a discovery started before settlement even when its answer arrives later", async () => {
+  bill = { ...tableBill([], []), settled: false, mine: { ...tableBill([], []).mine, orders: [{ id: "order" } as never] } };
+  let finish!: (response: Response) => void;
+  vi.mocked(fetch).mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+  await render(); bill = tableBill([], []); await render();
+  vi.mocked(fetch).mockImplementation(async () => Response.json({ payments: [paid("last")], split: true, splitOrderIds: ["order"] }));
+  await act(async () => finish(Response.json({ payments: [], split: false, splitOrderIds: [] })));
+  expect(offer.offering).toBeNull(); await poll(); expect(offer.paymentId).toBe("last");
+});

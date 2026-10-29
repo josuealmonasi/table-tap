@@ -34,6 +34,8 @@ and that a new party cannot see the previous party's waiting phones.
 | A duplicate refund tracks customer completion and fee completion separately (S11 I5) | A failed fee return disappeared behind an already-refunded customer payment |
 | A duplicate refund keeps its original charge currency everywhere (S11 I9) | Changing the menu currency relabelled money owed back and the approval amount |
 |---|---|
+| Write-off confirmations use per-order decimal cents (#576 R4) | Frozen slot totals and binary rounding quoted 2.01 instead of 2.02, or 0.50 instead of 0.51, while the writer required more |
+| Receipt suppression uses discovery begun for the settlement decision (#576 R3) | An earlier unsplit read, or a failed latest read, offered a whole-order receipt after parts paid |
 | Write-off confirms only the unpaid remainder (#574-5) | The open-bill row showed MX$20 left while its confirmation claimed MX$100 lost |
 | Promotion controls respect a live division (#574-6) | Managers and waiters could offer a discount that the split guard refused |
 | Receipt discovery queues payments independently of a pending card return (#574-7) | Waiting for one webhook permanently swallowed another part's receipt |
@@ -5523,3 +5525,37 @@ identities and old zero-payment writer before the fixes. They cover both doors,
 roles, states, reviewed request bodies and visible refusals in both languages.
 Layout and dialog lists open the real confirmation through both staff doors,
 with a private paid-part fixture that deliberately leaves no online hold.
+
+
+### Receipt discovery belongs to the settlement decision (#576 R3)
+
+The bill closing and the receipt poll had to agree about the same moment.
+A successful read before a division was created said no orders were divided;
+reusing it when the bill closed offered the whole order as well as the paid
+parts. A failed later read left that old answer usable too. Discovery now
+belongs to the current settlement decision and is cleared when a read starts.
+A late answer begun before closure cannot decide the ordinary receipt; a new
+read follows it. The payment queue keeps its last successful observation.
+`slot-receipt-offer.spec.tsx` first failed all three sequences, then passed
+alongside mixed bills, later ordinary rounds and ordinary cash/card receipts.
+
+
+### Write-off confirmations share the writer's decimal cents (#576 R4)
+
+The staff confirmation and `owedCents` had to agree before the manager acted.
+Frozen slots round the pooled bill, so two 1.005 orders on one phone could
+quote 2.01 even though the writer requires 2.02. Binary rounding in open bills
+also showed 0.50 for 1.005 less 0.50, where SQL requires 0.51. Both staff doors
+now pass their already-read order totals and coverage to the split
+confirmation. Open bills carry the same per-order remainder, including the
+per-order zero floor so excess coverage cannot hide another order's debt.
+The existing `owedCents` calculation and its explanatory comment now live in
+a pure module shared by the server and confirmations. Collection math stays
+as it was. No new copy or SQL is needed.
+
+`split-write-off.spec.tsx` and `bill-discount-574.spec.tsx` failed the old
+quotes first. They now verify decimal cents through both collection doors and
+in both languages, including the split request's reviewed cents.
+`open-bills.spec.ts` covers grouping order and excess coverage;
+`split-write-off-route.spec.ts` mocks the database to check that the writer
+receives exactly 202 or 51 cents for those same confirmations.

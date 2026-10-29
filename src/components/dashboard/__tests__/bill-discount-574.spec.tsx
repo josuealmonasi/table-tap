@@ -37,3 +37,19 @@ it.each([true, false])("explains a live split and offers no discount or request 
   expect([...host.querySelectorAll("button")].some(b => b.textContent === text(canApprove ? "writeOff.title" : "writeOff.request"))).toBe(true);
   expect(fetch).not.toHaveBeenCalled();
 });
+
+it.each([
+  ["en", [1.005, 1.005], 0, "2.02"],
+  ["es", [1.005, 1.005], 0, "2.02"],
+  ["en", [1.005], 0.50, "0.51"],
+  ["es", [1.005], 0.50, "0.51"],
+  ["en", [1.005, 1.005], 0.50, "1.52"],
+] as const)("quotes per-order decimal cents in %s for %j less %s", async (locale, totals, collected, expected) => {
+  state.locale = locale;
+  const { openBills } = await import("@/lib/open-bills");
+  const orders = totals.map((total, index) => ({ id: String(index), total, table_id: "t", diner: "phone", status: "received", currency: "MXN", created_at: "2026-10-28", items: [] } as unknown as import("@/lib/types").Order));
+  const grouped = openBills(orders, new Map([["0", collected]]))[0];
+  await render(true, { ...grouped, collected });
+  await act(async () => [...host.querySelectorAll("button")].find(b => b.textContent === text("writeOff.title"))!.click());
+  expect(host.querySelector(".tt-writeoff-amount strong")?.textContent).toContain(expected);
+});

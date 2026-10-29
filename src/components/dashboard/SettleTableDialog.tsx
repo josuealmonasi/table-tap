@@ -296,7 +296,7 @@ export default function SettleTableDialog({
         </>
       )}
       </Modal>
-      {open && writingOff && <SplitWriteOffDialog split={writingOff} canApprove={canApprove}
+      {open && writingOff && <SplitWriteOffDialog split={writingOff} orders={orders ?? []} canApprove={canApprove}
         onClose={() => setWritingOff(null)} onApplied={() => { setAttempt(n => n + 1); onSettled(); }} />}
 
       {tableId && (
