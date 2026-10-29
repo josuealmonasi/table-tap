@@ -8,7 +8,7 @@ import { actingManager, actingStaff } from "@/lib/api-guard";
 import { costsBlocks, uuidOf } from "@/lib/costs/guard";
 import { dishCount, quantityRefusal, recipeQuantity, wasteNote } from "@/lib/costs/input";
 import { wasteProduct, type WasteProduct } from "@/lib/costs/waste-product";
-import { WASTE_REASONS, type WasteReason } from "@/lib/costs/usage";
+import { PRODUCT_ONLY_REASONS, WASTE_REASONS, type WasteReason } from "@/lib/costs/usage";
 
 export const runtime = "nodejs";
 
@@ -40,6 +40,8 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   if (quantity === null) return await apiError(quantityRefusal(body.quantity, "apiErr.wasteQuantity"), 400);
   const reason = WASTE_REASONS.includes(body.reason as WasteReason) ? (body.reason as WasteReason) : null;
   if (!reason) return await apiError("apiErr.wasteReason", 400);
+  // Only a dish can come back from a table; an ingredient never left the kitchen.
+  if (ingredientId && PRODUCT_ONLY_REASONS.includes(reason)) return await apiError("apiErr.wasteReason", 400);
 
   let cost: number | null = null;
   let productChoices: WasteProduct["choices"] | undefined;

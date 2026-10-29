@@ -5772,3 +5772,15 @@ divided bill's own part pages stamp and never clear (R2).
 The offline normalizer and ingredient consumption must agree on each combo
 component, including its choices. `offline-sale.spec.ts` keeps Milk = Oat on
 two offline combos and bounds their choices just like ordinary lines.
+The ingredient ledger had to agree with the shelf (sweep 7). A dish sent back
+and recorded as waste took its 200 ml a second time: its sale had already
+consumed it. A new reason, "sent back by a customer", records the loss and
+its cost and moves no stock, and only a product can have it. Deleting a
+mistaken spill after a recount added it back on top of the count, because the
+correction was dated now; a correction to a waste or purchase record is now
+dated with that record, so the count that already saw the truth absorbs it. A
+recipe saved while its ingredient was being archived attached the hidden
+ingredient at zero cost; the save now holds those ingredients. And a pack
+price derived from a purchase was rounded to cents, valuing 10,000 one-piece
+packs bought for MX$149 at MX$100; it keeps six places, and the ingredient
+dialog sends it back unchanged (`inventory-sql.spec.ts`).
