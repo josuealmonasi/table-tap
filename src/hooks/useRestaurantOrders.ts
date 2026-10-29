@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { badgesChanged } from "@/hooks/useBadges";
 import { useOnline } from "@/hooks/useOnline";
-import { enqueue, readQueue, writeQueue, type QueuedMove } from "@/lib/offline-queue";
+import { afterFlush, enqueue, readQueue, writeQueue, type QueuedMove } from "@/lib/offline-queue";
 import { useT } from "@/lib/i18n/context";
 import { orderChanges, orderReplyTime, reconcileOrders } from "@/components/dashboard/orders-snapshot";
 import { useToast } from "@/components/ui/Toast";
@@ -34,6 +34,15 @@ function playPing() {
  * them in sync via realtime (pinging on new ones), and exposes a status updater
  * with optimistic UI.
  */
+/** Who is signed in on this tab, read from the stored session: it works offline. */
+async function currentUserId(): Promise<string | undefined> {
+  try {
+    return (await createClient().auth.getSession()).data.session?.user.id;
+  } catch {
+    return undefined;
+  }
+}
+
 export function useRestaurantOrders(restaurantId: string, initialOrders: BoardOrder[], kitchen = false, snapshotReadAt = 0) {
   const t = useT();
   const toast = useToast();
@@ -118,11 +127,18 @@ export function useRestaurantOrders(restaurantId: string, initialOrders: BoardOr
    * stay, because the board it was arguing with is newer than it is.
    */
   const flush = useCallback(async () => {
-    const queue = readQueue();
-    if (queue.length === 0) return;
+    const stored = readQueue();
+    if (stored.length === 0) return;
+    // Only this login's own moves are sent. Another login's are dropped, not
+    // replayed under these cookies.
+    const me = await currentUserId();
+    // Nobody signed in on this tab: nothing is sent, and nothing is dropped.
+    if (!me) return;
+    const foreign = stored.filter(m => m.by !== undefined && m.by !== me);
+    const queue = stored.filter(m => !foreign.includes(m));
 
     const stuck: QueuedMove[] = [];
-    let refused = 0;
+    let refused = foreign.length;
     const blocked = new Set<string>();
     for (const move of queue) {
       // A later step cannot overtake one that still needs to be sent.
@@ -158,8 +174,9 @@ export function useRestaurantOrders(restaurantId: string, initialOrders: BoardOr
         finish(answeredAt);
       }
     }
-    writeQueue(stuck);
-    setPending(stuck);
+    const left = afterFlush(readQueue(), stored, stuck);
+    writeQueue(left);
+    setPending(left);
     if (refused > 0) toast(t("orders.queuedRefused", { n: refused }), "error");
     badgesChanged();
   }, [t, toast, protect]);
@@ -187,7 +204,7 @@ export function useRestaurantOrders(restaurantId: string, initialOrders: BoardOr
       // ticket showed as moved to whoever moved it and untouched to everybody
       // else. Hold it instead, and say so on the board.
       if (was) {
-        const queue = enqueue(readQueue(), { id, from: was, to: status, at: Date.now() });
+        const queue = enqueue(readQueue(), { id, from: was, to: status, at: Date.now(), by: await currentUserId() });
         writeQueue(queue);
         setPending(queue);
       }
