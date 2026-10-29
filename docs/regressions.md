@@ -5765,3 +5765,14 @@ open or paid page, or Stripe being unreachable, keeps the refusal. The
 walkout write-off reads open pages too instead of `card_checkout_at`, which a
 divided bill's own part pages stamp and never clear (R2).
 `whole-bill-pages.spec.ts`, `split-574-sql.spec.ts`.
+
+Recovery had to agree with what Stripe and the shelf actually hold (sweep 6).
+A refund attempt saved but never sent stayed unfinishable after its
+idempotency key expired: resending the key could refund twice, so the
+executor refused for ever. Stripe's full list of the charge's refunds proves
+whether that attempt ever arrived; past 24 hours with none, it is retired as
+`never_sent` and a new attempt with a new key carries what is still owed
+(`returns-provider.spec.ts`, `recovery-sql.spec.ts`). And a sale held offline
+and sent after a recount took its portions off a count that already left them
+out; a dish counted after the sale was made now keeps its count, and the
+money and the order are recorded as before (`recovery-sql.spec.ts`).
