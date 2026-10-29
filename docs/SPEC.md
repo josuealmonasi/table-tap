@@ -2565,3 +2565,51 @@ membership and login, returning the seat. Statement email sends require a client
 operation reference; retries keep it and confirmed sends renew it. The account
 and reference form the Resend idempotency key (provider retention: 24 hours).
 The existing IP, account and restaurant mail rate limits also apply to retries.
+## Scheduled recovery
+
+`GET /api/cron/recover` runs in production once a day (09:00 UTC, 03:00 in
+Mexico City) through Vercel Cron: the schedule every plan accepts, since a
+schedule the plan refuses fails the deploy. On a plan that allows it, set
+`vercel.json` to every ten minutes; the jobs are bounded per run either way. Configure a random `CRON_SECRET` in Vercel production before deploying;
+Vercel sends it as a Bearer authorization header. Missing, empty and incorrect
+secrets return 401 before any recovery client is created. The route compares
+fixed-size hashes in constant time and never needs a signed-in user.
+
+Four isolated jobs use the admin client and the existing locked writers:
+
+- Stock calls `recover_stock_reservations` across restaurants. SQL keeps its
+  one-hour grace period, checks that no order owns the reservation, and releases
+  at most one orphan per call, at most ten calls per invocation.
+- Customer refunds retrieve only saved provider refund IDs for pending app
+  attempts, including duplicate-payment refunds. Charge, frozen account,
+  currency and exact amount must match before the existing finish functions
+  record the result. Recovery never starts an attempt or creates a refund.
+  Successful evidence enqueues the existing fee reconciliation path.
+- Fees drain the existing charge queue through the same frozen-account lookup,
+  generation checks and provider requests as Bills.
+- Linked subscriptions for locally locked or past-due restaurants are read
+  from Stripe and passed through the webhook's revision-checked transition.
+  Recovery cannot relink a subscription that an admin has since replaced.
+
+Each job has ten seconds, with bounded network requests and no Stripe network
+retries. Each source reads at most ten items per batch (refunds have two
+sources sharing one budget). A rotating page prevents a full batch of pending
+items from permanently hiding later restaurants. Work stops before the budget
+to leave time for observation; four jobs fit within the route's 60-second limit.
+An item or job failure does not prevent subsequent items or jobs from running.
+
+The JSON response and logs report each job's completed items, remaining
+eligible count, failures, oldest pending date and age in seconds. Failed queue
+observations return `pending: null` with `observation_failed`, never a false
+zero. Subscription age is explicitly a restaurant-creation upper bound: the
+schema has no date for entering locked or past-due status. Over-six-hour work
+is logged with the affected restaurant. Duplicate-payment refunds also reuse
+the existing bilingual `refund_due` bell message, with one conflict-safe
+reminder per restaurant, including repeated or overlapping invocations. Other
+jobs have no matching bell kind and only log. Reading a reminder does not cause
+cron to ring it again. Recovery does not block selling, paying or signing out.
+
+The API gate covers both unauthorized refusal and an authorized clean-seed
+invocation, including unchanged sales, payment and stock records. Set
+`CRON_SECRET` in the dev server environment for that authorized case. Cron
+setup follows [Vercel's authorization contract](https://vercel.com/docs/cron-jobs/manage-cron-jobs#securing-cron-jobs).

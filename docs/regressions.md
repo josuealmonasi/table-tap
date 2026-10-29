@@ -54,6 +54,12 @@ and that a new party cannot see the previous party's waiting phones.
 | Bell times follow the restaurant clock (notify sweep 5-8) | The same event appeared on different days on staff devices |
 | Staff seats commit before invite mail (notify sweep 5-6) | An insert failed after the waiter already received a dead invitation |
 | Failed card checkouts return their own bell warnings (notify sweep 5-3) | Stock returned while the sold-out message stayed behind |
+| Pending provider refunds recover without a page visit (Recovery R6-3) | Stripe completed the refund but the local attempt stayed processing until somebody retried it |
+| Orphan stock recovers without a page visit (Recovery R6-4) | A request reserved stock and died before its order existed, leaving portions unavailable |
+| The fee queue drains without Bills opening (Recovery R6-5) | Durable fee work waited forever when nobody opened the page that drained it |
+| Locked subscriptions recover from missed events (Recovery R6-6) | Stripe accepted payment while the local restaurant stayed locked or past due |
+| Recovery reports remaining work and its age (Recovery R6-7) | A stuck queue had no scheduled counts or overdue signal |
+| Scheduled subscription snapshots respect later admin moves | An old active snapshot could relink the subscription an admin just removed |
 | Write-off confirmations use per-order decimal cents (#576 R4) | Frozen slot totals and binary rounding quoted 2.01 instead of 2.02, or 0.50 instead of 0.51, while the writer required more |
 | Receipt suppression uses discovery begun for the settlement decision (#576 R3) | An earlier unsplit read, or a failed latest read, offered a whole-order receipt after parts paid |
 | Write-off confirms only the unpaid remainder (#574-5) | The open-bill row showed MX$20 left while its confirmation claimed MX$100 lost |
@@ -6160,3 +6166,64 @@ saw a warning on the wrong day. The authorized bell response now includes the
 restaurant's time zone, with the same default used for receipts, and the menu
 uses it for both date and time. `notifications-menu.spec.tsx` checks English and
 Spanish across midnight; the pagination spec checks the API supplies the zone.
+## A saved provider refund must not wait for a page (Recovery R6-3)
+
+Stripe's current refund state and the saved attempt must agree even if the
+webhook never arrives and nobody opens Bills. The cron refund job retrieves
+only saved provider IDs, verifies their original account, intent, currency and
+exact cents, and uses the existing locked finish writers for order returns and
+duplicate payments. It never opens an attempt or creates a customer refund.
+`recovery/__tests__/jobs.spec.ts` reproduces the missing scheduled path;
+`recovery/__tests__/refunds.spec.ts` covers pending, succeeded and failed states,
+mismatched evidence, stale writes and isolation between the two refund sources.
+
+## Orphan stock must recover while the restaurant is closed (Recovery R6-4)
+
+A reserved portion and the order meant to own it had to agree. An interrupted
+request could leave only the reservation, and its page-triggered cleanup did
+nothing until somebody visited. The scheduled stock job calls the existing
+one-orphan SQL recovery across restaurants, keeping its grace period, locking
+and late-order check. `recovery/__tests__/jobs.spec.ts` verifies recovery without
+a page, while `bounds.spec.ts` checks the batch and observation budget.
+
+## The fee queue must have a caller that does not need Bills (Recovery R6-5)
+
+The durable queue and the page draining it had to agree that someone would
+eventually open Bills. The cron fee job now shares the page's original-account
+lookup and charge reconciler, including its generation acknowledgements and
+immutable provider requests. A missing original account leaves work pending;
+one failed charge does not stop the rest. `recovery/__tests__/jobs.spec.ts`
+checks the frozen account, independent charges and remaining queue count.
+
+## Stripe's subscription and local access must agree after a missed event (Recovery R6-6)
+
+A paid subscription and the local locked or past-due status could disagree
+forever after a missed webhook. The scheduled job reads the linked Stripe
+subscription and uses the same revision-checked transition as the webhook.
+Still-unpaid subscriptions remain pending, and rotating batches let later
+restaurants recover too. `recovery/__tests__/jobs.spec.ts` checks the shared
+transition; `bounds.spec.ts` proves a full pending batch does not starve the next.
+
+## A recovery response must say what is still waiting (Recovery R6-7)
+
+Successful HTTP responses and unfinished work had nothing checking that they
+agreed. Every job now returns and logs done, pending, failed and the oldest
+pending item's date and age. Failed observations report unknown counts instead
+of an empty queue. Overdue work logs its restaurant; duplicate-payment refunds
+reuse the existing bilingual bell kind, with a deterministic notification ID
+that also deduplicates overlapping requests. Other job kinds only log.
+Subscription age explicitly uses restaurant creation as an upper bound because
+there is no saved status-change date. `jobs.spec.ts`, `refunds.spec.ts` and
+`bounds.spec.ts` check ages, reminders and failed observations; `route.spec.ts`
+checks secret refusal and isolation. The API case checks an authorized clean
+seed leaves its sales, payments and stock unchanged.
+
+## A scheduled subscription snapshot cannot undo a later admin move
+
+The worker's initial linked subscription and the webhook helper's later read
+had to agree. An admin could unlink the contract between them, and an active
+old snapshot would relink it as if it were a new checkout. Worker calls now
+require the expected subscription to remain linked on every revision retry.
+`subscription-sync.spec.ts` first reproduced the unwanted plan write and now
+checks that the scheduled snapshot leaves the admin's move alone. Webhook calls
+still accept a genuinely new subscription.

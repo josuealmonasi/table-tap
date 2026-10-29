@@ -33,9 +33,11 @@ import { webhooksCases } from "./api-cases/webhooks.mjs";
 import { signupCases } from "./api-cases/signup.mjs";
 import { retriesCases } from "./api-cases/retries.mjs";
 import { paymentCheckCases } from "./api-cases/payment-check.mjs";
+import { recoveryCases } from "./api-cases/recovery.mjs";
 
 export function cases(fx) {
   return [
+    ...recoveryCases(fx),
     ...adminOpeningCases(fx),
     ...menuCopyCases(fx),
     ...membershipCases(fx),

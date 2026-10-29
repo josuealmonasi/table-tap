@@ -4,10 +4,12 @@ import { readPlanName } from "@/lib/billing";
 import type { PlanName } from "@/lib/plan";
 
 /** The actual Price grants the tier; old subscription metadata can be stale. */
-export async function subscriptionPlan(sub: Stripe.Subscription): Promise<PlanName> {
+export async function subscriptionPlan(
+  sub: Stripe.Subscription, database?: ReturnType<typeof createAdminClient>,
+): Promise<PlanName> {
   if (sub.items.data.length !== 1) throw new Error(`Subscription ${sub.id} needs one mapped Price`);
   const price = sub.items.data[0].price.id;
-  const db = createAdminClient();
+  const db = database ?? createAdminClient();
   const { data: registered, error } = await db.from("restaurant_subscription_prices")
     .select("plan").eq("price_id", price).maybeSingle();
   if (error) throw new Error(`Subscription Price lookup failed: ${error.message}`);
