@@ -1,3 +1,4 @@
+import { resolveSelectedSplitPages } from "@/lib/split-page-recovery";
 import Stripe from "stripe";
 import { type NextRequest, NextResponse } from "next/server";
 import type { TableMember } from "@/lib/table-membership";
@@ -38,9 +39,14 @@ export async function paySplitSlots(req: NextRequest, body: SlotPayBody, member:
     const prior = await resumeDinerAttempt(stripe, body.restaurantId, scopeKey);
     if (prior) return NextResponse.json({ url: prior.url });
     if (split.revision !== body.revision) return await splitResponse({ outcome: "stale", revision: split.revision }, []);
-    const { data: selected, error: slotsError } = await db.from("bill_split_slots")
+    const readSelected = () => db.from("bill_split_slots")
       .select("share_no, amount_cents, fee_slice_cents, payment_id, reserved_checkout_id")
       .eq("restaurant_id", body.restaurantId).eq("split_id", split.id).in("share_no", slots);
+    let { data: selected, error: slotsError } = await readSelected();
+    if (!slotsError && selected?.some(s => s.reserved_checkout_id)
+      && await resolveSelectedSplitPages(body.restaurantId, split.id, slots) === "closed") {
+      ({ data: selected, error: slotsError } = await readSelected());
+    }
     if (slotsError || selected?.length !== slots.length) throw new Error("Could not read split slots");
     if (selected.some(s => s.payment_id)) return await splitResponse({ outcome: "paid" }, []);
     if (selected.some(s => s.reserved_checkout_id)) return await splitResponse({ outcome: "taken" }, []);

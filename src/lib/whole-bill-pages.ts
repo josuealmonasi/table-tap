@@ -1,58 +1,116 @@
+import { matchesDinerCheckout, type DinerCheckoutRecord } from "@/lib/diner-checkout";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { checkoutOrderIds, checkoutRows, checkoutRowsIn, checkoutScope, type CheckoutPageScope } from "@/lib/checkout-page-scope";
+
+export type CheckoutPageResolution = "closed" | "unresolved" | "unverified";
+interface Page extends Omit<DinerCheckoutRecord, "stripe_session_id" | "stripe_account_id" | "metadata"> {
+  id: string; status?: string; stripe_session_id: string | null; stripe_account_id: string | null;
+  split_id: string | null; metadata: Record<string, string> | null; scope_key: string | null; created_at: string;
+}
+interface AccountPage { id: string; stripe_session_id: string | null }
+
+async function closePage(restaurantId: string, page: Page): Promise<CheckoutPageResolution> {
+  if (page.status === "paid") return "unresolved";
+  if (!page.stripe_account_id) return "unverified";
+  const db = createAdminClient();
+  // Loaded only when a page must be read: every split route imports this module.
+  const { stripe } = await import("@/lib/stripe");
+  if (!page.stripe_session_id) {
+    // Saved, but its Stripe page was never bound (the process stopped
+    // between the two). Resending its saved request returns that same page
+    // while Stripe still keeps the key (24h), binds it, and closes it if it
+    // expired. Older than that, nothing here can prove it never charged.
+    const age = Date.now() - new Date(page.created_at).getTime();
+    if (!page.scope_key || !Number.isFinite(age) || age < 0 || age > 23 * 3600 * 1000) return "unverified";
+    const { resumeDinerAttempt } = await import("@/lib/diner-attempt");
+    await resumeDinerAttempt(stripe, restaurantId, page.scope_key, page.id);
+    const { data: now, error } = await db.from("diner_checkouts").select("status")
+      .eq("id", page.id).eq("restaurant_id", restaurantId).maybeSingle();
+    if (error || !now) return "unverified";
+    return now.status === "expired" ? "closed" : "unresolved";
+  }
+  const session = await stripe.checkout.sessions.retrieve(page.stripe_session_id, {}, { stripeAccount: page.stripe_account_id });
+  // A paid page belongs to the verified webhook, even when its answer is late.
+  if (!matchesDinerCheckout(session, { ...page, stripe_session_id: page.stripe_session_id, stripe_account_id: page.stripe_account_id, metadata: page.metadata ?? {} })) return "unverified";
+  if (session.status !== "expired" || session.payment_status !== "unpaid") return "unresolved";
+  if (page.metadata?.order_id) {
+    // A pay-now cart still owns stock. Its complete expiry path returns that
+    // stock and its coupon before another checkout may use the reference.
+    const { abandonCheckout } = await import("@/lib/checkout-abandon");
+    await abandonCheckout(session, { account: page.stripe_account_id, livemode: page.livemode });
+  } else if (page.metadata?.split_model === "2") {
+    const { data, error } = await db.rpc("retire_split_attempt_v1", { p_restaurant: restaurantId, p_checkout: page.id });
+    if (error || !["retired", "gone", "paid"].includes(data?.outcome)) return "unverified";
+    if (data.outcome === "paid") return "unresolved";
+  } else {
+    const { error } = await db.rpc("finish_diner_checkout", { p_attempt: page.id, p_paid: false });
+    if (error) throw new Error("Could not close the unpaid checkout");
+  }
+  return "closed";
+}
+
+/** Read the exact saved page and account; time passing is never proof of expiry. */
+export async function resolveCheckoutPages(restaurantId: string, scope: CheckoutPageScope): Promise<CheckoutPageResolution> {
+  try {
+    const db = createAdminClient();
+    const { checkoutIds, accountId } = scope;
+    const orderIds = scope.checkoutIds ? [] : await checkoutOrderIds(restaurantId, scope);
+    if (!orderIds.length && !scope.accountId && !scope.checkoutIds?.length) return "unverified";
+    const diners = () => {
+      const query = db.from("diner_checkouts").select("*").eq("restaurant_id", restaurantId).eq("status", "open");
+      return scope.includeParts === false ? query.is("split_id", null) : query;
+    };
+    const pages = checkoutIds
+      ? await checkoutRows<Page>((start, end) => diners().in("id", checkoutIds).order("id").range(start, end))
+      : await checkoutRowsIn<Page>(orderIds, (ids, start, end) => diners().overlaps("order_ids", ids).order("id").range(start, end));
+    const accounts = () => db.from("account_checkouts").select("id, stripe_session_id")
+      .eq("restaurant_id", restaurantId).eq("status", "open");
+    const accountPages = checkoutIds ? [] : accountId
+      ? await checkoutRows<AccountPage>((start, end) => accounts().eq("account_id", accountId).order("id").range(start, end))
+      : await checkoutRowsIn<AccountPage>(orderIds, (ids, start, end) => accounts().overlaps("order_ids", ids).order("id").range(start, end));
+    if (scope.checkoutIds && pages.length !== new Set(scope.checkoutIds).size) return "unverified";
+    const results = new Map<string, CheckoutPageResolution>();
+    for (const page of pages) {
+      if (scope.checkoutIds && scope.splitId && (page.split_id !== scope.splitId
+        || page.metadata?.split_id !== scope.splitId || page.metadata?.split_model !== "2")) return "unverified";
+      // A part's own page must not block cash for another part of its split.
+      if (scope.includeParts === false && (page.split_id || page.metadata?.split_model === "2")) continue;
+      results.set(page.id, await closePage(restaurantId, page));
+    }
+    for (const account of accountPages) {
+      let page = pages.find(p => p.metadata?.account_checkout === account.id);
+      if (!page) {
+        // Older account rows carry no connected account. Only their durable
+        // diner attempt can supply it; today's restaurant connection cannot.
+        const { data, error } = await db.from("diner_checkouts").select("*")
+          .eq("restaurant_id", restaurantId).contains("metadata", { account_checkout: account.id }).maybeSingle();
+        if (error || !data) return "unverified";
+        page = data as Page;
+      }
+      if (account.stripe_session_id && account.stripe_session_id !== page.stripe_session_id) return "unverified";
+      const resolution = results.get(page.id) ?? await closePage(restaurantId, page);
+      results.set(page.id, resolution);
+      if (resolution === "closed") {
+        const { releaseAccountCheckout } = await import("@/lib/account-checkout");
+        await releaseAccountCheckout(account.id);
+      }
+    }
+    if (!results.size || [...results.values()].includes("unverified")) return "unverified";
+    return [...results.values()].includes("unresolved") ? "unresolved" : "closed";
+  } catch (err) {
+    // Stripe unreachable is not proof the page cannot charge.
+    console.error("could not resolve an unconfirmed card page", err);
+    return "unverified";
+  }
+}
 
 /**
  * A divided bill refuses with "paying" while a whole-bill card page is open on
  * its orders: Stripe may have charged it with the webhook still on its way.
  * Ask Stripe about each such page; one Stripe says expired is closed exactly as
- * its expiry webhook would. Answers whether any page was closed, so the caller
- * retries once. Open or paid pages, and any read failure, leave the refusal.
+ * its expiry webhook would. Answers whether the blocking pages were closed, so
+ * the caller retries once. Open or paid pages, and any read failure, leave the refusal.
  */
 export async function closeExpiredWholeBillPages(restaurantId: string, args: Record<string, unknown>): Promise<boolean> {
-  const db = createAdminClient();
-  let orderIds: string[] = [];
-  if (typeof args.p_split === "string") {
-    const { data } = await db.from("bill_splits").select("order_ids").eq("id", args.p_split).eq("restaurant_id", restaurantId).maybeSingle();
-    orderIds = data?.order_ids ?? [];
-  } else if (typeof args.p_session === "string") {
-    const { data } = await db.from("orders").select("id").eq("session_id", args.p_session).eq("restaurant_id", restaurantId);
-    orderIds = (data ?? []).map(o => o.id);
-  }
-  if (!orderIds.length) return false;
-  const { data: pages, error } = await db.from("diner_checkouts")
-    .select("id, stripe_session_id, stripe_account_id, split_id, metadata, scope_key, created_at")
-    .eq("restaurant_id", restaurantId).eq("status", "open").is("split_id", null).overlaps("order_ids", orderIds);
-  if (error || !pages) return false;
-  let closed = false;
-  // Loaded only when a page must be read: every split route imports this module.
-  const { stripe } = await import("@/lib/stripe");
-  for (const page of pages) {
-    if (page.metadata?.split_model === "2" || !page.stripe_account_id) continue;
-    if (!page.stripe_session_id) {
-      // Saved, but its Stripe page was never bound (the process stopped
-      // between the two). Resending its saved request returns that same page
-      // while Stripe still keeps the key (24h), binds it, and closes it if it
-      // expired. Older than that, nothing here can prove it never charged.
-      const age = Date.now() - new Date(page.created_at).getTime();
-      if (!page.scope_key || age > 23 * 3600 * 1000) continue;
-      try {
-        const { resumeDinerAttempt } = await import("@/lib/diner-attempt");
-        await resumeDinerAttempt(stripe, restaurantId, page.scope_key);
-        const { data: now } = await db.from("diner_checkouts").select("status").eq("id", page.id).maybeSingle();
-        if (now?.status === "expired") closed = true;
-      } catch (err) {
-        console.error("split: could not resolve an unbound whole-bill card page", err);
-      }
-      continue;
-    }
-    try {
-      const session = await stripe.checkout.sessions.retrieve(page.stripe_session_id, {}, { stripeAccount: page.stripe_account_id });
-      if (session.status !== "expired") continue;
-      const { error: finishError } = await db.rpc("finish_diner_checkout", { p_attempt: page.id, p_paid: false });
-      if (!finishError) closed = true;
-    } catch (err) {
-      // Stripe unreachable is not proof the page cannot charge.
-      console.error("split: could not read a whole-bill card page", err);
-    }
-  }
-  return closed;
+  return await resolveCheckoutPages(restaurantId, { ...checkoutScope(args), includeParts: false }) === "closed";
 }

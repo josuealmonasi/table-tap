@@ -15,8 +15,8 @@ import { createAdminClient } from "@/lib/supabase/admin";
  * And it leaves alone every order whose total is already promised to someone:
  * paid, written off or cancelled; waiting for its own card payment; with money
  * already against it or its sitting; divided into shares; named in a discount
- * or write-off waiting for a manager; or in a card checkout opened in the last
- * `CHECKOUT_HOLD_MINUTES` — each of those was priced from the old total, and
+ * or write-off waiting for a manager; or in an unresolved card checkout at
+ * any age — each of those was priced from the old total, and
  * changing it underneath them is how a ledger comes to disagree with Stripe.
  *
  * All of that is decided in `reprice_open_service`, under the money lock
@@ -24,8 +24,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
  * between, and the stale write lowered a total with money already against it.
  */
 
-/** A bill's Stripe session expires after 30 minutes; five more for the webhook (the SQL uses the same 35). */
-export const CHECKOUT_HOLD_MINUTES = 35;
+/** Stripe expires the page after 30 minutes; only its confirmed result can free the quote. */
 
 /**
  * Lowers the service charge on the restaurant's open bills to `servicePct`.

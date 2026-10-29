@@ -1,3 +1,4 @@
+import { unresolvedAccounts } from "@/lib/account-checkout-state";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { everyRow } from "@/lib/paged";
 import { DEFAULT_TIME_ZONE } from "@/lib/open-menus";
@@ -20,6 +21,7 @@ export interface AccountRow {
   opened_at: string;
   closed_at: string | null;
   checkout_until: string | null;
+  payingOnline?: boolean;
 }
 
 const ACCOUNT_COLUMNS =
@@ -60,10 +62,12 @@ export async function listAccounts(restaurantId: string): Promise<AccountSummary
     const was = owed.get(o.account_id) ?? { last: null };
     owed.set(o.account_id, { last: !was.last || at > was.last ? at : was.last });
   }
+  const unresolved = await unresolvedAccounts(restaurantId, accounts.map(a => a.id));
   return accounts.map(a => {
     const balances = currencyBalances(owedRows.filter(o => o.account_id === a.id).map(o => ({ currency: o.currency, amount: Number(o.total) })));
     return {
       ...a,
+      payingOnline: unresolved.has(a.id),
       credit_limit: Number(a.credit_limit),
       owed: balances.length === 1 ? balances[0].amount : 0,
       currency: balances.length === 1 ? balances[0].currency : null,

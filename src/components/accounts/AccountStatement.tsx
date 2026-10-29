@@ -220,7 +220,7 @@ export default function AccountStatement({ code, paid }: { code: string; paid: b
                 {svg && <div className="tt-account-qr-img" dangerouslySetInnerHTML={{ __html: svg }} />}
               </div>
             ) : null}
-            {mode !== "online" && data.cardsEnabled && !data.payingOnline && (
+            {mode !== "online" && data.cardsEnabled && (
               <button type="button" className="tt-btn tt-btn-primary tt-btn-lg" onClick={() => setMode("online")}>
                 {t("account.payOnline")}
               </button>

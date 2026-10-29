@@ -1,8 +1,8 @@
+import { checkoutPageRpc } from "@/lib/checkout-page-rpc";
 import { NextResponse, type NextRequest } from "next/server";
 import { apiError } from "@/lib/api-error";
 import { actingFrontOfHouse } from "@/lib/api-guard";
 import { jsonBody } from "@/lib/json-body";
-import { createAdminClient } from "@/lib/supabase/admin";
 import { logEvent } from "@/lib/activity-log";
 import { logDetail } from "@/lib/log-detail";
 import { applyPayment } from "@/lib/table-balance";
@@ -42,7 +42,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   if (Number(body.tip ?? 0) > expected || !Number.isFinite(Number(body.tip ?? 0))) return await apiError("apiErr.invalidRequest", 400);
   if (body.currency !== undefined && !isDinerCurrency(body.currency)) return await apiError("apiErr.invalidRequest", 400);
 
-  const { data, error } = await createAdminClient().rpc(body.currency ? "account_settle_currency_v1" : "account_settle_v2", {
+  const { data, error } = await checkoutPageRpc(body.currency ? "account_settle_currency_v1" : "account_settle_v2", {
     p_restaurant: actor.restaurantId,
     p_account: account.id,
     p_expected: expected,

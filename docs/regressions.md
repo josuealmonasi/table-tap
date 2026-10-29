@@ -34,6 +34,12 @@ and that a new party cannot see the previous party's waiting phones.
 | A duplicate refund tracks customer completion and fee completion separately (S11 I5) | A failed fee return disappeared behind an already-refunded customer payment |
 | A duplicate refund keeps its original charge currency everywhere (S11 I9) | Changing the menu currency relabelled money owed back and the approval amount |
 |---|---|
+| Every collector and account transfer resolves the same refused card scope (unresolved pages) | Ordinary collection and account transfer offered no expiry recovery, including after minute 35 |
+| Account displays and serialization follow either unresolved row (unresolved pages) | The clock cleared the displayed hold while a saved card page could still charge |
+| Cancellation rebuilds its plan after verified account expiry (unresolved pages) | An old deadline allowed cancellation, while a future deadline rejected an already-expired page |
+| Selected held parts recover only their own attempts (unresolved pages) | An expired part stayed unavailable; recovering the whole split would touch another diner's page |
+| Expiry matches frozen provenance and keeps full cart cleanup (unresolved pages) | Closing only an attempt could free a quote without returning a pending cart's stock |
+| Card refusals describe an unconfirmed result in both languages (unresolved pages) | Staff were told someone was paying right now when the result was unknown |
 | Write-off confirmations use per-order decimal cents (#576 R4) | Frozen slot totals and binary rounding quoted 2.01 instead of 2.02, or 0.50 instead of 0.51, while the writer required more |
 | Receipt suppression uses discovery begun for the settlement decision (#576 R3) | An earlier unsplit read, or a failed latest read, offered a whole-order receipt after parts paid |
 | Write-off confirms only the unpaid remainder (#574-5) | The open-bill row showed MX$20 left while its confirmation claimed MX$100 lost |
@@ -5572,3 +5578,72 @@ open or paid page, or Stripe being unreachable, keeps the refusal. The
 walkout write-off reads open pages too instead of `card_checkout_at`, which a
 divided bill's own part pages stamp and never clear (R2).
 `whole-bill-pages.spec.ts`, `split-574-sql.spec.ts`.
+
+
+## Ordinary collections and account transfers share card-page recovery
+
+The SQL refusal and its caller had to agree about unresolved debt. Only divided
+bills asked Stripe about an expired page; ordinary collection and moving a bill
+to an account returned `paying` without recovery. `unresolved-writers.spec.ts`
+first failed on both writers, then verifies minute-36 paid pages remain refused
+and expired unpaid pages cause one identical retry. The source orders scope is
+kept separate from the destination account, so adding new food remains possible.
+`checkout-page-rpc.spec.ts` covers text, JSON, batch and exception refusals, and
+keeps ambiguous writes out of automatic retry. `unresolved-staff-routes.spec.ts`
+exercises full, partial and counter collection plus source-order transfer,
+including no success log or closure while unverified. Claude's SQL probes must prove
+that fresh collection at minute 36 changes no ledger or order before the webhook.
+
+## Account rows and the displayed hold agree at every age
+
+The deadline and the provider's result had to agree, but only the clock was read.
+`account-checkout-state.spec.ts` covers an open account row, an open linked diner
+attempt, tenant isolation, pagination below the requested page size, and failed
+reads. `unresolved-account-picker.spec.tsx` first fails against the old picker:
+an old timestamp hides an unresolved page. The new sale remains selectable and
+the public card action remains available to resume its original saved request.
+`unresolved-account-routes.spec.ts` covers both account collection and opening,
+including each currency variant, unchanged quotes, and unconfirmed refusals.
+
+## Cancellation's preview and locked write share the same payment state
+
+The account's timestamp and its saved payment page had to agree. They did not:
+an old deadline let a cancellation through, and a future deadline refused an
+already-expired page. `cancel-read.spec.tsx` verifies that unresolved rows block
+even when both old hold fields are absent, and confirmed expiry rebuilds the
+cancellation plan before the writer checks it. `cancel-race.spec.tsx` keeps the
+snapshot and provider refund ordering covered. SQL remains authoritative when
+another payment wins after the preview.
+
+## Recover the selected part, leaving the other parts alone
+
+A selected slot and its durable owner had to agree before another collection.
+The split wrapper handled `paying` but did not recover `reserved` or `taken`.
+`split-page-recovery.spec.ts` fails against the old wrapper and passes with
+recovery of only the selected owner IDs, preserving the original selection,
+quote, tip and reference on one retry. `whole-bill-pages.spec.ts` keeps modern
+part pages out of whole-bill conflict recovery; `split-slots-pay.spec.ts` keeps
+the owner's original request ahead of a new reservation or fee.
+
+## Expiry proves identity and completes the right cleanup
+
+Stripe's response and the saved checkout had to name the same page, amount,
+currency, mode, metadata and connected account. `unresolved-pages.spec.ts`
+rejects each mismatch, paid contradictions, failed reads and cleanup, old
+unbound keys, and multiple blockers. A recent unbound replay also names its
+exact attempt ID, so a newer page reusing the scope cannot be reopened instead.
+Ordinary expiry finishes only as unpaid; parts retire atomically; pay-now carts
+use the full abandonment path so stock and coupons return together.
+`unresolved-attempt.spec.ts` first fails on conflicting checkout opening, then
+checks one unchanged retry and no Stripe creation on an unverified refusal.
+
+## Unconfirmed payment copy means the same thing on every staff door
+
+The recorded outcome and the staff explanation had to agree. Ordinary bill,
+account and write-off messages claimed an active payer while split copy already
+said the result was unconfirmed. `unresolved-copy.spec.ts` first fails in both
+languages, then requires an unconfirmed result, retry and manager help for all
+applicable refusals. `unresolved-api-error.spec.ts` checks the shared
+`checkoutCode: checkout_unresolved` while preserving each route's existing
+outcome code and keeping historical attribution separate. The existing split
+message was already correct and is kept.
