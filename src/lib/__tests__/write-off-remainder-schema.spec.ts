@@ -36,7 +36,7 @@ it("the guard lets through only the change its own adjustment records", () => {
 });
 
 it("the forgiveness is an immutable record, one per order per operation", () => {
-  expect(sql).toContain("check (kind in ('cancel', 'forgive'))");
+  expect(sql).toContain("check (kind in ('cancel', 'forgive', 'return'))");
   expect(sql).toContain("round(previous_total - resulting_total, 2) = forgiven");
   expect(sql).toContain("for each row when (old.kind = 'forgive') execute function public.guard_order_adjustment();");
   expect(sql).toContain("create unique index if not exists order_adjustments_forgive_once");

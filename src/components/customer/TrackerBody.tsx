@@ -83,6 +83,7 @@ export default function TrackerBody({
           total={order.total}
           currency={order.currency}
           paid={order.paid !== false}
+          returnSummary={order.returnSummary}
         />
 
         {/* Paid, and the restaurant runs a visit card: the moment to offer it,

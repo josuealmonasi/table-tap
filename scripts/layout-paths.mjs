@@ -112,6 +112,10 @@ export const TILL = {
 export const DIALOGS = {
   "/dashboard/orders": [
     { name: "order detail", click: ".tt-order-card" },
+    { name: "completed sale return", click: "[data-order-return]", shows: "[data-return-form]" },
+  ],
+  "/dashboard/analytics": [
+    { name: "completed sale return", click: "[data-order-return]", shows: "[data-return-form]" },
   ],
   "/dashboard/bills": [
     { name: "settle", text: "Cobrar" },

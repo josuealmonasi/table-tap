@@ -5269,7 +5269,12 @@ begin
      where id = v_order.account_id and restaurant_id = p_restaurant;
   end if;
   return jsonb_build_object('outcome', 'settled', 'settled', true, 'repeat', true,
-    'orderId', v_order.id, 'total', v_order.total, 'currency', v_order.currency, 'method', v_order.pay_method, 'handedOver', v_order.status = 'completed')
+    'orderId', v_order.id,
+    -- What was collected: a return made since then lowers the order, but the
+    -- device must still be told the amount it took, or the sale never leaves
+    -- it (returns audit 6).
+    'total', v_order.total + coalesce((select sum(a.previous_total - a.resulting_total) from order_adjustments a
+      where a.order_id = v_order.id and a.restaurant_id = p_restaurant and a.kind = 'return'), 0), 'currency', v_order.currency, 'method', v_order.pay_method, 'handedOver', v_order.status = 'completed')
     || case when v_order.account_id is null then '{}'::jsonb
        else jsonb_build_object('onAccount', jsonb_build_object('name', v_name)) end;
 end;
@@ -5629,7 +5634,20 @@ create table if not exists refund_attempts (
 
 alter table refund_attempts add column if not exists attempt_no int not null default 1;
 alter table refund_attempts drop constraint if exists refund_attempts_operation_id_key;
-create unique index if not exists refund_attempts_number on refund_attempts(operation_id, attempt_no);
+-- Returns: provider evidence is either an attempt the app sent (`app`) or a
+-- manual refund a manager attributed to the operation (`manual`), numbered
+-- separately. Manual rows never POST; their key only names the evidence.
+alter table refund_attempts add column if not exists origin text not null default 'app';
+alter table refund_attempts add column if not exists currency text;
+alter table refund_attempts add column if not exists attribution_ref uuid;
+-- When this refund was first verified as succeeded. Retries and replays never
+-- move it, so a partial refund is reported on its own day (returns audit 7).
+alter table refund_attempts add column if not exists succeeded_at timestamptz;
+alter table refund_attempts drop constraint if exists refund_attempts_origin_check;
+alter table refund_attempts add constraint refund_attempts_origin_check check (origin in ('app', 'manual')
+  and (origin = 'app' or (attribution_ref is not null and stripe_refund_id is not null and provider_status is not null)));
+drop index if exists refund_attempts_number;
+create unique index if not exists refund_attempts_origin_number on refund_attempts(operation_id, origin, attempt_no);
 
 alter table refund_operations drop constraint if exists refund_operations_tip_check;
 alter table refund_operations add constraint refund_operations_tip_check check (tip >= 0 and tip <= amount and tip = round(tip, 2));
@@ -5841,14 +5859,26 @@ create constraint trigger check_receipt_allocations after insert or update on pa
 
 -- Old receipt tip metadata can be missing. That exception is named, not
 -- silently treated as proof that all historical money paid for food.
+-- The snapshot columns are added with write-offs further down; a SQL
+-- function's body is checked when it is created, so they exist from here.
+alter table order_adjustments add column if not exists resulting_total numeric;
+alter table order_adjustments add column if not exists resulting_tip numeric;
 create or replace function public.order_component_capacity(p_restaurant uuid, p_order uuid)
 returns jsonb language sql security definer set search_path = public as $$
-  select jsonb_build_object('principal', o.total - o.tip - coalesce(sum(a.amount - a.tip), 0),
-    'tip', o.tip - coalesce(sum(a.tip), 0),
-    'breakdown_unknown', coalesce(bool_or(p.breakdown_unknown), false))
-  from orders o left join payment_allocations a on a.order_id = o.id and a.restaurant_id = p_restaurant
-    left join payments p on p.id = a.payment_id
-  where o.id = p_order and o.restaurant_id = p_restaurant group by o.id;
+  -- Receipt attribution capacity: the order as it was before any return
+  -- (live components plus each return's immutable delta), less ORIGINAL
+  -- allocations. A returned MX$30 is not MX$30 a new receipt may spend.
+  select jsonb_build_object(
+    'principal', (o.total + coalesce(r.total, 0)) - (o.tip + coalesce(r.tip, 0)) - coalesce(a.principal, 0),
+    'tip', (o.tip + coalesce(r.tip, 0)) - coalesce(a.tip, 0),
+    'breakdown_unknown', coalesce(a.unknown, false))
+  from orders o
+  left join lateral (select sum(x.amount - x.tip) principal, sum(x.tip) tip, bool_or(p.breakdown_unknown) unknown
+    from payment_allocations x left join payments p on p.id = x.payment_id
+    where x.order_id = o.id and x.restaurant_id = p_restaurant) a on true
+  left join lateral (select sum(d.previous_total - d.resulting_total) total, sum(d.previous_tip - d.resulting_tip) tip
+    from order_adjustments d where d.order_id = o.id and d.restaurant_id = p_restaurant and d.kind = 'return') r on true
+  where o.id = p_order and o.restaurant_id = p_restaurant;
 $$;
 revoke all on function public.order_component_capacity(uuid, uuid) from public, anon, authenticated;
 grant execute on function public.order_component_capacity(uuid, uuid) to service_role;
@@ -5866,7 +5896,7 @@ begin
   if o.id is null or o.status <> 'cancelled' then return; end if;
   insert into order_adjustments(restaurant_id, order_id, kind, previous_total, previous_tip, actor, created_at)
     values(p_restaurant, o.id, 'cancel', o.total, o.tip, 'historical review', coalesce(o.cancelled_at, o.created_at))
-    on conflict(order_id, kind) do nothing;
+    on conflict (order_id) where kind = 'cancel' do nothing;
   select id into d from order_adjustments where order_id = o.id and kind = 'cancel';
   for g in select p.method, p.actor_email, p.currency, p.stripe_payment_intent, p.stripe_account_id,
       sum(a.amount) amount, sum(a.tip) tip, jsonb_agg(to_jsonb(a)) entries, f.id existing_operation
@@ -6079,26 +6109,38 @@ grant execute on function public.prepare_order_refund(uuid, uuid, text, jsonb, b
 -- and key survive a lost HTTP response, process crash, or repeated button tap.
 create or replace function public.start_refund_attempt(p_restaurant uuid, p_operation uuid)
 returns jsonb language plpgsql security definer set search_path = public as $$
-declare o refund_operations; a refund_attempts; v_order uuid; v_no int;
+declare o refund_operations; a refund_attempts; v_no int; v_progress jsonb; v_outstanding int;
 begin
   perform public.lock_restaurant_money(p_restaurant);
   select * into o from refund_operations where id = p_operation and restaurant_id = p_restaurant for update;
   if o.id is null or o.source <> 'stripe' or o.status = 'review' then return null; end if;
-  select * into a from refund_attempts where operation_id = o.id order by attempt_no desc limit 1;
-  if a.id is null or (o.status = 'failed' and a.provider_status in ('failed', 'canceled')) then
+  select * into a from refund_attempts where operation_id = o.id and origin = 'app' order by attempt_no desc limit 1;
+  -- A refund completed before attempts existed keeps its own evidence, so a
+  -- later failure of that refund still finds the row (audit R finding 1).
+  -- Only when the operation has no evidence at all: next to manual pieces a
+  -- full-amount row would count the money twice (verification 4).
+  if a.id is null and o.status = 'succeeded' and o.stripe_refund_id is not null
+    and not exists (select 1 from refund_attempts x where x.operation_id = o.id) then
+    insert into refund_attempts(restaurant_id, operation_id, attempt_no, idempotency_key, amount, currency,
+        stripe_account_id, stripe_payment_intent, stripe_refund_id, provider_status)
+      values(p_restaurant, o.id, 1, 'return-' || o.id || '-' || 1, o.amount, o.currency,
+        o.stripe_account_id, o.stripe_payment_intent, o.stripe_refund_id, 'succeeded') returning * into a;
+    update refund_attempts set succeeded_at = o.completed_at where id = a.id returning * into a;
+  end if;
+  v_progress := public.refund_operation_progress_v1(o.id);
+  v_outstanding := (v_progress->>'outstanding_cents')::int;
+  -- Every unresolved app POST is reused unchanged: same row, key and body.
+  -- A new one opens only for what is still owed, numbered per operation so
+  -- two returns on one charge never share a key.
+  if o.status <> 'succeeded' and not (v_progress->>'unresolved')::boolean and v_outstanding > 0 then
     v_no := coalesce(a.attempt_no, 0) + 1;
-    select order_id into v_order from order_adjustments where id = o.adjustment_id;
-    -- A refund completed before attempts existed keeps its own evidence, so a
-    -- later failure of that refund still finds the row (audit R finding 1).
-    insert into refund_attempts(restaurant_id, operation_id, attempt_no, idempotency_key, amount, stripe_account_id, stripe_payment_intent, stripe_refund_id, provider_status)
-      values(p_restaurant, o.id, v_no,
-        case when v_no = 1 then 'cancel-' || v_order || '-' || o.stripe_payment_intent else 'return-' || o.id || '-' || v_no end,
-        o.amount, o.stripe_account_id, o.stripe_payment_intent,
-        case when a.id is null and o.status = 'succeeded' then o.stripe_refund_id end,
-        case when a.id is null and o.status = 'succeeded' then 'succeeded' end) returning * into a;
+    insert into refund_attempts(restaurant_id, operation_id, attempt_no, idempotency_key, amount, currency,
+        stripe_account_id, stripe_payment_intent)
+      values(p_restaurant, o.id, v_no, 'return-' || o.id || '-' || v_no, v_outstanding / 100.0, o.currency,
+        o.stripe_account_id, o.stripe_payment_intent) returning * into a;
   end if;
   if o.status <> 'succeeded' then update refund_operations set status = 'processing' where id = o.id; end if;
-  return to_jsonb(a) || jsonb_build_object('operation_status', o.status);
+  return to_jsonb(a) || jsonb_build_object('operation_status', o.status, 'outstanding_cents', v_outstanding);
 end;
 $$;
 revoke all on function public.start_refund_attempt(uuid, uuid) from public, anon, authenticated;
@@ -6116,8 +6158,10 @@ begin
   if o.id is null then return false; end if;
   if o.status = 'succeeded' then return true; end if;
   if o.source = 'stripe' and p_attempt is distinct from
-    (select id from refund_attempts where operation_id = o.id order by attempt_no desc limit 1) then return false; end if;
+    (select id from refund_attempts where operation_id = o.id and origin = 'app' order by attempt_no desc limit 1) then return false; end if;
   if o.source = 'stripe' and p_refund is null then raise exception 'provider refund required'; end if;
+  -- One provider refund pays one obligation (returns audit 1).
+  if o.source = 'stripe' and public.refund_id_taken_v1(p_restaurant, p_refund, o.id) then return false; end if;
   if o.source <> 'stripe' and (o.source = 'review' or p_refund is not null) then raise exception 'review required'; end if;
   if p_status not in ('succeeded', 'pending', 'requires_action', 'failed', 'canceled') then raise exception 'invalid refund status'; end if;
   -- Stripe already told us this refund failed: a late "succeeded" read is
@@ -6125,7 +6169,8 @@ begin
   -- one instead of finding this one again for ever (audit Q 2).
   select f.provider_status into v_failed from refund_failures f where f.restaurant_id = p_restaurant and f.stripe_refund_id = p_refund;
   if v_failed is not null then p_status := v_failed; end if;
-  update refund_attempts set stripe_refund_id = p_refund, provider_status = p_status, updated_at = now()
+  update refund_attempts set stripe_refund_id = p_refund, provider_status = p_status, updated_at = now(),
+    succeeded_at = case when p_status = 'succeeded' then coalesce(succeeded_at, now()) else succeeded_at end
     where operation_id = o.id and id = p_attempt;
   update refund_operations set stripe_refund_id = p_refund, provider_status = p_status,
     status = case when p_status = 'succeeded' then 'succeeded' when p_status in ('failed', 'canceled') then 'failed' else 'processing' end,
@@ -6170,6 +6215,7 @@ begin
   -- Nothing it protects changed, which is a kitchen moving a ticket along:
   -- no coverage read on every board update.
   if new.total is not distinct from old.total and new.tip is not distinct from old.tip
+    and new.service_fee is not distinct from old.service_fee
     and new.written_off is not distinct from old.written_off
     and new.account_id is not distinct from old.account_id
     and (new.status is not distinct from old.status or new.status <> 'cancelled') then return new; end if;
@@ -6185,6 +6231,18 @@ begin
       and old.total - new.total <= coalesce((select (c.order_discounts->>old.id::text)::numeric
         from diner_checkouts c where c.id::text = current_setting('tabletap.diner_discount', true)
           and c.stripe_payment_intent is not null and not c.discount_applied), 0) then return new; end if;
+    -- A return on a completed order (returns contract): exactly the change its
+    -- own adjustment records, named by this transaction. An older return row
+    -- or a blanket refund flag authorizes nothing.
+    if new.paid and old.paid and new.status = old.status and new.written_off = old.written_off
+      and new.account_id is not distinct from old.account_id
+      and exists (select 1 from order_adjustments a
+        where a.restaurant_id = old.restaurant_id and a.order_id = old.id and a.kind = 'return'
+          and a.id::text = current_setting('tabletap.return_adjustment', true)
+          and a.previous_total = old.total and a.resulting_total = new.total
+          and a.previous_tip = old.tip and a.resulting_tip = new.tip
+          and a.previous_service_fee = coalesce(old.service_fee, 0)
+          and a.resulting_service_fee = coalesce(new.service_fee, 0)) then return new; end if;
     -- Writing off the rest of a part-paid bill: the total comes down to what
     -- was paid, exactly, the order is paid and completed, and the adjustment
     -- recording what was forgiven must already exist for this very change.
@@ -6206,7 +6264,7 @@ end;
 $$;
 revoke all on function public.guard_allocated_order() from public, anon, authenticated;
 drop trigger if exists guard_allocated_order on orders;
-create trigger guard_allocated_order before update of total, tip, written_off, account_id, status on orders
+create trigger guard_allocated_order before update of total, tip, service_fee, written_off, account_id, status on orders
   for each row execute function public.guard_allocated_order();
 
 create or replace function public.check_refund_allocations()
@@ -6283,7 +6341,9 @@ begin
     and public.retained_order_coverage(o.restaurant_id, o.id) < o.total then
     raise exception 'settled order lacks retained payment coverage';
   end if;
-  v_capacity := public.order_component_capacity(o.restaurant_id, o.id);
+  -- Retained components: a return gives money back and lowers the order to
+  -- match, so what must still be covered is net of every reserved refund.
+  v_capacity := public.retained_order_component_capacity_v1(o.restaurant_id, o.id);
   if not (v_capacity->>'breakdown_unknown')::boolean
     and ((v_capacity->>'principal')::numeric <> 0 or (v_capacity->>'tip')::numeric <> 0) then
     raise exception 'settled order lacks principal or tip coverage';
@@ -6331,6 +6391,9 @@ begin
     fee_reconciled_at = case when v_returned >= greatest(coalesce(fee_target_cents, 0), p_target) then coalesce(fee_reconciled_at, now()) end
     where restaurant_id = p_restaurant and stripe_payment_intent = p_intent
       and status = 'succeeded' and source = 'stripe'
+      -- The header is the latest refund that completed the operation, so a
+      -- snapshot holding it was read after completion. Matching any earlier
+      -- piece let a stale partial snapshot reconcile it (verification 5).
       and (p_refunds is null or stripe_refund_id = any(p_refunds));
   -- Duplicate-charge recovery must use this final snapshot too. A manual
   -- refund between provider reads can leave more of our fee still owed.
@@ -6469,8 +6532,12 @@ begin
   else
     update refund_attempts set provider_status = p_status, updated_at = now() where id = v_attempt;
     select * into o from refund_operations where id = o.id and restaurant_id = p_restaurant for update;
-    select id into v_latest from refund_attempts where operation_id = o.id order by attempt_no desc limit 1;
-    if v_latest = v_attempt and o.status in ('succeeded', 'processing') then
+    -- App or manual evidence: the operation reopens when what still counts no
+    -- longer covers its promise and no app POST is in flight. The adjustment
+    -- and its reservation stay; only the customer's money is owed again.
+    if o.status in ('succeeded', 'processing')
+      and (public.refund_operation_progress_v1(o.id)->>'outstanding_cents')::int > 0
+      and not (public.refund_operation_progress_v1(o.id)->>'unresolved')::boolean then
       update refund_operations set status = 'failed', provider_status = p_status, completed_at = null,
         fee_verification_pending = false, fee_target_cents = null, fee_reconciled_at = null where id = o.id;
       v_reopened := 'operation';
@@ -8308,6 +8375,8 @@ begin
   if p_attempt is distinct from (select id from refund_due_attempts where due_id = d.id order by attempt_no desc limit 1) then return false; end if;
   if p_status not in ('succeeded', 'pending', 'requires_action', 'failed', 'canceled') then raise exception 'invalid provider outcome'; end if;
   if p_refund is null then raise exception 'provider evidence required'; end if;
+  -- One provider refund pays one obligation (returns audit 1).
+  if public.refund_owned_by_return_v1(p_restaurant, p_refund) then return false; end if;
   -- Stripe already told us this refund failed: record that on this attempt
   -- (so a retry opens a new one) and never complete it (audit Q 2).
   select f.provider_status into v_failed from refund_failures f where f.restaurant_id = p_restaurant and f.stripe_refund_id = p_refund;
@@ -8562,7 +8631,10 @@ begin
   end if;
   if p_status not in ('succeeded', 'pending', 'requires_action', 'failed', 'canceled') then raise exception 'invalid provider outcome'; end if;
   if p_refunds is null or jsonb_typeof(p_refunds) <> 'array' then raise exception 'provider evidence required'; end if;
-  v_first := p_refunds->0->>'id';
+  -- Pending, requires_action or failed: the id is this attempt's own refund
+  -- and is kept for its retry (verification 3). Success picks below.
+  v_first := case when p_status <> 'succeeded' and not public.refund_owned_by_return_v1(p_restaurant, p_refunds->0->>'id')
+    then p_refunds->0->>'id' end;
   v_due := round(d.amount * 100);
   if p_status = 'succeeded' then
     if jsonb_array_length(p_refunds) = 0 then raise exception 'provider evidence required'; end if;
@@ -8573,6 +8645,10 @@ begin
       if exists (select 1 from refund_failures f where f.restaurant_id = p_restaurant and f.stripe_refund_id = e->>'id') then
         v_any_failed := true;
       end if;
+      -- A refund a return operation counts is that return's (returns audit 1).
+      continue when public.refund_owned_by_return_v1(p_restaurant, e->>'id');
+      -- The due names a refund it counted, never one a return owns (verification 2, V1).
+      v_first := coalesce(v_first, e->>'id');
       -- Once a refund failed it stays inactive, however often it is reported.
       insert into refund_due_coverage (restaurant_id, due_id, attempt_id, stripe_refund_id, amount_cents, active)
         values (p_restaurant, d.id, p_attempt, e->>'id', (e->>'amount_cents')::int,
@@ -8618,16 +8694,29 @@ grant execute on function public.finish_refund_due_attempt_v2(uuid, uuid, uuid, 
 create or replace function public.record_refund_due_coverage_v1(
   p_restaurant uuid, p_due uuid, p_actor text, p_refunds jsonb
 ) returns jsonb language plpgsql security definer set search_path = public as $$
-declare d refunds_due; e jsonb; v_due int; v_covered int;
+declare d refunds_due; e jsonb; v_due int; v_covered int; v_first text;
 begin
   perform public.lock_restaurant_money(p_restaurant);
   select * into d from refunds_due where id = p_due and restaurant_id = p_restaurant for update;
   if d.id is null then return jsonb_build_object('outcome', 'missing'); end if;
   if p_refunds is null or jsonb_typeof(p_refunds) <> 'array' then raise exception 'provider evidence required'; end if;
+  -- An attempt already sent may still succeed for the whole due. Counting a
+  -- manual refund now would let both leave; the attempt is resumed first
+  -- with its saved key, and its own refund decides (returns audit, due side).
+  if exists (select 1 from refund_due_attempts a where a.due_id = d.id and a.restaurant_id = p_restaurant
+      and a.attempt_no = (select max(b.attempt_no) from refund_due_attempts b where b.due_id = d.id)
+      and (a.provider_status is null or a.provider_status not in ('succeeded', 'failed', 'canceled'))) then
+    p_refunds := '[]'::jsonb;
+  end if;
   for e in select * from jsonb_array_elements(p_refunds) loop
     if coalesce(e->>'id', '') = '' or (e->>'amount_cents')::int is null or (e->>'amount_cents')::int <= 0 then
       raise exception 'invalid refund evidence';
     end if;
+    -- One provider refund pays one obligation. A refund a return operation
+    -- already counts is that return's, not this duplicate charge's (returns
+    -- audit 1): counting it twice would close both with half the money back.
+    continue when public.refund_owned_by_return_v1(p_restaurant, e->>'id');
+    v_first := coalesce(v_first, e->>'id');
     insert into refund_due_coverage (restaurant_id, due_id, attempt_id, stripe_refund_id, amount_cents, active)
       values (p_restaurant, d.id, null, e->>'id', (e->>'amount_cents')::int,
         not exists (select 1 from refund_failures f where f.restaurant_id = p_restaurant and f.stripe_refund_id = e->>'id'))
@@ -8638,7 +8727,7 @@ begin
   if v_covered >= v_due then
     if d.refunded_at is null then
       update refunds_due set refunded_at = now(), refunded_by = p_actor,
-        stripe_refund_id = coalesce(d.stripe_refund_id, p_refunds->0->>'id'), fee_verification_pending = true
+        stripe_refund_id = coalesce(d.stripe_refund_id, v_first), fee_verification_pending = true
         where id = d.id;
       return jsonb_build_object('outcome', 'completed', 'marked', true, 'outstanding_cents', 0);
     end if;
@@ -11440,7 +11529,8 @@ grant execute on function public.retire_split_attempt_v1(uuid, uuid) to service_
 -- original and resulting totals, what was forgiven, and who and why.
 -- `written_off` keeps meaning "the whole order was forgiven".
 alter table order_adjustments drop constraint if exists order_adjustments_kind_check;
-alter table order_adjustments add constraint order_adjustments_kind_check check (kind in ('cancel', 'forgive'));
+-- 'return' too: rerunning this file must accept the return rows added below.
+alter table order_adjustments add constraint order_adjustments_kind_check check (kind in ('cancel', 'forgive', 'return'));
 alter table order_adjustments add column if not exists resulting_total numeric;
 alter table order_adjustments add column if not exists resulting_tip numeric;
 alter table order_adjustments add column if not exists forgiven numeric;
@@ -11692,3 +11782,567 @@ begin
 end $$;
 revoke all on function public.release_unreached_account_page_v1(uuid, uuid) from public, anon, authenticated;
 grant execute on function public.release_unreached_account_page_v1(uuid, uuid) to service_role;
+
+-- ── Returns on completed orders (contract: loop/dialogue/returns-contract.md) ──
+--
+-- A completed order could not get money back through the app: cancellation
+-- takes only orders still in the kitchen, and would restock an eaten meal.
+-- A return gives back part or all of what was paid on a paid, completed
+-- order. Its own immutable adjustment records the order before and after,
+-- the money plan reuses refund_operations and refund_allocations from the
+-- original receipts, and the order comes down to match: still paid, still
+-- completed, stock untouched. The sale stays the sale; the return is dated.
+alter table order_adjustments drop constraint if exists order_adjustments_kind_check;
+alter table order_adjustments add constraint order_adjustments_kind_check check (kind in ('cancel', 'forgive', 'return'));
+alter table order_adjustments add column if not exists amount_cents int;
+alter table order_adjustments add column if not exists request jsonb;
+-- Several returns per order; still one cancellation.
+alter table order_adjustments drop constraint if exists order_adjustments_order_id_kind_key;
+create unique index if not exists order_adjustments_one_cancel on order_adjustments (order_id) where kind = 'cancel';
+create unique index if not exists order_adjustments_return_once on order_adjustments (restaurant_id, operation_ref)
+  where kind = 'return';
+alter table order_adjustments drop constraint if exists order_adjustments_return_check;
+alter table order_adjustments add constraint order_adjustments_return_check check (kind <> 'return' or (
+  amount_cents is not null and amount_cents > 0 and operation_ref is not null and request is not null
+  and resulting_total is not null and resulting_tip is not null
+  and previous_service_fee is not null and resulting_service_fee is not null
+  and resulting_total >= 0 and resulting_tip >= 0 and resulting_service_fee >= 0
+  and resulting_service_fee <= resulting_total - resulting_tip
+  and round((previous_total - resulting_total) * 100) = amount_cents
+  and resulting_tip <= previous_tip and resulting_service_fee <= previous_service_fee));
+drop trigger if exists guard_order_adjustment on order_adjustments;
+create trigger guard_order_adjustment before update or delete on order_adjustments
+  for each row when (old.kind in ('forgive', 'return')) execute function public.guard_order_adjustment();
+
+-- What a paid order must still have covered: its current components less what
+-- its receipts still hold after every reserved refund. No missing-data-as-zero.
+create or replace function public.retained_order_component_capacity_v1(p_restaurant uuid, p_order uuid)
+returns jsonb language sql stable security definer set search_path = public as $$
+  select jsonb_build_object(
+    'principal', o.total - o.tip - coalesce(a.principal, 0),
+    'tip', o.tip - coalesce(a.tip, 0),
+    'breakdown_unknown', coalesce(a.unknown, false))
+  from orders o
+  left join lateral (select sum((x.amount - coalesce(r.amount, 0)) - (x.tip - coalesce(r.tip, 0))) principal,
+      sum(x.tip - coalesce(r.tip, 0)) tip, bool_or(p.breakdown_unknown) unknown
+    from payment_allocations x left join payments p on p.id = x.payment_id
+    left join lateral (select sum(amount) amount, sum(tip) tip from refund_allocations where allocation_id = x.id) r on true
+    where x.order_id = o.id and x.restaurant_id = p_restaurant) a on true
+  where o.id = p_order and o.restaurant_id = p_restaurant;
+$$;
+revoke all on function public.retained_order_component_capacity_v1(uuid, uuid) from public, anon, authenticated;
+grant execute on function public.retained_order_component_capacity_v1(uuid, uuid) to service_role;
+
+-- Gives back part or all of what a paid, completed order was paid.
+-- Components (contract, integer cents): P = total - tip, S = service,
+-- F = P - S. principal_return = min(A, P), tip_return = A - principal_return;
+-- the principal splits across food and service by largest remainders of their
+-- shares, food first on a tie. Across the receipts still holding money,
+-- principal is taken first in (payment.created_at, payment.id, allocation.id)
+-- order, then tips in the same order; operations group by source, charge,
+-- account, currency and collector.
+create or replace function public.return_on_order_v1(
+  p_restaurant uuid, p_order uuid, p_amount_cents int, p_actor text, p_reason text, p_note text, p_ref uuid,
+  p_expected_total_cents int, p_expected_tip_cents int, p_expected_service_cents int
+) returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  o orders;
+  d order_adjustments%rowtype;
+  v_request jsonb;
+  v_total int; v_tip int; v_service int; v_p int; v_f int;
+  v_pr int; v_tr int; v_sr int; v_fr int; v_rem int;
+  v_have_p int := 0; v_have_t int := 0; v_unknown boolean;
+  v_left_p int; v_left_t int; v_take_p int; v_take_t int;
+  v_adjustment uuid; v_operation uuid;
+  x record; g record;
+  v_plan jsonb := '[]'::jsonb;
+  v_ops jsonb := '[]'::jsonb;
+begin
+  if p_ref is null or p_amount_cents is null or nullif(btrim(p_actor), '') is null or nullif(btrim(p_reason), '') is null then
+    return jsonb_build_object('outcome', 'invalid');
+  end if;
+  perform public.lock_restaurant_money(p_restaurant);
+  perform set_config('tabletap.allocation_writer', 'v1', true);
+  perform public.backfill_payment_allocations(p_restaurant);
+  perform set_config('tabletap.allocation_scope', '', true);
+  v_request := jsonb_build_object('order', p_order, 'amount_cents', p_amount_cents, 'actor', p_actor,
+    'reason', p_reason, 'note', coalesce(p_note, ''), 'total_cents', p_expected_total_cents,
+    'tip_cents', p_expected_tip_cents, 'service_cents', p_expected_service_cents);
+
+  -- The reference first: the same request returns its saved plan.
+  select * into d from order_adjustments where restaurant_id = p_restaurant and operation_ref = p_ref and kind = 'return';
+  if found then
+    if d.request is distinct from v_request then return jsonb_build_object('outcome', 'conflict'); end if;
+    return jsonb_build_object('outcome', 'prepared', 'replay', true, 'adjustment', d.id, 'amount_cents', d.amount_cents,
+      'previous', jsonb_build_object('total', d.previous_total, 'tip', d.previous_tip, 'service_fee', d.previous_service_fee),
+      'resulting', jsonb_build_object('total', d.resulting_total, 'tip', d.resulting_tip, 'service_fee', d.resulting_service_fee),
+      'operations', coalesce((select jsonb_agg(jsonb_build_object('id', id, 'source', source, 'amount', amount, 'tip', tip) order by id)
+        from refund_operations where adjustment_id = d.id), '[]'::jsonb));
+  end if;
+
+  select * into o from orders where restaurant_id = p_restaurant and id = p_order for update;
+  if o.id is null then return jsonb_build_object('outcome', 'missing'); end if;
+  if not o.paid or o.status <> 'completed' or o.written_off or o.account_id is not null then
+    return jsonb_build_object('outcome', 'ineligible');
+  end if;
+  if exists (select 1 from bill_splits b where b.restaurant_id = p_restaurant and b.status in ('proposed', 'locked')
+    and (b.session_id = o.session_id or o.id = any(b.order_ids))) then
+    return jsonb_build_object('outcome', 'split');
+  end if;
+  v_total := round(o.total * 100)::int; v_tip := round(o.tip * 100)::int; v_service := round(coalesce(o.service_fee, 0) * 100)::int;
+  -- What the screen showed, exactly, or nothing changes.
+  if v_total <> p_expected_total_cents or v_tip <> p_expected_tip_cents or v_service <> p_expected_service_cents then
+    return jsonb_build_object('outcome', 'changed');
+  end if;
+  -- Money nobody can attribute exactly goes to a person, not to a guess.
+  if (public.order_coverage(p_restaurant, array[o.id])->0->>'unresolved')::boolean
+    or exists (select 1 from jsonb_array_elements(public.order_refund_coverage(p_restaurant, o.id)) c
+      where c->>'allocation_quality' <> 'exact' or c->>'currency' is distinct from o.currency
+        or (c->>'stripe_payment_intent' is not null and c->>'stripe_account_id' is null)) then
+    return jsonb_build_object('outcome', 'review');
+  end if;
+  -- A receipt that never recorded its tip holds the order's money with the tip
+  -- inside it. A return of the food comes out of it exactly; the tip's share
+  -- cannot be placed, so only that part goes to a person (returns audit 8;
+  -- 41% of production's receipts are like this, so refusing all of it would
+  -- leave most old sales with no return at all).
+  v_unknown := (public.retained_order_component_capacity_v1(p_restaurant, o.id)->>'breakdown_unknown')::boolean;
+  for x in select (c->>'amount')::numeric amount, (c->>'tip')::numeric tip
+    from jsonb_array_elements(public.order_refund_coverage(p_restaurant, o.id)) c loop
+    v_have_p := v_have_p + round((x.amount - x.tip) * 100)::int;
+    v_have_t := v_have_t + round(x.tip * 100)::int;
+  end loop;
+
+  v_p := v_total - v_tip;
+  v_pr := least(p_amount_cents, v_p);
+  v_tr := p_amount_cents - v_pr;
+  if v_unknown and v_tr > 0 then return jsonb_build_object('outcome', 'review'); end if;
+  if p_amount_cents <= 0 or p_amount_cents > v_total or v_tr > v_tip or v_pr > v_have_p or v_tr > v_have_t then
+    return jsonb_build_object('outcome', 'capacity');
+  end if;
+  -- Food and service, by largest remainders, food first on a tie.
+  v_f := v_p - v_service;
+  if v_p > 0 then
+    -- bigint: a MX$500 return already multiplies 50000 × 50000 cents.
+    v_sr := ((v_pr::bigint * v_service) / v_p)::int;
+    v_fr := ((v_pr::bigint * v_f) / v_p)::int;
+    v_rem := v_pr - v_sr - v_fr;
+    if v_rem > 0 then
+      if ((v_pr::bigint * v_f) % v_p) >= ((v_pr::bigint * v_service) % v_p) then v_fr := v_fr + v_rem; else v_sr := v_sr + v_rem; end if;
+    end if;
+  else
+    v_sr := 0; v_fr := 0;
+  end if;
+
+  insert into order_adjustments (restaurant_id, order_id, kind, previous_total, previous_tip, previous_service_fee,
+    resulting_total, resulting_tip, resulting_service_fee, amount_cents, actor, reason, note, operation_ref, request, currency)
+  values (p_restaurant, o.id, 'return', o.total, o.tip, coalesce(o.service_fee, 0),
+    round((v_total - p_amount_cents) / 100.0, 2), round((v_tip - v_tr) / 100.0, 2), round((v_service - v_sr) / 100.0, 2),
+    p_amount_cents, p_actor, p_reason, nullif(btrim(p_note), ''), p_ref, v_request, o.currency)
+  returning id into v_adjustment;
+
+  -- The plan: principal first across the receipts in stable order, then tips.
+  v_left_p := v_pr; v_left_t := v_tr;
+  for x in select (c->>'id')::uuid id, round(((c->>'amount')::numeric - (c->>'tip')::numeric) * 100)::int principal,
+      round((c->>'tip')::numeric * 100)::int tip, p.created_at, p.id payment_id
+    from jsonb_array_elements(public.order_refund_coverage(p_restaurant, o.id)) c
+    join payments p on p.id = (c->>'payment_id')::uuid
+    order by p.created_at, p.id, (c->>'id')::uuid loop
+    v_take_p := least(v_left_p, x.principal); v_left_p := v_left_p - v_take_p;
+    v_plan := v_plan || jsonb_build_object('id', x.id, 'p', v_take_p, 't', 0, 'tip_room', x.tip);
+  end loop;
+  -- Tips, in the same order.
+  select coalesce(jsonb_agg(e), '[]'::jsonb) into v_plan from (
+    select e || jsonb_build_object('t', 0) e from jsonb_array_elements(v_plan) e) z;
+  declare v_i int := 0; v_e jsonb; v_new jsonb := '[]'::jsonb;
+  begin
+    for v_e in select * from jsonb_array_elements(v_plan) loop
+      v_take_t := least(v_left_t, (v_e->>'tip_room')::int); v_left_t := v_left_t - v_take_t;
+      v_new := v_new || (v_e || jsonb_build_object('t', v_take_t));
+    end loop;
+    v_plan := v_new;
+  end;
+  if v_left_p <> 0 or v_left_t <> 0 then raise exception 'return plan does not cover its amount'; end if;
+
+  for g in select
+      case when c->>'stripe_payment_intent' is not null and c->>'stripe_account_id' is not null then 'stripe'
+        when c->>'method' = 'cash' then 'cash' else 'terminal' end as source,
+      c->>'currency' as currency, c->>'stripe_account_id' as account, c->>'stripe_payment_intent' as intent,
+      case when c->>'stripe_payment_intent' is null then c->>'actor_email' end as collector,
+      sum(((e->>'p')::int + (e->>'t')::int) / 100.0) as amount, sum((e->>'t')::int / 100.0) as tip,
+      jsonb_agg(jsonb_build_object('id', c->>'id', 'amount', ((e->>'p')::int + (e->>'t')::int) / 100.0, 'tip', (e->>'t')::int / 100.0)) as entries
+    from jsonb_array_elements(v_plan) e
+    join jsonb_array_elements(public.order_refund_coverage(p_restaurant, o.id)) c on c->>'id' = e->>'id'
+    where (e->>'p')::int + (e->>'t')::int > 0
+    group by 1, 2, 3, 4, 5 loop
+    insert into refund_operations (restaurant_id, adjustment_id, source, amount, tip, currency,
+      stripe_account_id, stripe_payment_intent, original_collector, status)
+    values (p_restaurant, v_adjustment, g.source, g.amount, g.tip, g.currency, g.account, g.intent, g.collector, 'pending')
+    returning id into v_operation;
+    insert into refund_allocations (restaurant_id, operation_id, allocation_id, amount, tip)
+    select p_restaurant, v_operation, (y->>'id')::uuid, (y->>'amount')::numeric, (y->>'tip')::numeric
+      from jsonb_array_elements(g.entries) y;
+    v_ops := v_ops || jsonb_build_object('id', v_operation, 'source', g.source, 'amount', g.amount, 'tip', g.tip);
+  end loop;
+
+  -- The order comes down to match, by exactly the change its adjustment names.
+  perform set_config('tabletap.return_adjustment', v_adjustment::text, true);
+  update orders set total = round((v_total - p_amount_cents) / 100.0, 2), tip = round((v_tip - v_tr) / 100.0, 2),
+    service_fee = round((v_service - v_sr) / 100.0, 2)
+   where id = o.id and restaurant_id = p_restaurant;
+  perform set_config('tabletap.return_adjustment', '', true);
+
+  return jsonb_build_object('outcome', 'prepared', 'replay', false, 'adjustment', v_adjustment, 'amount_cents', p_amount_cents,
+    'previous', jsonb_build_object('total', o.total, 'tip', o.tip, 'service_fee', coalesce(o.service_fee, 0)),
+    'resulting', jsonb_build_object('total', round((v_total - p_amount_cents) / 100.0, 2), 'tip', round((v_tip - v_tr) / 100.0, 2),
+      'service_fee', round((v_service - v_sr) / 100.0, 2)),
+    'operations', v_ops);
+end; $$;
+revoke all on function public.return_on_order_v1(uuid, uuid, int, text, text, text, uuid, int, int, int) from public, anon, authenticated;
+grant execute on function public.return_on_order_v1(uuid, uuid, int, text, text, text, uuid, int, int, int) to service_role;
+
+-- The whole plan reconciles with its adjustment, checked at commit: the
+-- operations' money equals the amount, their tips equal the tip returned, and
+-- every allocation belongs to the adjusted order.
+create or replace function public.check_order_return_adjustment_v1()
+returns trigger language plpgsql security definer set search_path = public as $$
+declare d order_adjustments; v_amount numeric; v_tip numeric;
+begin
+  -- Fires on both tables; only refund_operations has adjustment_id.
+  if tg_table_name = 'order_adjustments' then
+    select * into d from order_adjustments where id = new.id;
+  else
+    select * into d from order_adjustments where id = new.adjustment_id;
+  end if;
+  if d.id is null or d.kind <> 'return' then return null; end if;
+  select coalesce(sum(o.amount), 0), coalesce(sum(o.tip), 0) into v_amount, v_tip
+    from refund_operations o where o.adjustment_id = d.id;
+  if round(v_amount * 100) <> d.amount_cents or round(v_tip * 100) <> round((d.previous_tip - d.resulting_tip) * 100) then
+    raise exception 'return plan does not reconcile with its adjustment';
+  end if;
+  if exists (select 1 from refund_operations o join refund_allocations r on r.operation_id = o.id
+    join payment_allocations a on a.id = r.allocation_id
+    where o.adjustment_id = d.id and a.order_id is distinct from d.order_id) then
+    raise exception 'return plan reaches another order';
+  end if;
+  return null;
+end $$;
+revoke all on function public.check_order_return_adjustment_v1() from public, anon, authenticated;
+drop trigger if exists check_order_return_adjustment on order_adjustments;
+create constraint trigger check_order_return_adjustment after insert on order_adjustments
+  deferrable initially deferred for each row execute function public.check_order_return_adjustment_v1();
+drop trigger if exists check_order_return_operations on refund_operations;
+create constraint trigger check_order_return_operations after insert or update on refund_operations
+  deferrable initially deferred for each row execute function public.check_order_return_adjustment_v1();
+
+-- What an operation has actually got back to the customer: distinct succeeded
+-- provider refunds, app or manual, that no later failure overruled; and
+-- whether an app POST is still unresolved. Cash and terminal operations are
+-- covered only by their own confirmed completion.
+create or replace function public.refund_operation_progress_v1(p_operation uuid)
+returns jsonb language sql stable security definer set search_path = public as $$
+  select jsonb_build_object(
+    -- Cash and terminal have no provider evidence: their own confirmation is it.
+    'outstanding_cents', case when o.source <> 'stripe' then case when o.status = 'succeeded' then 0 else round(o.amount * 100)::int end
+      -- Completed before attempts existed: its own header is its evidence.
+      when o.status = 'succeeded' and o.stripe_refund_id is not null
+        and not exists (select 1 from refund_attempts x where x.operation_id = o.id) then 0
+      else round(o.amount * 100)::int - coalesce((select sum(c) from (
+        select distinct on (a.stripe_refund_id) round(a.amount * 100)::int c from refund_attempts a
+        where a.operation_id = o.id and a.provider_status = 'succeeded' and a.stripe_refund_id is not null
+          and not exists (select 1 from refund_failures f where f.restaurant_id = a.restaurant_id and f.stripe_refund_id = a.stripe_refund_id)
+        order by a.stripe_refund_id, a.attempt_no, a.id) z), 0) end,
+    'unresolved', exists (select 1 from refund_attempts a where a.operation_id = o.id and a.origin = 'app'
+      and (a.provider_status is null or a.provider_status not in ('succeeded', 'failed', 'canceled'))))
+  from refund_operations o where o.id = p_operation;
+$$;
+revoke all on function public.refund_operation_progress_v1(uuid) from public, anon, authenticated;
+grant execute on function public.refund_operation_progress_v1(uuid) to service_role;
+
+-- One provider refund pays one obligation: an operation or a duplicate due,
+-- never both, and never two operations.
+create or replace function public.refund_id_taken_v1(p_restaurant uuid, p_refund text, p_operation uuid)
+returns boolean language sql stable security definer set search_path = public as $$
+  -- Used by every return writer; refund_owned_by_return_v1 is the due side's.
+  select exists (select 1 from refund_attempts where restaurant_id = p_restaurant and stripe_refund_id = p_refund and operation_id <> p_operation)
+    or exists (select 1 from refund_operations where restaurant_id = p_restaurant and stripe_refund_id = p_refund and id <> p_operation)
+    or exists (select 1 from refunds_due where restaurant_id = p_restaurant and stripe_refund_id = p_refund)
+    or exists (select 1 from refund_due_attempts where restaurant_id = p_restaurant and stripe_refund_id = p_refund)
+    or exists (select 1 from refund_due_coverage where restaurant_id = p_restaurant and stripe_refund_id = p_refund);
+$$;
+revoke all on function public.refund_id_taken_v1(uuid, text, uuid) from public, anon, authenticated;
+grant execute on function public.refund_id_taken_v1(uuid, text, uuid) to service_role;
+
+-- Completion, stamped once, when the promise is covered and nothing is in flight.
+create or replace function public.complete_refund_operation_v1(p_operation uuid, p_actor text)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare o refund_operations; v jsonb;
+begin
+  select * into o from refund_operations where id = p_operation for update;
+  v := public.refund_operation_progress_v1(o.id);
+  if (v->>'outstanding_cents')::int = 0 and not (v->>'unresolved')::boolean then
+    if o.status <> 'succeeded' then
+      -- A fee snapshot read before this completion cannot reconcile it: the
+      -- charge's revision moves on, as a failure moves it (verification 2, V5).
+      -- Queued too, so an interrupted request is still reconciled later.
+      if o.source = 'stripe' then perform public.enqueue_fee_reconcile(o.restaurant_id, o.stripe_payment_intent); end if;
+      -- The header names the latest refund that still counts, app or manual,
+      -- so completion evidence and fee readers find it (returns audit 4).
+      update refund_operations set status = 'succeeded', completed_at = now(), fee_verification_pending = true,
+        confirmed_by = p_actor,
+        stripe_refund_id = coalesce((select a.stripe_refund_id from refund_attempts a where a.operation_id = o.id
+          and a.provider_status = 'succeeded' and a.stripe_refund_id is not null
+          and not exists (select 1 from refund_failures f where f.restaurant_id = a.restaurant_id and f.stripe_refund_id = a.stripe_refund_id)
+          order by a.updated_at desc, a.attempt_no desc limit 1), stripe_refund_id)
+        where id = o.id returning * into o;
+    end if;
+    return jsonb_build_object('outcome', 'completed', 'outstanding_cents', 0, 'completed_at', o.completed_at);
+  end if;
+  return jsonb_build_object('outcome', 'partial', 'outstanding_cents', greatest((v->>'outstanding_cents')::int, 0),
+    'unresolved', (v->>'unresolved')::boolean);
+end $$;
+revoke all on function public.complete_refund_operation_v1(uuid, text) from public, anon, authenticated;
+grant execute on function public.complete_refund_operation_v1(uuid, text) to service_role;
+
+-- A refund somebody made by hand in Stripe counts once a manager attributes
+-- it, and only when it is exactly this charge's, in this currency, succeeded
+-- and no bigger than what is still owed. It adds evidence only: no new
+-- allocation, no order change. A pooled refund that would need splitting
+-- across orders goes to a person.
+create or replace function public.record_order_return_coverage_v1(
+  p_restaurant uuid, p_operation uuid, p_actor text, p_refunds jsonb, p_attribution_ref uuid
+) returns jsonb language plpgsql security definer set search_path = public as $$
+declare o refund_operations; r jsonb; x refund_attempts; v_no int; v_cents int; v_outstanding int;
+begin
+  if jsonb_typeof(p_refunds) is distinct from 'array' then raise exception 'invalid refund evidence'; end if;
+  perform public.lock_restaurant_money(p_restaurant);
+  select * into o from refund_operations where id = p_operation and restaurant_id = p_restaurant for update;
+  if o.id is null or o.source <> 'stripe' then return jsonb_build_object('outcome', 'missing'); end if;
+  if o.status = 'succeeded' then return public.complete_refund_operation_v1(o.id, p_actor); end if;
+  if p_attribution_ref is null or nullif(btrim(p_actor), '') is null then return jsonb_build_object('outcome', 'review'); end if;
+  for r in select * from jsonb_array_elements(p_refunds) order by value->>'id' loop
+    if r->>'id' is null or jsonb_typeof(r->'amount_cents') <> 'number' or r->>'status' is null then
+      raise exception 'invalid refund evidence';
+    end if;
+    -- Failed or pending evidence is recorded nowhere and covers nothing.
+    continue when r->>'status' <> 'succeeded'
+      or exists (select 1 from refund_failures f where f.restaurant_id = p_restaurant and f.stripe_refund_id = r->>'id');
+    -- The app's own refunds are already evidence on their attempt.
+    continue when exists (select 1 from refund_attempts where operation_id = o.id and origin = 'app' and stripe_refund_id = r->>'id');
+    v_cents := (r->>'amount_cents')::int;
+    if upper(r->>'currency') is distinct from o.currency or r->>'payment_intent' is distinct from o.stripe_payment_intent
+      or r->>'account' is distinct from o.stripe_account_id or v_cents <= 0
+      or public.refund_id_taken_v1(p_restaurant, r->>'id', o.id) then
+      return jsonb_build_object('outcome', 'conflict');
+    end if;
+    select * into x from refund_attempts where operation_id = o.id and origin = 'manual' and stripe_refund_id = r->>'id';
+    if x.id is not null then
+      if round(x.amount * 100) <> v_cents or x.attribution_ref <> p_attribution_ref then return jsonb_build_object('outcome', 'conflict'); end if;
+      continue;
+    end if;
+    -- New evidence only. An app refund already sent for the outstanding amount
+    -- may still succeed; counting a manual one now would let both leave
+    -- (returns audit 2: MX$140 for a MX$100 promise). Replaying evidence
+    -- already saved stays allowed, so its retry can finish (verification 3).
+    if (public.refund_operation_progress_v1(o.id)->>'unresolved')::boolean then
+      return jsonb_build_object('outcome', 'pending');
+    end if;
+    v_outstanding := (public.refund_operation_progress_v1(o.id)->>'outstanding_cents')::int;
+    if v_cents > v_outstanding then return jsonb_build_object('outcome', 'review'); end if;
+    select coalesce(max(attempt_no), 0) + 1 into v_no from refund_attempts where operation_id = o.id and origin = 'manual';
+    insert into refund_attempts(restaurant_id, operation_id, origin, attempt_no, idempotency_key, amount, currency,
+        stripe_account_id, stripe_payment_intent, stripe_refund_id, provider_status, attribution_ref, succeeded_at)
+      values(p_restaurant, o.id, 'manual', v_no, 'manual-' || o.id || '-' || (r->>'id'), v_cents / 100.0, o.currency,
+        o.stripe_account_id, o.stripe_payment_intent, r->>'id', 'succeeded', p_attribution_ref, public.refund_success_time_v1(r));
+  end loop;
+  return public.complete_refund_operation_v1(o.id, p_actor);
+end $$;
+revoke all on function public.record_order_return_coverage_v1(uuid, uuid, text, jsonb, uuid) from public, anon, authenticated;
+grant execute on function public.record_order_return_coverage_v1(uuid, uuid, text, jsonb, uuid) to service_role;
+
+-- Records the current app attempt's provider evidence, or a cash/terminal
+-- confirmation, and completes the operation only when the whole promise is
+-- back with the customer. Amounts are checked, never assumed: a smaller
+-- refund than the attempt asked for cannot mark everything returned.
+create or replace function public.finish_refund_operation_v2(
+  p_restaurant uuid, p_operation uuid, p_actor text, p_refunds jsonb, p_status text, p_payout text default null, p_attempt uuid default null
+) returns jsonb language plpgsql security definer set search_path = public as $$
+declare o refund_operations; a refund_attempts; r jsonb; v_status text; v_failed text;
+begin
+  if p_status is null or p_status not in ('succeeded', 'pending', 'requires_action', 'failed', 'canceled') then
+    raise exception 'invalid refund status';
+  end if;
+  perform public.lock_restaurant_money(p_restaurant);
+  select * into o from refund_operations where id = p_operation and restaurant_id = p_restaurant for update;
+  if o.id is null then return jsonb_build_object('outcome', 'missing'); end if;
+  if o.status = 'succeeded' then return public.complete_refund_operation_v1(o.id, p_actor); end if;
+  if o.source = 'review' then raise exception 'review required'; end if;
+
+  if o.source <> 'stripe' then
+    -- Money handed back from a drawer: confirmed, with the drawer named.
+    if coalesce(jsonb_array_length(p_refunds), 0) <> 0 or p_status <> 'succeeded' or nullif(btrim(p_payout), '') is null then
+      raise exception 'cash or terminal returns need a confirmed payout drawer';
+    end if;
+    update refund_operations set status = 'succeeded', completed_at = now(), confirmed_by = p_actor,
+      payout_actor = p_payout, fee_verification_pending = false where id = o.id returning * into o;
+    return jsonb_build_object('outcome', 'completed', 'outstanding_cents', 0, 'completed_at', o.completed_at);
+  end if;
+
+  select * into a from refund_attempts where operation_id = o.id and origin = 'app' order by attempt_no desc limit 1;
+  if a.id is null or p_attempt is distinct from a.id then return jsonb_build_object('outcome', 'stale'); end if;
+  if jsonb_typeof(p_refunds) is distinct from 'array' or jsonb_array_length(p_refunds) <> 1 then
+    raise exception 'one provider refund required';
+  end if;
+  r := p_refunds->0;
+  if r->>'id' is null or jsonb_typeof(r->'amount_cents') <> 'number' then raise exception 'invalid refund evidence'; end if;
+  if (a.stripe_refund_id is not null and a.stripe_refund_id <> r->>'id')
+    or public.refund_id_taken_v1(p_restaurant, r->>'id', o.id)
+    or exists (select 1 from refund_attempts where operation_id = o.id and id <> a.id and stripe_refund_id = r->>'id')
+    or upper(r->>'currency') is distinct from o.currency or r->>'payment_intent' is distinct from o.stripe_payment_intent
+    or r->>'account' is distinct from o.stripe_account_id
+    or (r->>'amount_cents')::int <> round(a.amount * 100) then
+    return jsonb_build_object('outcome', 'conflict');
+  end if;
+  -- Stripe already told us this refund failed: a late "succeeded" is stale.
+  select f.provider_status into v_failed from refund_failures f where f.restaurant_id = p_restaurant and f.stripe_refund_id = r->>'id';
+  v_status := coalesce(v_failed, p_status);
+  update refund_attempts set stripe_refund_id = r->>'id', provider_status = v_status, updated_at = now(),
+    succeeded_at = case when v_status = 'succeeded' then coalesce(succeeded_at, public.refund_success_time_v1(r)) else succeeded_at end where id = a.id;
+  update refund_operations set stripe_refund_id = r->>'id', provider_status = v_status,
+    status = case when v_status in ('failed', 'canceled') then 'failed' else 'processing' end where id = o.id;
+  if v_status in ('failed', 'canceled') then
+    return jsonb_build_object('outcome', 'failed',
+      'outstanding_cents', (public.refund_operation_progress_v1(o.id)->>'outstanding_cents')::int);
+  end if;
+  if v_status <> 'succeeded' then
+    return jsonb_build_object('outcome', 'pending',
+      'outstanding_cents', (public.refund_operation_progress_v1(o.id)->>'outstanding_cents')::int);
+  end if;
+  -- No mirrored financial activity row: typed returns are what readers read.
+  return public.complete_refund_operation_v1(o.id, p_actor);
+end $$;
+revoke all on function public.finish_refund_operation_v2(uuid, uuid, text, jsonb, text, text, uuid) from public, anon, authenticated;
+grant execute on function public.finish_refund_operation_v2(uuid, uuid, text, jsonb, text, text, uuid) to service_role;
+
+-- An attempt's request is what was sent: amount, charge, account, currency,
+-- key and attribution never change. Provider evidence fills in once.
+create or replace function public.guard_refund_attempt_request_v1()
+returns trigger language plpgsql set search_path = public as $$
+begin
+  if tg_op = 'DELETE' then
+    if pg_trigger_depth() > 1 then return old; end if;
+    raise exception 'refund attempts are financial evidence';
+  end if;
+  if new.restaurant_id is distinct from old.restaurant_id or new.operation_id is distinct from old.operation_id
+    or new.origin is distinct from old.origin or new.attempt_no is distinct from old.attempt_no
+    or new.idempotency_key is distinct from old.idempotency_key or new.amount is distinct from old.amount
+    or new.stripe_account_id is distinct from old.stripe_account_id or new.stripe_payment_intent is distinct from old.stripe_payment_intent
+    or (old.currency is not null and new.currency is distinct from old.currency)
+    or new.attribution_ref is distinct from old.attribution_ref
+    or (old.stripe_refund_id is not null and new.stripe_refund_id is distinct from old.stripe_refund_id)
+    or (old.succeeded_at is not null and new.succeeded_at is distinct from old.succeeded_at) then
+    raise exception 'refund attempt request is immutable';
+  end if;
+  return new;
+end $$;
+revoke all on function public.guard_refund_attempt_request_v1() from public, anon, authenticated;
+drop trigger if exists guard_refund_attempt_request on refund_attempts;
+create trigger guard_refund_attempt_request before update or delete on refund_attempts
+  for each row execute function public.guard_refund_attempt_request_v1();
+
+-- Every piece of money a refund operation got back to a customer, dated by when
+-- it succeeded (returns audit 7). A card return can finish in several refunds,
+-- app and manual, on different days; each is its own event, once per provider
+-- refund. Cash and terminal are one event at their confirmed completion.
+-- Evidence that cannot be dated fails the read: a report that silently drops
+-- money looks exactly like a quiet day.
+create or replace function public.order_return_events_v1(p_restaurant uuid, p_currency text default null)
+returns table (id text, operation_id uuid, order_id uuid, kind text, source text, currency text, amount_cents int,
+  succeeded_at timestamptz, payout_actor text, confirmed_by text, historical_log_id uuid)
+language plpgsql stable security definer set search_path = public as $$
+begin
+  if exists (
+    select 1 from refund_operations o join refund_attempts a on a.operation_id = o.id and a.restaurant_id = o.restaurant_id
+    where o.restaurant_id = p_restaurant and (p_currency is null or o.currency = p_currency)
+      and a.provider_status = 'succeeded' and a.stripe_refund_id is not null and a.succeeded_at is null
+      and not exists (select 1 from refund_failures f where f.restaurant_id = a.restaurant_id and f.stripe_refund_id = a.stripe_refund_id)
+      -- Before success times were kept: a single refund that proves the whole
+      -- operation is dated by the operation's own completion.
+      and not (o.status = 'succeeded' and o.completed_at is not null and round(a.amount * 100) = round(o.amount * 100)
+        and (select count(distinct b.stripe_refund_id) from refund_attempts b where b.operation_id = o.id
+          and b.provider_status = 'succeeded' and b.stripe_refund_id is not null) = 1)) then
+    raise exception 'a succeeded refund has no success time';
+  end if;
+  -- Every writer now keeps one refund to one obligation; one that predates it
+  -- would be counted twice, so it fails the read (verification 2, V7).
+  if exists (select 1 from (
+        select a.stripe_refund_id r, a.operation_id op from refund_attempts a where a.restaurant_id = p_restaurant and a.stripe_refund_id is not null
+        union select o.stripe_refund_id, o.id from refund_operations o where o.restaurant_id = p_restaurant and o.stripe_refund_id is not null) owners
+      group by r having count(distinct op) > 1) then
+    raise exception 'a provider refund is counted by two returns';
+  end if;
+  -- Two records of one refund must agree; which one a report picks must
+  -- never decide its amount or its day (verification 4).
+  if exists (select 1 from refund_attempts a where a.restaurant_id = p_restaurant and a.provider_status = 'succeeded'
+      and a.stripe_refund_id is not null
+      group by a.operation_id, a.stripe_refund_id
+      having count(distinct round(a.amount * 100)) > 1 or count(distinct a.succeeded_at) > 1) then
+    raise exception 'two records of one refund disagree';
+  end if;
+  -- A completed operation's events must be exactly its amount: money a report
+  -- cannot place is a failed read, never a quiet day (verification 7).
+  if exists (select 1 from refund_operations o where o.restaurant_id = p_restaurant
+      and (p_currency is null or o.currency = p_currency) and o.status = 'succeeded' and o.source <> 'review'
+      and ((o.source in ('cash', 'terminal') and o.completed_at is null)
+        or (o.source = 'stripe' and not exists (select 1 from refund_attempts a where a.operation_id = o.id)
+          and (o.stripe_refund_id is null or o.completed_at is null))
+        or (o.source = 'stripe' and exists (select 1 from refund_attempts a where a.operation_id = o.id)
+          and (public.refund_operation_progress_v1(o.id)->>'outstanding_cents')::int <> 0))) then
+    raise exception 'a completed return does not reconcile with its refunds';
+  end if;
+  return query
+  select distinct on (o.id, a.stripe_refund_id) 'refund:' || a.stripe_refund_id, o.id, d.order_id, d.kind, o.source, o.currency,
+      round(a.amount * 100)::int, coalesce(a.succeeded_at, o.completed_at), o.payout_actor, o.confirmed_by, o.historical_log_id
+    from refund_operations o
+    join order_adjustments d on d.id = o.adjustment_id and d.restaurant_id = o.restaurant_id
+    join refund_attempts a on a.operation_id = o.id and a.restaurant_id = o.restaurant_id
+    where o.restaurant_id = p_restaurant and o.source = 'stripe' and (p_currency is null or o.currency = p_currency)
+      and a.provider_status = 'succeeded' and a.stripe_refund_id is not null
+      and not exists (select 1 from refund_failures f where f.restaurant_id = a.restaurant_id and f.stripe_refund_id = a.stripe_refund_id)
+    order by o.id, a.stripe_refund_id, a.attempt_no, a.id;
+  -- A Stripe operation completed before attempts existed has only its own record.
+  return query
+  select case when o.source = 'stripe' then 'refund:' || o.stripe_refund_id else 'operation:' || o.id end,
+      o.id, d.order_id, d.kind, o.source, o.currency, round(o.amount * 100)::int,
+      o.completed_at, o.payout_actor, o.confirmed_by, o.historical_log_id
+    from refund_operations o join order_adjustments d on d.id = o.adjustment_id and d.restaurant_id = o.restaurant_id
+    where o.restaurant_id = p_restaurant and (p_currency is null or o.currency = p_currency)
+      and o.status = 'succeeded' and o.completed_at is not null
+      and (o.source in ('cash', 'terminal')
+        or (o.source = 'stripe' and not exists (select 1 from refund_attempts a where a.operation_id = o.id)
+          and o.stripe_refund_id is not null
+          and not exists (select 1 from refund_failures f where f.restaurant_id = o.restaurant_id and f.stripe_refund_id = o.stripe_refund_id)));
+end $$;
+revoke all on function public.order_return_events_v1(uuid, text) from public, anon, authenticated;
+grant execute on function public.order_return_events_v1(uuid, text) to service_role;
+
+-- The due side of the same rule: a provider refund a return operation counts
+-- (app or manual evidence, or its header) never pays a duplicate charge.
+create or replace function public.refund_owned_by_return_v1(p_restaurant uuid, p_refund text)
+returns boolean language sql stable security definer set search_path = public as $$
+  select exists (select 1 from refund_attempts where restaurant_id = p_restaurant and stripe_refund_id = p_refund)
+    or exists (select 1 from refund_operations where restaurant_id = p_restaurant and stripe_refund_id = p_refund);
+$$;
+revoke all on function public.refund_owned_by_return_v1(uuid, text) from public, anon, authenticated;
+grant execute on function public.refund_owned_by_return_v1(uuid, text) to service_role;
+
+-- When a refund succeeded: the provider's own time when the evidence carries
+-- one (`succeeded_at`, epoch seconds, read from Stripe server-side), never later
+-- than now; otherwise the first time we verified it (verification 6).
+create or replace function public.refund_success_time_v1(p_evidence jsonb)
+returns timestamptz language sql stable set search_path = public as $$
+  select least(now(), coalesce(case when jsonb_typeof(p_evidence->'succeeded_at') = 'number'
+    then to_timestamp((p_evidence->>'succeeded_at')::double precision) end, now()));
+$$;
+revoke all on function public.refund_success_time_v1(jsonb) from public, anon, authenticated;
+grant execute on function public.refund_success_time_v1(jsonb) to service_role;

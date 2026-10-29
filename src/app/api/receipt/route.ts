@@ -88,7 +88,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   const db = createAdminClient();
   let source: ReceiptSource;
   try {
-    source = paymentId ? await readSlotReceipt(db, paymentId) : await readOrderReceipt(db, ids, printing, orderIds, body.version);
+    source = paymentId ? await readSlotReceipt(db, paymentId, undefined, body.version) : await readOrderReceipt(db, ids, printing, orderIds, body.version);
   } catch (error) {
     return await apiError(error instanceof ReceiptReadError && error.status === 404 ? "apiErr.notFound" : "apiErr.generic",
       error instanceof ReceiptReadError ? error.status : 503);

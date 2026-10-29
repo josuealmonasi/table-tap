@@ -1,8 +1,10 @@
+import type { ReturnComponents } from "@/lib/return-components";
 import type { OrderLineItem } from "@/lib/types";
 import { itemSalePrice } from "@/lib/pricing";
 
 export interface RevenueOrder {
   items: OrderLineItem[];
+  return_components?: ReturnComponents;
   total: number;
   service_fee: number;
   tip: number;
@@ -12,7 +14,8 @@ export interface RevenueOrder {
  * discounts, but a later table discount changes only total. Subtracting the
  * stored discount again would count the checkout discount twice. */
 export function foodRevenue(order: RevenueOrder): number {
-  return Math.max(0, Math.round((Number(order.total) - Number(order.service_fee) - Number(order.tip)) * 100)) / 100;
+  return Math.max(0, Math.round((Number(order.total) + Number(order.return_components?.total ?? 0) - Number(order.service_fee)
+    - Number(order.return_components?.service_fee ?? 0) - Number(order.tip) - Number(order.return_components?.tip ?? 0)) * 100)) / 100;
 }
 
 /** What one line came to before the order's own discounts: its dish's sale price and extras. */

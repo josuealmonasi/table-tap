@@ -150,6 +150,8 @@ export function saleAcknowledgement(sale: HeldSale, raw: unknown): "settled" | "
   if (!raw || typeof raw !== "object") return "unsettled";
   const ack = raw as { settled?: unknown; orderId?: unknown; total?: unknown; onAccount?: unknown; currency?: unknown; method?: unknown };
   if (ack.settled !== true) return "unsettled";
+  // The server replays what was collected, including after a later return.
+  // Accepting the retained bill instead would hide a contradictory collection.
   if (ack.orderId !== sale.posRef || typeof ack.total !== "number" || !Number.isFinite(ack.total)
       || Math.abs(ack.total - sale.charge.total) > 0.005 || ack.onAccount
       || (sale.currency !== undefined && ack.currency !== sale.currency) || ack.method !== sale.method) return "mismatch";

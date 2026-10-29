@@ -101,7 +101,7 @@ export async function POST(req: NextRequest) {
 
   let source: ReceiptSource;
   try {
-    source = paymentId ? await readSlotReceipt(db, paymentId, actor.restaurantId)
+    source = paymentId ? await readSlotReceipt(db, paymentId, actor.restaurantId, version)
       : await readOrderReceipt(db, [order!.id], false, undefined, version);
   } catch (error) {
     return await apiError("apiErr.generic", error instanceof ReceiptReadError ? error.status : 503);

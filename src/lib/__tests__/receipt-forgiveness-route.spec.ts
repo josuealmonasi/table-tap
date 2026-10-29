@@ -9,14 +9,15 @@ vi.mock("@/lib/api-error", () => ({ apiError: async (error: string, status: numb
 vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({ from: (table: string) => {
   state.reads.push(table);
   const filters: ((row: Record<string, unknown>) => boolean)[] = [];
+  let offset = 0;
   const answer = (single = false) => {
-    const rows = (state.tables[table] ?? []).filter(row => filters.every(filter => filter(row)));
+    const rows = (state.tables[table] ?? []).filter(row => filters.every(filter => filter(row))).slice(offset);
     return state.errorTable === table ? { data: null, error: { message: "timeout" } } : { data: single ? rows[0] ?? null : rows, error: null };
   };
   const q = { select: () => q, update: () => q,
     eq: (key: string, value: unknown) => { filters.push(row => row[key] === value); return q; },
     in: (key: string, values: unknown[]) => { filters.push(row => values.includes(row[key])); return q; },
-    order: () => q, single: async () => answer(true), maybeSingle: async () => answer(true),
+    range: (start: number) => { offset = start; return q; }, order: () => q, single: async () => answer(true), maybeSingle: async () => answer(true),
     then: (resolve: (value: unknown) => unknown) => Promise.resolve(answer()).then(resolve) };
   return q;
 } }) }));
