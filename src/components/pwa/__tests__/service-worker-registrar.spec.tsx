@@ -1,8 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Session } from "@supabase/supabase-js";
 
-const { effect, subscribe } = vi.hoisted(() => ({ effect: vi.fn(), subscribe: vi.fn() }));
+const { effect, subscribe, refresh } = vi.hoisted(() => ({ effect: vi.fn(), subscribe: vi.fn(), refresh: vi.fn() }));
 vi.mock("react", () => ({ useEffect: effect }));
+vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh }) }));
 vi.mock("@/lib/supabase/client", () => ({ createClient: () => ({ auth: { onAuthStateChange: subscribe } }) }));
 import ServiceWorkerRegistrar from "../ServiceWorkerRegistrar";
 import { privateCacheIdentity } from "@/lib/private-cache-identity";
@@ -60,12 +61,18 @@ describe("auth and the worker agree about the private render", () => {
     expect(postMessage).toHaveBeenLastCalledWith({ type: "IDENTITY", identity: null, retire: true });
   });
 
-  it("keeps a refreshed token bound to its restaurant and role", () => {
+  it("renews the offline window only from the server's fresh membership read (sweep 3, finding 5)", () => {
     mount();
-    const refreshed = session("alice", "session-a", Math.floor(Date.now() / 1000) + 7200);
-    authChange("TOKEN_REFRESHED", refreshed);
+    authChange("INITIAL_SESSION", session());
+    const issued = privateCacheIdentity(session(), "restaurant-a", "owner");
+    postMessage.mockClear();
+    // An hour on, the page's own role would have extended the window again.
+    vi.setSystemTime(new Date("2026-10-17T13:00:30Z"));
+    authChange("TOKEN_REFRESHED", session("alice", "session-a", Math.floor(Date.now() / 1000) + 3600));
     controlChange();
-    expect(postMessage).toHaveBeenLastCalledWith({ type: "IDENTITY", identity: privateCacheIdentity(refreshed, "restaurant-a", "owner"), retire: true });
+    expect(refresh).toHaveBeenCalledOnce();
+    // What the worker hears is still the label the server issued, not a longer one.
+    expect(postMessage).toHaveBeenLastCalledWith({ type: "IDENTITY", identity: issued, retire: true });
   });
 
   it("never registers on a public page but still clears an existing controller", () => {

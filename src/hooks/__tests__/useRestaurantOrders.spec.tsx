@@ -11,7 +11,7 @@ vi.mock("@/hooks/useOnline", () => ({ useOnline: () => ({ online: true, markOffl
 vi.mock("@/hooks/useBadges", () => ({ badgesChanged: vi.fn() }));
 vi.mock("@/lib/i18n/context", () => ({ useT: () => (key: string) => key }));
 vi.mock("@/components/ui/Toast", () => ({ useToast: () => toast }));
-vi.mock("@/lib/supabase/client", () => ({ createClient: vi.fn() }));
+vi.mock("@/lib/supabase/client", () => ({ createClient: () => ({ auth: { getSession: async () => ({ data: { session: { user: { id: "u1" } } } }) } }) }));
 const { useRestaurantOrders } = await import("@/hooks/useRestaurantOrders");
 let saved: string | null;
 const queue = [
@@ -61,4 +61,28 @@ it("sends the stage shown by a live tap too", async () => {
   const hook = useRestaurantOrders("r1", [{ id: "o1", status: "ready" } as Order]);
   await hook.updateStatus("o1", "completed");
   expect(JSON.parse(send.mock.calls[0][1].body)).toEqual({ id: "o1", status: "completed", from: "ready" });
+});
+it("never sends another login's stored moves (sweep 3, finding 3)", async () => {
+  saved = JSON.stringify([{ id: "o2", from: "received", to: "preparing", at: 5, by: "cashier" }, { ...queue[0], by: "u1" }]);
+  const send = vi.fn().mockResolvedValue({ ok: true, status: 200 });
+  vi.stubGlobal("fetch", send);
+  useRestaurantOrders("r1", []);
+  await callbacks[0]();
+  expect(send).toHaveBeenCalledTimes(1);
+  expect(JSON.parse(send.mock.calls[0][1].body).id).toBe("o1");
+  expect(saved).toBeNull();
+  expect(toast).toHaveBeenCalledWith("orders.queuedRefused", "error");
+});
+it("keeps a move queued while a flush was waiting (sweep 3, finding 4)", async () => {
+  saved = JSON.stringify([queue[0]]);
+  const later = { id: "o9", from: "received", to: "preparing", at: 9 };
+  const send = vi.fn().mockImplementation(async () => {
+    saved = JSON.stringify([...JSON.parse(saved!), later]);
+    return { ok: true, status: 200 };
+  });
+  vi.stubGlobal("fetch", send);
+  useRestaurantOrders("r1", []);
+  await callbacks[0]();
+  expect(send).toHaveBeenCalledTimes(1);
+  expect(JSON.parse(saved!)).toEqual([later]);
 });
