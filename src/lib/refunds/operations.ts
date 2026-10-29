@@ -46,7 +46,7 @@ export async function orderRefunds(restaurantId: string, adjustmentId?: string):
 /** Persist provider state before showing completion. A lost response reuses
  * the durable attempt's exact request, account and idempotency key. */
 export async function executeOrderRefund(
-  restaurantId: string, operationId: string, actor: string, client: Stripe = stripe,
+  restaurantId: string, operationId: string, actor: string, client: Stripe = stripe, retried = false,
 ): Promise<boolean> {
   const db = createAdminClient();
   const operation = await returnCharge(restaurantId, operationId);
@@ -95,8 +95,19 @@ export async function executeOrderRefund(
       // Provider idempotency expires. A durable metadata search recovers an
       // older successful attempt before its key can ever create another one.
       const prior = discovered.refunds.find(made => made.metadata?.refund_attempt === attempt.id || legacyRefund(made, { ...attempt, operation_id: operationId }));
-      // An expired key cannot prove an unknown POST failed. Keep the obligation
-      // visible for review instead of sending a fresh provider request.
+      // An expired key cannot prove an unknown POST failed — but the charge's
+      // full refund list just read can: past the key's 24 hours, an attempt
+      // with no refund there never reached Stripe. It is retired and a new one
+      // opened, once; between 23 and 24 hours it waits (sweep 6, finding 1).
+      const age = attempt.created_at ? Date.now() - Date.parse(attempt.created_at) : NaN;
+      if (!prior && !retried && !attempt.stripe_refund_id && !attempt.provider_status && age >= 24 * 3600000) {
+        const { data: retired, error: retireError } = await db.rpc("retire_unsent_refund_attempt_v1", {
+          p_restaurant: restaurantId, p_operation: operationId, p_attempt: attempt.id, p_actor: actor,
+        });
+        if (retireError) throw new Error(`Could not retire the unsent refund attempt: ${retireError.message}`);
+        return retired === true ? executeOrderRefund(restaurantId, operationId, actor, client, true) : false;
+      }
+      // Otherwise keep the obligation visible instead of sending a fresh provider request.
       if (!prior && (!attempt.created_at || !Number.isFinite(Date.parse(attempt.created_at))
         || Date.now() - Date.parse(attempt.created_at) >= 23 * 3600000
         || !Number.isSafeInteger(attempt.outstanding_cents) || attempt.outstanding_cents <= 0
