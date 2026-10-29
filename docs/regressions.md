@@ -5765,3 +5765,21 @@ open or paid page, or Stripe being unreachable, keeps the refusal. The
 walkout write-off reads open pages too instead of `card_checkout_at`, which a
 divided bill's own part pages stamp and never clear (R2).
 `whole-bill-pages.spec.ts`, `split-574-sql.spec.ts`.
+
+A shared tablet has one browser and many people, and three things on it had
+to agree with who is signed in now (sweep 3). The kitchen board's offline
+queue replayed the last person's stored moves under the next login's cookies,
+and a flush wrote back its own snapshot, erasing any move queued while it
+waited; moves now carry their user, another login's are dropped unsent, and a
+flush removes exactly what it handled (`useRestaurantOrders.spec.tsx`).
+Signing out in one tab retired the navigation's cache but left the page
+itself mounted in the others, account statement included; a dashboard tab now
+leaves for the sign-in screen, or reloads for a fresh check of a new login.
+Deleting a visit card left its code saved on the phone, so the menu's
+"My card" kept opening a card that no longer existed
+(`loyalty-device.spec.ts`). A token refresh renewed the offline window from
+the page's own restaurant and role, so a demoted manager's pages stayed
+renewable while the tab was open; the server now reads the membership again
+(`service-worker-registrar.spec.tsx`). And a cashier moved to the kitchen with
+sales held could neither send them nor sign out; a login that cannot send them
+now signs out and leaves them for a manager (`sign-out.spec.tsx`).

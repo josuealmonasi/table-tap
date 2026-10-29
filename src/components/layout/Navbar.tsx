@@ -36,7 +36,7 @@ export default function Navbar({
   features?: PlanFeature[];
 }) {
   const t = useT();
-  const signOut = useSignOut();
+  const signOut = useSignOut(role);
   const [open, setOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { privateCacheIdentity } from "@/lib/private-cache-identity";
 
@@ -14,6 +15,7 @@ import { privateCacheIdentity } from "@/lib/private-cache-identity";
  * an insecure origin, gets the app exactly as it was before this existed.
  */
 export default function ServiceWorkerRegistrar({ identity }: { identity: string | null }) {
+  const router = useRouter();
   useEffect(() => {
     if (!("serviceWorker" in navigator)) return;
     const workers = navigator.serviceWorker;
@@ -25,7 +27,16 @@ export default function ServiceWorkerRegistrar({ identity }: { identity: string 
       // valid offline till whenever a new worker takes control first.
       if (current !== undefined) workers.controller?.postMessage({ type: "IDENTITY", identity: current, retire });
     };
-    const { data: { subscription } } = createClient().auth.onAuthStateChange((_event, session) => {
+    const { data: { subscription } } = createClient().auth.onAuthStateChange((event, session) => {
+      // A refreshed token proves the login, not the role. Extending the offline
+      // window from this page's own restaurant and role kept a demoted
+      // manager's pages renewable for as long as the tab stayed open (sweep 3,
+      // finding 5). The server reads the membership again and hands down a
+      // fresh label, which runs this effect again; a changed role retires the old one.
+      if (event === "TOKEN_REFRESHED" && identity) {
+        router.refresh();
+        return;
+      }
       const parts = identity?.split(":");
       current = parts ? privateCacheIdentity(session, parts[2], parts[3]) : null;
       // An expired token needs fresh server proof, but its auth session may
@@ -48,7 +59,7 @@ export default function ServiceWorkerRegistrar({ identity }: { identity: string 
       subscription.unsubscribe();
       workers.removeEventListener("controllerchange", notify);
     };
-  }, [identity]);
+  }, [identity, router]);
 
   return null;
 }

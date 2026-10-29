@@ -32,8 +32,9 @@ vi.mock("@/lib/supabase/client", () => ({ createClient: () => {
   const channel = { on: (_kind: unknown, _opts: unknown, receive: typeof state.receive) => {
     state.receive = receive; return channel;
   }, subscribe: () => channel };
-  return { auth: { getSession: async () => ({ data: { session: null } }) },
-    channel: () => channel, removeChannel: vi.fn() };
+  // Signed in: a queued move is sent only under the login that made it.
+  return { auth: { getSession: async () => ({ data: { session: { user: { id: "u1" }, access_token: "t" } } }) },
+    realtime: { setAuth: vi.fn() }, channel: () => channel, removeChannel: vi.fn() };
 } }));
 import OrdersBoard from "../OrdersBoard";
 
