@@ -17,9 +17,9 @@ vi.mock("@/components/ui/Toast", () => ({ useToast: () => toast }));
 vi.mock("@/hooks/useLiveOrders", () => ({ useLiveOrders: vi.fn() }));
 vi.mock("@/components/layout/Breadcrumb", () => ({ default: () => null }));
 vi.mock("../BillApprovals", () => ({ default: () => null }));
-vi.mock("../BillDiscountDialog", () => ({ default: () => null }));
+vi.mock("../BillDiscountDialog", () => ({ default: () => <span data-promotion /> }));
 vi.mock("../loyalty/StampCard", () => ({ default: () => null }));
-vi.mock("../OpenBillRow", () => ({ default: ({ bill }: { bill: { total: number } }) => <span>{bill.total}</span> }));
+vi.mock("../OpenBillRow", () => ({ default: ({ bill, onOpen }: { bill: { total: number }; onOpen: (bill: { total: number }) => void }) => <button data-bill-row onClick={() => onOpen(bill)}>{bill.total}</button> }));
 vi.mock("../ScanToCollect", () => ({ default: ({ onFound }: { onFound: (id: string) => void }) =>
   <button onClick={() => onFound("order-a")}>scan</button> }));
 vi.mock("../SettleTableDialog", () => ({ default: ({ onClose }: { onClose: () => void }) =>
@@ -28,9 +28,10 @@ import BillsPanel from "../BillsPanel";
 
 let root: Root;
 let container: HTMLDivElement;
-async function render(total = 100) {
+async function render(total = 100, divided = false) {
   const bills = openBills([{ id: "order-a", total, table_id: null, paid: false,
     status: "completed", items: [], created_at: "2026-10-27T12:00:00Z" } as unknown as Order]);
+  if (divided) bills[0].split = { shares: 2, paidShares: 1 };
   await act(async () => root.render(<React.StrictMode><BillsPanel bills={bills} requests={[]} writeOffs={[]}
     restaurantId="r1" currency="MXN" canApprove canSettle canCollectInParts canDiscount
     canChargeAccount askedToPay={[]} /></React.StrictMode>));
@@ -63,4 +64,11 @@ it("accepts a new URL scan after navigation clears the previous one", async () =
   state.scanned = null; await render();
   state.scanned = "order-a"; await render();
   expect(container.querySelector("[data-collection]")).not.toBeNull();
+});
+
+it("a divided-bill row opens the same collection door as its collect button", async () => {
+  state.scanned = null; await render(100, true);
+  await act(async () => container.querySelector<HTMLButtonElement>("[data-bill-row]")!.click());
+  expect(container.querySelector("[data-collection]")).not.toBeNull();
+  expect(container.querySelector("[data-promotion]")).toBeNull();
 });

@@ -133,7 +133,7 @@ export default async function BillsPage() {
       .from("bill_splits")
       .select("id, session_id, shares, model_version, currency, order_ids, bill_split_claims(paid_at, amount), bill_split_slots(payment_id)")
       .eq("restaurant_id", r.id)
-      .eq("status", "locked"),
+      .in("status", ["proposed", "locked"]),
     "the bills being divided",
   );
 
@@ -173,7 +173,7 @@ export default async function BillsPage() {
   return (
     <ConfirmProvider>
       <BillsPanel
-        bills={withSplits(openBills(rows as Order[]), splits, sessionOf).map(b => ({
+        bills={withSplits(openBills(rows as Order[], coverage), splits, sessionOf).map(b => ({
           ...b, collected: b.orderIds.reduce((sum,id) => sum + (coverage.get(id) ?? 0),0),
         }))}
         requests={MANAGES(membership.role) ? (requests ?? []).map(a => ({ ...a,currency: requestCurrencies.get(a.id) ?? null })) : []}

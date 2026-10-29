@@ -150,7 +150,10 @@ export default function BillsPanel({
       now={now}
       canSettle={canSettle}
       updating={refreshing && refreshingBills.has(bill.tableId ?? bill.key)}
-      onOpen={setChosen}
+      onOpen={bill => {
+        if (bill.split && canSettle) setSettling(bill);
+        else setChosen(bill);
+      }}
       onCollect={setSettling}
     />
   );

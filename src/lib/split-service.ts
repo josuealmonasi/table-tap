@@ -1,5 +1,5 @@
 import { splitResumptions } from "@/lib/split-slots-resume";
-import { splitSlots } from "@/lib/split-slots-state";
+import { splitSlots, splitFrozen } from "@/lib/split-slots-state";
 import type { SplitSlot } from "@/lib/split-slots";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { fetchTableBill } from "@/lib/bill-data";
@@ -141,7 +141,7 @@ export async function currentSplit(
     return { id: split.id, shares: split.shares, status: split.status, amount: Number(split.amount),
       proposedBy: split.proposed_by, joined: slots.filter(s => s.paid).length, mine: null,
       outstanding: tableBill(orders, []).total, ownSince: 0, modelVersion: 2, revision: split.revision,
-      currency: split.currency, frozen: Boolean(split.first_payment_attempt_at), slots,
+      currency: split.currency, frozen: splitFrozen(split.first_payment_attempt_at, slots), slots,
       resumptions: await splitResumptions(restaurantId, split.id, split.revision, member.id) };
   }
 

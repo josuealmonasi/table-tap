@@ -23,10 +23,10 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     const db = createAdminClient();
     // bill_splits has no table column: a split belongs to its sitting, and the
     // membership check above already tied that sitting to this table.
-    const { data: splits, error } = await db.from("bill_splits").select("id, status")
+    const { data: splits, error } = await db.from("bill_splits").select("id, status, order_ids")
       .eq("restaurant_id", restaurantId).eq("session_id", sessionId).eq("model_version", 2);
     if (error || !splits) return await apiError("apiErr.ordersLoad", 503);
-    if (!splits.length) return NextResponse.json({ split: false, payments: [] });
+    if (!splits.length) return NextResponse.json({ split: false, splitOrderIds: [], payments: [] });
     const { data: slots, error: slotError } = await db.from("bill_split_slots").select("payment_id, split_id, share_no")
       .eq("restaurant_id", restaurantId).in("split_id", splits.map(s => s.id)).order("share_no");
     if (slotError || !slots) return await apiError("apiErr.ordersLoad", 503);
@@ -37,6 +37,9 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
       if (!receipt) { receipt = { paymentId: slot.payment_id, splitId: slot.split_id, slots: [] }; payments.push(receipt); }
       receipt.slots.push(slot.share_no);
     }
-    return NextResponse.json({ split: payments.length > 0 || splits.some(s => s.status !== "cancelled"), payments });
+    // A completed split still owns its order receipts, but not the next round.
+    const splitOrderIds = [...new Set(splits.filter(s => s.status !== "cancelled"
+      || payments.some(p => p.splitId === s.id)).flatMap(s => s.order_ids ?? []))];
+    return NextResponse.json({ split: splits.some(s => ["proposed", "locked"].includes(s.status)), splitOrderIds, payments });
   } catch { return await apiError("apiErr.ordersLoad", 503); }
 }

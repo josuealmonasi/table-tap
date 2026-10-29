@@ -114,7 +114,7 @@ for (const size of SIZES) for (const screen of SPLIT_SCREENS) {
         const auth = cookies.get(screen.role);
         if (auth?.error) throw auth.error;
         if (auth?.cookie) await job.ctx.addCookies([auth.cookie]);
-        const fixture = await splitScreenFixture(admin, fixtures.r.id, screen.state !== "start");
+        const fixture = await splitScreenFixture(admin, fixtures.r.id, screen.state !== "start", screen.state !== "writeoff");
         try {
           await openSplitScreen(job, { fixture, screen, base: BASE, lang });
           return { failures: await look(job.tab, screen.name, job.phase, job.log), audits: 1 };

@@ -9,11 +9,12 @@ import { formatMoney } from "@/lib/format";
 import { useT } from "@/lib/i18n/context";
 import { tipFor } from "@/lib/pricing";
 import { newRef } from "@/lib/collection-ref";
+import type { CollectedSlotReceipt } from "@/hooks/useStaffSlotReceipts";
 import type { StaffSlotSplit } from "@/lib/split-slots-staff";
 
-interface Props { split: StaffSlotSplit; remaining: number; refresh: () => Promise<void>; onCollected: () => void }
+interface Props { canApprove: boolean; onWriteOff: (split: StaffSlotSplit) => void; split: StaffSlotSplit; remaining: number; refresh: () => Promise<void>; onCollected: () => void; onReceipt: (receipt: CollectedSlotReceipt) => void }
 /** Both staff doors choose the same parts and send the same reviewed cents. */
-export default function SplitCollection({ split, remaining, refresh, onCollected }: Props): JSX.Element {
+export default function SplitCollection({ split, remaining, refresh, onCollected, onReceipt, canApprove, onWriteOff }: Props): JSX.Element {
   const t = useT();
   const [selected, setSelected] = useState<number[]>([]);
   const [tipPct, setTipPct] = useState(0);
@@ -23,6 +24,8 @@ export default function SplitCollection({ split, remaining, refresh, onCollected
   const sending = useRef(false);
   const request = useRef<{ body: string; ref: string } | null>(null);
   const slots = split.slots ?? [];
+  const canWriteOff = split.modelVersion === 2 && split.status === "locked" && split.orderIds?.length > 0
+    && slots.length === split.shares && slots.some(s => !s.paid) && !slots.some(s => s.paying);
   const chosen = freeSelection(slots, selected);
   const cents = chosen.reduce((sum, s) => sum + s.amountCents, 0);
   const amount = cents / 100;
@@ -48,6 +51,8 @@ export default function SplitCollection({ split, remaining, refresh, onCollected
       const data = await res.json().catch(() => ({}));
       if (!res.ok) setError(data.error ?? t("settle.failed"));
       else {
+        if (!cancel && typeof data.payment === "string") onReceipt({ paymentId: data.payment,
+          amountCents: Number(data.amount_cents ?? cents + Math.round(tip * 100)), currency });
         setSelected([]); setTipPct(0); setTipCustom(null); request.current = null;
         onCollected();
       }
@@ -73,6 +78,8 @@ export default function SplitCollection({ split, remaining, refresh, onCollected
         {t("settle.card")} · {formatMoney(amount + (tooMuch ? 0 : tip), currency)}
       </button>
     </div>
+    {canWriteOff && <button type="button" className="tt-btn tt-btn-ghost tt-bill-close" disabled={busy}
+      onClick={() => onWriteOff(split)}>{t(canApprove ? "writeOff.rest" : "writeOff.request")}</button>}
     {split.frozen ? <p className="tt-muted">{t("slots.frozen")}</p>
       : <button type="button" className="tt-btn tt-btn-ghost" disabled={busy} onClick={() => send(true)}>{t("slots.cancel")}</button>}
   </section>;

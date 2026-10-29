@@ -10,3 +10,8 @@ export async function splitSlots(restaurantId: string, splitId: string): Promise
   return (data ?? []).map(s => ({ shareNo: s.share_no, amountCents: s.amount_cents, feeCents: s.fee_slice_cents,
     paid: Boolean(s.payment_id), paying: Boolean(s.reserved_checkout_id) && !s.payment_id }));
 }
+
+/** Cash can pay a part without opening a card attempt; both freeze the division. */
+export function splitFrozen(firstAttempt: string | null, slots: SplitSlot[]): boolean {
+  return Boolean(firstAttempt) || slots.some(slot => slot.paid || slot.paying);
+}

@@ -60,12 +60,17 @@ export function useSplit(
       const res = await fetch(url, { cache: "no-store" });
       const result = await res.json();
       if (!res.ok) throw new Error(result.error ?? t("slots.readFailed"));
+      // A confirmed empty bill ends the old start; a failed read cannot do that.
+      if (!sending.current && result.split === null) start.current = null;
       return result;
     } catch { throw new Error(t("slots.readFailed")); }
   }, { refreshInterval: SPLIT_POLL_MS });
   const split = data?.split ?? null;
   const diner = data?.diner ?? "";
-  async function read(): Promise<void> { await mutate(); }
+  async function read(): Promise<void> {
+    const fresh = await mutate();
+    if (fresh?.split === null) start.current = null;
+  }
 
   async function send(path: string, method: string, body: Record<string, unknown>): Promise<void> {
     if (!tableId || !sessionId || sending.current) return;
@@ -79,6 +84,8 @@ export function useSplit(
       });
       const result = await res.json().catch(() => ({}));
       if (!res.ok) setError(result.error ?? t("apiErr.generic"));
+      // Cancellation is final even when Wi-Fi loses the following read.
+      else if (path === "/api/split/cancel" || method === "DELETE") start.current = null;
       // Offline for a moment: keep showing what we last knew.
       // A refusal can mean another phone took a part, so read the current list too.
       await read();
@@ -86,6 +93,7 @@ export function useSplit(
     finally { sending.current = false; setBusy(false); }
   }
   function propose(shares: number): Promise<void> {
+    if (sending.current) return Promise.resolve();
     const request = JSON.stringify({ restaurantId, tableId, sessionId, shares, ...quote });
     // The same start after a lost reply must find its split, not create another.
     if (start.current?.key !== request) start.current = { key: request, ref: splitStartRef() };

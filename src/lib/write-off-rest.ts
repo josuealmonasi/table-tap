@@ -1,3 +1,4 @@
+import { receiptCents } from "@/lib/receipt-amount";
 import { randomUUID } from "node:crypto";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { closeSessionsFor } from "@/lib/table-session";
@@ -10,24 +11,12 @@ export async function coverageByOrder(restaurantId: string, orderIds: string[]):
   for (const id of orderIds) {
     const { data, error } = await db.rpc("retained_order_coverage", { p_restaurant: restaurantId, p_order: id });
     if (error) return null;
-    paid.set(id, Math.round(Number(data ?? 0) * 100) / 100);
+    paid.set(id, receiptCents(Number(data ?? 0)) / 100);
   }
   return paid;
 }
 
-/**
- * What a table still owes, in cents: the rest of part-paid orders and the whole
- * of unpaid ones. Each amount is rounded to cents before subtracting, exactly
- * as write_off_remainder_v1 counts them: subtracting first gave 67 cents for an
- * unscaled 2.675 less 2.00 where Postgres gave 68 (write-off audit #8).
- */
-export function owedCents(orders: Pick<Order, "id" | "total">[], paid: Map<string, number>): number {
-  return orders.reduce((sum, o) => {
-    const covered = paid.get(o.id) ?? 0;
-    const total = Math.round(Number(o.total) * 100);
-    return sum + (covered <= 0 ? total : Math.max(total - Math.round(covered * 100), 0));
-  }, 0);
-}
+export { owedCents } from "@/lib/write-off-cents";
 
 export type RestOutcome =
   | { outcome: "forgiven"; forgivenCents: number; writtenOffCents: number; orderIds: string[] }
@@ -72,3 +61,13 @@ export const REST_REFUSAL: Record<string, string> = {
   invalid: "apiErr.invalidRequest",
   failed: "apiErr.generic",
 };
+
+/** A locked division can lose its unpaid parts even before its first payment. */
+export async function hasLockedSlotSplit(restaurantId: string, orders: { id: string; session_id?: string | null }[]): Promise<boolean | null> {
+  const sessions = [...new Set(orders.map(o => o.session_id).filter((id): id is string => Boolean(id)))];
+  if (!sessions.length) return false;
+  const { data, error } = await createAdminClient().from("bill_splits").select("order_ids")
+    .eq("restaurant_id", restaurantId).eq("model_version", 2).eq("status", "locked").in("session_id", sessions);
+  if (error) return null;
+  return (data ?? []).some(s => s.order_ids.some((id: string) => orders.some(o => o.id === id)));
+}

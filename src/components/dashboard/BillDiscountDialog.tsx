@@ -12,7 +12,7 @@ import { normalizeCoupon } from "@/lib/coupons";
 import { useCouponOptions } from "@/hooks/useCouponOptions";
 import CouponCodePicker from "./CouponCodePicker";
 import OpenBillSummary from "./OpenBillSummary";
-import type { OpenBill } from "@/lib/open-bills";
+import { remainingBill, type OpenBill } from "@/lib/open-bills";
 
 interface BillDiscountDialogProps {
   open: boolean;
@@ -84,7 +84,10 @@ export default function BillDiscountDialog({
   }
   const [error, setError] = useState<string | null>(null);
 
-  const coupons = useCouponOptions(open, bill.total);
+  const discountBlocked = bill.split ? "dash.billSplitDiscount"
+    : (bill.collected ?? 0) > 0 ? "dash.billCollectedDiscount"
+    : bill.discounted ? "dash.billAlreadyDiscounted" : null;
+  const coupons = useCouponOptions(open && !discountBlocked, bill.total);
 
   function pick(next: string): void {
     setCode(next);
@@ -93,6 +96,7 @@ export default function BillDiscountDialog({
 
   async function submit(e: React.FormEvent): Promise<void> {
     e.preventDefault();
+    if (discountBlocked) return;
     setBusy(true);
     setError(null);
     try {
@@ -139,9 +143,9 @@ export default function BillDiscountDialog({
       >
         <OpenBillSummary bill={bill} currency={currency} />
 
-        {bill.discounted ? (
+        {discountBlocked ? (
           <p className="tt-muted" style={{ marginTop: 14 }}>
-            {t("dash.billAlreadyDiscounted")}
+            {t(discountBlocked)}
           </p>
         ) : (
           <form onSubmit={submit} style={{ marginTop: 16 }}>
@@ -187,11 +191,16 @@ export default function BillDiscountDialog({
             </div>
           </form>
         )}
+        {discountBlocked && <button type="button" className="tt-btn tt-btn-ghost tt-btn-sm tt-bill-close"
+          onClick={() => { setError(null); setClosing(true); }}>
+          {canApprove ? t("writeOff.title") : t("writeOff.request")}
+        </button>}
       </Modal>
       <WriteOffDialog
         open={closing}
         onClose={() => setClosing(false)}
-        amount={bill.total}
+        amount={remainingBill(bill)}
+        collected={bill.collected}
         currency={currency}
         canApprove={canApprove}
         busy={busy}

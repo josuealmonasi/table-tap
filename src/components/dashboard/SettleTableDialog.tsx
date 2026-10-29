@@ -1,7 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useStaffSlotReceipts } from "@/hooks/useStaffSlotReceipts";
+import SlotReceiptPrints from "./SlotReceiptPrints";
 import TableSplitCollection from "./TableSplitCollection";
+import SplitWriteOffDialog from "./SplitWriteOffDialog";
 import type { StaffSlotSplit } from "@/lib/split-slots-staff";
 import { SPLIT_POLL_MS } from "@/lib/poll";
 import CashChange from "@/components/dashboard/CashChange";
@@ -71,6 +74,7 @@ export default function SettleTableDialog({
 }: SettleTableDialogProps) {
   const t = useT();
   const toast = useToast();
+  const [writingOff, setWritingOff] = useState<StaffSlotSplit | null>(null);
   const [splits, setSplits] = useState<StaffSlotSplit[]>([]);
   const [orders, setOrders] = useState<Order[] | null>(null);
   // The bill could not be read. Never the same answer as a table that owes
@@ -87,7 +91,9 @@ export default function SettleTableDialog({
   const [selectedCurrency, setSelectedCurrency] = useState<string | null>(null);
   const [ref] = useState(newRef);
 
-  useEffect(() => { setOrders(null); setSplits([]); setUnread(false); }, [open, restaurantId, tableId, orderId]);
+  const { receipts, rememberReceipt } = useStaffSlotReceipts(`${open}:${restaurantId}:${tableId}:${orderId}`);
+
+  useEffect(() => { setOrders(null); setSplits([]); setUnread(false); setWritingOff(null); }, [open, restaurantId, tableId, orderId]);
 
   useEffect(() => {
     if (!open) return;
@@ -180,7 +186,7 @@ export default function SettleTableDialog({
           the settle sheet rather than stacking over it — two open dialogs trap
           focus against each other and take two Escapes to leave. */}
       <Modal
-        open={open && !asking && !inParts}
+        open={open && !asking && !inParts && !writingOff}
         onClose={onClose}
         maxWidth={460}
         label={t("settle.open")}
@@ -190,6 +196,8 @@ export default function SettleTableDialog({
             with the one thing it does not have. */}
         {t(tableId ? "settle.title" : "settle.titleToGo", { label: tableLabel })}
       </h3>
+
+      <SlotReceiptPrints receipts={receipts} />
 
       {currencies.length > 1 && <div role="group" aria-label={t("settle.currency")}>
         <p className="tt-muted">{t("settle.mixed")}</p>
@@ -218,8 +226,8 @@ export default function SettleTableDialog({
       ) : (
         <>
           <SettleBillLines bill={{ ...bill, paid: tableBill(orders ?? [], []).paid }} currency={currency} />
-          {slotSplits.length > 0 ? <TableSplitCollection splits={slotSplits}
-            remaining={bill.total} refresh={async () => { setAttempt(n => n + 1); }} onCollected={onSettled} /> : <>
+          {slotSplits.length > 0 ? <TableSplitCollection canApprove={canApprove} onWriteOff={setWritingOff} splits={slotSplits}
+            remaining={bill.total} refresh={async () => { setAttempt(n => n + 1); }} onCollected={onSettled} onReceipt={rememberReceipt} /> : <>
           <CashChange amount={bill.total} currency={currency} />
 
           <div className="tt-bill-actions">
@@ -288,8 +296,12 @@ export default function SettleTableDialog({
         </>
       )}
       </Modal>
+      {open && writingOff && <SplitWriteOffDialog split={writingOff} orders={orders ?? []} canApprove={canApprove}
+        onClose={() => setWritingOff(null)} onApplied={() => { setAttempt(n => n + 1); onSettled(); }} />}
+
       {tableId && (
         <TableCalculator
+          canApprove={canApprove}
           open={inParts}
           onClose={() => {
             setInParts(false);
