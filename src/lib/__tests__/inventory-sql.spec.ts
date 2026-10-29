@@ -30,3 +30,10 @@ it("keeps a derived pack price to six places (sweep 7, finding 8)", () => {
   expect(schema).not.toContain("round(p_total / p_packs, 2)");
   expect(schema.match(/round\(p_total \/ p_packs, 6\)/g)?.length).toBe(3);
 });
+
+it("takes a wasted plate's ingredients from the choices it was made with (sweep 7, finding 6)", () => {
+  expect(schema).toContain("alter table waste_entries add column if not exists choices jsonb;");
+  for (const writer of ["record_waste", "record_waste_once"]) expect(body(writer), writer).toContain("case when p_item is not null then p_choices end");
+  expect(body("waste_ingredient_usage_v2")).toContain("'mods', coalesce(p_choices->'mods', '{}'), 'extras', coalesce(p_choices->'extras', '[]')");
+  expect(body("track_ingredient_movement")).toContain("waste_ingredient_usage_v2(v_restaurant,");
+});
