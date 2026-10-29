@@ -10,13 +10,14 @@ import type { MenuItem, OrderLineItem } from "@/lib/types";
 
 const burger: VerifiableItem = {
   id: "burger", name: "Burger", price: 100, emoji: "", available: true,
-  discount_pct: 0, category_id: null,
+  discount_pct: 0, category_id: null, menu_id: "dinner", is_addon: false,
+  item_addons: [{ addon_id: "cheese" }],
   modifiers: [
     { label: "Size", type: "single", options: ["Small", "Large"], required: true },
     { label: "Sauces", type: "multi", options: ["Hot", "Mild"] },
   ],
 };
-const cheese: VerifiableItem = { ...burger, id: "cheese", name: "Cheese", price: 25, modifiers: [] };
+const cheese: VerifiableItem = { ...burger, id: "cheese", name: "Cheese", price: 25, modifiers: [], is_addon: true };
 const promotion: PromotionWithItems = {
   id: "meal", restaurant_id: "r", kind: "combo", name: "Meal", emoji: "", description: null,
   combo_price: 120, buy_qty: null, pay_qty: null, tiers: null, active: true, sort_order: 0,
@@ -100,7 +101,7 @@ describe("E5: component extras agree with price, stock and paper", () => {
   it("preserves the actual UI's duplicate copies without charging twice", () => {
     const rows = [burger, { ...burger, id: "coffee", name: "Coffee", modifiers: [] }, cheese];
     const promo = { ...promotion, items: [{ item_id: "burger", qty: 1 }, { item_id: "coffee", qty: 1 }] };
-    const menu = new Map(rows.map(row => [row.id, row as MenuItem]));
+    const menu = new Map(rows.map(row => [row.id, row as unknown as MenuItem]));
     const combo = buildCombos([promo], menu)[0];
     const line = comboCartLine(combo, [
       { itemId: "burger", mods: { Size: "Large" }, extraIds: ["cheese"] },
