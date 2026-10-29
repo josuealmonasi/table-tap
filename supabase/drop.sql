@@ -1,5 +1,6 @@
 drop table if exists restaurant_accounting_records cascade;
 drop table if exists platform_admin_audit cascade;
+drop function if exists public.check_item_addon_restaurant();
 drop function if exists public.keep_platform_admin_audit();
 drop function if exists public.admin_delete_restaurant(uuid, boolean);
 drop function if exists public.advance_refund_due_fee(uuid, uuid, jsonb, int, int, int, text);
