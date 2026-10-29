@@ -9,10 +9,11 @@ const checked = async query => {
   return data;
 };
 /** Each browser visit owns its table, membership and receipts; none borrows the demo's money. */
-export async function splitScreenFixture(admin, restaurantId, start = true) {
+export async function splitScreenFixture(admin, restaurantId, start = true, holdPart = true) {
   const f = await splitSlotFixture(admin, restaurantId, { totalCents: 11000, shares: 3, start });
   const phones = memberFixture(admin, restaurantId);
   const requestId = randomUUID();
+  let collectedReceipt;
   const tableLabel = `split-${f.startBody.ref.slice(0, 8)}`;
   const cleanup = async () => {
     try { await checked(admin.from("service_requests").delete().eq("id", requestId)); }
@@ -27,12 +28,15 @@ export async function splitScreenFixture(admin, restaurantId, start = true) {
         p_revision: 1, p_slots: b.slots, p_expected_cents: b.expectedCents, p_currency: b.currency,
         p_tip_cents: 0, p_method: "cash", p_actor: "split-screen-fixture", p_ref: b.ref });
       if (result.outcome !== "collected") throw new Error(`screen collection: ${result.outcome}`);
-      const held = await f.hold([1], phones.idFor(f.scope.sessionId, "slot-screen"));
-      if (held.result.outcome !== "reserved") throw new Error(`screen reservation: ${held.result.outcome}`);
+      collectedReceipt = result;
+      if (holdPart) {
+        const held = await f.hold([1], phones.idFor(f.scope.sessionId, "slot-screen"));
+        if (held.result.outcome !== "reserved") throw new Error(`screen reservation: ${held.result.outcome}`);
+      }
       await checked(admin.from("service_requests").insert({ id: requestId, restaurant_id: restaurantId,
         table_id: f.scope.tableId, table_label: tableLabel, kind: "pay" }));
     }
-    return { ...f, cookie, tableLabel, cleanup };
+    return { ...f, cookie, tableLabel, cleanup, collectedReceipt };
   } catch (error) { await cleanup(); throw error; }
 }
 
@@ -67,12 +71,27 @@ export async function openSplitScreen({ ctx, tab, phase }, { fixture, screen, ba
       await tab.locator(".tt-split select").selectOption("20");
     } else await tab.locator("[data-split-slot='2'] input").check();
   } else if (screen.door === "bills") {
-    await navigate(tab, `${base}/dashboard/bills?order=${f.orderId}`, phase, pending);
+    const promotion = ["promotion", "writeoff"].includes(screen.state);
+    await navigate(tab, `${base}/dashboard/bills${promotion ? "" : `?order=${f.orderId}`}`, phase, pending);
+    if (promotion) {
+      await tab.locator(".tt-bill-open-main").filter({ hasText: f.tableLabel }).click();
+    }
   } else {
     await navigate(tab, `${base}/dashboard/orders`, phase, pending);
     const chip = tab.locator(".tt-request-chip").filter({ hasText: f.tableLabel });
     await chip.getByRole("button", { name: /cobrar|collect/i }).click();
   }
+  if (screen.state === "writeoff") await tab.locator(".tt-bill-close").click();
   await phase("readiness", () => ready(tab, { pending }));
-  await tab.locator(screen.state === "start" ? ".tt-split select" : "[data-split-model='2']").waitFor({ state: "visible" });
+  const target = screen.state === "start" ? ".tt-split select"
+    : screen.state === "writeoff" ? ".tt-writeoff-amount" : "[data-split-model='2']";
+  await tab.locator(target).waitFor({ state: "visible" });
+  if (screen.state === "receipt") {
+    // Reuse the fixture's paid receipt. A browser sweep never collects more money.
+    await tab.route("**/api/split/collect", route => route.fulfill({ status: 200,
+      contentType: "application/json", body: JSON.stringify({ ok: true, ...f.collectedReceipt }) }));
+    await tab.locator("[data-split-slot='2'] input").check();
+    await tab.getByRole("button", { name: /pagó en efectivo|paid cash/i }).click();
+    await tab.locator("[data-slot-receipt-print]").waitFor({ state: "visible" });
+  }
 }

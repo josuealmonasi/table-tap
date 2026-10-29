@@ -7,7 +7,7 @@ import { logEvent } from "@/lib/activity-log";
 import { logDetail } from "@/lib/log-detail";
 import { closeSessionsFor } from "@/lib/table-session";
 import { NOTE_MAX, writableOff, writeOffTotal } from "@/lib/write-off";
-import { applyWriteOffRest, coverageByOrder, owedCents, REST_REFUSAL } from "@/lib/write-off-rest";
+import { applyWriteOffRest, coverageByOrder, owedCents, hasLockedSlotSplit, REST_REFUSAL } from "@/lib/write-off-rest";
 
 export const runtime = "nodejs";
 
@@ -103,11 +103,13 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   const paidBy = await coverageByOrder(actor.restaurantId, orders.map(o => o.id));
   if (paidBy === null) return await apiError("apiErr.verifyOrders", 503);
   const paid = Math.round([...paidBy.values()].reduce((a, b) => a + b, 0) * 100) / 100;
-  if (paid > 0) {
+  const divided = paid > 0 ? true : await hasLockedSlotSplit(actor.restaurantId, orders);
+  if (divided === null) return await apiError("apiErr.verifyOrders", 503);
+  if (divided) {
     const expectedCents = owedCents(orders, paidBy);
     // Asked for the whole bill, and part of it was paid since: not the same decision.
     if (expectedCents !== Math.round(reviewedAmount * 100) || orders.length !== request.order_ids.length) {
-      return await apiError("apiErr.writeOffPartPaidLater", 409);
+      return await apiError(paid > 0 ? "apiErr.writeOffPartPaidLater" : "apiErr.writeOffChanged", 409);
     }
     const done = await applyWriteOffRest({
       orders, restaurantId: actor.restaurantId, actorEmail: actor.email, reason: request.reason,
@@ -133,7 +135,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   // Paid in part since it was asked for: the request stays pending, and the
   // floor collects the rest (paths audit #5).
   if (outcome === "part_paid") return await apiError("apiErr.writeOffPartPaidLater", 409);
-  if (outcome === "split") return await apiError("apiErr.billSplitLive", 409);
+  if (outcome === "split") return await apiError("apiErr.writeOffSplit", 409);
   if (outcome !== "approved") return await apiError("apiErr.approvalChanged", 409);
   await closeSessionsFor(orders, "written_off");
 

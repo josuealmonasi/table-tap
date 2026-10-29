@@ -49,3 +49,23 @@ it("can start on a local phone without the secure-context randomUUID method", as
   const call = vi.mocked(fetch).mock.calls.find(([url]) => url === "/api/split/start");
   expect(JSON.parse(call![1]!.body as string).ref).toMatch(/^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/);
 });
+
+it("retires the start reference after cancellation even if the follow-up read fails", async () => {
+  await act(async () => hook.propose(2));
+  vi.mocked(fetch).mockImplementation(async (_url, init) => {
+    if (!init?.method) throw new Error("read lost");
+    return { ok: true, json: async () => ({ outcome: "cancelled" }) } as Response;
+  });
+  await act(async () => hook.cancel());
+  await act(async () => hook.propose(2));
+  const bodies = vi.mocked(fetch).mock.calls.filter(([url]) => url === "/api/split/start").map(([, init]) => JSON.parse(init!.body as string));
+  expect(bodies[1].ref).not.toBe(bodies[0].ref);
+});
+it("retires the start reference when a fresh read finds no live split", async () => {
+  await act(async () => hook.propose(2));
+  vi.mocked(fetch).mockResolvedValue({ ok: true, json: async () => ({ diner: "member", split: null }) } as Response);
+  await act(async () => hook.refresh());
+  await act(async () => hook.propose(2));
+  const bodies = vi.mocked(fetch).mock.calls.filter(([url]) => url === "/api/split/start").map(([, init]) => JSON.parse(init!.body as string));
+  expect(bodies[1].ref).not.toBe(bodies[0].ref);
+});

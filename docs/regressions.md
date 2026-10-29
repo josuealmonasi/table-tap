@@ -34,6 +34,18 @@ and that a new party cannot see the previous party's waiting phones.
 | A duplicate refund tracks customer completion and fee completion separately (S11 I5) | A failed fee return disappeared behind an already-refunded customer payment |
 | A duplicate refund keeps its original charge currency everywhere (S11 I9) | Changing the menu currency relabelled money owed back and the approval amount |
 |---|---|
+| Write-off confirmations use per-order decimal cents (#576 R4) | Frozen slot totals and binary rounding quoted 2.01 instead of 2.02, or 0.50 instead of 0.51, while the writer required more |
+| Receipt suppression uses discovery begun for the settlement decision (#576 R3) | An earlier unsplit read, or a failed latest read, offered a whole-order receipt after parts paid |
+| Write-off confirms only the unpaid remainder (#574-5) | The open-bill row showed MX$20 left while its confirmation claimed MX$100 lost |
+| Promotion controls respect a live division (#574-6) | Managers and waiters could offer a discount that the split guard refused |
+| Receipt discovery queues payments independently of a pending card return (#574-7) | Waiting for one webhook permanently swallowed another part's receipt |
+| Receipt suppression follows the divided orders (#574-8) | A historical split hid the receipt for a later ordinary round |
+| A divided-bill walkout can forgive the whole remainder (#574-2) | The writer allowed it but both staff doors offered no matching action; zero-payment requests still used the old writer |
+| Staff paper keeps the collected payment identity (#574-9) | Collecting one part left only a whole-order print control |
+| Remainder quotes and SQL round decimal cents alike (#574-10) | A legacy 1.005 total quoted 50 cents left where SQL required 51 |
+| A split start reference ends with its operation (#574-3) | Cancelling and starting the same division replayed the cancelled split |
+| The split readers and money writer agree on frozen parts (#574-4) | Cash-paid or held parts left forbidden resize and cancel controls visible |
+
 | A manual-only completion needs no app attempt (Returns verification 3) | A manager finished the return between discovery and start, but the executor required app account fields and answered incomplete |
 | A manual return keeps its provider date when attributed later (Returns V6) | Discovering Monday's successful manual refund on Tuesday moved its money into Tuesday's reports |
 | Completed returns preserve the eaten sale and its exact component plan (Returns 7b) | Cancelling served food would release stock, while the return route had no preparation boundary |
@@ -5613,3 +5625,143 @@ format. A mismatched attempt is now simply not offered for resuming and is
 logged; its parts stay held, so nothing can be paid twice. The fixture now
 writes the card path's own key, and the seed picks a bill large enough for
 three card parts, so its card hold is never refused at random.
+
+### A split start ends when its operation ends (#574-3)
+
+The phone's retry reference and the split's lifetime had to agree. A successful
+cancellation retires the reference even if the next read fails; a fresh read
+with no live split retires it too. Lost replies and failed reads keep it, so
+retrying uncertain work still names the same operation. The failing cases in
+`split-slots-client.spec.tsx` now pass for cancellation and a later empty read.
+
+### Paid and held parts freeze both readers (#574-4)
+
+The staff and diner readers had to agree with the writer's refusal. Cash can
+pay a part without setting the first card-attempt timestamp. Both readers now
+also freeze for any paid or held part, through the same helper. The previously
+failing paid-only and held-only cases in `split-slots-state.spec.ts` and
+`split-slots-staff-read.spec.ts` pass; untouched parts remain changeable.
+
+### Write-off confirms the remaining loss (#574-5)
+
+The open-bill row and its write-off confirmation had to agree. The promotion
+dialog now passes `remainingBill(bill)`, with the existing collection shown as
+money that stays paid. `bill-discount-574.spec.tsx` first reproduced MX$100
+shown for an MX$20 remainder, then passed with the MX$80 retained explanation
+in both languages. The request and manager paths use the same confirmation.
+
+### Promotions respect the live division (#574-6)
+
+The older promotion form and the split guard had to agree. Cuentas abiertas
+now reads proposed as well as locked divisions. A live split or an existing
+collection replaces the promotion picker and its apply/request button with a
+plain explanation. Write-off remains reachable, including on discounted bills.
+`bill-discount-574.spec.tsx` reproduced both forbidden offers before the fix;
+it now checks that neither role can submit one and that write-off still opens.
+
+### A pending card receipt does not swallow another payment (#574-7)
+
+The list of seen payments and the receipt queue had to agree. Newly observed
+payments now enter the queue whether or not the returning card payment has
+arrived. `slot-receipt-offer.spec.tsx` reproduced a cash receipt lost while
+waiting for a webhook; the cash receipt and later card receipt now each get
+one turn without replacing the receipt already visible.
+
+### A later round gets its own receipt (#574-8)
+
+The receipt poll and the orders just paid had to agree. The endpoint returns
+the order ids covered by divisions, including completed ones. The ordinary
+receipt offer excludes those orders rather than suppressing a whole sitting
+forever. It waits through a failed discovery read before deciding. The failing
+later-round case in `slot-receipt-offer.spec.tsx` now passes, alongside a mixed
+bill, split-only closure and delayed discovery. `slot-receipt-payments-route.spec.ts`
+checks the completed split's order ids and preserves approved-sitting scoping.
+
+### Staff can print the part they just collected (#574-9)
+
+The collection result and its print control had to agree on the payment id.
+Both staff doors keep the receipt after the live split disappears and expose
+“Print this part” with its charged amount, through the payment reprint route.
+The existing activity read supplies the original payment id on duplicate
+retries, even if logging later fails; activity still cannot block collection.
+`split-slots-collection-screen.spec.tsx` first failed without the control and
+now checks both doors and languages, disappearance of the split and a tip
+counted once. `split-slots-collect-route.spec.ts` reproduced the retry's missing
+id and now verifies it. Layout and dialog lists include these receipt states,
+plus the promotion refusal and remainder confirmation, for every collector.
+Their browser fixture reuses a paid receipt without collecting more money.
+
+### Remainder quotes use decimal cents (#574-10)
+
+The JavaScript quote and SQL's numeric rounding had to agree. `owedCents` now
+uses the existing `receiptCents` conversion for each total and retained amount,
+still rounding before subtracting. `write-off-rest-cents.spec.ts` reproduced
+1.005 less 0.50 as 50 cents; it now quotes SQL's 51, and preserves 2.675 less
+2.00 as 68. No collection rounding policy or SQL is changed.
+
+
+### Staff can forgive a divided-bill walkout (#574-2)
+
+The locked split's writer and the staff's two collection doors had to agree.
+Pedidos and a Cuentas abiertas row now offer “Write off the rest” to owners
+and managers, or a cancellation request to waiters and cashiers, only for a
+locked model-2 split with unpaid parts and no online hold. The confirmation
+says the paid parts stay paid. It names every order of the chosen split and
+quotes only its unpaid parts; later rounds are separate. The existing route
+checks the reviewed cents and uses the remainder writer even before a first
+payment, including when a manager approves a request. Proposals, partial
+split selections, online payments and changed amounts keep their refusal.
+
+`split-write-off.spec.tsx`, `split-write-off-route.spec.ts` and
+`split-slots-staff-read.spec.ts` reproduced the absent control, missing order
+identities and old zero-payment writer before the fixes. They cover both doors,
+roles, states, reviewed request bodies and visible refusals in both languages.
+Layout and dialog lists open the real confirmation through both staff doors,
+with a private paid-part fixture that deliberately leaves no online hold.
+
+
+### Receipt discovery belongs to the settlement decision (#576 R3)
+
+The bill closing and the receipt poll had to agree about the same moment.
+A successful read before a division was created said no orders were divided;
+reusing it when the bill closed offered the whole order as well as the paid
+parts. A failed later read left that old answer usable too. Discovery now
+belongs to the current settlement decision and is cleared when a read starts.
+A late answer begun before closure cannot decide the ordinary receipt; a new
+read follows it. The payment queue keeps its last successful observation.
+`slot-receipt-offer.spec.tsx` first failed all three sequences, then passed
+alongside mixed bills, later ordinary rounds and ordinary cash/card receipts.
+
+
+### Write-off confirmations share the writer's decimal cents (#576 R4)
+
+The staff confirmation and `owedCents` had to agree before the manager acted.
+Frozen slots round the pooled bill, so two 1.005 orders on one phone could
+quote 2.01 even though the writer requires 2.02. Binary rounding in open bills
+also showed 0.50 for 1.005 less 0.50, where SQL requires 0.51. Both staff doors
+now pass their already-read order totals and coverage to the split
+confirmation. Open bills carry the same per-order remainder, including the
+per-order zero floor so excess coverage cannot hide another order's debt.
+The existing `owedCents` calculation and its explanatory comment now live in
+a pure module shared by the server and confirmations. Collection math stays
+as it was. No new copy or SQL is needed.
+
+`split-write-off.spec.tsx` and `bill-discount-574.spec.tsx` failed the old
+quotes first. They now verify decimal cents through both collection doors and
+in both languages, including the split request's reviewed cents.
+`open-bills.spec.ts` covers grouping order and excess coverage;
+`split-write-off-route.spec.ts` mocks the database to check that the writer
+receives exactly 202 or 51 cents for those same confirmations.
+### An open whole-bill card page blocks a divided bill until it is resolved
+
+The split writers and Stripe had to agree on whether a whole-bill page can
+still charge. The first guard counted only pages opened in the last 35
+minutes, so a charge whose webhook arrived late left a still-open page that
+no longer blocked cash for the parts: the table paid twice again (#576
+verification R1). The guard now has no age window; a split route that gets
+`paying` asks Stripe about each open whole-bill page and closes one Stripe
+says expired, exactly as the expiry webhook would, then tries once more. An
+open or paid page, or Stripe being unreachable, keeps the refusal. The
+walkout write-off reads open pages too instead of `card_checkout_at`, which a
+divided bill's own part pages stamp and never clear (R2).
+`whole-bill-pages.spec.ts`, `split-574-sql.spec.ts`.

@@ -64,7 +64,10 @@ it.each([false, true])("locks both bill-row actions until the server refresh fin
   click("dash.collect"); state.ui.render(); state.dialog!.onSettled(); state.dialog!.onClose(); state.ui.render();
   const mains = state.ui.all("button").filter(n => n.props.className === "tt-bill-open-main");
   expect(mains.map(n => n.disabled)).toEqual([true, false]);
-  expect(state.ui.all("button").find(n => n.text === "settle.updatingBalance")?.disabled).toBe(true);
+  // The button keeps its label (a longer one crushed the row at 360px) and the
+  // row itself says the balance is refreshing.
+  expect(state.ui.all("button").filter(n => n.text === "dash.collect").map(n => n.disabled)).toEqual([true, false]);
+  expect(state.ui.text()).toContain("settle.updatingBalance");
   expect(state.refresh).toHaveBeenCalledOnce();
   bills = fullyPaid ? [bills[1]] : [{ ...bills[0], total: 60, collected: 40 }, bills[1]];
   state.finish(); state.ui.render();

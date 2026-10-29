@@ -17,7 +17,7 @@ const request = () => GET(new NextRequest("http://localhost/api/receipt/payments
 beforeEach(() => {
   state.reads = []; state.errorTable = ""; state.limited = false; state.member.mockReset().mockResolvedValue({ id: "member", closed: true });
   state.tables = {
-    bill_splits: [{ id: "split", restaurant_id: "r", table_id: "table", session_id: "session", model_version: 2 }],
+    bill_splits: [{ id: "split", restaurant_id: "r", table_id: "table", session_id: "session", model_version: 2, status: "locked", order_ids: ["order"] }],
     bill_split_slots: [0, 2].map(share_no => ({ restaurant_id: "r", split_id: "split", share_no, payment_id: "payment", reserved_checkout_id: "secret-checkout" })),
   };
 });
@@ -27,7 +27,7 @@ it("groups only the approved sitting's paid parts, including after its last paym
     { restaurant_id: "other-restaurant", split_id: "split", share_no: 1, payment_id: "foreign" },
     { restaurant_id: "r", split_id: "split", share_no: 3, payment_id: null });
   const response = await request(); expect(response.status).toBe(200);
-  expect(await response.json()).toEqual({ split: true, payments: [{ paymentId: "payment", splitId: "split", slots: [0, 2] }] });
+  expect(await response.json()).toEqual({ split: true, splitOrderIds: ["order"], payments: [{ paymentId: "payment", splitId: "split", slots: [0, 2] }] });
   expect(state.member).toHaveBeenCalledWith(expect.any(NextRequest), "r", "table", "session", true);
   expect(state.reads).not.toContain("payments");
 });
@@ -42,5 +42,13 @@ it.each(["bill_splits", "bill_split_slots"])("does not turn a failed %s read int
 });
 it("does not invent a receipt for an unsplit or legacy bill", async () => {
   state.tables.bill_splits[0].model_version = 1;
-  expect(await (await request()).json()).toEqual({ split: false, payments: [] });
+  expect(await (await request()).json()).toEqual({ split: false, splitOrderIds: [], payments: [] });
+});
+
+it("names the split's orders without labelling a later round as divided", async () => {
+  state.tables.bill_splits[0] = { ...state.tables.bill_splits[0], status: "done", order_ids: ["split-order"] };
+  const body = await (await request()).json();
+  expect(body.splitOrderIds).toEqual(["split-order"]);
+  expect(body.split).toBe(false);
+  expect(body.payments).toHaveLength(1);
 });

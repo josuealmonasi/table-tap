@@ -3,7 +3,8 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { logDetail } from "@/lib/log-detail";
 
 /** The receipt includes old unpaid gratuities inside the parts as well as the new tip. */
-export async function logSlotReceipt(actor: Actor, paymentId: string | undefined, ref: string): Promise<void> {
+export async function logSlotReceipt(actor: Actor, paymentId: string | undefined, ref: string): Promise<string | undefined> {
+  let receiptId = paymentId;
   try {
     const db = createAdminClient();
     const query = db.from("payments").select("id, amount, tip, currency, method, actor_email, created_at, session_id")
@@ -12,6 +13,7 @@ export async function logSlotReceipt(actor: Actor, paymentId: string | undefined
     // finds the original receipt, including its cashier and collection time.
     const { data, error } = await (paymentId ? query.eq("id", paymentId) : query.eq("client_ref", ref)).single();
     if (error || !data) throw new Error("Could not read the split collection receipt for its activity");
+    receiptId = data.id;
     const { data: order } = await db.from("orders").select("table_label")
       .eq("restaurant_id", actor.restaurantId).eq("session_id", data.session_id).limit(1).maybeSingle();
     // The receipt id is also this event's id. Concurrent retries insert once,
@@ -28,4 +30,5 @@ export async function logSlotReceipt(actor: Actor, paymentId: string | undefined
     // must not make the cashier take the same money again after a log failure.
     console.error("split collection activity:", error);
   }
+  return receiptId;
 }

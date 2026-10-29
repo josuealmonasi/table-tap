@@ -20,7 +20,7 @@ vi.mock("@/lib/coupon-service", () => ({
 vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({
   rpc,
   from: (table: string) => {
-    const answer = () => table === "orders"
+    const answer = () => table === "bill_splits" ? { data: [], error: null } : table === "orders"
       ? { data: state.missing ? [] : [{ id: "o1", total: state.total, paid: false, written_off: false, status: "received", session_id: "s1" }], error: state.readError ? { message: "down" } : null }
       : { data: { id: "ask", order_ids: ["o1"], amount: state.amount, code: "FREE", reason: "walkout", status: "pending" }, error: null };
     const q: Record<string, unknown> = {};

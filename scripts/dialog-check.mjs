@@ -75,13 +75,18 @@ for (const width of WIDTHS) for (const screen of SPLIT_SCREENS) {
         const auth = cookies.get(screen.role);
         if (auth?.error) throw auth.error;
         if (auth?.cookie) await job.ctx.addCookies([auth.cookie]);
-        const fixture = await splitScreenFixture(admin, splitRestaurant.id, screen.state !== "start");
+        const fixture = await splitScreenFixture(admin, splitRestaurant.id, screen.state !== "start", screen.state !== "writeoff");
         try {
           await openSplitScreen(job, { fixture, screen, base: BASE });
           const failures = await look(job.tab, screen.name, job.phase, job.log);
           const faults = await typingFaults(job.tab);
           for (const fault of faults) job.log(`    BAD      ${screen.name}: ${fault}`);
           await job.tab.keyboard.press("Escape");
+          if (screen.state === "writeoff") {
+            // Back returns to collection. Check that step before leaving it.
+            await job.tab.locator(".tt-writeoff-amount").waitFor({ state: "hidden" });
+            await job.tab.keyboard.press("Escape");
+          }
           await job.tab.locator("[role=dialog]").waitFor({ state: "hidden" });
           return { failures: failures + faults.length, opened: 1, fieldChecks: 1 };
         } finally { try { await job.tab.close(); } finally { await fixture.cleanup(); } }

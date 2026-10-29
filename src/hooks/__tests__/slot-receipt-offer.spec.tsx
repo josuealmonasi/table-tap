@@ -30,7 +30,7 @@ beforeEach(() => {
   vi.useFakeTimers(); vi.stubGlobal("React", React); vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   sessionStorage.clear(); window.history.replaceState(null, "", "/"); rows = []; fail = false; bill = tableBill([], []); receiptScope = scope;
   host = document.createElement("div"); document.body.append(host); root = createRoot(host);
-  vi.stubGlobal("fetch", vi.fn(async () => Response.json({ payments: rows, split: true }, { status: fail ? 503 : 200 })));
+  vi.stubGlobal("fetch", vi.fn(async () => Response.json({ payments: rows, split: true, splitOrderIds: ["order"] }, { status: fail ? 503 : 200 })));
 });
 afterEach(async () => { await act(async () => root.unmount()); host.remove(); vi.useRealTimers(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
@@ -49,7 +49,8 @@ it.each(["en", "es"] as const)("offers the returned card payment once, after a l
   expect(offer.paymentId).toBe("card");
   expect(host.textContent).toContain(translate(messagesFor(locale), "receipt.askTitle"));
   await act(async () => [...host.querySelectorAll("button")].find(b => b.textContent === translate(messagesFor(locale), "receipt.noThanks"))!.click());
-  expect(offer.paymentId).toBeNull(); await poll(); expect(offer.paymentId).toBeNull();
+  expect(offer.paymentId).toBe("other");
+  await act(async () => offer.dismiss()); await poll(); expect(offer.paymentId).toBeNull();
   await act(async () => root.unmount()); root = createRoot(host); await render(); expect(offer.paymentId).toBeNull();
 });
 it.each(["en", "es"] as const)("offers staff collections while other parts remain unpaid, without an order receipt (%s)", async locale => {
@@ -105,4 +106,69 @@ it("keeps the ordinary whole-bill cash offer", async () => {
 it("keeps the ordinary whole-bill card return and forgets a cancelled slot checkout", async () => {
   receiptScope = undefined; sessionStorage.setItem("tt.settling", JSON.stringify(["order"]));
   window.history.replaceState(null, "", "/?settled=1"); await render(); expect(offer.offering).toEqual(["order"]);
+});
+
+it("queues another payment while the returning card payment is still pending", async () => {
+  sessionStorage.setItem("tt.settling.slots", JSON.stringify({ ...scope, splitId: "split", slots: [0] }));
+  window.history.replaceState(null, "", "/?settled=1");
+  await render();
+  rows = [paid("cash", [1])]; await poll();
+  expect(offer.paymentId).toBe("cash");
+  rows.push(paid("card", [0])); await poll();
+  expect(offer.paymentId).toBe("cash");
+  await act(async () => offer.dismiss()); expect(offer.paymentId).toBe("card");
+  await act(async () => offer.dismiss()); await poll(); expect(offer.paymentId).toBeNull();
+});
+it("offers a later ordinary round after a completed split in the same sitting", async () => {
+  receiptScope = { ...scope, dividing: false };
+  rows = [paid("historical")];
+  vi.mocked(fetch).mockImplementation(async () => Response.json({ payments: rows, split: true, splitOrderIds: ["split-order"] }));
+  bill = { ...tableBill([], []), settled: false, mine: { ...tableBill([], []).mine, orders: [{ id: "later-round" } as never] } };
+  await render(); bill = tableBill([], []); await render();
+  expect(offer.offering).toEqual(["later-round"]);
+});
+
+it("offers only the ordinary orders when a mixed bill closes in one poll", async () => {
+  receiptScope = { ...scope, dividing: false };
+  vi.mocked(fetch).mockImplementation(async () => Response.json({ payments: rows, split: true, splitOrderIds: ["split-order"] }));
+  bill = { ...tableBill([], []), settled: false, mine: { ...tableBill([], []).mine,
+    orders: [{ id: "split-order" } as never, { id: "later-round" } as never] } };
+  await render(); bill = tableBill([], []); await render();
+  expect(offer.offering).toEqual(["later-round"]);
+});
+it("waits for a successful payment discovery before offering a closing bill's orders", async () => {
+  fail = true;
+  bill = { ...tableBill([], []), settled: false, mine: { ...tableBill([], []).mine, orders: [{ id: "order" } as never] } };
+  await render(); bill = tableBill([], []); await render(); expect(offer.offering).toBeNull();
+  fail = false; rows = [paid("last")]; await poll();
+  expect(offer.offering).toBeNull();
+});
+
+it("rechecks a pre-split discovery before deciding a newly settled bill's receipt", async () => {
+  let divided = false;
+  vi.mocked(fetch).mockImplementation(async () => Response.json({ payments: rows, split: divided, splitOrderIds: divided ? ["order"] : [] }));
+  bill = { ...tableBill([], []), settled: false, mine: { ...tableBill([], []).mine, orders: [{ id: "order" } as never] } };
+  await render();
+  divided = true; rows = [paid("last")]; bill = tableBill([], []);
+  await render(); await poll();
+  expect(offer.offering).toBeNull(); expect(offer.paymentId).toBe("last");
+  expect(sessionStorage.getItem("tt.receipt.asked")).toBeNull();
+});
+
+it("does not use an earlier successful discovery after the latest read fails", async () => {
+  vi.mocked(fetch).mockImplementation(async () => Response.json({ payments: rows, split: false, splitOrderIds: [] }, { status: fail ? 503 : 200 }));
+  bill = { ...tableBill([], []), settled: false, mine: { ...tableBill([], []).mine, orders: [{ id: "order" } as never] } };
+  await render(); fail = true; await poll(); bill = tableBill([], []); await render();
+  expect(offer.offering).toBeNull();
+  fail = false; await poll(); expect(offer.offering).toEqual(["order"]);
+});
+
+it("rejects a discovery started before settlement even when its answer arrives later", async () => {
+  bill = { ...tableBill([], []), settled: false, mine: { ...tableBill([], []).mine, orders: [{ id: "order" } as never] } };
+  let finish!: (response: Response) => void;
+  vi.mocked(fetch).mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+  await render(); bill = tableBill([], []); await render();
+  vi.mocked(fetch).mockImplementation(async () => Response.json({ payments: [paid("last")], split: true, splitOrderIds: ["order"] }));
+  await act(async () => finish(Response.json({ payments: [], split: false, splitOrderIds: [] })));
+  expect(offer.offering).toBeNull(); await poll(); expect(offer.paymentId).toBe("last");
 });

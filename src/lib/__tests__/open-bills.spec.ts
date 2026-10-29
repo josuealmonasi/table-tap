@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { matchesBill, openBills, withSplits } from "@/lib/open-bills";
+import { matchesBill, openBills, remainingBill, withSplits } from "@/lib/open-bills";
 import type { Order } from "@/lib/types";
 
 /**
@@ -123,5 +123,25 @@ describe("finding a bill the way the floor asks for it", () => {
 
   it("does not match what is not there", () => {
     expect(matchesBill(bill, "sushi")).toBe(false);
+  });
+});
+
+
+describe("the confirmed loss uses each order's decimal cents", () => {
+  it("rounds each order before summing, independently of arrival order", () => {
+    const orders = [order({ id: "first", table_id: "t", total: 1.005 }), order({ id: "second", table_id: "t", total: 1.005 })];
+    for (const rows of [orders, [...orders].reverse()]) {
+      const bill = openBills(rows, new Map([["first", 0.50]]))[0];
+      expect(bill.total).toBe(2.02);
+      expect(remainingBill(bill)).toBe(1.52);
+    }
+  });
+  it("does not spend one order's excess coverage on another order", () => {
+    const bill = openBills([order({ id: "first", table_id: "t", total: 1.005 }),
+      order({ id: "second", table_id: "t", total: 1.005 })], new Map([["first", 2]]))[0];
+    expect(remainingBill(bill)).toBe(1.01);
+  });
+  it("uses decimal cents for an older bill without a per-order quote", () => {
+    expect(remainingBill({ total: 1.005, collected: 0.50 })).toBe(0.51);
   });
 });

@@ -5,10 +5,11 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import SettleTableDialog from "../SettleTableDialog";
 import TableCalculator from "../TableCalculator";
-import { en } from "@/lib/i18n/en";
+import { messagesFor } from "@/lib/i18n";
 import { translate } from "@/lib/i18n";
-const { toast } = vi.hoisted(() => ({ toast: vi.fn() }));
-vi.mock("@/lib/i18n/context", () => ({ useT: () => (key: string, vars?: Record<string, string | number>) => translate(en, key, vars) }));
+const state = vi.hoisted(() => ({ toast: vi.fn(), locale: "en" as "en" | "es" }));
+const { toast } = state;
+vi.mock("@/lib/i18n/context", () => ({ useT: () => (key: string, vars?: Record<string, string | number>) => translate(messagesFor(state.locale), key, vars) }));
 vi.mock("@/components/ui/Toast", () => ({ useToast: () => toast }));
 vi.mock("@/components/ui/Modal", () => ({ Modal: ({ open, children }: { open: boolean; children: React.ReactNode }) => open ? <div role="dialog">{children}</div> : null }));
 const order = { id: "order", session_id: "session", total: 100, subtotal: 100, collected: 50, currency: "MXN", paid: false, status: "received", items: [] };
@@ -18,11 +19,11 @@ const split = { id: "split", restaurantId: "restaurant", tableId: "table", sessi
     { shareNo: 1, amountCents: 5000, paid: false, paying: false, feeCents: 0 },
   ] };
 let root: Root, el: HTMLDivElement;
-let reply: { ok: boolean; code?: string; error?: string; settled?: boolean; outcome?: string; amount_cents?: number; tip_cents?: number; owed?: number };
+let reply: { ok: boolean; code?: string; error?: string; settled?: boolean; outcome?: string; payment?: string; amount_cents?: number; tip_cents?: number; owed?: number };
 const collected = vi.fn();
 beforeEach(() => {
   vi.stubGlobal("React", React); vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
-  vi.clearAllMocks(); reply = { ok: true, settled: false, outcome: "collected", amount_cents: 5000, tip_cents: 0, owed: 0 };
+  vi.clearAllMocks(); state.locale = "en"; reply = { ok: true, settled: false, outcome: "collected", amount_cents: 5000, tip_cents: 0, owed: 0 };
   vi.stubGlobal("fetch", vi.fn().mockImplementation(async (_url, init) => init
     ? { ok: reply.ok, json: async () => reply }
     : { ok: true, json: async () => ({ orders: [order], outstanding: { owed: 50, ordered: 100, collected: 50, tips: 0, currency: "MXN" }, splits: [split] }) }));
@@ -98,4 +99,33 @@ it.each([false, true])("switches to parts immediately when the whole-bill writer
   await act(async () => el.querySelector<HTMLButtonElement>("[data-whole-bill-collect]")!.click());
   expect(el.querySelectorAll("[data-split-slot]")).toHaveLength(2);
   expect(el.querySelectorAll("[data-whole-bill-collect]")).toHaveLength(0);
+});
+
+it.each([[false, "en"], [true, "en"], [false, "es"], [true, "es"]] as const)("prints the collected part by payment id after the last split disappears (calculator=%s, %s)", async (calculator, locale) => {
+  state.locale = locale;
+  reply = { ...reply, payment: "part-payment" };
+  await render(calculator);
+  await act(async () => el.querySelectorAll<HTMLInputElement>("input[type=checkbox]")[1].click());
+  vi.mocked(fetch).mockImplementation(async (_url, init) => init
+    ? { ok: true, json: async () => reply } as Response
+    : { ok: true, json: async () => ({ orders: [], splits: [], outstanding: { owed: 0, currency: "MXN" } }) } as Response);
+  await act(async () => [...el.querySelectorAll("button")].find(b => (b.textContent ?? "").includes(translate(messagesFor(locale), "settle.cash")))!.click());
+  const print = [...el.querySelectorAll("button")].find(b => (b.textContent ?? "").includes(translate(messagesFor(locale), "slots.printPart")));
+  expect(print).toBeDefined();
+  vi.mocked(fetch).mockResolvedValue({ ok: true, json: async () => ({ html: "<p>Part paid</p>" }) } as Response);
+  const popup = { document: { write: vi.fn(), close: vi.fn(), readyState: "complete", fonts: { ready: Promise.resolve() } }, focus: vi.fn(), print: vi.fn(), addEventListener: vi.fn() };
+  vi.spyOn(window, "open").mockReturnValue(popup as unknown as Window);
+  await act(async () => print!.click());
+  const call = vi.mocked(fetch).mock.calls.find(([url]) => url === "/api/orders/print");
+  expect(JSON.parse(call![1]!.body as string)).toEqual({ paymentId: "part-payment", to: "receipt" });
+  expect(popup.document.write).toHaveBeenCalledWith(expect.stringContaining("Part paid"));
+});
+it("labels the payment print with its total without adding its tip twice", async () => {
+  reply = { ...reply, payment: "part-payment", amount_cents: 5500, tip_cents: 500 };
+  await render();
+  await act(async () => el.querySelectorAll<HTMLInputElement>("input[type=checkbox]")[1].click());
+  await act(async () => [...el.querySelectorAll("button")].find(b => b.textContent?.startsWith("10%"))!.click());
+  await act(async () => [...el.querySelectorAll("button")].find(b => /Paid cash/.test(b.textContent ?? ""))!.click());
+  const print = el.querySelector("[data-slot-receipt-print]");
+  expect(print?.textContent).toContain("55.00");
 });

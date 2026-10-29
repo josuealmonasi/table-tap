@@ -42,12 +42,12 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       // The drawer reads this same activity as other table collections. Log
       // the receipt before a balance read can fail, and repair a missing entry
       // on a lost-response retry without counting the cash twice.
-      await logSlotReceipt(actor, result.payment, body.ref.trim());
+      const payment = await logSlotReceipt(actor, result.payment, body.ref.trim());
       await closeSessionsFor([{ session_id: body.sessionId }], "settled");
       const after = await tableOutstanding(actor.restaurantId, body.tableId, body.currency);
       const otherCurrencies = after.owed <= 0 ? await tableOutstanding(actor.restaurantId, body.tableId) : null;
       const settled = after.owed <= 0 && !(otherCurrencies?.balances?.some(b => b.owed > 0) ?? (otherCurrencies?.owed ?? 0) > 0);
-      return NextResponse.json({ ok: true, ...result, settled, owed: after.owed, currency: body.currency });
+      return NextResponse.json({ ok: true, ...result, payment, settled, owed: after.owed, currency: body.currency });
     }
     return await splitResponse(result, []);
   } catch { return await apiError("apiErr.collectionFailed", 503); }

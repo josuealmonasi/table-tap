@@ -6,7 +6,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { logEvent } from "@/lib/activity-log";
 import { logDetail } from "@/lib/log-detail";
 import { applyWriteOff } from "@/lib/apply-write-off";
-import { applyWriteOffRest, coverageByOrder, owedCents, REST_REFUSAL } from "@/lib/write-off-rest";
+import { applyWriteOffRest, coverageByOrder, owedCents, hasLockedSlotSplit, REST_REFUSAL } from "@/lib/write-off-rest";
 import { MANAGES } from "@/lib/membership";
 import { formatMoney } from "@/lib/format";
 import {
@@ -38,11 +38,15 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   const body = await jsonBody<{
     tableId?: string;
     orderIds?: string[];
+    expectedCents?: number;
     reason?: string;
     note?: string;
   }>(req);
   if (!body) return await apiError("apiErr.invalidRequest", 400);
-  const { tableId, orderIds, reason, note } = body;
+  const { tableId, orderIds, reason, note, expectedCents } = body;
+  if (expectedCents !== undefined && (!Number.isSafeInteger(expectedCents) || expectedCents <= 0)) {
+    return await apiError("apiErr.invalidRequest", 400);
+  }
   // A table, or a named set of orders — a counter bill has no table to point
   // at, and it is just as capable of walking out the door.
   const ids = (orderIds ?? []).filter(v => typeof v === "string").slice(0, 100);
@@ -58,14 +62,14 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   // nothing rather than someone else's bill.
   const scoped = db
     .from("orders")
-    .select("id, total, paid, written_off, status, table_id, table_label, currency")
+    .select("id, total, paid, written_off, status, table_id, table_label, session_id, currency")
     .is("account_id", null)
     .eq("restaurant_id", actor.restaurantId);
   const { data: rows, error: readError } = await (tableId ? scoped.eq("table_id", tableId) : scoped.in("id", ids));
   // A failed read is not a bill with nothing on it.
   if (readError) return await apiError("apiErr.generic", 503);
 
-  const orders = writableOff((rows ?? []) as Order[]);
+  const orders = writableOff(rows ?? []);
   if (orders.length === 0) return await apiError("apiErr.nothingToWriteOff", 409);
 
   // Part of it is paid: only the rest is lost, so only the rest is written off
@@ -74,7 +78,14 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   const paidBy = await coverageByOrder(actor.restaurantId, orders.map(o => o.id));
   if (paidBy === null) return await apiError("apiErr.generic", 503);
   const paid = Math.round([...paidBy.values()].reduce((a, b) => a + b, 0) * 100) / 100;
-  if (paid > 0) {
+  // The amount the manager saw must still be the amount lost, including a
+  // division with no paid parts yet. SQL checks it again under the money lock.
+  if (expectedCents !== undefined && expectedCents !== owedCents(orders, paidBy)) {
+    return await apiError("apiErr.writeOffChanged", 409);
+  }
+  const divided = paid > 0 || expectedCents !== undefined ? true : await hasLockedSlotSplit(actor.restaurantId, orders);
+  if (divided === null) return await apiError("apiErr.generic", 503);
+  if (divided) {
     return await writeOffTheRest({ actor, orders, paidBy, paid, tableId, reason, note: text });
   }
 
@@ -120,7 +131,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   if (done.outcome === "part_paid") {
     return await apiError("apiErr.writeOffPartPaid", 409, { amount: formatMoney(done.paid, orders[0].currency ?? "MXN") });
   }
-  if (done.outcome === "split") return await apiError("apiErr.billSplitLive", 409);
+  if (done.outcome === "split") return await apiError("apiErr.writeOffSplit", 409);
   if (done.outcome === "nothing") return await apiError("apiErr.nothingToWriteOff", 409);
   if (done.outcome === "failed") return await apiError("apiErr.generic", 500);
 
@@ -143,7 +154,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
  */
 async function writeOffTheRest(p: {
   actor: NonNullable<Awaited<ReturnType<typeof actingFrontOfHouse>>>;
-  orders: Order[]; paidBy: Map<string, number>; paid: number;
+  orders: Pick<Order, "id" | "total" | "currency" | "table_label" | "table_id">[]; paidBy: Map<string, number>; paid: number;
   tableId: string | undefined; reason: string; note: string;
 }): Promise<NextResponse> {
   const { actor, orders, paidBy, paid, reason, note } = p;

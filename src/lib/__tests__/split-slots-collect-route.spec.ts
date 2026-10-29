@@ -98,3 +98,9 @@ it("a failed activity write leaves money collected and a duplicate can repair it
   s.logError = false; s.outcome = "duplicate";
   expect((await POST(req())).status).toBe(200); expect(s.logs).toHaveLength(1);
 });
+it("returns the original payment id on a lost-reply retry, even when activity cannot save", async () => {
+  s.outcome = "duplicate"; s.logError = true;
+  const response = await POST(req());
+  expect(response.status).toBe(200);
+  expect(await response.json()).toMatchObject({ payment: "receipt", amount_cents: 6000 });
+});

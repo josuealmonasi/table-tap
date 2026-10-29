@@ -11052,6 +11052,11 @@ begin
   v_freeze := clock_timestamp();
   select * into v_debt from public.sitting_split_debt(p_restaurant, p_session, p_table, v_freeze);
   if v_debt.debt_cents <= 0 then return jsonb_build_object('outcome', 'nothing'); end if;
+  -- A whole-bill card page still open on these orders could charge it all
+  -- after parts are paid: MX$300 for a MX$200 bill (#574 audit 1). Parts'
+  -- own pages carry split_model 2 and do not count.
+  if public.whole_bill_card_open_v1(p_restaurant, v_debt.order_ids) then return jsonb_build_object('outcome', 'paying'); end if;
+
   if v_debt.currencies <> 1 or v_debt.currency is distinct from p_currency then
     return jsonb_build_object('outcome', 'currency');
   end if;
@@ -11156,6 +11161,11 @@ begin
   perform pg_advisory_xact_lock(hashtextextended(v_split.session_id::text, 0));
   select * into v_split from bill_splits where id = p_split for update;
   if v_split.status <> 'locked' then return jsonb_build_object('outcome', 'gone'); end if;
+  -- A whole-bill card page still open on these orders could charge it all
+  -- after parts are paid: MX$300 for a MX$200 bill (#574 audit 1). Parts'
+  -- own pages carry split_model 2 and do not count.
+  if public.whole_bill_card_open_v1(p_restaurant, v_split.order_ids) then return jsonb_build_object('outcome', 'paying'); end if;
+
   if v_split.revision <> p_revision then return jsonb_build_object('outcome', 'stale', 'revision', v_split.revision); end if;
   if p_member is not null and not exists (select 1 from table_session_members m
     where m.id = p_member and m.session_id = v_split.session_id and m.status = 'approved') then
@@ -11267,6 +11277,11 @@ begin
   perform pg_advisory_xact_lock(hashtextextended(v_split.session_id::text, 0));
   select * into v_split from bill_splits where id = p_split for update;
   if v_split.status <> 'locked' then return jsonb_build_object('outcome', 'gone'); end if;
+  -- A whole-bill card page still open on these orders could charge it all
+  -- after parts are paid: MX$300 for a MX$200 bill (#574 audit 1). Parts'
+  -- own pages carry split_model 2 and do not count.
+  if public.whole_bill_card_open_v1(p_restaurant, v_split.order_ids) then return jsonb_build_object('outcome', 'paying'); end if;
+
   if v_split.revision <> p_revision then return jsonb_build_object('outcome', 'stale', 'revision', v_split.revision); end if;
   if v_split.currency is distinct from p_currency then return jsonb_build_object('outcome', 'currency'); end if;
   perform 1 from bill_split_slots where split_id = p_split order by share_no for update;
@@ -11541,6 +11556,8 @@ declare
   v_sessions uuid[];
   v_label text;
   v_paid numeric := 0;
+  v_split bill_splits%rowtype;
+  v_ended uuid[] := '{}';
 begin
   if p_orders is null or cardinality(p_orders) = 0 or cardinality(p_orders) <> (select count(distinct x) from unnest(p_orders) x)
     or p_expected_cents is null or p_expected_cents <= 0 or p_currency not in ('MXN', 'USD')
@@ -11581,13 +11598,31 @@ begin
     return jsonb_build_object('outcome', 'unresolved');
   end if;
   -- A card page still open could charge after this commits.
-  if exists (select 1 from orders where id = any(p_orders) and card_checkout_at > now() - interval '35 minutes') then
+  -- A card page still open could charge after this commits. Read the pages
+  -- themselves: card_checkout_at is stamped by a divided bill's own part pages
+  -- too and never cleared, so a part paid online refused the walkout for 35
+  -- minutes (#576 verification R2). A held part is refused below.
+  if exists (select 1 from diner_checkouts c where c.restaurant_id = p_restaurant and c.status = 'open'
+      and c.order_ids && p_orders and c.split_id is null and coalesce(c.metadata->>'split_model', '') <> '2') then
     return jsonb_build_object('outcome', 'paying');
   end if;
-  if exists (select 1 from bill_splits b where b.restaurant_id = p_restaurant and b.status in ('proposed', 'locked')
-    and b.session_id in (select session_id from orders where id = any(p_orders))) then
-    return jsonb_build_object('outcome', 'split');
-  end if;
+  -- A divided bill whose last diners walked out (#574 audit 2). A proposal
+  -- moved no money: cancel it first. A part held by a card page may still be
+  -- paid. Otherwise the whole divided bill is forgiven at once: paid parts keep
+  -- their money, each order's remainder is forgiven as on any part-paid bill,
+  -- and the split ends below so no part can be paid afterwards. A later round
+  -- outside the split is written off on its own.
+  for v_split in select * from bill_splits b where b.restaurant_id = p_restaurant and b.status in ('proposed', 'locked')
+      and b.session_id in (select session_id from orders where id = any(p_orders)) for update loop
+    if v_split.status = 'proposed' or v_split.model_version <> 2 then return jsonb_build_object('outcome', 'split'); end if;
+    if exists (select 1 from bill_split_slots s where s.split_id = v_split.id and s.reserved_checkout_id is not null and s.payment_id is null) then
+      return jsonb_build_object('outcome', 'paying');
+    end if;
+    if v_split.order_ids && p_orders and not (v_split.order_ids <@ p_orders) then
+      return jsonb_build_object('outcome', 'split');
+    end if;
+    if v_split.order_ids && p_orders then v_ended := v_ended || v_split.id; end if;
+  end loop;
   -- In cents the way the screen counts them, so an unscaled legacy total
   -- (2.675) agrees with the route (audit #8).
   for o in select x.id, x.total, public.retained_order_coverage(p_restaurant, x.id) as covered
@@ -11657,11 +11692,27 @@ begin
     update write_off_requests set status = 'approved', decided_by = p_actor, decided_at = now()
      where id = p_request and restaurant_id = p_restaurant and status = 'pending';
   end if;
+  -- Every unpaid part of an ended split was just forgiven with its orders.
+  update bill_splits set status = 'done' where id = any(v_ended) and restaurant_id = p_restaurant;
   return jsonb_build_object('outcome', 'forgiven', 'forgiven_cents', v_owed, 'written_off_cents', v_whole,
     'orderIds', to_jsonb(v_ids), 'sessions', coalesce(to_jsonb(v_sessions), '[]'::jsonb));
 end; $$;
 revoke all on function public.write_off_remainder_v1(uuid, uuid[], int, text, text, text, text, uuid, uuid) from public, anon, authenticated;
 grant execute on function public.write_off_remainder_v1(uuid, uuid[], int, text, text, text, text, uuid, uuid) to service_role;
+
+-- A diner's whole-bill card page not yet paid or expired, on any of these
+-- orders. Split parts' pages are not one. No age limit: a charge Stripe made
+-- whose webhook is late is still open here, and minute 35 proves nothing
+-- (#576 verification R1). Stripe's expiry, the diner's resume, or the split
+-- routes asking Stripe directly close an unpaid page.
+create or replace function public.whole_bill_card_open_v1(p_restaurant uuid, p_orders uuid[])
+returns boolean language sql stable security definer set search_path = public as $$
+  select exists (select 1 from diner_checkouts c
+    where c.restaurant_id = p_restaurant and c.status = 'open' and c.order_ids && p_orders
+      and c.split_id is null and coalesce(c.metadata->>'split_model', '') <> '2');
+$$;
+revoke all on function public.whole_bill_card_open_v1(uuid, uuid[]) from public, anon, authenticated;
+grant execute on function public.whole_bill_card_open_v1(uuid, uuid[]) to service_role;
 
 -- ── Returns on completed orders (contract: loop/dialogue/returns-contract.md) ──
 --
