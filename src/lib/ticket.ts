@@ -29,11 +29,19 @@ export interface TicketOrder {
 }
 
 const rule = (ch = "-") => ch.repeat(TICKET_COLUMNS);
+const segmenter = new Intl.Segmenter(undefined, { granularity: "grapheme" });
+const graphemes = (text: string): string[] => Array.from(segmenter.segment(text), part => part.segment);
+
+/** Names and notes are paper text, never printer commands or direction overrides. */
+function printText(text: string): string {
+  // Keep newlines, but remove printer commands at the print boundary.
+  return text.replace(/[\u0000-\u0009\u000b-\u001f\u007f-\u009f\u202a-\u202e\u2066-\u2069]/g, "");
+}
 
 /** Centred, and wrapped first so a long restaurant name still fits the roll. */
 function centre(text: string): string[] {
   return wrap(text).map(line => {
-    const pad = Math.max(0, Math.floor((TICKET_COLUMNS - line.length) / 2));
+    const pad = Math.max(0, Math.floor((TICKET_COLUMNS - graphemes(line).length) / 2));
     return " ".repeat(pad) + line;
   });
 }
@@ -49,15 +57,16 @@ export function wrap(text: string, indent = 0): string[] {
   const width = TICKET_COLUMNS - indent;
   const out: string[] = [];
   let line = "";
-  for (const word of text.split(/\s+/).filter(Boolean)) {
+  for (const word of printText(text).split(/\s+/).filter(Boolean)) {
+    const letters = graphemes(word);
     // A single word longer than the paper is hard-split; better a broken word
     // than a silently missing one.
-    if (word.length > width) {
+    if (letters.length > width) {
       if (line) { out.push(line); line = ""; }
-      for (let i = 0; i < word.length; i += width) out.push(word.slice(i, i + width));
+      for (let i = 0; i < letters.length; i += width) out.push(letters.slice(i, i + width).join(""));
       continue;
     }
-    if (line.length + (line ? 1 : 0) + word.length > width) {
+    if (graphemes(line).length + (line ? 1 : 0) + letters.length > width) {
       out.push(line);
       line = word;
     } else {
