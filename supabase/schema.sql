@@ -6243,7 +6243,7 @@ begin
     where operation_id = o.id and id = p_attempt;
   update refund_operations set stripe_refund_id = p_refund, provider_status = p_status,
     status = case when p_status = 'succeeded' then 'succeeded' when p_status in ('failed', 'canceled') then 'failed' else 'processing' end,
-    completed_at = case when p_status = 'succeeded' then now() end,
+    completed_at = case when p_status = 'succeeded' then clock_timestamp() end,
     fee_verification_pending = (source = 'stripe'),
     confirmed_by = p_actor,
     payout_actor = case when source = 'stripe' then null else coalesce(p_payout, original_collector) end where id = o.id;
@@ -12253,7 +12253,9 @@ begin
       if o.source = 'stripe' then perform public.enqueue_fee_reconcile(o.restaurant_id, o.stripe_payment_intent); end if;
       -- The header names the latest refund that still counts, app or manual,
       -- so completion evidence and fee readers find it (returns audit 4).
-      update refund_operations set status = 'succeeded', completed_at = now(), fee_verification_pending = true,
+      -- After the money lock: now() is when the transaction began, and a refund
+      -- that waited for a shift close was dated inside the closed shift (C3).
+      update refund_operations set status = 'succeeded', completed_at = clock_timestamp(), fee_verification_pending = true,
         confirmed_by = p_actor,
         stripe_refund_id = coalesce((select a.stripe_refund_id from refund_attempts a where a.operation_id = o.id
           and a.provider_status = 'succeeded' and a.stripe_refund_id is not null
@@ -12348,7 +12350,7 @@ begin
     if coalesce(jsonb_array_length(p_refunds), 0) <> 0 or p_status <> 'succeeded' or nullif(btrim(p_payout), '') is null then
       raise exception 'cash or terminal returns need a confirmed payout drawer';
     end if;
-    update refund_operations set status = 'succeeded', completed_at = now(), confirmed_by = p_actor,
+    update refund_operations set status = 'succeeded', completed_at = clock_timestamp(), confirmed_by = p_actor,
       payout_actor = p_payout, fee_verification_pending = false where id = o.id returning * into o;
     return jsonb_build_object('outcome', 'completed', 'outstanding_cents', 0, 'completed_at', o.completed_at);
   end if;
