@@ -17,11 +17,11 @@ export const dynamic = "force-dynamic";
  * order more. Read here with the secret key after the role check, because the
  * unread count has to be counted across all of them rather than just the page shown.
  */
-export async function GET(req?: NextRequest): Promise<NextResponse> {
+export async function GET(req: NextRequest): Promise<NextResponse> {
   const actor = await actingManager();
   if (!actor) return await apiError("apiErr.forbidden", 403);
 
-  const cursor = notificationCursor(req?.nextUrl.searchParams.get("before") ?? null);
+  const cursor = notificationCursor(req.nextUrl.searchParams.get("before") ?? null);
   if (!cursor) return await apiError("apiErr.invalidRequest", 400);
   const db = createAdminClient();
   const [listed, unread] = await Promise.all([

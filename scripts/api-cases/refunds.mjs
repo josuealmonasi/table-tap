@@ -101,10 +101,18 @@ export function orderRefundCases(fx) {
       path: "/api/orders/cancel",
       arrange: async f => {
         await f.admin.from("orders").update({ account_id: fx.accountId }).eq("id", fx.acctOrder2);
-        await f.admin.from("customer_accounts")
-          .update({ checkout_until: new Date(Date.now() + 10 * 60_000).toISOString() }).eq("id", fx.accountId);
+        // Paying online is an open account checkout, as the app opens one: its
+        // row and the account's hold together (#578). The hold alone was never
+        // a state the app writes.
+        const { data: page } = await f.admin.from("account_checkouts").insert({
+          restaurant_id: fx.restaurant.id, account_id: fx.accountId, order_ids: [fx.acctOrder2], amount: 1,
+        }).select("id").single();
+        await f.admin.from("customer_accounts").update({
+          checkout_until: new Date(Date.now() + 10 * 60_000).toISOString(), checkout_id: page?.id ?? null,
+        }).eq("id", fx.accountId);
         return async () => {
-          await f.admin.from("customer_accounts").update({ checkout_until: null }).eq("id", fx.accountId);
+          await f.admin.from("customer_accounts").update({ checkout_until: null, checkout_id: null }).eq("id", fx.accountId);
+          if (page?.id) await f.admin.from("account_checkouts").delete().eq("id", page.id);
           await f.admin.from("orders").update({ account_id: null }).eq("id", fx.acctOrder2);
         };
       },
