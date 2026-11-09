@@ -6,8 +6,10 @@ export function splitSlotCases(fx) {
   const controlBody = f => ({ ...f.slotCase.scope, splitId: f.slotCase.splitId, revision: 1, shares: 3 });
   const error = {
     stale: /cuenta cambió|bill changed/i, frozen: /empezó a pagar|started paying/i,
-    gone: /ya no está disponible|no longer available/i, taken: /ya está pagando|already paying/i,
-    reserved: /ya está pagando|already paying/i, paid: /ya está pagada|already paid/i,
+    // A part held by an online payment that is not yet confirmed answers as
+    // one (#578): the same refusal, with the way to check that payment.
+    gone: /ya no está disponible|no longer available/i, taken: /ya está pagando|already paying|sin confirmar|unconfirmed/i,
+    reserved: /ya está pagando|already paying|sin confirmar|unconfirmed/i, paid: /ya está pagada|already paid/i,
     below_minimum: /más partes|more parts/i, currency: /monedas|currenc/i,
     busy: /ya hay una divisi|already dividing/i, conflict: /otras partes|different parts/i,
   };

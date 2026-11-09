@@ -37,3 +37,14 @@ it("takes a wasted plate's ingredients from the choices it was made with (sweep 
   expect(body("waste_ingredient_usage_v2")).toContain("'mods', coalesce(p_choices->'mods', '{}'), 'extras', coalesce(p_choices->'extras', '[]')");
   expect(body("track_ingredient_movement")).toContain("waste_ingredient_usage_v2(v_restaurant,");
 });
+
+it("freezes each sale's line costs and currency, which the history reads (sweep 7, finding 3)", () => {
+  expect(schema).toContain("alter table ingredient_consumption add column if not exists line_costs jsonb;");
+  expect(body("sale_line_costs")).toContain("public.sale_ingredient_usage(p_restaurant, jsonb_build_array(line.value))");
+  // Every dish in the line needs a recipe, combo parts and extras included, or the line is unknown.
+  expect(body("sale_line_costs")).toContain("where not exists (select 1 from recipe_lines r where r.restaurant_id = p_restaurant and r.item_id::text = part.id)");
+  const track = body("track_ingredient_movement");
+  expect(track).toContain("public.sale_line_costs(v_restaurant, v_row->'items')");
+  // A cancellation keeps the costs the sale was valued at.
+  expect(track).toContain("line_costs = coalesce(excluded.line_costs, ingredient_consumption.line_costs)");
+});

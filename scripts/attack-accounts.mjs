@@ -135,10 +135,11 @@ export async function attackAccounts({ admin, post, who, home, neighbour, ok, ba
         : bad("money was recorded against an account by somebody who may not collect it");
     }
 
-    // A card payment's hold outlives a dead checkout's late expiry. Stripe
-    // retries an expiry for days; one arriving after the hold had lapsed and a
-    // new checkout had opened lifted the NEW checkout's hold, and the till could
-    // collect the account while its customer was paying it by card.
+    // An account's open card checkout holds the till at any age (#578). Stripe
+    // retries an expiry for days; under the old 35-minute hold a second
+    // checkout opened beside a lapsed first one, and the first one's late expiry
+    // lifted the second's hold. Now the second is refused until Stripe resolves
+    // the first, and the till cannot collect while any page is open.
     {
       const held = await account(home.id, 1000);
       await order(home.id, 30, { account_id: held });
@@ -146,24 +147,23 @@ export async function attackAccounts({ admin, post, who, home, neighbour, ok, ba
         p_restaurant: home.id, p_account: held, p_expected: 30, p_tip: 0, p_fee: 0,
       })).data;
       const first = await open();
-      // Thirty-five minutes on: the hold lapsed with the first still open.
       await admin.from("customer_accounts")
         .update({ checkout_until: new Date(Date.now() - 60_000).toISOString() }).eq("id", held);
       const second = await open();
+      const tillWhileOpen = await post("/api/accounts/settle", { currency: "MXN", accountId: held, expected: 30, tip: 0, method: "cash", ref: `${MARK}-held-${Date.now()}` }, who.cashier);
       // The first one's expiry, late, through the same function the webhook calls.
       const { error } = await admin.rpc("account_checkout_release", { p_checkout: first?.checkout });
-      const hold = (await admin.from("customer_accounts").select("checkout_until").eq("id", held).single()).data?.checkout_until;
-      const collected = await post("/api/accounts/settle", { currency: "MXN", accountId: held, expected: 30, tip: 0, method: "cash", ref: `${MARK}-held-${Date.now()}` }, who.cashier);
-      first?.outcome === "open" && second?.outcome === "open" && !error && hold && new Date(hold) > new Date()
-        && (await paymentsOf(held)).length === 0
-        ? ok("a dead checkout's late expiry leaves the hold of the one being paid, and the till cannot collect it")
-        : bad(`a dead checkout's late expiry lifted the hold of the one being paid (${first?.outcome}/${second?.outcome}, hold ${hold}, till ${collected?.status ?? "?"}, ${error?.message ?? "no error"})`);
+      const third = await open();
+      const tillWhileThird = await post("/api/accounts/settle", { currency: "MXN", accountId: held, expected: 30, tip: 0, method: "cash", ref: `${MARK}-held2-${Date.now()}` }, who.cashier);
+      first?.outcome === "open" && second?.outcome === "paying" && tillWhileOpen.status === 409 && !error
+        && third?.outcome === "open" && tillWhileThird.status === 409 && (await paymentsOf(held)).length === 0
+        ? ok("an open account checkout holds the till at any age, and a late expiry frees only its own page")
+        : bad(`an account was collectable beside an open checkout (${first?.outcome}/${second?.outcome}/${third?.outcome}, till ${tillWhileOpen.status}/${tillWhileThird.status}, ${error?.message ?? "no error"})`);
     }
 
-    // A card payment whose webhook arrives after the hold ran out, for a tab
-    // the till collected in cash meanwhile: the customer paid twice. It used
-    // to go into the ledger against food already paid. Like a card payment on
-    // a settled table, it is kept as a refund due, once, and the bell says so.
+    // A tab being paid by card cannot also be collected in cash, however long
+    // the page has been open (#578): the double payment that used to become a
+    // refund due is refused before it happens, and the card pays the debt.
     {
       const tab = await account(home.id, 1000);
       await order(home.id, 40, { account_id: tab });
@@ -176,17 +176,15 @@ export async function attackAccounts({ admin, post, who, home, neighbour, ok, ba
       const intent = `pi_${MARK}_twice_${tab.slice(0, 8)}`;
       await admin.rpc("account_checkout_settle_v2", { p_checkout: checkout?.checkout, p_intent: intent });
       await admin.rpc("account_checkout_settle_v2", { p_checkout: checkout?.checkout, p_intent: intent }); // Stripe sends it again
-      const [{ data: byCard }, { data: due }, { count: told }] = await Promise.all([
+      const [{ data: byCard }, { data: due }, cashRows] = await Promise.all([
         admin.from("payments").select("amount").eq("stripe_payment_intent", intent),
-        admin.from("refunds_due").select("amount, account_name").eq("stripe_payment_intent", intent),
-        admin.from("notifications").select("id", { count: "exact", head: true })
-          .eq("restaurant_id", home.id).eq("kind", "refund_due").eq("data->>account", MARK),
+        admin.from("refunds_due").select("amount").eq("stripe_payment_intent", intent),
+        paymentsOf(tab),
       ]);
-      cash.status === 200 && (byCard ?? []).length === 0 && due?.length === 1 &&
-        Number(due[0].amount) === 40 && due[0].account_name === MARK && told === 1
-        ? ok("a card payment for a tab the till already collected is kept as MX$40 to refund, once, and the bell says so")
-        : bad(`card on a collected tab: cash ${cash.status}, ${byCard?.length} card payment(s) in the ledger, ` +
-            `refund ${JSON.stringify(due)}, ${told} notification(s)`);
+      cash.status === 409 && (byCard ?? []).length === 1 && Number(byCard[0].amount) === 40 && (due ?? []).length === 0
+        && cashRows.length === 1
+        ? ok("cash is refused while the tab is paid by card, and the card pays the MX$40 once")
+        : bad(`a tab being paid by card: cash ${cash.status}, ${byCard?.length} card payment(s), refund ${JSON.stringify(due)}, ${cashRows.length} payment(s) in all`);
     }
   } finally {
     // The money first, then the orders pointing at the accounts, then them.
