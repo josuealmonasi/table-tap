@@ -254,6 +254,7 @@ export const es: Messages = {
     reorderProducts: "No se pudo reordenar los productos",
     updateAvailability: "No se pudo actualizar la disponibilidad",
     updateProductExtras: "No se pudieron actualizar los extras del producto",
+    copyRecipe: "Se hizo la copia, pero no se copió su receta. Agrega sus insumos en Costos antes de venderla.",
     createExtra: "No se pudo crear el extra",
     reorderExtras: "No se pudo reordenar los extras",
     updateExtra: "No se pudo actualizar el extra",

@@ -15,6 +15,10 @@ export const runtime = "nodejs";
 //
 // { itemId, lines: [{ ingredientId, quantity, modLabel?, modOption? }] }
 //
+// { itemId, lines: [], copyFrom } — a copied product takes its source's recipe,
+// checked like any other: a copy that consumed no milk was a cost made up
+// (D5, end-to-end review).
+//
 // A line with a choice applies only when the diner makes it, so the choice
 // must be one the product offers: a line under a choice nobody can make is a
 // cost that never counts. An empty list clears the recipe.
@@ -31,12 +35,23 @@ export async function PUT(req: NextRequest): Promise<NextResponse> {
   if (!actor) return await apiError("apiErr.forbidden", 403);
   const blocked = await costsBlocks(actor.restaurantId);
   if (blocked) return blocked;
-  const body = await jsonBody<{ itemId?: unknown; lines?: unknown }>(req);
+  const body = await jsonBody<{ itemId?: unknown; lines?: unknown; copyFrom?: unknown }>(req);
   const itemId = uuidOf(body?.itemId);
   if (!itemId || !Array.isArray(body?.lines)) return await apiError("apiErr.invalidRequest", 400);
   if (body.lines.length > MAX_RECIPE_LINES) return await apiError("apiErr.recipeTooLong", 400, { n: MAX_RECIPE_LINES });
 
   const db = createAdminClient();
+  if (body.copyFrom !== undefined) {
+    const source = uuidOf(body.copyFrom);
+    if (!source || body.lines.length > 0) return await apiError("apiErr.invalidRequest", 400);
+    const { data: copied, error: copyError } = await db.from("recipe_lines")
+      .select("ingredient_id, quantity, mod_label, mod_option")
+      .eq("restaurant_id", actor.restaurantId).eq("item_id", source).limit(MAX_RECIPE_LINES + 1);
+    if (copyError) return await apiError("apiErr.generic", 503);
+    if ((copied ?? []).length === 0) return NextResponse.json({ ok: true, lines: 0 });
+    body.lines = (copied ?? []).map(l => ({ ingredientId: l.ingredient_id, quantity: Number(l.quantity),
+      modLabel: l.mod_label ?? undefined, modOption: l.mod_option ?? undefined }));
+  }
   const { data: item } = await db.from("menu_items").select("name, modifiers")
     .eq("id", itemId).eq("restaurant_id", actor.restaurantId).maybeSingle();
   if (!item) return await apiError("apiErr.notFound", 404);

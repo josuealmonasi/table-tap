@@ -252,6 +252,7 @@ export const en = {
     reorderProducts: "Couldn't reorder the products",
     updateAvailability: "Couldn't update availability",
     updateProductExtras: "Couldn't update the product's extras",
+    copyRecipe: "The copy was made, but its recipe wasn't copied. Add its ingredients in Costs before selling it.",
     createExtra: "Couldn't create the extra",
     reorderExtras: "Couldn't reorder the extras",
     updateExtra: "Couldn't update the extra",
