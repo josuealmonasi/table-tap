@@ -6262,4 +6262,9 @@ which settled a US$100 debt against a MX$100 screen after the restaurant
 switched; the route now refreshes such a screen instead (an api case pins it).
 And the statement's payment history used the phone's day while its charges
 used the restaurant's, so a 00:30 payment showed under the day before
-(`collection-currency.spec.tsx`).
+(`collection-currency.spec.tsx`). A credit ceiling stored only a number, so
+a MX$500 ceiling allowed US$500 once the old debt was paid and the
+restaurant had switched; ceilings now keep the currency they were approved
+in, a charge in another one is refused until a manager sets a new ceiling,
+and accounts from before take the currency of their last charge
+(`account-credit-currency.spec.ts`).
