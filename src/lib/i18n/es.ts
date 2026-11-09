@@ -1632,6 +1632,7 @@ foundingLeftBody: "Quien contrata ahora conserva este precio de suscripción mie
     cashMovementNotFound: "Ese retiro ya no está aquí.",
     shiftAlreadyOpen: "Ya hay un turno abierto: ciérralo antes de abrir otro.",
     shiftChanged: "Este turno cambió. Actualiza la página y vuelve a contar la caja abierta.",
+    shiftHeldCash: "{n} venta(s) en efectivo cobradas sin conexión esperan la revisión de un gerente. Revísalas en Ventas guardadas antes de cerrar la caja.",
     noOpenShift: "No hay un turno abierto: abre uno primero.",
     shiftConfirm: "Confirma que contaste el efectivo para cerrar el turno.",
     shiftNote: "Escribe por qué hubo una diferencia.",

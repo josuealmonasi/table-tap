@@ -4,6 +4,7 @@ const id = "00000000-0000-4000-8000-000000000001";
 const ref = "00000000-0000-4000-8000-000000000002";
 const newer = "00000000-0000-4000-8000-000000000003";
 const state = vi.hoisted(() => ({ current: "", rows: new Map<string, unknown>(), calls: [] as Record<string, unknown>[], movement: 0 }));
+vi.mock("@/lib/held-cash", () => ({ heldCashWaiting: async () => 0 }));
 vi.mock("@/lib/api-guard", () => ({ actingStaff: async () => ({ restaurantId: "r", role: "owner", email: "owner" }), actingManager: async () => ({ restaurantId: "r", role: "owner", email: "owner" }) }));
 vi.mock("@/lib/costs/guard", async original => ({ ...await original<typeof import("@/lib/costs/guard")>(), costsBlocks: async () => null }));
 vi.mock("@/lib/activity-log", () => ({ logEvent: async () => {} }));

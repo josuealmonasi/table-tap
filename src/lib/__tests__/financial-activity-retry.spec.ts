@@ -4,6 +4,7 @@ const state = vi.hoisted(() => ({
   logs: new Map<string, Record<string, unknown>>(), operations: new Map<string, unknown>(),
   ref: "00000000-0000-4000-8000-000000000001", restaurant: "r", actor: "owner", failLog: false,
 }));
+vi.mock("@/lib/held-cash", () => ({ heldCashWaiting: async () => 0 }));
 vi.mock("@/lib/api-guard", () => ({
   actingStaff: async () => ({ restaurantId: state.restaurant, role: "owner", email: state.actor }),
   actingManager: async () => ({ restaurantId: state.restaurant, role: "owner", email: state.actor }),

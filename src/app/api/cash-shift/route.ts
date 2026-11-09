@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { heldCashWaiting } from "@/lib/held-cash";
 import { apiError } from "@/lib/api-error";
 import { jsonBody } from "@/lib/json-body";
 import { actingStaff } from "@/lib/api-guard";
@@ -55,6 +56,10 @@ export async function POST(req: NextRequest) {
     const shiftId = uuidOf(body.shiftId);
     const ref = uuidOf(body.ref);
     if (!shiftId || !ref) return await apiError("apiErr.shiftChanged", 409);
+    // Held cash awaiting review is reviewed before the drawer is signed (C4).
+    const waiting = await heldCashWaiting(db, actor.restaurantId).catch(() => null);
+    if (waiting === null) return await apiError("apiErr.generic", 503);
+    if (waiting > 0) return await apiError("apiErr.shiftHeldCash", 409, { n: waiting });
     // Only the shift still open: two people closing at once close it once.
     // The sum and the signature belong to one transaction, after every earlier
     // money writer and before another withdrawal can change the drawer.

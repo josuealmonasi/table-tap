@@ -6,6 +6,7 @@ const state = vi.hoisted(() => ({
   race: true, expected: 80, reads: 0, rpcs: [] as string[],
 }));
 const shift = { id: "00000000-0000-4000-8000-000000000005", opening_amount: 100, currency: "MXN", opened_at: "2026-10-20T12:00:00Z", closed_at: null };
+vi.mock("@/lib/held-cash", () => ({ heldCashWaiting: async () => 0 }));
 vi.mock("@/lib/api-guard", () => ({
   actingStaff: async () => ({ restaurantId: "r", email: "cashier", role: "cashier" }),
   actingManager: async () => ({ restaurantId: "r", email: "manager", role: "manager" }),

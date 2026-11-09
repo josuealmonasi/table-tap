@@ -1637,6 +1637,7 @@ foundingLeftBody: "Subscribe now and keep this subscription price for as long as
     cashMovementNotFound: "That withdrawal is not here any more.",
     shiftAlreadyOpen: "A shift is already open: close it before opening another.",
     shiftChanged: "This shift has changed. Refresh the page and count the open drawer again.",
+    shiftHeldCash: "{n} cash sale(s) taken offline are waiting for a manager's review. Review them in Held sales before closing the drawer.",
     noOpenShift: "No shift is open: open one first.",
     shiftConfirm: "Confirm that you counted the cash to close the shift.",
     shiftNote: "Write why there was a difference.",
