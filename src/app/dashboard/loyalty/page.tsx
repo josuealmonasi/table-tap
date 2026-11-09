@@ -1,7 +1,8 @@
 import { requireManager } from "@/lib/page-guard";
 import { allPlans, getPlan } from "@/lib/plan-server";
 import { can, cheapestWith } from "@/lib/plan";
-import { programOf } from "@/lib/loyalty/server";
+import LoyaltyReadError from "@/components/dashboard/loyalty/LoyaltyReadError";
+import { programOf, type LoyaltyProgram } from "@/lib/loyalty/server";
 import PlanLock from "@/components/dashboard/plan/PlanLock";
 import LoyaltyAdmin from "@/components/dashboard/loyalty/LoyaltyAdmin";
 import EarnedRewards from "@/components/dashboard/loyalty/EarnedRewards";
@@ -25,12 +26,19 @@ export default async function LoyaltyPage() {
   const r = membership.restaurant;
   const plan = await getPlan(r.id);
 
+  let savedProgram: LoyaltyProgram | null;
+  try {
+    savedProgram = await programOf(r.id, true);
+  } catch {
+    return <LoyaltyReadError />;
+  }
+
   if (!plan || !can(plan.limits, "loyalty")) {
     const unlocks = cheapestWith(await allPlans(), "loyalty", plan?.limits);
     // A restaurant that ran the card and moved to a tier without it still owes
     // the rewards its diners earned (terms, §7): the lock, and under it a way
     // to redeem them. One that never ran it has nothing to honour.
-    const ranIt = (await programOf(r.id)) !== null;
+    const ranIt = savedProgram !== null;
     return (
       <div className="tt-dash">
         <div className="container">
@@ -41,7 +49,7 @@ export default async function LoyaltyPage() {
     );
   }
 
-  const program = (await programOf(r.id)) ?? { active: false, goal: 8, reward: "", steps: [{ visits: 8, reward: "" }] };
+  const program = savedProgram ?? { active: false, goal: 8, reward: "", steps: [{ visits: 8, reward: "" }] };
 
   // The card as a diner gets it, drawn on the owner's screen from a sample
   // code. Built here so the QR library stays on the server, as it does for

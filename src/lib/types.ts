@@ -178,6 +178,9 @@ export type OrderExtra = {
 // A single line item snapshot stored on the order.
 /** One item inside a combo, kept on the line so the kitchen ticket lists it. */
 export type ComboComponent = {
+  /** Preparation facts from the menu, kept per plate so mixed bundles reach both stations. */
+  station?: "bar";
+  skipsKitchen?: boolean;
   itemId: string;
   name: string;
   emoji: string;

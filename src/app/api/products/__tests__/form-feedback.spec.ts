@@ -67,3 +67,12 @@ it("K11: the transaction's late plan refusals keep their useful explanation", as
   const frozen = await send({ id, addonIds: [] });
   expect(frozen.status).toBe(402); expect(await frozen.json()).toEqual({ error: "plan.frozen" });
 });
+it.each(["Side", " side ", "Ｓｉｄｅ"])("D6: refuses duplicate normalized labels (%s) before product creation", async label => {
+  const res = await send({ menuId: menu, changes: { name: "Meal", modifiers: [
+    { label: "Side", type: "single", required: true, options: ["Rice"] },
+    { label, type: "single", required: true, options: ["Salad"] },
+  ] }, addonIds: [] });
+  expect(res.status).toBe(400);
+  expect(await res.json()).toEqual({ error: "menu.duplicateOptionGroup" });
+  expect(mock.rpc).not.toHaveBeenCalled();
+});

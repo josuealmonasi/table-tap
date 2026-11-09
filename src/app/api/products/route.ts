@@ -7,6 +7,7 @@ import { planLabel } from "@/lib/plan";
 import { frozenBlocks, planBlocks } from "@/lib/plan-guard";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
+import { duplicateModifierLabels } from "@/lib/clean-modifiers";
 import { modifierEditBlocks } from "@/lib/costs/modifier-edit";
 import { uuidOf } from "@/lib/costs/guard";
 
@@ -31,6 +32,7 @@ export async function PATCH(req: NextRequest): Promise<NextResponse> {
     return await apiError("apiErr.invalidRequest", 400);
   }
   const changes = Object.fromEntries(Object.entries(input).filter(([key]) => FIELDS.has(key)));
+  if (duplicateModifierLabels(changes.modifiers)) return await apiError("menu.duplicateOptionGroup", 400);
   if (id && "modifiers" in changes) {
     const blocked = await modifierEditBlocks(actor.restaurantId, id, changes.modifiers);
     if (blocked) return blocked;

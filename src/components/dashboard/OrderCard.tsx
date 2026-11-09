@@ -7,6 +7,7 @@ import { MoveToIcon } from "@/components/ui/icons";
 import { type Order, type OrderStatus } from "@/lib/types";
 import { boardOrderCode, hasOrderMoney, type BoardOrder } from "@/lib/kitchen-ticket";
 import OrderDetailDialog from "./OrderDetailDialog";
+import OrderLineAdditions from "./OrderLineAdditions";
 import TicketWait from "./TicketWait";
 import { DEFAULT_TICKET_LATE_MINUTES, DEFAULT_TICKET_WARN_MINUTES } from "@/lib/ticket-wait";
 import { STATUS_META, statusMeta } from "@/lib/order-status";
@@ -176,6 +177,7 @@ export default function OrderCard({
                 )
               </span>
             )}
+            <OrderLineAdditions item={item} />
             {item.notes && (
               <div className="tt-accent tt-subline" style={{ fontSize: 11, fontStyle: "italic" }}>
                 ↳ {item.notes}

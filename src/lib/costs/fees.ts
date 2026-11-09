@@ -5,7 +5,8 @@
  * own mix applied to its price: the period's fees over the period's takings.
  * Cash costs nothing. A card through TableTap pays Stripe's Mexican rate —
  * 3.6% plus MX$3 a charge, with IVA on the fee — and TableTap's per-order fee,
- * which the order records. A card on the restaurant's own terminal pays
+ * which the order records. Other currencies use the provider fee in the
+ * charge currency, because MX$3 is not US$3. A card on the restaurant's own terminal pays
  * whatever the owner signed for, which they tell us.
  *
  * Pure.
@@ -18,6 +19,10 @@ export const FEE_IVA_PCT = 16;
 
 export interface FeePayment {
   amount: number;
+  currency?: string;
+  stripe_account_id?: string | null;
+  /** Provider processing fee allocated to this row, in its collected currency. */
+  processing_fee?: number;
   method: "card" | "cash";
   /** Set when Stripe took it; a card with none was the restaurant's own terminal. */
   stripe_payment_intent: string | null;
@@ -27,6 +32,8 @@ export interface FeePayment {
 export function paymentFee(p: FeePayment, terminalPct: number): number {
   const amount = Number(p.amount);
   if (p.method === "cash") return 0;
+  if (p.stripe_payment_intent && p.processing_fee !== undefined) return p.processing_fee;
+  if (p.stripe_payment_intent && p.currency && p.currency !== "MXN") throw new Error("Processing fee evidence required");
   if (p.stripe_payment_intent) return (amount * (STRIPE_PCT / 100) + STRIPE_FIXED) * (1 + FEE_IVA_PCT / 100);
   return amount * (terminalPct / 100);
 }
@@ -58,7 +65,7 @@ export function feeRate(payments: FeePayment[], platformFees: number, terminalPc
     const amount = Number(p.amount);
     takings += amount;
     fees += paymentFee(p, terminalPct);
-    if (p.stripe_payment_intent && charged.has(p.stripe_payment_intent)) fees -= STRIPE_FIXED * (1 + FEE_IVA_PCT / 100);
+    if (p.stripe_payment_intent && p.processing_fee === undefined && charged.has(p.stripe_payment_intent)) fees -= STRIPE_FIXED * (1 + FEE_IVA_PCT / 100);
     if (p.stripe_payment_intent) charged.add(p.stripe_payment_intent);
     if (p.method === "cash") cash += amount;
     else if (p.stripe_payment_intent) online += amount;

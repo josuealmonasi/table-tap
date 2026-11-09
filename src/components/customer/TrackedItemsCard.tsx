@@ -11,6 +11,7 @@ export default function TrackedItemsCard({
   total,
   currency,
   paid = true,
+  cancelled = false,
   returnSummary,
 }: {
   items: OrderLineItem[];
@@ -18,6 +19,8 @@ export default function TrackedItemsCard({
   currency: string;
   /** False on a bill paid at the end or at the till. */
   paid?: boolean;
+  /** A cancelled bill has no amount due; keep its ordered total as history. */
+  cancelled?: boolean;
   returnSummary?: TrackedReturnSummary;
 }) {
   const t = useT();
@@ -47,7 +50,7 @@ export default function TrackedItemsCard({
         {/* An order settled at the table or at the till is not paid yet, and
             calling it "Total paid" tells the diner they have already settled
             something they are still going to have to settle. */}
-        <span>{t(paid ? "tracker.totalPaid" : "tracker.totalDue")}</span>
+        <span>{t(cancelled ? "totals.total" : paid ? "tracker.totalPaid" : "tracker.totalDue")}</span>
         <span className="tt-price">{formatMoney(returnSummary?.paid ?? total, currency)}</span>
       </div>
       {returnSummary && <>

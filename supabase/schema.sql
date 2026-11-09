@@ -4276,9 +4276,13 @@ begin
   if v_order.status not in ('received', 'preparing') then
     return jsonb_build_object('outcome', 'moved', 'status', v_order.status);
   end if;
-  select coalesce(array_agg(distinct coalesce(i->>'station', 'kitchen')), '{}') into v_needed
+  -- A combo keeps one bill line, but each plate still needs its own station.
+  select coalesce(array_agg(distinct coalesce(part->>'station', i->>'station', 'kitchen')), '{}') into v_needed
     from jsonb_array_elements(coalesce(v_order.items, '[]'::jsonb)) i
-   where not coalesce((i->>'skipsKitchen')::boolean, false);
+    cross join lateral jsonb_array_elements(case
+      when jsonb_typeof(i->'components') = 'array' and i->'components' <> '[]'::jsonb
+        then i->'components' else jsonb_build_array(i) end) part
+   where not coalesce((part->>'skipsKitchen')::boolean, (i->>'skipsKitchen')::boolean, false);
   if not (p_station = any(v_needed)) then return jsonb_build_object('outcome', 'notHere'); end if;
   v_ready := array(select distinct unnest(v_order.stations_ready || p_station) order by 1);
   update orders
@@ -4906,8 +4910,8 @@ create table if not exists terminal_deposits (
   id            uuid primary key default gen_random_uuid(),
   restaurant_id uuid not null references restaurants(id) on delete cascade,
   sales_day     date not null,
-  expected      numeric not null check (expected >= 0 and expected <= 100000000),
-  received      numeric not null check (received >= 0 and received <= 100000000),
+  expected      numeric not null check (expected between -100000000 and 100000000),
+  received      numeric not null check (received between -100000000 and 100000000),
   note          text check (note is null or char_length(note) <= 140),
   recorded_by   text not null,
   created_at    timestamptz not null default now(),
@@ -8999,7 +9003,8 @@ begin
     left join menu_items m on m.id = (d.value->>'item_id')::uuid and m.restaurant_id = p_restaurant;
   perform set_config('tabletap.offline_queue_writer', p_ref::text, true);
   v_ticket := public.ring_pos_sale_v2(p_restaurant, p_ref, p_order, p_method, p_actor,
-    'completed', p_at, p_terminal, v_demand, false, 0);
+    case when coalesce((p_order->>'preparation_pending')::boolean, false) then 'received' else 'completed' end,
+    p_at, p_terminal, v_demand, false, 0);
   if v_ticket->>'outcome' <> 'settled' then return v_ticket; end if;
   perform set_config('tabletap.offline_audit_writer', p_ref::text, true);
   update orders set offline_collector = p_actor, offline_authority = p_authority,
@@ -10382,6 +10387,14 @@ $$;
 revoke all on function public.terminal_deposit_ledger_v1(uuid, text) from public, anon, authenticated;
 grant execute on function public.terminal_deposit_ledger_v1(uuid, text) to service_role;
 
+-- A refund-heavy day can debit the bank. Keep its sign in the same signed manifest.
+alter table terminal_deposits drop constraint if exists terminal_deposits_expected_check;
+alter table terminal_deposits add constraint terminal_deposits_expected_check
+  check (expected between -100000000 and 100000000);
+alter table terminal_deposits drop constraint if exists terminal_deposits_received_check;
+alter table terminal_deposits add constraint terminal_deposits_received_check
+  check (received between -100000000 and 100000000);
+
 create or replace function public.record_terminal_deposit_v1(
   p_restaurant uuid, p_day date, p_currency text, p_received numeric, p_note text, p_actor text)
 returns jsonb language plpgsql security definer set search_path = public as $$
@@ -10392,7 +10405,7 @@ begin
   select coalesce(timezone, 'America/Mexico_City'), terminal_fee_pct into v_zone, v_fee
     from restaurants where id = p_restaurant for share;
   if not found or p_day is null or p_currency not in ('MXN', 'USD') or p_received is null
-    or p_received < 0 or p_received <> round(p_received, 2) then raise exception 'invalid deposit'; end if;
+    or p_received < -100000000 or p_received > 100000000 or p_received <> round(p_received, 2) then raise exception 'invalid deposit'; end if;
   if exists(select 1 from terminal_deposits where restaurant_id = p_restaurant and sales_day = p_day and currency = p_currency) then
     return jsonb_build_object('error', 'marked');
   end if;
@@ -12635,3 +12648,49 @@ begin
 end $$;
 revoke all on function public.retire_unsent_refund_attempt_v1(uuid, uuid, uuid, text) from public, anon, authenticated;
 grant execute on function public.retire_unsent_refund_attempt_v1(uuid, uuid, uuid, text) to service_role;
+
+-- Removing one warning must not overwrite another manager's newer warnings.
+create or replace function public.delete_dietary_tag_v1(p_restaurant uuid, p_tag uuid)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  v_key text;
+  v_unlinked integer;
+begin
+  select key into v_key from public.dietary_tags
+    where id = p_tag and restaurant_id = p_restaurant for update;
+  if not found then return null; end if;
+  update public.menu_items set dietary = array_remove(dietary, v_key)
+    where restaurant_id = p_restaurant and dietary @> array[v_key];
+  get diagnostics v_unlinked = row_count;
+  delete from public.dietary_tags where id = p_tag and restaurant_id = p_restaurant;
+  return jsonb_build_object('unlinked', v_unlinked);
+end;
+$$;
+revoke all on function public.delete_dietary_tag_v1(uuid, uuid) from public, anon, authenticated;
+grant execute on function public.delete_dietary_tag_v1(uuid, uuid) to service_role;
+
+-- Only new self-serve signups wait for verification; existing restaurants keep their plans.
+alter table restaurants add column if not exists owner_signup_pending boolean not null default false;
+
+-- A confirmation retry must not restart the trial, and password knowledge is not email ownership.
+create or replace function public.complete_owner_signup_v1(p_user uuid)
+returns uuid language plpgsql security definer set search_path = public as $$
+declare v_restaurant restaurants; v_email text; v_confirmed timestamptz;
+begin
+  select * into v_restaurant from restaurants where owner_id = p_user and owner_signup_pending for update;
+  if not found then return null; end if;
+  select email, email_confirmed_at into v_email, v_confirmed from auth.users where id = p_user;
+  if v_confirmed is null or lower(v_email) is distinct from lower(v_restaurant.terms_accepted_email) then
+    raise exception using errcode = 'PT403', message = 'email verification required';
+  end if;
+  -- Servicio shows ordering at the table for 30 days, with no card required.
+  -- Mail delays must not spend those days before the owner can open the restaurant.
+  update restaurants set owner_signup_pending = false,
+    trial_ends_at = case when plan = 'servicio' and plan_status = 'trialing' and stripe_subscription_id is null
+      then clock_timestamp() + interval '30 days' else trial_ends_at end
+    where id = v_restaurant.id;
+  return v_restaurant.id;
+end;
+$$;
+revoke all on function public.complete_owner_signup_v1(uuid) from public, anon, authenticated;
+grant execute on function public.complete_owner_signup_v1(uuid) to service_role;

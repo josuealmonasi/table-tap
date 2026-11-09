@@ -4,6 +4,8 @@ import { jsonBody } from "@/lib/json-body";
 import { TERMS_VERSION } from "@/lib/legal";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { clientKey, isRateLimited } from "@/lib/rate-limit";
+import { sendSignupConfirmation } from "@/lib/signup-confirmation";
+import { normalizeEmail, isValidEmail } from "@/lib/email";
 import { passwordTooShort } from "@/lib/password";
 
 export const runtime = "nodejs";
@@ -22,7 +24,7 @@ const TRIAL_DAYS = 30;
 
 // POST /api/signup
 // Body: { restaurantName, email, password }
-// Creates a pre-confirmed auth user and their restaurant, atomically-ish:
+// Creates an unconfirmed auth user and their pending restaurant, atomically-ish:
 // if the restaurant insert fails we remove the just-created user so a retry works.
 export async function POST(req: NextRequest) {
   // Cap account-creation attempts per IP to blunt signup spam.
@@ -37,14 +39,15 @@ export async function POST(req: NextRequest) {
     acceptedTerms?: boolean;
   }>(req);
   if (!body) return await apiError("apiErr.invalidRequest", 400);
-  const { restaurantName, email, password, acceptedTerms } = body;
+  const { restaurantName, password, acceptedTerms } = body;
+  const email = typeof body.email === "string" ? normalizeEmail(body.email) : "";
 
   // Checked on the server too. The box in the browser is the honest place to
   // ask; this is the place that makes the answer mean something.
   if (!acceptedTerms) return await apiError("auth.termsRequired", 400);
 
   // Strings, or nothing: a number for a name once reached `.trim()` and answered 500.
-  if (typeof restaurantName !== "string" || !restaurantName.trim() || typeof email !== "string" || !email) {
+  if (typeof restaurantName !== "string" || !restaurantName.trim() || !isValidEmail(email)) {
     return await apiError("apiErr.signupFields", 400);
   }
   // Held to the same length as every other password in the app. This account
@@ -54,11 +57,11 @@ export async function POST(req: NextRequest) {
 
   const admin = createAdminClient();
 
-  // Pre-confirm the email so there's no verification step for now.
+  // Only the email link proves ownership; signup must never confirm itself.
   const { data: created, error: userErr } = await admin.auth.admin.createUser({
     email,
     password,
-    email_confirm: true,
+    email_confirm: false,
   });
 
   if (userErr || !created?.user) {
@@ -73,9 +76,9 @@ export async function POST(req: NextRequest) {
     .insert({
       name: restaurantName.trim(),
       owner_id: created.user.id,
-      // A month of everything, no card. Sold on the top self-serve tier
-      // because a restaurant deciding whether this is worth paying for should
-      // be deciding about the product, not about a cut-down version of it.
+      owner_signup_pending: true,
+      // A month of Servicio, no card, so the trial shows ordering at the table.
+      // Confirmation starts these 30 days afresh: mail delays must not spend the trial.
       plan: TRIAL_PLAN,
       plan_status: "trialing",
       // What they agreed to and when. Versioned, because "they accepted" is
@@ -93,5 +96,6 @@ export async function POST(req: NextRequest) {
     return await apiError("apiErr.signupFailed", 400);
   }
 
-  return NextResponse.json({ ok: true });
+  const verificationSent = await sendSignupConfirmation(req, email);
+  return NextResponse.json({ ok: true, pendingVerification: true, verificationSent });
 }

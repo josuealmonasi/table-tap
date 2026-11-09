@@ -1,3 +1,4 @@
+import { stationsOf } from "@/lib/stations";
 import { MANAGES } from "@/lib/membership";
 import { NextResponse } from "next/server";
 import { apiError } from "@/lib/api-error";
@@ -20,8 +21,9 @@ export interface OfflineApproval { reason: string; collector?: string; at?: stri
  * It already happened: the customer paid and left with the food. A dish sold
  * out since or a menu closed since cannot undo it. Changed prices require a
  * manager's approval before the receipt joins the ledger. It is recorded at
- * the time it happened, for what was collected, finished (the kitchen worked
- * from the ticket at the time), and its stock is taken down to nought at most.
+ * the time it happened, for what was collected. A sale taken offline is finished
+ * (the kitchen worked from its ticket); an interrupted online send still needs
+ * the pass. Its stock is taken down to nought at most.
  * Today's menu prices it to show a manager the difference.
  *
  * Its reference is its id, so the code on the ticket the till printed offline
@@ -79,7 +81,8 @@ export async function ringOffline(actor: Actor, body: PosSaleBody & { offline?: 
     p_manager: approval ? actor.email : null, p_reason: approval?.reason ?? null,
     p_original_at: typeof originalAt === "string" ? originalAt.slice(0, 80) : null,
     p_authority: context ? "signed" : "manager_attested",
-    p_order: { subtotal: charge.subtotal, service_fee: charge.serviceFee, tip: charge.tip,
+    p_order: { preparation_pending: (body.offline as { preparationPending?: unknown })?.preparationPending === true && stationsOf({ items: lines }).length > 0,
+      subtotal: charge.subtotal, service_fee: charge.serviceFee, tip: charge.tip,
       discount: charge.discount, total: charge.total, tax_pct: Number(restaurant.tax_pct) || 0,
       currency, items: lines, note: capNote(body.note) ?? null, customer_name: capName(body.customerName) ?? null,
       offline_drift: offlineDrift(charge.total, currency === restaurant.currency ? current?.price.total ?? null : null) },

@@ -27,7 +27,7 @@ export default function LoginForm() {
         return;
       }
       // Hard navigate so the server picks up the fresh auth cookies.
-      window.location.assign("/dashboard");
+      window.location.assign("/signup/complete");
     } catch {
       setError(t("auth.unavailable"));
       setLoading(false);

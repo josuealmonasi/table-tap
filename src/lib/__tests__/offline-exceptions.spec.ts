@@ -140,3 +140,11 @@ it("does not compare a queued receipt belonging to another restaurant", async ()
   expect(res.status).toBe(404);
   expect(state.calls).toEqual([]);
 });
+it("C5: manager recovery preserves an interrupted kitchen sale's pending preparation", async () => {
+  state.role = "manager";
+  const original = { ...body(), offline: { ...body().offline, preparationPending: true } };
+  state.queued = { body: original, collector: "cashier@example.com", currency: "MXN" };
+  expect((await recovery.POST(request({ posRef: original.posRef, restaurantId: "r",
+    approval: { confirmed: true, reason: "Original receipt checked" } }))).status).toBe(200);
+  expect(state.calls[0]).toMatchObject({ name: "record_offline_sale", args: { p_order: { preparation_pending: true } } });
+});

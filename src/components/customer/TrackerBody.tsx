@@ -9,6 +9,7 @@ import LoyaltyOffer from "./LoyaltyOffer";
 import type { LoyaltyOfferInfo } from "@/lib/loyalty/offer";
 import {
   BackIcon,
+  CloseIcon,
   StatusPreparingIcon,
   StatusReadyIcon,
   StatusReceivedIcon,
@@ -22,6 +23,7 @@ export function toDisplayStatus(status: OrderStatus): OrderStatus {
 }
 
 const HERO: Record<string, { headlineKey: string; Glyph: typeof StatusReadyIcon }> = {
+  cancelled: { headlineKey: "tracker.cancelled", Glyph: CloseIcon },
   ready: { headlineKey: "tracker.ready", Glyph: StatusReadyIcon },
   preparing: { headlineKey: "tracker.preparing", Glyph: StatusPreparingIcon },
   received: { headlineKey: "tracker.received", Glyph: StatusReceivedIcon },
@@ -45,7 +47,8 @@ export default function TrackerBody({
   loyalty?: LoyaltyOfferInfo | null;
 }) {
   const t = useT();
-  const status = toDisplayStatus(order.status);
+  const cancelled = order.status === "cancelled" || order.written_off === true;
+  const status = cancelled ? "cancelled" : toDisplayStatus(order.status);
   const hero = HERO[status] ?? HERO.received;
 
   return (
@@ -77,25 +80,26 @@ export default function TrackerBody({
       </div>
 
       <div className="tt-track-body">
-        <OrderStatusTimeline status={status} tableLabel={order.table_label} />
+        {!cancelled && <OrderStatusTimeline status={status} tableLabel={order.table_label} />}
         <TrackedItemsCard
           items={order.items}
           total={order.total}
           currency={order.currency}
           paid={order.paid !== false}
+          cancelled={cancelled}
           returnSummary={order.returnSummary}
         />
 
         {/* Paid, and the restaurant runs a visit card: the moment to offer it,
             however the money came — online, at the till or to the waiter. */}
-        {order.paid !== false && loyalty && <LoyaltyOffer offer={loyalty} />}
+        {!cancelled && order.paid !== false && loyalty && <LoyaltyOffer offer={loyalty} />}
 
         {/* Only while there is something to collect. On a settled order there
             is nothing for anyone to scan, and a payment code on a paid bill
             invites somebody to be charged twice. Placed after the total, which
             is the order it gets used in: this is what you owe, this is how
             they take it. */}
-        {order.paid === false && (
+        {!cancelled && order.paid === false && (
           <div className="tt-card tt-pay-qr">
             <strong>{t("tracker.showToPay")}</strong>
             <p className="tt-muted">{t("tracker.showToPayHint")}</p>

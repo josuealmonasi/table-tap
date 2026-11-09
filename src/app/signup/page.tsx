@@ -7,7 +7,7 @@ export const dynamic = "force-dynamic";
 // /signup — create a restaurant account.
 export default async function SignupPage() {
   const user = await currentUser();
-  if (user) redirect("/dashboard");
+  if (user) redirect("/signup/complete");
 
   return <SignupForm />;
 }

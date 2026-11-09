@@ -21,3 +21,17 @@ export function cleanModifiers(groups: Modifier[]): Modifier[] {
     }))
     .filter(g => g.label && g.options.length > 0);
 }
+
+/** Choices are keyed by label, so two groups cannot share the same name. */
+export function duplicateModifierLabels(raw: unknown): boolean {
+  if (!Array.isArray(raw)) return false;
+  const seen = new Set<string>();
+  for (const group of raw) {
+    if (typeof group?.label !== "string") continue;
+    const label = group.label.normalize("NFKC").trim().replace(/\s+/g, " ").toLowerCase();
+    if (!label) continue;
+    if (seen.has(label)) return true;
+    seen.add(label);
+  }
+  return false;
+}
