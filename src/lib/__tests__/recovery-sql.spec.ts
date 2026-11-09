@@ -17,5 +17,6 @@ it("leaves a dish counted after a late offline sale as counted (sweep 6, finding
   expect(body("stock_tracking_epoch")).toContain("new.stock_epoch_at := now();");
   const sale = body("record_offline_sale");
   expect(sale).toContain("m.stock_epoch_at is null or m.stock_epoch_at <= p_at");
-  expect(sale).toContain("'completed', p_at, p_terminal, v_demand, false, 0)");
+  expect(sale).toContain("then 'received' else 'completed' end");
+  expect(sale).toContain("p_at, p_terminal, v_demand, false, 0)");
 });

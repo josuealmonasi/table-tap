@@ -2613,3 +2613,30 @@ The API gate covers both unauthorized refusal and an authorized clean-seed
 invocation, including unchanged sales, payment and stock records. Set
 `CRON_SECRET` in the dev server environment for that authorized case. Cron
 setup follows [Vercel's authorization contract](https://vercel.com/docs/cron-jobs/manage-cron-jobs#securing-cron-jobs).
+
+## Owner email verification and review fixes (9 Nov 2026)
+
+Self-serve signup creates an unconfirmed auth user and a restaurant with
+`owner_signup_pending = true`. The verification screen offers resend and sign-in;
+it does not sign the owner in with the password just chosen. The server callback
+accepts the email token hash or a PKCE code and opens `/signup/complete`.
+`complete_owner_signup_v1` checks `auth.users.email_confirmed_at` and the address
+recorded with terms acceptance under the pending restaurant lock. Only then does
+it clear pending and start the existing 30-day Servicio trial. Repeated completion
+does not extend the trial; existing owners and staff pass through unchanged.
+A mail failure keeps the pending account available for resend. Supabase must have
+email confirmation enabled, a server-side token-hash confirmation template and
+the callback URL allowed. No SQL or Auth configuration has been applied by this fix.
+
+Mixed-station combos keep one priced line and one bill. Each component stores its
+verified preparation facts; the board, detail, paper and station-ready writer use
+those parts. Backward stage moves clear completed stations atomically. An
+interrupted online counter sale retains its pending preparation through replay
+and manager recovery; a sale taken entirely offline remains completed, and Caja
+continues serving at the till without a kitchen board.
+
+Terminal reconciliation accepts signed bank movements, including debits, within
+the same amount limits and signed payment/return manifest as credits. Costs retain
+the existing MXN processing estimate; other payment currencies use original
+connected-charge provider evidence and its settlement exchange rate. Missing fee
+evidence makes the report unavailable for retry instead of mixing currencies.

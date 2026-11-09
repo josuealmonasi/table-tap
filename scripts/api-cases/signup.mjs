@@ -3,6 +3,8 @@ import { loginByEmail } from "../logins.mjs";
 
 export function signupCases() {
   return [
+    { name: "POST /api/signup/resend (rejects an empty address)", as: "diner", method: "POST",
+      path: "/api/signup/resend", body: {}, expect: [400, 429] },
     { name: "POST /api/signup (rejects an empty form)", as: "diner", method: "POST",
       path: "/api/signup", body: {}, expect: [400, 429] },
     // The front door, which nothing had ever opened. The only case here

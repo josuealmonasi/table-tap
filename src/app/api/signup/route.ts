@@ -77,7 +77,9 @@ export async function POST(req: NextRequest) {
       name: restaurantName.trim(),
       owner_id: created.user.id,
       owner_signup_pending: true,
-      // A month of Servicio, no card, so the trial shows ordering at the table.
+      // A month of everything, no card. Sold on the top self-serve tier
+      // because a restaurant deciding whether this is worth paying for should
+      // be deciding about the product, not about a cut-down version of it.
       // Confirmation starts these 30 days afresh: mail delays must not spend the trial.
       plan: TRIAL_PLAN,
       plan_status: "trialing",

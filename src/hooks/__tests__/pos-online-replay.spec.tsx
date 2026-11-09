@@ -57,3 +57,9 @@ it("C5: the SQL writer does not finish interrupted kitchen preparation", () => {
   expect(sql).toContain("p_order->>'preparation_pending'");
   expect(sql).toContain("then 'received' else 'completed' end");
 });
+
+it("C5: the money writer preserves the requested kitchen stage even with an offline timestamp", () => {
+  const sql = readFileSync("supabase/schema.sql", "utf8").split("create or replace function public.ring_pos_sale_v2(")[1].split("$$;")[0];
+  expect(sql).toMatch(/settle_offline_sale_v2[\s\S]*?update orders set status = p_status[\s\S]*?where id = p_ref and restaurant_id = p_restaurant/);
+  expect(sql).toContain("'handedOver', p_status = 'completed'");
+});

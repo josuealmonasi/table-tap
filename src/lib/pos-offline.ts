@@ -1,3 +1,5 @@
+import { getPlan } from "@/lib/plan-server";
+import { can } from "@/lib/plan";
 import { stationsOf } from "@/lib/stations";
 import { MANAGES } from "@/lib/membership";
 import { NextResponse } from "next/server";
@@ -74,6 +76,10 @@ export async function ringOffline(actor: Actor, body: PosSaleBody & { offline?: 
     return await apiError("apiErr.offlineApproval", 409, undefined, { held: true, reviewReason: "apiErr.offlineApproval" });
   }
   const lines = approval ? savedLines : current!.lines;
+  const interrupted = (body.offline as { preparationPending?: unknown })?.preparationPending === true;
+  const plan = interrupted ? await getPlan(actor.restaurantId) : null;
+  // Caja serves at the till; a reconnect must not leave food on a board it cannot open.
+  const preparationPending = interrupted && (!plan || can(plan.limits, "kitchenBoard")) && stationsOf({ items: lines }).length > 0;
   const { data: ticket, error } = await db.rpc("record_offline_sale", {
     p_restaurant: actor.restaurantId, p_ref: posRef, p_method: body.method, p_actor: collector,
     p_at: charge.at, p_terminal: body.method === "card" ? terminalRef(body.terminalRef) : null,
@@ -81,7 +87,7 @@ export async function ringOffline(actor: Actor, body: PosSaleBody & { offline?: 
     p_manager: approval ? actor.email : null, p_reason: approval?.reason ?? null,
     p_original_at: typeof originalAt === "string" ? originalAt.slice(0, 80) : null,
     p_authority: context ? "signed" : "manager_attested",
-    p_order: { preparation_pending: (body.offline as { preparationPending?: unknown })?.preparationPending === true && stationsOf({ items: lines }).length > 0,
+    p_order: { preparation_pending: preparationPending,
       subtotal: charge.subtotal, service_fee: charge.serviceFee, tip: charge.tip,
       discount: charge.discount, total: charge.total, tax_pct: Number(restaurant.tax_pct) || 0,
       currency, items: lines, note: capNote(body.note) ?? null, customer_name: capName(body.customerName) ?? null,

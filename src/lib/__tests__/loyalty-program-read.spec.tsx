@@ -25,3 +25,8 @@ it.each([true, false])("D7: a failed read offers retry without an empty editor o
 it("D7: a genuinely absent program can still be configured", async () => {
   expect(renderToStaticMarkup(await LoyaltyPage())).toContain("Editable program");
 });
+
+it.each(["en", "es"] as const)("D7: the retry explanation exists in %s", async locale => {
+  const { messagesFor, translate } = await import("@/lib/i18n");
+  expect(translate(messagesFor(locale), "loyalty.readFailed")).not.toBe("loyalty.readFailed");
+});

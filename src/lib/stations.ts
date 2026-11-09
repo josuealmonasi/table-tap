@@ -37,11 +37,13 @@ export const inStation = (order: { items: KitchenLine[] }, station: Station | nu
 export function linesAt<T extends KitchenLine>(order: { items: T[] }, station: Station | null): T[] {
   if (station === null) return order.items;
   return order.items.flatMap(line => {
-    if (line.skipsKitchen) return [];
-    if (!line.components?.length) return stationOf(line) === station ? [line] : [];
-    const components = line.components.filter(part => !part.skipsKitchen &&
+    if (!line.components?.length) return !line.skipsKitchen && stationOf(line) === station ? [line] : [];
+    const components = line.components.filter(part => !(part.skipsKitchen ?? line.skipsKitchen) &&
       stationOf({ station: part.station ?? line.station }) === station);
-    return components.length ? [{ ...line, components }] : [];
+    // Flattened extras belong to the bill; a station must only read its own plates.
+    const extras = line.components.some(part => part.extras?.length)
+      ? components.flatMap(part => part.extras ?? []) : line.extras;
+    return components.length ? [{ ...line, components, extras }] : [];
   });
 }
 

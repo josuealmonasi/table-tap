@@ -3,7 +3,7 @@ import { NextRequest } from "next/server";
 import { readFileSync } from "node:fs";
 
 const state = vi.hoisted(() => ({ dietary: ["nuts"], fail: false }));
-vi.mock("@/lib/desk-mutation", () => ({ deskMutation: (fn: Function) => (req: NextRequest) => fn(req, { restaurantId: "r1" }) }));
+vi.mock("@/lib/desk-mutation", () => ({ deskMutation: (fn: (req: NextRequest, actor: { restaurantId: string }) => Promise<Response>) => (req: NextRequest) => fn(req, { restaurantId: "r1" }) }));
 vi.mock("@/lib/api-error", () => ({ apiError: async (error: string, status: number) => Response.json({ error }, { status }) }));
 vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({
   rpc: async (_name: string, args: { p_restaurant: string; p_tag: string }) => {
@@ -24,7 +24,7 @@ vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({
         state.dietary.push("dairy");
         return { data };
       },
-      then: (resolve: Function) => {
+      then: (resolve: (value: { error: { message: string } | null; data: unknown }) => unknown) => {
         if (patch) state.dietary = patch.dietary;
         resolve({ error: state.fail ? { message: "failed" } : null, data: table === "dietary_tags" ? [] : null });
       },

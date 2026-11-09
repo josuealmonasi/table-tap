@@ -9,7 +9,7 @@ export default function LoyaltyReadError() {
   const t = useT();
   const router = useRouter();
   const [pending, startTransition] = useTransition();
-  return <div className="tt-card" role="alert">
+  return <div className="tt-card" style={{ padding: 20 }} role="alert">
     <p>{t("loyalty.readFailed")}</p>
     <button type="button" className="tt-btn" disabled={pending}
       onClick={() => startTransition(() => router.refresh())}>

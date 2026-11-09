@@ -3,7 +3,7 @@ import { NextRequest } from "next/server";
 import { issueOfflineContext } from "@/lib/offline-authority";
 
 const state = vi.hoisted(() => ({
-  role: "cashier", email: "cashier@example.com", blocked: false, matching: false, calls: [] as { name: string; args: Record<string, unknown> }[],
+  board: true, role: "cashier", email: "cashier@example.com", blocked: false, matching: false, calls: [] as { name: string; args: Record<string, unknown> }[],
   queued: null as Record<string, unknown> | null,
 }));
 vi.mock("@/lib/api-guard", () => ({
@@ -13,6 +13,7 @@ vi.mock("@/lib/api-guard", () => ({
 vi.mock("@/lib/api-error", () => ({ apiError: async (error: string, status: number, _: unknown, extra: object = {}) => Response.json({ error: `Translated: ${error}`, ...extra }, { status }) }));
 vi.mock("@/lib/plan-guard", () => ({ frozenBlocks: async () => state.blocked ? Response.json({ error: "frozen" }, { status: 402 }) : null,
   planBlocks: async () => state.blocked ? Response.json({ error: "plan" }, { status: 403 }) : null }));
+vi.mock("@/lib/plan-server", () => ({ getPlan: async () => ({ limits: { allows_kitchen_board: state.board } }) }));
 vi.mock("@/lib/offline-pricing", () => ({ currentOfflinePrice: async () => ({ price: { subtotal: 100, serviceFee: 0, tip: 0, discount: 0, total: 100 }, lines: [] }), sameOfflinePrice: () => state.matching }));
 vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({
   from: (table: string) => {
@@ -39,7 +40,7 @@ const body = () => ({ posRef: "6b1f0c2e-0000-4000-8000-000000000001", restaurant
   offline: { at: new Date().toISOString(), subtotal: 80, serviceFee: 0, tip: 0, discount: 0, total: 80 },
 });
 const request = (data: unknown) => new NextRequest("http://localhost/api/pos/order", { method: "POST", body: JSON.stringify(data) });
-beforeEach(() => { state.calls = []; state.role = "cashier"; state.email = "cashier@example.com"; state.blocked = false; state.matching = false; state.queued = null; process.env.SUPABASE_SECRET_KEY = "test-offline-secret"; });
+beforeEach(() => { state.calls = []; state.board = true; state.role = "cashier"; state.email = "cashier@example.com"; state.blocked = false; state.matching = false; state.queued = null; process.env.SUPABASE_SECRET_KEY = "test-offline-secret"; });
 
 it("queues a price difference as collected instead of leaving it on the device", async () => {
   const sent = body();
@@ -147,4 +148,13 @@ it("C5: manager recovery preserves an interrupted kitchen sale's pending prepara
   expect((await recovery.POST(request({ posRef: original.posRef, restaurantId: "r",
     approval: { confirmed: true, reason: "Original receipt checked" } }))).status).toBe(200);
   expect(state.calls[0]).toMatchObject({ name: "record_offline_sale", args: { p_order: { preparation_pending: true } } });
+});
+
+it("C5: a till without a kitchen board still finishes an interrupted counter sale", async () => {
+  state.board = false; state.role = "manager";
+  const original = { ...body(), offline: { ...body().offline, preparationPending: true } };
+  state.queued = { body: original, collector: "cashier@example.com", currency: "MXN" };
+  expect((await recovery.POST(request({ posRef: original.posRef, restaurantId: "r",
+    approval: { confirmed: true, reason: "Original receipt checked" } }))).status).toBe(200);
+  expect(state.calls[0]).toMatchObject({ name: "record_offline_sale", args: { p_order: { preparation_pending: false } } });
 });

@@ -71,7 +71,6 @@ export const en = {
       terminal: "Terminal",
     },
     loyalty: {
-    readFailed: "We couldn’t load your visit card program. Try again to see your settings and earned rewards.",
       stamped: "stamped a visit card",
       redeemed: "redeemed a visit card's reward",
       updated: "changed the visit card",
@@ -2240,6 +2239,7 @@ votes: "Votes",
   },
   /** The staff scanner that stamps a diner's visit card. */
   loyalty: {
+    readFailed: "We couldn’t load your visit card program. Try again to see your settings and earned rewards.",
     stampButton: "Stamp a card",
     title: "Visit card",
     scanHint: "Point the camera at the QR on the diner's card.",

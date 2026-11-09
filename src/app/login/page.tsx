@@ -4,7 +4,7 @@ import { currentUser } from "@/lib/current-user";
 
 export const dynamic = "force-dynamic";
 
-// /login — restaurant staff sign in. Already signed in? Go straight to the dashboard.
+// /login — restaurant staff sign in. Already signed in? Finish a pending signup, then open the dashboard.
 export default async function LoginPage() {
   const user = await currentUser();
   if (user) redirect("/signup/complete");

@@ -73,7 +73,6 @@ export const es: Messages = {
       terminal: "Terminal",
     },
     loyalty: {
-    readFailed: "No pudimos cargar tu programa de visitas. Intenta de nuevo para ver tus ajustes y las recompensas ganadas.",
       stamped: "selló una tarjeta de visitas",
       redeemed: "canjeó la recompensa de una tarjeta",
       updated: "cambió la tarjeta de visitas",
@@ -2223,6 +2222,7 @@ votes: "Votos",
     saveAgainAction: "Guardar la tarjeta al día",
   },
   loyalty: {
+    readFailed: "No pudimos cargar tu programa de visitas. Intenta de nuevo para ver tus ajustes y las recompensas ganadas.",
     stampButton: "Sellar tarjeta",
     title: "Tarjeta de visitas",
     scanHint: "Apunta la cámara al QR de la tarjeta del cliente.",

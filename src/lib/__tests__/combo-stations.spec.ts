@@ -1,5 +1,6 @@
 import { expect, it } from "vitest";
 import { readFileSync } from "node:fs";
+import { offlineLines } from "@/lib/offline-sale";
 import { verifyCombo } from "@/lib/verify-combo";
 import { stationsOf, linesAt } from "@/lib/stations";
 import { kitchenTicket } from "@/lib/ticket";
@@ -12,9 +13,9 @@ const components = [
   { itemId: "water", name: "Water", emoji: "", qty: 1 },
 ];
 function verified() {
-  const products = components.map(part => ({ id: part.itemId, name: part.name, price: 10, modifiers: [], available: true,
+  const products: VerifiableItem[] = components.map(part => ({ id: part.itemId, name: part.name, price: 10, modifiers: [], available: true, emoji: "", discount_pct: 0, category_id: null, menu_id: null, is_addon: false, item_addons: [],
     categories: { station: part.itemId === "food" ? "kitchen" : "bar" }, skips_kitchen: part.itemId === "water",
-  } as VerifiableItem));
+  }));
   const result = verifyCombo({ id: "meal", name: "Breakfast", emoji: "", price: 40, components } as Combo,
     { mods: {}, components: components.map(part => ({ ...part, station: "bar", skipsKitchen: true })) } as OrderLineItem,
     3, new Map(products.map(p => [p.id, p])), new Map(), () => true);
@@ -46,4 +47,34 @@ it("B7: the station writer computes required stations from components with a leg
   expect(sql).toContain("then i->'components' else");
   expect(sql).toContain("jsonb_build_array(i)");
   expect(sql).toContain("part->>'skipsKitchen'");
+});
+
+it("B7: station slices keep only their component extras", () => {
+  const line = verified();
+  const cheese = { id: "cheese", name: "Cheese", emoji: "", price: 5 };
+  const milk = { id: "milk", name: "Oat", emoji: "", price: 5 };
+  line.components![0].extras = [cheese];
+  line.components![1].extras = [milk];
+  line.extras = [cheese, milk];
+  expect(linesAt({ items: [line] }, "bar")[0].extras).toEqual([milk]);
+  expect(linesAt({ items: [line] }, "kitchen")[0].extras).toEqual([cheese]);
+});
+it("B7: legacy components inherit their parent's preparation flag consistently", () => {
+  const line = verified();
+  line.skipsKitchen = true;
+  line.components = line.components!.map(part => ({ ...part, skipsKitchen: undefined }));
+  expect(stationsOf({ items: [line] })).toEqual([]);
+  expect(linesAt({ items: [line] }, "bar")).toEqual([]);
+  line.components[0].skipsKitchen = false;
+  expect(stationsOf({ items: [line] })).toEqual(["kitchen"]);
+  expect(linesAt({ items: [line] }, "kitchen")).toHaveLength(1);
+});
+
+it("B7: manager recovery keeps the saved component stations and shelf items", () => {
+  const line = verified();
+  const [saved] = offlineLines([line]);
+  expect(stationsOf({ items: [saved] })).toEqual(["kitchen", "bar"]);
+  expect(linesAt({ items: [saved] }, "bar")[0].components?.map(part => part.name)).toEqual(["Latte"]);
+  const shelf = { ...line, components: undefined, comboId: undefined, skipsKitchen: true };
+  expect(stationsOf({ items: offlineLines([shelf]) })).toEqual([]);
 });

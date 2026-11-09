@@ -15,6 +15,12 @@ export default function OrderLineAdditions({ item }: Props) {
         <OrderLineAdditions item={part} />
       </div>
     ))}
+    {/* Older orders kept additions only on the bundle; those still need making. */}
+    {!item.components.some(part => part.extras?.length) && item.extras?.length ? (
+      <div className="tt-muted tt-subline" style={{ fontSize: 12 }}>
+        + {item.extras.map(extra => extra.name).join(", ")}
+      </div>
+    ) : null}
   </>;
   return item.extras?.length ? (
     <div className="tt-muted tt-subline" style={{ fontSize: 12 }}>

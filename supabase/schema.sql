@@ -7907,6 +7907,10 @@ begin
   perform public.pos_insert_order(p_restaurant, p_ref, p_order, 'pending_payment', p_at, v_reservation);
   if p_at is not null then
     perform public.settle_offline_sale_v2(p_restaurant, p_ref, p_method, p_actor, p_at);
+    -- The timestamp dates the money; it does not prove the kitchen made the food.
+    -- Keep the requested stage under this same lock and transaction.
+    update orders set status = p_status
+      where id = p_ref and restaurant_id = p_restaurant;
   else
     perform public.settle_sale_v2(p_restaurant, p_ref, p_method, p_actor, p_status);
   end if;
@@ -7916,7 +7920,7 @@ begin
   end if;
   return jsonb_build_object('outcome', 'settled', 'settled', true, 'orderId', p_ref,
     'total', (p_order->>'total')::numeric, 'low', v_stock->'low',
-    'handedOver', p_at is not null or p_status = 'completed');
+    'handedOver', p_status = 'completed');
 end;
 $$;
 revoke all on function public.ring_pos_sale_v2(uuid, uuid, jsonb, text, text, text, timestamptz, text, jsonb, boolean, int) from public, anon, authenticated;
