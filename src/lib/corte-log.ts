@@ -14,7 +14,6 @@ export function corteLogs(rows: CorteLog[], currency: string): { verified: Corte
   for (const row of rows) {
     const eligible = (row.entity === "bill" && row.action === "written_off")
       || (row.entity === "discount" && ["discounted", "approved"].includes(row.action))
-      || (row.entity === "account" && row.action === "charged")
       || (["order", "bill"].includes(row.entity) && row.action === "refunded");
     const fields = parseLogDetail(row.detail);
     if (!eligible || !fields?.amount || !Number.isFinite(Number(fields.amount))) continue;
