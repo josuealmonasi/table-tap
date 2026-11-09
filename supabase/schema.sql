@@ -9834,7 +9834,15 @@ alter table ingredient_consumption add column if not exists line_costs jsonb;
 create or replace function public.sale_line_costs(p_restaurant uuid, p_items jsonb)
 returns jsonb language sql stable security definer set search_path = public as $$
   select coalesce(jsonb_agg((
+    -- Known only when every dish in the line has a recipe: a combo of a costed
+    -- coffee and an uncosted cake was saved as the coffee's cost alone, and
+    -- read back as the whole line's (sweep 7, finding 3; end-to-end review).
     select case when u.usage = '{}'::jsonb
+        or exists (select 1 from (
+            select c->>'itemId' id from jsonb_array_elements(coalesce(line.value->'components', '[]')) c
+            union all select line.value->>'itemId' where jsonb_array_length(coalesce(line.value->'components', '[]')) = 0
+            union all select e->>'id' from jsonb_array_elements(coalesce(line.value->'extras', '[]')) e
+          ) part where not exists (select 1 from recipe_lines r where r.restaurant_id = p_restaurant and r.item_id::text = part.id))
         or exists (select 1 from jsonb_each_text(u.usage) e left join ingredients i
           on i.id = e.key::uuid and i.restaurant_id = p_restaurant where i.unit_cost is null) then null
       else to_jsonb(round((select sum(-e.value::numeric * i.unit_cost) from jsonb_each_text(u.usage) e
