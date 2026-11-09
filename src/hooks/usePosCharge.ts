@@ -137,7 +137,9 @@ export function usePosCharge({ collector, collectorContext, restaurant, cart, de
     accountResent.current = retriedAccount;
     const sale: HeldSale | null = method === "account" ? null : {
       posRef, collector, collectorContext, restaurantId: restaurant.id, at: new Date().toISOString(), method, items: lines,
-      charge: { ...pricing }, currency: restaurant.currency, tipPct: tipCustom === null ? tipPct : undefined, tipAmount: tipCustom ?? undefined,
+      // The tax rate it was sold under travels with it: replayed tomorrow, a
+      // sale took today's rate (C6, end-to-end review).
+      charge: { ...pricing, taxPct: Number(restaurant.tax_pct) || 0 }, currency: restaurant.currency, tipPct: tipCustom === null ? tipPct : undefined, tipAmount: tipCustom ?? undefined,
       customerName: details.customerName.trim() || undefined, note: details.note.trim() || undefined,
       terminalRef: method === "card" ? details.terminalRef.trim() || undefined : undefined,
     };

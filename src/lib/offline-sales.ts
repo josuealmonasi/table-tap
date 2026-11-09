@@ -46,7 +46,7 @@ export interface HeldSale {
    */
   currency?: string;
   /** What the till charged, from its own copy of the menu. */
-  charge: { subtotal: number; serviceFee: number; tip: number; discount: number; total: number };
+  charge: { subtotal: number; serviceFee: number; tip: number; discount: number; total: number; taxPct?: number };
   /** The server's last refusal, in words; absent until one comes back. */
   error?: string;
   /** Keep a contradictory ticket for the manager; retrying cannot erase the evidence. */

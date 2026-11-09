@@ -80,7 +80,7 @@ export async function ringOffline(actor: Actor, body: PosSaleBody & { offline?: 
     p_original_at: typeof originalAt === "string" ? originalAt.slice(0, 80) : null,
     p_authority: context ? "signed" : "manager_attested",
     p_order: { subtotal: charge.subtotal, service_fee: charge.serviceFee, tip: charge.tip,
-      discount: charge.discount, total: charge.total, tax_pct: Number(restaurant.tax_pct) || 0,
+      discount: charge.discount, total: charge.total, tax_pct: charge.taxPct ?? (Number(restaurant.tax_pct) || 0),
       currency, items: lines, note: capNote(body.note) ?? null, customer_name: capName(body.customerName) ?? null,
       offline_drift: offlineDrift(charge.total, currency === restaurant.currency ? current?.price.total ?? null : null) },
   });

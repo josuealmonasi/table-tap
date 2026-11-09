@@ -26,6 +26,8 @@ export interface OfflineCharge {
   tip: number;
   discount: number;
   total: number;
+  /** The tax rate the till sold it under; absent on receipts from before it was kept. */
+  taxPct?: number;
 }
 
 export function offlineCharge(raw: unknown, now = Date.now(), recovery = false): OfflineCharge | null {
@@ -43,7 +45,8 @@ export function offlineCharge(raw: unknown, now = Date.now(), recovery = false):
   // The subtotal is already after the discounts; the service charge and the
   // tip go on top of it. A total that is not those three is not a charge.
   if (Math.abs(round2(subtotal + serviceFee + tip) - total) > 0.01) return null;
-  return { at: new Date(at).toISOString(), subtotal, serviceFee, tip, discount, total };
+  const taxPct = typeof r.taxPct === "number" && Number.isFinite(r.taxPct) && r.taxPct >= 0 && r.taxPct <= 100 ? r.taxPct : undefined;
+  return { at: new Date(at).toISOString(), subtotal, serviceFee, tip, discount, total, ...(taxPct !== undefined ? { taxPct } : {}) };
 }
 
 /** What was collected less what today's menu prices it at; null when it could not be priced. */
