@@ -46,10 +46,12 @@ export async function runBatch<T extends PendingItem>(
     oldest_pending_at: null, oldest_pending_age_seconds: null, age_basis: ageBasis };
   let batch = await load(BATCH_SIZE);
   if (batch.error) throw new Error(`${name} discovery failed: ${batch.error.message}`);
-  // Persistently unpaid subscriptions and review-only fees stay queued. A
-  // rotating ten-minute page keeps their first batch from hiding everyone else.
+  // Persistently unpaid subscriptions and review-only fees stay queued, so a
+  // fixed first page would hide everyone behind them. The page is drawn at
+  // random: a clock-based rotation aligned with the schedule, and a daily run
+  // advanced 144 ten-minute buckets and drew the same page every day (E1).
   const pages = Math.ceil((batch.count ?? 0) / BATCH_SIZE);
-  const offset = pages > 1 ? (Math.floor(Date.now() / 600_000) % pages) * BATCH_SIZE : 0;
+  const offset = pages > 1 ? Math.floor(Math.random() * pages) * BATCH_SIZE : 0;
   if (offset) batch = await load(BATCH_SIZE, offset);
   if (batch.error) throw new Error(`${name} discovery failed: ${batch.error.message}`);
   for (const item of batch.data ?? []) {
