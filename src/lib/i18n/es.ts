@@ -1598,6 +1598,7 @@ foundingLeftBody: "Quien contrata ahora conserva este precio de suscripción mie
     offlineCurrency: "Esta venta se cobró en {collected}, pero el restaurante ahora usa {current}. Se queda en este dispositivo hasta que la moneda vuelva a ser {collected}.",
     offlineMethod: "Sin conexión solo se cobran ventas en efectivo o con tu terminal.",
     depositDay: "Eso no es un día: usa la fecha de las ventas.",
+    depositLater: "Ya hay un depósito posterior firmado. Deshaz primero los posteriores, del más reciente al más antiguo.",
     depositAmount: "Escribe lo que depositó el banco, como 1250 o 1250.50.",
     depositNoSales: "Ese día no hubo cobros con tarjeta en tu terminal.",
     depositMarked: "El depósito de ese día ya está marcado: quita la marca primero para marcarlo de nuevo.",

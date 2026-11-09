@@ -10438,6 +10438,24 @@ $$;
 revoke all on function public.delete_terminal_deposit_v1(uuid, date, text) from public, anon, authenticated;
 grant execute on function public.delete_terminal_deposit_v1(uuid, date, text) to service_role;
 
+-- A deposit is undone newest first. A later deposit may have absorbed a
+-- refund this one could not: undoing the earlier one put that refund back in
+-- its expected amount too, and the two days together expected MX$200 where
+-- MX$250 had come in (C2, end-to-end review).
+create or replace function public.delete_terminal_deposit_v2(p_restaurant uuid, p_day date, p_currency text)
+returns text language plpgsql security definer set search_path = public as $$
+begin
+  perform public.lock_restaurant_money(p_restaurant);
+  if exists (select 1 from terminal_deposits where restaurant_id = p_restaurant and currency = p_currency and sales_day > p_day) then
+    return 'later';
+  end if;
+  delete from terminal_deposits where restaurant_id = p_restaurant and sales_day = p_day and currency = p_currency;
+  return case when found then 'deleted' else 'missing' end;
+end;
+$$;
+revoke all on function public.delete_terminal_deposit_v2(uuid, date, text) from public, anon, authenticated;
+grant execute on function public.delete_terminal_deposit_v2(uuid, date, text) to service_role;
+
 -- Stock movements keep their generation; a new physical count supersedes it.
 -- Each trusted function sets tabletap.stock_movement itself (set_config, for
 -- its transaction): Supabase refuses a custom setting attached with ALTER

@@ -354,3 +354,4 @@ drop function if exists public.record_waste_v2(uuid, uuid, uuid, numeric, text, 
 drop function if exists public.record_waste_once_v2(uuid, uuid, uuid, numeric, text, text, numeric, text, uuid, jsonb);
 drop function if exists public.retire_unsent_refund_attempt_v1(uuid, uuid, uuid, text);
 drop function if exists public.stamp_account_credit_currency() cascade;
+drop function if exists public.delete_terminal_deposit_v2(uuid, date, text);

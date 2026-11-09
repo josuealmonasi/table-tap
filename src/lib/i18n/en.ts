@@ -1603,6 +1603,7 @@ foundingLeftBody: "Subscribe now and keep this subscription price for as long as
     offlineMethod: "Only cash and card-on-terminal sales can be rung without a connection.",
     offlineCurrency: "This sale was charged in {collected}, but the restaurant now uses {current}. It stays on this device until the currency is {collected} again.",
     depositDay: "That is not a day: use the date of the sales.",
+    depositLater: "A later deposit is already signed. Undo the later ones first, newest first.",
     depositAmount: "Write what the bank deposited, like 1250 or 1250.50.",
     depositNoSales: "There were no card payments on your terminal that day.",
     depositMarked: "That day's deposit is already marked: take it back first to mark it again.",
