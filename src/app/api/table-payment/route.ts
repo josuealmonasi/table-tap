@@ -1,4 +1,5 @@
 import { checkoutPageRpc } from "@/lib/checkout-page-rpc";
+import { formatMoney } from "@/lib/format";
 import { PaymentAttributionRequired } from "@/lib/payment-coverage";
 import { NextResponse, type NextRequest } from "next/server";
 import { apiError } from "@/lib/api-error";
@@ -68,8 +69,12 @@ async function collect(req: NextRequest): Promise<NextResponse> {
   if (tableId && body.expected === undefined) return await apiError("apiErr.refreshToCollect", 409);
   if (tableId) return settleReviewedTable(actor, tableId, body, settlement!);
 
-  // From here on it is a counter order, collected whole: nothing can be added
-  // to it between the screen and this request, so its total is what was seen.
+  // From here on it is a counter order, collected whole. Nothing can be added
+  // to it, but a manager's discount can lower it while the cashier holds the
+  // MX$100 the screen showed: recorded as the MX$80 it then came to, MX$20 of
+  // taken cash vanished from the ledger (journey B, finding 2). It is
+  // collected only for the amount the screen showed, like a table.
+  if (body.expected === undefined) return await apiError("apiErr.refreshToCollect", 409);
   const db = createAdminClient();
 
   // Scoped by the actor's restaurant, so an order id from elsewhere matches
@@ -77,7 +82,7 @@ async function collect(req: NextRequest): Promise<NextResponse> {
   // paid must not be quietly rewritten.
   const scoped = db
     .from("orders")
-    .select("id, table_label, total, session_id")
+    .select("id, table_label, total, session_id, currency")
     .eq("restaurant_id", actor.restaurantId);
 
   // A general-QR order is collected on its own, and only if it has no table:
@@ -98,6 +103,9 @@ async function collect(req: NextRequest): Promise<NextResponse> {
   // it came to. Part payments and sittings belong to tables, which went
   // through the reviewed path above.
   const collectedNow = total(updated);
+  if (typeof body.expected !== "number" || Math.abs(collectedNow - body.expected) > 0.005) {
+    return await apiError("apiErr.collectionBalanceChanged", 409, { owed: formatMoney(collectedNow, updated[0].currency) });
+  }
 
   // The orders and the ledger in one write (`settle_orders`): both, or
   // neither. They were two, and a failed second write left a bill marked paid

@@ -174,7 +174,7 @@ export default function SettleTableDialog({
       const res = await fetch("/api/table-payment", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(tableId ? { tableId, settlement, expected: bill?.total, currency, ref } : { orderId, settlement, currency }),
+        body: JSON.stringify(tableId ? { tableId, settlement, expected: bill?.total, currency, ref } : { orderId, settlement, expected: bill?.total, currency }),
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
