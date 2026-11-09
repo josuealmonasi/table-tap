@@ -152,6 +152,12 @@ export function useCart(restaurantId: string) {
     }));
   }
 
+  /** Today's prices for plain dishes, so the cart shows what will be charged (A2). */
+  function reprice(prices: Record<string, number>): void {
+    setItems(prev => prev.map(line => !line.comboId && typeof prices[line.itemId] === "number"
+      ? { ...line, price: prices[line.itemId] } : line));
+  }
+
   function clear() {
     setItems([]);
   }
@@ -168,6 +174,7 @@ export function useCart(restaurantId: string) {
     trimToStock,
     clear,
     removeOrdered,
+    reprice,
     count,
   };
 }

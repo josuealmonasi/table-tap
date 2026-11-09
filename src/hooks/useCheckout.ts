@@ -27,6 +27,8 @@ export interface CheckoutInput {
   tipPct: number;
   tipCustom: number | null;
   coupon: AppliedCoupon | null;
+  /** What the cart showed, sent so the server never charges more without asking (A2). */
+  reviewedTotal?: number;
   cart: ReturnType<typeof useCart>;
   /** The coupon stopped being usable between applying it and paying. */
   dropCoupon: () => void;
@@ -103,6 +105,7 @@ export function useCheckout(input: CheckoutInput): {
             ...(c.comboId ? { comboId: c.comboId, components: c.components } : {}),
           })),
           note: input.orderNote || undefined,
+          reviewedTotal: input.reviewedTotal,
           customerName: input.customerName || undefined,
           tipPct: input.tipPct,
           tipAmount: input.tipCustom ?? undefined,
@@ -151,6 +154,14 @@ export function useCheckout(input: CheckoutInput): {
         // which dishes the menu suggests.
         rememberUsual(restaurantId, orderableItems);
         window.location.href = data.url; // Stripe Checkout
+        return;
+      }
+      // Prices rose since the cart was filled: it now shows today's, and the
+      // diner sends it again having seen them (A2).
+      if (data.code === "prices_changed" && data.prices) {
+        cart.reprice(data.prices);
+        input.notify(t("cart.pricesChanged"));
+        setLoading(false);
         return;
       }
       // The coupon stopped being usable between applying it and paying (most

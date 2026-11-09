@@ -206,6 +206,16 @@ export async function POST(req: NextRequest) {
 
     const pricing = coupon ? priceWith(toAppliedCoupon(coupon)) : base;
 
+    // Never more than the diner reviewed. A cart restored from before a price
+    // rise showed MX$80 and a pay-later order went to the kitchen at MX$100
+    // (A2, end-to-end review). Refused with today's prices, so the cart can
+    // show them; nothing is reserved yet but the coupon, which goes back.
+    if (typeof body.reviewedTotal === "number" && pricing.total > body.reviewedTotal + 0.005) {
+      if (coupon && !intent) await releaseCoupon(coupon.id);
+      const prices = Object.fromEntries(verified.filter(l => !l.comboId).map(l => [l.itemId, l.price]));
+      return await apiError("apiErr.pricesChanged", 409, undefined, { code: "prices_changed", prices });
+    }
+
     /** Set once the stock is ours, so the undo below knows to hand it back. */
     let stockReservationId: string | null = null;
     /** Our fee, reserved under the month's ceiling: given back with the rest. */

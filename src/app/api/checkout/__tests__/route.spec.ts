@@ -43,7 +43,8 @@ const coupon = {
 const taco = { itemId: "t1", name: "Taco", emoji: "🌮", price: 50, qty: 2, mods: {} };
 
 vi.mock("@/lib/api-error", () => ({
-  apiError: async (key: string, status: number) => NextResponse.json({ error: key }, { status }),
+  apiError: async (key: string, status: number, _vars?: unknown, extra?: Record<string, unknown>) =>
+    NextResponse.json({ ...extra, error: key }, { status }),
 }));
 vi.mock("@/lib/rate-limit", () => ({
   isRoomLimited: async () => false,
@@ -254,4 +255,23 @@ it("keeps the stock alert when Stripe takes responsibility for the card order", 
   step.reserveStock.mockResolvedValue({ ok: true, short: [], low: [soldOut], reservationId: "reservation-1" });
   expect((await checkout()).status).toBe(200);
   expect(notices).toHaveLength(1);
+});
+
+describe("never charges more than the diner reviewed (A2, end-to-end review)", () => {
+  it("refuses a higher total with today's prices, gives the coupon back and writes nothing", async () => {
+    const res = await checkout({ reviewedTotal: 0.01 });
+    expect(res.status).toBe(409);
+    const data = await res.json();
+    expect(data.code).toBe("prices_changed");
+    expect(typeof data.prices[taco.itemId]).toBe("number");
+    expect(releaseCoupon).toHaveBeenCalledTimes(1);
+    expect(step.insertOrder).not.toHaveBeenCalled();
+    expect(step.reserveStock).not.toHaveBeenCalled();
+  });
+
+  it("goes ahead at or under the total that was shown", async () => {
+    const res = await checkout({ reviewedTotal: 1_000_000 });
+    expect(res.status).not.toBe(409);
+    expect(step.insertOrder).toHaveBeenCalled();
+  });
 });

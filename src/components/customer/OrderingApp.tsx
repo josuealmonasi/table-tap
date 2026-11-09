@@ -190,6 +190,7 @@ export default function OrderingApp({
     tipPct,
     tipCustom,
     coupon,
+    reviewedTotal: pricing.total,
     cart,
     dropCoupon: () => setCoupon(null),
     markSoldOut,
