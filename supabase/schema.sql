@@ -9826,6 +9826,26 @@ $$;
 revoke all on function public.sale_ingredient_usage(uuid, jsonb) from public, anon, authenticated;
 grant execute on function public.sale_ingredient_usage(uuid, jsonb) to service_role;
 
+-- What each sold line cost in ingredients, in the order of the sale's items:
+-- null for a line with no recipe or an ingredient without a price. Frozen on
+-- the sale's snapshot when it is made (sweep 7, finding 3).
+alter table ingredient_consumption add column if not exists cost_currency text;
+alter table ingredient_consumption add column if not exists line_costs jsonb;
+create or replace function public.sale_line_costs(p_restaurant uuid, p_items jsonb)
+returns jsonb language sql stable security definer set search_path = public as $$
+  select coalesce(jsonb_agg((
+    select case when u.usage = '{}'::jsonb
+        or exists (select 1 from jsonb_each_text(u.usage) e left join ingredients i
+          on i.id = e.key::uuid and i.restaurant_id = p_restaurant where i.unit_cost is null) then null
+      else to_jsonb(round((select sum(-e.value::numeric * i.unit_cost) from jsonb_each_text(u.usage) e
+        join ingredients i on i.id = e.key::uuid and i.restaurant_id = p_restaurant), 4)) end
+    from (select public.sale_ingredient_usage(p_restaurant, jsonb_build_array(line.value)) as usage) u
+  ) order by line.n), '[]'::jsonb)
+  from jsonb_array_elements(coalesce(p_items, '[]'::jsonb)) with ordinality line(value, n);
+$$;
+revoke all on function public.sale_line_costs(uuid, jsonb) from public, anon, authenticated;
+grant execute on function public.sale_line_costs(uuid, jsonb) to service_role;
+
 create or replace function public.waste_ingredient_usage(p_restaurant uuid, p_ingredient uuid, p_item uuid, p_quantity numeric)
 returns jsonb language sql stable security definer set search_path = public as $$
   select case when p_ingredient is not null then jsonb_build_object(p_ingredient, -p_quantity)
@@ -9940,9 +9960,17 @@ begin
       union all
       select key, -value::numeric from jsonb_each_text(coalesce(v_previous.usage, '{}')) where coalesce(v_previous.active, false)
     ) delta group by key having sum(quantity) <> 0;
-  insert into ingredient_consumption(restaurant_id, source_kind, source_id, usage, active)
-    values(v_restaurant, v_kind, (v_row->>'id')::uuid, v_usage, v_active)
-    on conflict (source_kind, source_id) do update set usage = excluded.usage, active = excluded.active;
+  -- A sale's lines are valued once, when their usage is worked out: today's
+  -- recipe and today's ingredient prices, frozen with the sale's currency. A
+  -- later cancellation keeps them; history never reprices old food (sweep 7,
+  -- finding 3).
+  insert into ingredient_consumption(restaurant_id, source_kind, source_id, usage, active, cost_currency, line_costs)
+    values(v_restaurant, v_kind, (v_row->>'id')::uuid, v_usage, v_active,
+      case when v_kind = 'sale' and (v_previous.usage is null or v_changed) then v_row->>'currency' end,
+      case when v_kind = 'sale' and (v_previous.usage is null or v_changed) then public.sale_line_costs(v_restaurant, v_row->'items') end)
+    on conflict (source_kind, source_id) do update set usage = excluded.usage, active = excluded.active,
+      cost_currency = coalesce(excluded.cost_currency, ingredient_consumption.cost_currency),
+      line_costs = coalesce(excluded.line_costs, ingredient_consumption.line_costs);
   return null;
 end;
 $$;
