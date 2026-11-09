@@ -6,7 +6,12 @@ import { forgetSitting, recallSitting } from "@/lib/table-binding";
 export interface OpenElsewhere {
   tableLabel: string;
   owed: number;
+  /** Where that bill is, so the diner can go and settle it. */
+  tableId: string;
 }
+
+/** How often a blocked phone asks again whether the other bill was paid. */
+export const ELSEWHERE_RECHECK_MS = 15_000;
 
 /**
  * Whether this phone already owes for a different table.
@@ -31,26 +36,34 @@ export function useSitting(
     if (!sitting || sitting.tableId === tableId) return;
 
     let active = true;
+    let timer: ReturnType<typeof setInterval> | null = null;
     // A refusal is not an answer. It used to stand in as `{ open: false }`,
     // and "closed" is what makes this phone forget the table: one 429 threw
     // away the note of a bill it still owed.
-    fetch(`/api/session?id=${sitting.sessionId}`)
+    const check = () => fetch(`/api/session?id=${sitting.sessionId}`)
       .then(async r => {
         if (!r.ok || !active) return;
         const d = (await r.json()) as { open: boolean; tableLabel?: string; owed?: number };
         if (!active) return;
         if (!d.open) {
           forgetSitting(restaurantId); // settled or aged out: they are free
+          setElsewhere(null);
+          if (timer) clearInterval(timer);
           return;
         }
-        setElsewhere({ tableLabel: d.tableLabel ?? "", owed: d.owed ?? 0 });
+        setElsewhere({ tableLabel: d.tableLabel ?? "", owed: d.owed ?? 0, tableId: sitting.tableId });
+        // Asked again while blocked: checked once, the notice stayed after
+        // somebody else paid the other table (A5, end-to-end review).
+        timer ??= setInterval(() => void check(), ELSEWHERE_RECHECK_MS);
       })
       .catch(() => {
         // A check we could not make must not stop somebody ordering dinner.
       });
+    void check();
 
     return () => {
       active = false;
+      if (timer) clearInterval(timer);
     };
   }, [restaurantId, tableId]);
 

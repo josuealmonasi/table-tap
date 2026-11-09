@@ -981,7 +981,8 @@ foundingLeftBody: "Subscribe now and keep this subscription price for as long as
   sitting: {
     title: "You have an open bill",
     body: "Table {table} still owes {amount}. Settle it before ordering at another table.",
-    hint: "If you have already paid, ask your waiter to close the bill and scan again.",
+    hint: "If you have already paid, ask your waiter to close the bill. This closes by itself once it is paid.",
+    goBack: "Go to that table's bill",
   },
   tracker: {
     showToPay: "Show this code to pay",

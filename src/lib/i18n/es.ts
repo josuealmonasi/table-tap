@@ -978,7 +978,8 @@ foundingLeftBody: "Quien contrata ahora conserva este precio de suscripción mie
   sitting: {
     title: "Tienes una cuenta abierta",
     body: "En la {table} quedan {amount} por pagar. Págala antes de pedir en otra mesa.",
-    hint: "Si ya pagaste, pídele a tu mesero que cierre la cuenta y vuelve a escanear.",
+    hint: "Si ya pagaste, pídele a tu mesero que cierre la cuenta. Este aviso se cierra solo cuando quede pagada.",
+    goBack: "Ir a la cuenta de esa mesa",
   },
   tracker: {
     showToPay: "Muestra este código para pagar",

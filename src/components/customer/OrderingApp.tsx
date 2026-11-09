@@ -305,7 +305,7 @@ export default function OrderingApp({
             dividing={dividing}
           />
         )}
-        <OwingElsewhereModal owing={owingElsewhere} currency={restaurant.currency} />
+        <OwingElsewhereModal owing={owingElsewhere} currency={restaurant.currency} restaurantId={restaurant.id} />
         {receiptOpen && <ReceiptPrompt key={offering?.join(",") ?? receiptPaymentId} orderIds={offering ?? undefined} paymentId={offering ? undefined : receiptPaymentId ?? undefined} email={receipts} open onClose={dismissReceipt} />}
         <DishOverlays
           screens={screens}
