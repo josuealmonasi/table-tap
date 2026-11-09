@@ -43,7 +43,7 @@ export default function CountDialog({ open, onClose, ...rest }: CountDialogProps
   );
 }
 
-function CountForm({ ingredients, currency, onClose, attempt }: Omit<CountDialogProps, "open"> & { attempt: ReturnType<typeof useRetryIntent> }) {
+function CountForm({ ingredients, onClose, attempt }: Omit<CountDialogProps, "open"> & { attempt: ReturnType<typeof useRetryIntent> }) {
   const t = useT();
   const router = useRouter();
   const inFlight = useRef(false);
