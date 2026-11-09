@@ -148,6 +148,8 @@ export function usePosCharge({ collector, collectorContext, restaurant, cart, de
       toast(t("pos.offlineNoStorage"), "error");
       return;
     }
+    // Until it is answered, a reload replays the held sale instead of offering its lines again (C1).
+    if (sale) cart.charging?.(posRef);
     // Reserved during the tap only when the ticket will print: a sale sent by
     // email would otherwise flash an empty window (a new tab on an iPad) on
     // every charge. If that email fails, the fallback print opens late and may
@@ -159,6 +161,7 @@ export function usePosCharge({ collector, collectorContext, restaurant, cart, de
     });
     if (!navigator.onLine) {
       offline.setOnline(false);
+      cart.charging?.(null);
       if (sale) showHeld(sale, false, paper);
       else toast(t("pos.offlineNoAccount"), "error");
       paper?.close();
@@ -204,10 +207,12 @@ export function usePosCharge({ collector, collectorContext, restaurant, cart, de
         // only record of the sale; if it did, sending it again is answered
         // with the sale it already rang.
         offline.setOnline(false);
+        cart.charging?.(null);
         if (sale) showHeld(sale, false, paper);
         else toast(t("done.networkError"), "error");
         return;
       }
+      cart.charging?.(null);
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
         // A first send is the only request that ever carried this reference,
