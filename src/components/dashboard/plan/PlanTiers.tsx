@@ -73,7 +73,8 @@ export default function PlanTiers({
       const res = await fetch("/api/billing/checkout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ plan }),
+        // The price shown: founding or regular. The server refuses if it changed (E3).
+        body: JSON.stringify({ plan, founding: stillOpen }),
       });
       const data = await res.json();
       // Stripe's own page takes it from here — the card never touches this app.

@@ -1468,6 +1468,7 @@ foundingLeftBody: "Subscribe now and keep this subscription price for as long as
     pickPlan: "Pick a plan to subscribe to.",
     billingBusy: "Your last payment request is still being checked. Keep an open payment page to finish paying, or try again in 15 minutes. Contact support if you still cannot pay.",
     billingConflict: "We found more than one subscription for this restaurant. Contact support to check your payments before changing plans.",
+    billingPriceChanged: "The founding places just filled, so this plan now costs its regular price. Review the new price and choose the plan again.",
     billingUnavailable: "We could not confirm your last billing request. If you have a payment page open, finish there. Otherwise, try again in 15 minutes or contact support for help paying.",
     billingPaymentFailed: "The plan change could not be paid. Update your payment method in billing and try again. Your current plan is unchanged.",
     noBilling: "This restaurant has no subscription yet.",

@@ -1462,6 +1462,7 @@ foundingLeftBody: "Quien contrata ahora conserva este precio de suscripción mie
     pickPlan: "Elige un plan para suscribirte.",
     billingBusy: "Estamos revisando tu última solicitud de pago. Si tienes abierta una página de pago, termina ahí, o vuelve a intentar en 15 minutos. Contacta a soporte si aún no puedes pagar.",
     billingConflict: "Encontramos más de una suscripción para este restaurante. Contacta a soporte para revisar tus pagos antes de cambiar de plan.",
+    billingPriceChanged: "Los lugares de fundador acaban de llenarse, así que este plan ahora cuesta su precio normal. Revisa el nuevo precio y elige el plan otra vez.",
     billingUnavailable: "No pudimos confirmar tu última solicitud de cobro. Si tienes abierta una página de pago, termina ahí. Si no, vuelve a intentar en 15 minutos o contacta a soporte para que te ayude a pagar.",
     billingPaymentFailed: "No se pudo cobrar el cambio de plan. Actualiza tu método de pago en facturación e intenta de nuevo. Tu plan actual sigue igual.",
     noBilling: "Este restaurante todavía no tiene suscripción.",
