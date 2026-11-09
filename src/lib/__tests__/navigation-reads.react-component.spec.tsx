@@ -65,21 +65,21 @@ it.each([0, 1])("refuses a failed notification read at step %s rather than empty
   const reads: ReadResult[] = [{ data: [{ id: "notice" }], error: null }, { count: 3, error: null }, { data: [], error: null }];
   reads[index] = { data: null, count: null, error: { message: "database unavailable" } };
   queue(reads);
-  const response = await notifications();
+  const response = await notifications(new NextRequest("http://localhost/api/notifications"));
   expect(response.status).toBe(503);
   expect(await response.json()).toEqual({ error: "apiErr.generic" });
 });
 
 it("keeps the notification list and its full unread count", async () => {
   queue([{ data: [{ id: "notice" }], error: null }, { count: 3, error: null }, { data: [], error: null }, { data: { timezone: "Asia/Tokyo" }, error: null }]);
-  const response = await notifications();
+  const response = await notifications(new NextRequest("http://localhost/api/notifications"));
   expect(response.status).toBe(200);
   expect(await response.json()).toEqual({ notifications: [{ id: "notice" }], unread: 3, nextCursor: null, timeZone: "Asia/Tokyo" });
 });
 
 it.each([["badges", badges], ["notifications", notifications]] as const)("keeps authorization before %s reads", async (_name, read) => {
   actor.mockResolvedValue(null);
-  expect((await read()).status).toBe(403);
+  expect((await read(new NextRequest("http://localhost/api/read"))).status).toBe(403);
   expect(from).not.toHaveBeenCalled();
 });
 
