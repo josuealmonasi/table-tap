@@ -1690,6 +1690,8 @@ foundingLeftBody: "Quien contrata ahora conserva este precio de suscripción mie
     ratingsSave: "No se pudieron guardar las calificaciones",
     stripeOnboard:
       "No se pudo iniciar la configuración de Stripe. Inténtalo en un momento.",
+    stripeDashboard: "No se pudo abrir tu panel de Stripe. Inténtalo en un momento.",
+    connectFirst: "Conecta tu cuenta de Stripe primero.",
   },
   sched: {
     servingNow: "En servicio",
@@ -1892,6 +1894,7 @@ badgesHint: "Muestra cuántas cosas esperan acción en cada sección. Aplica a t
     paymentsChecking: "Revisando tu configuración de pagos…",
     connected: "Conectado",
     connectedMsg: "Los pagos de tus pedidos van directo a tu cuenta de Stripe.",
+    stripeDashboardBtn: "Ver depósitos y disputas en Stripe",
     connectAlmost:
       "Tu configuración de Stripe casi está lista — termínala para empezar a recibir pedidos.",
     connectPrompt:

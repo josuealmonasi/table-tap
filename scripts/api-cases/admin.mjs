@@ -47,6 +47,15 @@ export function adminOwnerCases(fx) {
         const { data } = await f.admin.from("restaurants").select("stripe_account_id").eq("id", r).single();
         return /^acct_/.test(data?.stripe_account_id ?? "") || "no Stripe account was stored for the restaurant";
       } },
+    // Stripe signs an owner into the dashboard only once onboarding is done,
+    // which a test account never finishes; what can be checked is the refusal.
+    { name: "POST /api/connect/dashboard (no account yet)", as: "owner", method: "POST", path: "/api/connect/dashboard",
+      arrange: async f => {
+        const { data: was } = await f.admin.from("restaurants").select("stripe_account_id").eq("id", r).single();
+        await f.admin.from("restaurants").update({ stripe_account_id: null }).eq("id", r);
+        return async () => { await f.admin.from("restaurants").update({ stripe_account_id: was?.stripe_account_id ?? null }).eq("id", r); };
+      },
+      body: {}, expect: [409], expectError: /Conecta tu cuenta de Stripe|Connect your Stripe account/i },
     { name: "POST /api/billing/checkout", as: "owner", method: "POST", path: "/api/billing/checkout",
       // The price the Plan page shows rides with the choice (E3): founding while places are left.
       body: async f => {

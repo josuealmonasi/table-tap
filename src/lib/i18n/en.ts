@@ -1693,6 +1693,8 @@ foundingLeftBody: "Subscribe now and keep this subscription price for as long as
     requestSend: "Could not send request",
     ratingsSave: "Could not save ratings",
     stripeOnboard: "Couldn't start Stripe onboarding. Please try again shortly.",
+    stripeDashboard: "Couldn't open your Stripe dashboard. Please try again shortly.",
+    connectFirst: "Connect your Stripe account first.",
   },
   sched: {
     servingNow: "Serving now",
@@ -1897,6 +1899,7 @@ badgesHint: "Shows how many things are waiting in each section. Applies to the w
     paymentsChecking: "Checking your payment setup…",
     connected: "Connected",
     connectedMsg: "Payments for your orders go straight to your Stripe account.",
+    stripeDashboardBtn: "See payouts and disputes in Stripe",
     connectAlmost:
       "Your Stripe setup is almost done — finish it so you can start taking orders.",
     connectPrompt:

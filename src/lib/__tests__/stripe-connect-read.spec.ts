@@ -121,3 +121,19 @@ describe("a restaurant's saved Connect account", () => {
     expect(await response.json()).toEqual({ error: "apiErr.generic" });
   });
 });
+
+describe("the owner's way into their Stripe dashboard (E5)", () => {
+  it("refuses before there is an account, and links once there is one", async () => {
+    const { POST: dashboard } = await import("@/app/api/connect/dashboard/route");
+    const { stripe } = await import("@/lib/stripe");
+    const createLoginLink = vi.fn().mockResolvedValue({ url: "https://connect.stripe.com/express/login" });
+    Object.assign(stripe, { accounts: { createLoginLink } });
+    stored = null;
+    expect((await dashboard()).status).toBe(409);
+    expect(createLoginLink).not.toHaveBeenCalled();
+    stored = "acct_ready";
+    const response = await dashboard();
+    expect(await response.json()).toEqual({ url: "https://connect.stripe.com/express/login" });
+    expect(createLoginLink).toHaveBeenCalledWith("acct_ready");
+  });
+});

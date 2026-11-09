@@ -176,3 +176,9 @@ export async function syncConnectAccount(accountId: string): Promise<boolean> {
   await syncConnectStatus(data.id as string);
   return true;
 }
+
+/** A single-use link that signs the owner into their Express dashboard. */
+export async function createDashboardLink(accountId: string): Promise<string> {
+  const link = await stripe.accounts.createLoginLink(accountId);
+  return link.url;
+}

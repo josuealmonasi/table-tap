@@ -216,6 +216,9 @@ dishes on a bill the restaurant has just cancelled.
 - **Stripe Connect, direct charges.** The restaurant's account takes the payment;
   we take an `application_fee_amount`. It used to be a destination charge on our
   platform, which had Stripe billing *us* for every order.
+  Once connected, Settings → Pagos opens the owner's own Express dashboard
+  (payouts, the bank they land in, disputes) through a single-use login link
+  from `POST /api/connect/dashboard`, owner-only.
   So a restaurant's Stripe account is created with the Accounts v2 `merchant`
   configuration only (`card_payments`, payouts included), and "can take cards"
   is `card_payments` being `active` — `src/lib/stripe-connect.ts`. It once
