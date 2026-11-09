@@ -1623,6 +1623,7 @@ foundingLeftBody: "Subscribe now and keep this subscription price for as long as
     wasteQuantity: "Write how much: whole products, or an amount of the ingredient greater than zero.",
     wasteReason: "Choose why it was thrown away.",
     purchasePacks: "Write how many packs came in, more than zero.",
+    purchasePackChanged: "This ingredient's pack size changed while the delivery was being entered. Check how many packs came in and save again.",
     ambiguousQuantity: "That amount can be read two ways. Write decimals with a point: 1.5 for one and a half, or 1500 for fifteen hundred.",
     purchaseTotal: "Write what you paid in total, like 380 or 380.50.",
     countEmpty: "Write at least one amount you counted.",

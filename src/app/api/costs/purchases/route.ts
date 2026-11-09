@@ -22,7 +22,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   if (!actor) return await apiError("apiErr.forbidden", 403);
   const blocked = await costsBlocks(actor.restaurantId);
   if (blocked) return blocked;
-  const body = await jsonBody<{ ingredientId?: unknown; packs?: unknown; total?: unknown; ref?: unknown }>(req);
+  const body = await jsonBody<{ ingredientId?: unknown; packs?: unknown; total?: unknown; ref?: unknown; packSize?: unknown }>(req);
   const ref = uuidOf(body?.ref);
   if (body?.ref !== undefined && !ref) return await apiError("apiErr.invalidRequest", 400);
   const ingredientId = uuidOf(body?.ingredientId);
@@ -33,6 +33,16 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   if (total === null) return await apiError("apiErr.purchaseTotal", 400);
 
   const db = createAdminClient();
+  // The pack size the form showed is part of what was entered: changed by
+  // another manager meanwhile, two 1-litre packs were recorded as 4 litres and
+  // the derived unit cost halved (D2, end-to-end review).
+  const { data: current, error: readError } = await db.from("ingredients").select("pack_size")
+    .eq("id", ingredientId).eq("restaurant_id", actor.restaurantId).maybeSingle();
+  if (readError) return await apiError("apiErr.generic", 503);
+  if (!current) return await apiError("apiErr.notFound", 404);
+  if (typeof body.packSize !== "number" || Number(current.pack_size) !== body.packSize) {
+    return await apiError("apiErr.purchasePackChanged", 409);
+  }
   const { data: id, error } = await db.rpc(ref ? "record_purchase_once_v2" : "record_purchase", {
     ...(ref ? { p_ref: ref } : {}),
     p_restaurant: actor.restaurantId, p_ingredient: ingredientId, p_packs: packs, p_total: total, p_actor: actor.email,

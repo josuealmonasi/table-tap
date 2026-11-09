@@ -8,12 +8,12 @@ vi.mock("@/lib/activity-log", () => ({ logEvent: state.log }));
 vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({
   rpc: async (name: string) => { state.rpcs.push(name); return { data: "purchase", error: state.error }; },
   from: () => {
-    const q = { select: () => q, eq: (...args: unknown[]) => { state.filters.push(args); return q; }, maybeSingle: async () => ({ data: { name: "Milk" } }) };
+    const q = { select: () => q, eq: (...args: unknown[]) => { state.filters.push(args); return q; }, maybeSingle: async () => ({ data: { name: "Milk", pack_size: 1000 }, error: null }) };
     return q;
   },
 }) }));
 const { POST } = await import("@/app/api/costs/purchases/route");
-const body = { ingredientId: "00000000-0000-4000-8000-000000000001", packs: 1, total: 100 };
+const body = { ingredientId: "00000000-0000-4000-8000-000000000001", packs: 1, total: 100, packSize: 1000 };
 const send = (ref?: string) => POST(new NextRequest("https://test/api/costs/purchases", { method: "POST", body: JSON.stringify({ ...body, ref }) }));
 beforeEach(() => { state.error = null; state.rpcs = []; state.filters = []; state.log.mockClear(); });
 it("L4 ingredient names read with the service key belong to this restaurant", async () => {

@@ -1618,6 +1618,7 @@ foundingLeftBody: "Quien contrata ahora conserva este precio de suscripción mie
     wasteQuantity: "Escribe cuánto: productos completos, o una cantidad del ingrediente mayor que cero.",
     wasteReason: "Elige por qué se tiró.",
     purchasePacks: "Escribe cuántos paquetes llegaron, más de cero.",
+    purchasePackChanged: "El tamaño del paquete de este insumo cambió mientras se registraba la entrega. Revisa cuántos paquetes llegaron y guarda otra vez.",
     ambiguousQuantity: "Esa cantidad se puede leer de dos formas. Escribe los decimales con punto: 1.5 para uno y medio, o 1500 para mil quinientos.",
     purchaseTotal: "Escribe cuánto pagaste en total, como 380 o 380.50.",
     countEmpty: "Escribe al menos una cantidad que contaste.",

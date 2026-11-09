@@ -23,7 +23,7 @@ export function inventoryCases(fx) {
           && data[0].expected === null && data[0].counted_by === "demo-manager@tabletap.dev" || `stored ${JSON.stringify(data)}`;
       } },
     { name: "POST /api/costs/purchases (two packs at a new price)", as: "owner", method: "POST",
-      path: "/api/costs/purchases", body: (_f, saved) => ({ ingredientId: saved.flour, packs: "2", total: "50" }),
+      path: "/api/costs/purchases", body: (_f, saved) => ({ ingredientId: saved.flour, packs: "2", total: "50", packSize: 1000 }),
       expect: [200],
       check: async (_d, f) => {
         const [{ data: bought }, { data: flour }, { data: rise }] = await Promise.all([
@@ -84,10 +84,14 @@ export function inventoryCases(fx) {
         const { count } = await f.admin.from("waste_entries").select("id", { count: "exact", head: true }).eq("id", f.wasteId);
         return count === 0 || "the entry is still there";
       } },
+    // D2: a delivery entered against a pack size that has since changed is refused, never rescaled.
+    { name: "POST /api/costs/purchases (the pack size changed)", as: "owner", method: "POST",
+      path: "/api/costs/purchases", body: (_f, saved) => ({ ingredientId: saved.flour, packs: "1", total: "20", packSize: 500 }),
+      expect: [409], expectError: /tamaño del paquete|pack size/i },
     { name: "POST /api/costs/purchases (a cashier refused)", as: "cashier", method: "POST",
-      path: "/api/costs/purchases", body: (_f, saved) => ({ ingredientId: saved.flour, packs: "1", total: "20" }), expect: [403] },
+      path: "/api/costs/purchases", body: (_f, saved) => ({ ingredientId: saved.flour, packs: "1", total: "20", packSize: 1000 }), expect: [403] },
     { name: "POST /api/costs/purchases (no packs)", as: "owner", method: "POST",
-      path: "/api/costs/purchases", body: (_f, saved) => ({ ingredientId: saved.flour, packs: "0", total: "20" }),
+      path: "/api/costs/purchases", body: (_f, saved) => ({ ingredientId: saved.flour, packs: "0", total: "20", packSize: 1000 }),
       expect: [400], expectError: /cuántos paquetes|how many packs/i },
     { name: "POST /api/costs/counts (the kitchen refused)", as: "kitchen", method: "POST",
       path: "/api/costs/counts", body: (_f, saved) => ({ counts: [{ ingredientId: saved.flour, counted: "1" }] }), expect: [403] },
