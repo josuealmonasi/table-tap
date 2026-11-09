@@ -18,7 +18,7 @@ const { readCosts } = await import("@/lib/costs/server");
 
 beforeEach(() => {
   state.rows = {
-    ingredients: [{ id: "flour", name: "Flour", unit: "g", pack_size: 1000, pack_price: 100, unit_cost: 0.1 }],
+    ingredients: [{ id: "flour", name: "Flour", unit: "g", pack_size: 1000, pack_price: 100, unit_cost: 0.1, currency: "MXN" }],
     recipe_lines: [{ item_id: "dish", ingredient_id: "flour", quantity: 30, mod_label: null, mod_option: null }],
     menu_items: [{ id: "dish", name: "Dish", price: 100, modifiers: [] }],
     orders: [{ id: "sale", currency: "MXN", total: 100, service_fee: 0, tip: 0, tax_pct: 0,

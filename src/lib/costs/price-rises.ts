@@ -17,6 +17,8 @@ export interface PriceChange {
   previous_cost: number | null;
   unit_cost: number;
   created_at: string;
+  /** The currency the change was typed in; one in another currency compares nothing. */
+  currency: string;
 }
 
 export interface AffectedProduct {
@@ -60,7 +62,7 @@ export function priceRises(
   const rises: PriceRise[] = [];
   for (const ingredient of ingredients) {
     const start = first.get(ingredient.id);
-    if (!start) continue;
+    if (!start || start.currency !== ingredient.currency) continue;
     const before = Number(start.previous_cost);
     const after = Number(ingredient.unit_cost);
     if (!(after > before)) continue;

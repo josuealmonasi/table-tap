@@ -67,7 +67,7 @@ function RecipeForm({ product, ingredients, recipes, feeRate, taxPct, currency, 
     const choice = choiceOf(l.when);
     return [{ item_id: product.id, ingredient_id: l.ingredientId, quantity, mod_label: choice?.[0] ?? null, mod_option: choice?.[1] ?? null }];
   });
-  const preview = unitMargin(product, recipeBook(recipe), unitCosts(ingredients), feeRate, taxPct);
+  const preview = unitMargin(product, recipeBook(recipe), unitCosts(ingredients, currency), feeRate, taxPct);
 
   const update = (key: string, change: Partial<DraftLine>) =>
     setLines(ls => ls.map(l => (l.key === key ? { ...l, ...change } : l)));

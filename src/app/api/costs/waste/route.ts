@@ -8,6 +8,8 @@ import { actingManager, actingStaff } from "@/lib/api-guard";
 import { costsBlocks, uuidOf } from "@/lib/costs/guard";
 import { dishCount, quantityRefusal, recipeQuantity, wasteNote } from "@/lib/costs/input";
 import { wasteProduct, type WasteProduct } from "@/lib/costs/waste-product";
+import { chargedCurrency } from "@/lib/costs/charged-currency";
+import { pricedIn } from "@/lib/costs/recipe-cost";
 import { PRODUCT_ONLY_REASONS, WASTE_REASONS, type WasteReason } from "@/lib/costs/usage";
 
 export const runtime = "nodejs";
@@ -52,11 +54,12 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       cost = result.value.cost;
       productChoices = result.value.choices;
     } else {
-      const { data, error } = await createAdminClient().from("ingredients").select("unit_cost")
+      const { data, error } = await createAdminClient().from("ingredients").select("unit_cost, currency")
         .eq("id", ingredientId!).eq("restaurant_id", actor.restaurantId).maybeSingle();
       if (error) return await apiError("apiErr.generic", 503);
       if (!data) return await apiError("apiErr.notFound", 404);
-      cost = Math.round(Number(data.unit_cost) * quantity * 100) / 100;
+      // A price typed in another currency than today's is no cost at all.
+      cost = pricedIn(data, await chargedCurrency(actor.restaurantId)) ? Math.round(Number(data.unit_cost) * quantity * 100) / 100 : null;
     }
   } catch {
     return await apiError("apiErr.generic", 503);

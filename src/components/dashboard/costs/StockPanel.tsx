@@ -27,7 +27,6 @@ export default function StockPanel({ stock, currency, timeZone }: StockPanelProp
   const [search, setSearch] = useState("");
   const ingredients = stockCountOrder(stock.ingredients, stock.onHand);
   const visible = ingredients.filter(i => matchesIngredient(i, search));
-  const money = (n: number) => formatMoney(n, currency);
 
   return (
     <section className="tt-section">
@@ -71,7 +70,7 @@ export default function StockPanel({ stock, currency, timeZone }: StockPanelProp
                         ? t("costs.countMatch")
                         : t(diff < 0 ? "costs.countShort" : "costs.countOver", {
                             amount: `${amount(diffShown!.amount)} ${t(`costs.unitShort.${diffShown!.unit}`)}`,
-                            cost: money(Math.abs(diff) * i.unit_cost),
+                            cost: formatMoney(Math.abs(diff) * i.unit_cost, i.currency),
                           })}
                   </span>
                 )}

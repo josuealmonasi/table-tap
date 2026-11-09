@@ -8,6 +8,7 @@ vi.mock("@/lib/api-guard", () => ({ actingStaff: async () => ({ restaurantId: "r
 vi.mock("@/lib/plan-guard", () => ({ frozenBlocks: async () => null, planBlocks: async () => null }));
 vi.mock("@/lib/activity-log", () => ({ logEvent: async () => {} }));
 vi.mock("@/lib/api-error", () => ({ apiError: async (key: string, status: number) => Response.json({ key }, { status }) }));
+vi.mock("@/lib/costs/charged-currency", () => ({ chargedCurrency: async () => "MXN" }));
 vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({
   from: (table: string) => {
     let offset = 0;
@@ -27,7 +28,7 @@ vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({
         { item_id: item, ingredient_id: "oat", quantity: 200, mod_label: "Milk", mod_option: "Oat" },
         { item_id: extra, ingredient_id: "coffee", quantity: 10, mod_label: null, mod_option: null },
       ],
-      ingredients: [{ id: "milk", unit_cost: 0.03 }, { id: "oat", unit_cost: 0.07 }, { id: "coffee", unit_cost: 0.4 }],
+      ingredients: [{ id: "milk", unit_cost: 0.03, currency: "MXN" }, { id: "oat", unit_cost: 0.07, currency: "MXN" }, { id: "coffee", unit_cost: 0.4, currency: "MXN" }],
       waste_entries: [{ name: "Latte" }],
     };
     const result = (single = false) => ({ data: single ? table === "menu_items" ? rows[table].find(r => (r as { id: string }).id === selectedId) : rows[table]?.[0] : (table === "menu_items" && addonOnly ? rows[table].filter(r => (r as { is_addon: boolean }).is_addon) : rows[table] ?? []).slice(offset), error: state.error ? { message: "offline" } : null });

@@ -5,6 +5,7 @@ import type { Modifier, OrderExtra } from "@/lib/types";
 import { uuidOf } from "./guard";
 import { lineCost, recipeBook, unitCosts, type Choices, type RecipeLine } from "./recipe-cost";
 import { recipeChoicesOffered } from "./recipe-choices";
+import { chargedCurrency } from "./charged-currency";
 
 export interface WasteProduct {
   choices: { mods: Choices; extras: OrderExtra[] };
@@ -36,11 +37,12 @@ export async function wasteProduct(restaurant: string, item: string, quantity: n
   const lines = await everyRowIn<RecipeLine>([item, ...ids], (slice, a, b) => db.from("recipe_lines")
     .select("item_id, ingredient_id, quantity, mod_label, mod_option")
     .eq("restaurant_id", restaurant).in("item_id", slice).order("id").range(a, b), "the wasted recipes");
-  const ingredients = await everyRowIn<{ id: string; unit_cost: number }>(lines.map(l => l.ingredient_id), (slice, a, b) => db.from("ingredients")
-    .select("id, unit_cost").eq("restaurant_id", restaurant).in("id", slice).order("id").range(a, b), "the wasted ingredients");
+  const ingredients = await everyRowIn<{ id: string; unit_cost: number; currency: string }>(lines.map(l => l.ingredient_id), (slice, a, b) => db.from("ingredients")
+    .select("id, unit_cost, currency").eq("restaurant_id", restaurant).in("id", slice).order("id").range(a, b), "the wasted ingredients");
+  const costs = unitCosts(ingredients, await chargedCurrency(restaurant));
   const choices = { mods: verified.mods, extras: addons.map(a => ({ id: a.id, name: a.name, emoji: a.emoji, price: Number(a.price) })) };
-  const result = lineCost({ itemId: item, name: product.name, emoji: product.emoji, price: Number(product.price), qty: quantity, ...choices }, recipeBook(lines), unitCosts(ingredients));
+  const result = lineCost({ itemId: item, name: product.name, emoji: product.emoji, price: Number(product.price), qty: quantity, ...choices }, recipeBook(lines), costs);
   const offered = [product, ...addons].every(p => recipeChoicesOffered(lines.filter(l => l.item_id === p.id), p.modifiers ?? []));
-  const known = lines.every(l => ingredients.some(i => i.id === l.ingredient_id && Number.isFinite(Number(i.unit_cost))));
+  const known = lines.every(l => Number.isFinite(costs.get(l.ingredient_id) ?? Number.NaN));
   return { value: { choices, cost: result.complete && offered && known ? Math.round(result.cost * 100) / 100 : null } };
 }

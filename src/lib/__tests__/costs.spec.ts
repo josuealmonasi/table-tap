@@ -19,11 +19,11 @@ const book = recipeBook([
   line("shot", "coffee", 9),
 ]);
 const costs = unitCosts([
-  { id: "coffee", unit_cost: 0.4 }, // MX$400 a kilo
-  { id: "cup", unit_cost: 2 },
-  { id: "milk", unit_cost: 0.025 }, // MX$25 a litre
-  { id: "oat", unit_cost: 0.06 },
-]);
+  { id: "coffee", unit_cost: 0.4, currency: "MXN" }, // MX$400 a kilo
+  { id: "cup", unit_cost: 2, currency: "MXN" },
+  { id: "milk", unit_cost: 0.025, currency: "MXN" }, // MX$25 a litre
+  { id: "oat", unit_cost: 0.06, currency: "MXN" },
+], "MXN");
 const latte: CostedItem = {
   id: "latte", name: "Latte", emoji: "☕", price: 58, discount_pct: 0, is_addon: false,
   modifiers: [{ label: "Leche", type: "single", options: ["Entera", "Avena"] }],
@@ -183,14 +183,14 @@ describe("what a product leaves", () => {
 
 describe("a supplier's rise", () => {
   const ingredients = [
-    { id: "milk", name: "Leche entera", unit: "ml" as const, pack_size: 1000, pack_price: 30, unit_cost: 0.03, supplier: null },
-    { id: "oat", name: "Leche de avena", unit: "ml" as const, pack_size: 1000, pack_price: 70, unit_cost: 0.07, supplier: null },
+    { id: "milk", name: "Leche entera", unit: "ml" as const, pack_size: 1000, pack_price: 30, unit_cost: 0.03, supplier: null, currency: "MXN" },
+    { id: "oat", name: "Leche de avena", unit: "ml" as const, pack_size: 1000, pack_price: 70, unit_cost: 0.07, supplier: null, currency: "MXN" },
   ];
-  const now = unitCosts([...ingredients, { id: "coffee", unit_cost: 0.4 }, { id: "cup", unit_cost: 2 }]);
+  const now = unitCosts([...ingredients, { id: "coffee", unit_cost: 0.4, currency: "MXN" }, { id: "cup", unit_cost: 2, currency: "MXN" }], "MXN");
 
   it("names each product it made thinner, and by how much", () => {
     const rises = priceRises(
-      [{ ingredient_id: "milk", previous_cost: 0.025, unit_cost: 0.03, created_at: "2026-10-10T10:00:00Z" }],
+      [{ ingredient_id: "milk", previous_cost: 0.025, unit_cost: 0.03, created_at: "2026-10-10T10:00:00Z", currency: "MXN" }],
       ingredients, [latte], book, now, 0, 0,
     );
     expect(rises).toHaveLength(1);
@@ -200,7 +200,7 @@ describe("a supplier's rise", () => {
 
   it("leaves out a product the rise does not move at its default", () => {
     const rises = priceRises(
-      [{ ingredient_id: "oat", previous_cost: 0.06, unit_cost: 0.07, created_at: "2026-10-10T10:00:00Z" }],
+      [{ ingredient_id: "oat", previous_cost: 0.06, unit_cost: 0.07, created_at: "2026-10-10T10:00:00Z", currency: "MXN" }],
       ingredients, [latte], book, now, 0, 0,
     );
     expect(rises[0].products).toEqual([]);
@@ -208,8 +208,31 @@ describe("a supplier's rise", () => {
 
   it("ignores the price an ingredient was created with, and a fall", () => {
     expect(priceRises([
-      { ingredient_id: "milk", previous_cost: null, unit_cost: 0.03, created_at: "2026-10-09T10:00:00Z" },
-      { ingredient_id: "oat", previous_cost: 0.09, unit_cost: 0.07, created_at: "2026-10-10T10:00:00Z" },
+      { ingredient_id: "milk", previous_cost: null, unit_cost: 0.03, created_at: "2026-10-09T10:00:00Z", currency: "MXN" },
+      { ingredient_id: "oat", previous_cost: 0.09, unit_cost: 0.07, created_at: "2026-10-10T10:00:00Z", currency: "MXN" },
     ], ingredients, [latte], book, now, 0, 0)).toEqual([]);
+  });
+});
+
+describe("a price typed before the restaurant switched currency", () => {
+  const switched = unitCosts([
+    { id: "coffee", unit_cost: 0.4, currency: "MXN" },
+    { id: "cup", unit_cost: 2, currency: "USD" },
+    { id: "milk", unit_cost: 0.025, currency: "USD" },
+  ], "USD");
+
+  it("is no cost at all, so the product reads as uncosted rather than cheap", () => {
+    expect(Number.isNaN(switched.get("coffee"))).toBe(true);
+    expect(dishCost("latte", { Leche: "Entera" }, book, switched)).toBeNull();
+    expect(lineCost({ itemId: "latte", name: "Latte", emoji: "☕", price: 58, qty: 1, mods: { Leche: "Entera" } }, book, switched).complete).toBe(false);
+    expect(unitMargin(latte, book, switched, 0, 0).margin).toBeNull();
+  });
+
+  it("compares no rise across the switch", () => {
+    const ingredients = [{ id: "milk", name: "Leche", unit: "ml" as const, pack_size: 1000, pack_price: 30, unit_cost: 0.03, supplier: null, currency: "USD" }];
+    expect(priceRises(
+      [{ ingredient_id: "milk", previous_cost: 0.025, unit_cost: 0.026, created_at: "2026-10-10T10:00:00Z", currency: "MXN" }],
+      ingredients, [latte], book, switched, 0, 0,
+    )).toEqual([]);
   });
 });

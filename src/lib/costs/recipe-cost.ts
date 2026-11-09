@@ -20,6 +20,8 @@ export interface Ingredient {
   pack_price: number;
   unit_cost: number;
   supplier: string | null;
+  /** The currency its price was typed in; another currency than today's is no price at all. */
+  currency: string;
   /** Days the supplier takes to deliver; read where purchases are worked out. */
   lead_days?: number;
 }
@@ -49,8 +51,14 @@ export function recipeBook(lines: RecipeLine[]): RecipeBook {
   return book;
 }
 
-export function unitCosts(ingredients: Pick<Ingredient, "id" | "unit_cost">[]): UnitCosts {
-  return new Map(ingredients.map(i => [i.id, Number(i.unit_cost)]));
+/** Its price counts only in the currency the restaurant charges in today. */
+export function pricedIn(ingredient: Pick<Ingredient, "currency">, currency: string): boolean {
+  return ingredient.currency === currency;
+}
+
+/** A price typed in another currency is unknown (NaN), never a number in this one. */
+export function unitCosts(ingredients: Pick<Ingredient, "id" | "unit_cost" | "currency">[], currency: string): UnitCosts {
+  return new Map(ingredients.map(i => [i.id, pricedIn(i, currency) ? Number(i.unit_cost) : Number.NaN]));
 }
 
 function chosen(choices: Choices, label: string, option: string): boolean {
@@ -58,14 +66,16 @@ function chosen(choices: Choices, label: string, option: string): boolean {
   return Array.isArray(picked) ? picked.includes(option) : picked === option;
 }
 
-/** One unit of a dish with these choices; null when it has no recipe at all. */
+/** One unit of a dish with these choices; null without a recipe or with an unknown price. */
 export function dishCost(itemId: string, choices: Choices, book: RecipeBook, costs: UnitCosts): number | null {
   const lines = book.get(itemId);
   if (!lines?.length) return null;
   let cost = 0;
   for (const line of lines) {
     if (line.mod_label !== null && line.mod_option !== null && !chosen(choices, line.mod_label, line.mod_option)) continue;
-    cost += Number(line.quantity) * (costs.get(line.ingredient_id) ?? 0);
+    const unit = costs.get(line.ingredient_id) ?? 0;
+    if (Number.isNaN(unit)) return null;
+    cost += Number(line.quantity) * unit;
   }
   return cost;
 }

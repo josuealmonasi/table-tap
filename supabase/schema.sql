@@ -12688,3 +12688,79 @@ revoke all on function public.stamp_account_credit_currency() from public, anon,
 drop trigger if exists stamp_account_credit_currency on customer_accounts;
 create trigger stamp_account_credit_currency before insert on customer_accounts
   for each row execute function public.stamp_account_credit_currency();
+
+-- ── What currency an ingredient cost is in (end-to-end review, D3) ──
+-- A restaurant can switch its currency. Prices, purchases and waste typed
+-- before the switch keep the currency they were typed in, so an old MX$100
+-- purchase never reads as US$100 and a peso price never feeds dollar margins.
+-- Old rows have no evidence of anything else: they take today's currency.
+alter table ingredients add column if not exists currency text;
+alter table ingredient_prices add column if not exists currency text;
+alter table ingredient_purchases add column if not exists currency text;
+alter table waste_entries add column if not exists currency text;
+update ingredients x set currency = r.currency from restaurants r where r.id = x.restaurant_id and x.currency is null;
+update ingredient_prices x set currency = r.currency from restaurants r where r.id = x.restaurant_id and x.currency is null;
+update ingredient_purchases x set currency = r.currency from restaurants r where r.id = x.restaurant_id and x.currency is null;
+update waste_entries x set currency = r.currency from restaurants r where r.id = x.restaurant_id and x.currency is null;
+
+-- A row takes the restaurant's currency when it is written. An ingredient
+-- takes it again whenever its price is typed, because that price is new.
+create or replace function public.stamp_cost_currency()
+returns trigger language plpgsql security definer set search_path = public as $$
+begin
+  if tg_op = 'INSERT' or tg_table_name <> 'ingredients' or new.pack_price is distinct from old.pack_price then
+    select currency into new.currency from restaurants where id = new.restaurant_id;
+  elsif new.currency is distinct from old.currency then
+    new.currency := old.currency;
+  end if;
+  return new;
+end $$;
+revoke all on function public.stamp_cost_currency() from public, anon, authenticated;
+drop trigger if exists stamp_cost_currency on ingredients;
+create trigger stamp_cost_currency before insert or update on ingredients
+  for each row execute function public.stamp_cost_currency();
+drop trigger if exists stamp_cost_currency on ingredient_purchases;
+create trigger stamp_cost_currency before insert on ingredient_purchases
+  for each row execute function public.stamp_cost_currency();
+drop trigger if exists stamp_cost_currency on waste_entries;
+create trigger stamp_cost_currency before insert on waste_entries
+  for each row execute function public.stamp_cost_currency();
+
+-- The price history keeps the currency of each price; a change across a
+-- currency switch has no previous cost to compare with.
+create or replace function public.record_ingredient_price()
+returns trigger language plpgsql security definer set search_path = public as $$
+begin
+  if tg_op = 'INSERT' or new.unit_cost is distinct from old.unit_cost or new.currency is distinct from old.currency then
+    insert into ingredient_prices (restaurant_id, ingredient_id, previous_cost, unit_cost, changed_by, currency)
+    values (new.restaurant_id, new.id,
+      case when tg_op = 'UPDATE' and old.currency is not distinct from new.currency then old.unit_cost end,
+      new.unit_cost, new.updated_by, new.currency);
+  end if;
+  return new;
+end;
+$$;
+revoke all on function public.record_ingredient_price() from public, anon, authenticated;
+
+-- A sale's cost is known only when every ingredient is priced in the
+-- restaurant's currency today.
+create or replace function public.sale_line_costs(p_restaurant uuid, p_items jsonb)
+returns jsonb language sql stable security definer set search_path = public as $$
+  select coalesce(jsonb_agg((
+    select case when u.usage = '{}'::jsonb
+        or exists (select 1 from (
+            select c->>'itemId' id from jsonb_array_elements(coalesce(line.value->'components', '[]')) c
+            union all select line.value->>'itemId' where jsonb_array_length(coalesce(line.value->'components', '[]')) = 0
+            union all select e->>'id' from jsonb_array_elements(coalesce(line.value->'extras', '[]')) e
+          ) part where not exists (select 1 from recipe_lines r where r.restaurant_id = p_restaurant and r.item_id::text = part.id))
+        or exists (select 1 from jsonb_each_text(u.usage) e left join ingredients i
+          on i.id = e.key::uuid and i.restaurant_id = p_restaurant
+          where i.unit_cost is null or i.currency is distinct from (select currency from restaurants where id = p_restaurant)) then null
+      else to_jsonb(round((select sum(-e.value::numeric * i.unit_cost) from jsonb_each_text(u.usage) e
+        join ingredients i on i.id = e.key::uuid and i.restaurant_id = p_restaurant), 4)) end
+    from (select public.sale_ingredient_usage(p_restaurant, jsonb_build_array(line.value)) as usage) u
+  ) order by line.n), '[]'::jsonb)
+  from jsonb_array_elements(coalesce(p_items, '[]'::jsonb)) with ordinality line(value, n);
+$$;
+revoke all on function public.sale_line_costs(uuid, jsonb) from public, anon, authenticated;
+grant execute on function public.sale_line_costs(uuid, jsonb) to service_role;

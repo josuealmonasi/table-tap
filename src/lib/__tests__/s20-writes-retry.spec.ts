@@ -10,9 +10,10 @@ vi.mock("@/lib/costs/guard", async original => ({ ...await original<typeof impor
 vi.mock("@/lib/activity-log", () => ({ logEvent: async () => {} }));
 vi.mock("@/lib/api-error", () => ({ apiError: async (error: string, status: number) => Response.json({ error }, { status }) }));
 vi.mock("@/lib/cash-shift-server", () => ({ openShift: async () => state.current ? { id: state.current } : null }));
+vi.mock("@/lib/costs/charged-currency", () => ({ chargedCurrency: async () => "MXN" }));
 vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({
   from: () => {
-    const q = { select: () => q, eq: () => q, maybeSingle: async () => ({ data: { name: "Milk", unit_cost: 1, pack_size: 1000 } }) }; return q;
+    const q = { select: () => q, eq: () => q, maybeSingle: async () => ({ data: { name: "Milk", unit_cost: 1, pack_size: 1000, currency: "MXN" } }) }; return q;
   },
   rpc: async (name: string, args: Record<string, unknown>) => {
     name = name.replace(/_once$/, "");

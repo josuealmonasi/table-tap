@@ -73,7 +73,7 @@ export default function WastePanel({ stock, currency, timeZone }: WastePanelProp
             {stock.waste.map(e => (
               <li key={e.id} className="tt-costs-entry">
                 <span className="tt-costs-product-name">{e.name}</span>
-                <span className="tt-costs-margin">{e.cost === null ? t("costs.wasteNoCost") : money(e.cost)}</span>
+                <span className="tt-costs-margin">{e.cost === null ? t("costs.wasteNoCost") : formatMoney(e.cost, e.currency)}</span>
                 <span className="tt-costs-product-meta tt-muted">
                   {quantityOf(e)} · {t(`costs.reason.${e.reason}`)} · {e.recorded_by} · {when(e.created_at)}
                   {e.note && ` · ${e.note}`}
