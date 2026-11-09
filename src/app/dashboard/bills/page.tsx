@@ -44,17 +44,23 @@ export default async function BillsPage() {
   const db = createAdminClient();
   const [ordersRes, requestsRes, writeOffsRes, askingRes] =
     await Promise.all([
-    db
+    // Every outstanding order, filtered before it is paged: the newest 200
+    // unpaid rows were taken first and cancellations dropped after, so 200
+    // newer cancelled orders hid an older MX$100 debt and the list said
+    // nothing was owed (journey B, finding 4). Throws when a page fails.
+    everyRow((a, b) => db
       .from("orders")
       .select(
         "id, session_id, table_id, table_label, currency, items, total, discount, paid, written_off, status, coupon_code, customer_name, created_at",
       )
       .eq("restaurant_id", r.id)
       .eq("paid", false)
+      .eq("written_off", false)
       .is("account_id", null)
-      .neq("status", "pending_payment")
+      .not("status", "in", "(pending_payment,cancelled)")
       .order("created_at", { ascending: false })
-      .limit(200),
+      .order("id")
+      .range(a, b), "the open bills"),
     db
       .from("discount_requests")
       .select("*")
@@ -81,7 +87,7 @@ export default async function BillsPage() {
   // as "no open tables", and an unread ledger as "nothing collected yet", so
   // the whole amount looked owing and could be taken again. The error screen
   // says no order was lost and offers a retry, which is the true answer.
-  const orders = unwrap(ordersRes, "the open bills");
+  const orders = ordersRes;
   const requests = unwrap(requestsRes, "the discount requests");
   const writeOffs = unwrap(writeOffsRes, "the write-off requests");
   const asking = unwrap(askingRes, "who asked for the bill");
