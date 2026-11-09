@@ -39,6 +39,7 @@ import BillSheet from "./BillSheet";
 import ReceiptPrompt from "./ReceiptPrompt";
 import TrackerOverlay from "./TrackerOverlay";
 import type { TrackedOrder } from "@/lib/order-tracking";
+import { takePaidCardLines } from "@/lib/card-checkout-lines";
 
 /**
  * The QR-target customer app. Owns which screen is showing and the cart, and
@@ -123,6 +124,16 @@ export default function OrderingApp({
   // sat open stops being orderable here too.
   useMenuFreshness();
   const cart = useCart(restaurant.id);
+  // Back from Stripe with this order paid: what it paid for leaves the cart,
+  // and anything added after stays (A4).
+  const paidOrderId = trackOrder && (trackOrder.paid === true
+    || (typeof window !== "undefined" && new URLSearchParams(window.location.search).get("paid") === "1")) ? trackOrder.id : null;
+  useEffect(() => {
+    if (!paidOrderId) return;
+    const lines = takePaidCardLines(restaurant.id, paidOrderId);
+    if (lines) cart.removeOrdered(lines);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [restaurant.id, paidOrderId]);
   // Which screen is showing — menu, dish, combo, a cart line, the cart.
   const screens = useOrderingScreens(cart, items, combos);
   const { screen, setScreen, openItem, openCombo, editLine } = screens;
