@@ -30,8 +30,12 @@ it("keeps an existing peso deposit visible in pesos after settings switch to dol
   expect(view.days[0]).toMatchObject({ expected: 1000, late: 0, deposit: { currency: "MXN", received: 1000 }, status: "received" });
 });
 it("lists currencies separately and keeps older unverified deposits outside their arithmetic", async () => {
+  // The report reads "now"; its fixtures are dated 2026-10-20. Unpinned, the
+  // test began failing once those days left the report's window.
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(new Date("2026-10-20T18:00:00Z"));
   const { readTerminalReport } = await import("@/lib/terminal-report");
-  const report = await readTerminalReport("r", "UTC", "USD");
+  const report = await readTerminalReport("r", "UTC", "USD").finally(() => vi.useRealTimers());
   expect(report.currencies.map(c => c.currency)).toEqual(["MXN", "USD"]);
   expect(report.unverified).toMatchObject([{ id: "legacy", currency: null, expected: 500, received: 500 }]);
   expect(report.currencies.flatMap(c => c.view.days).some(d => d.expected === 500)).toBe(false);
