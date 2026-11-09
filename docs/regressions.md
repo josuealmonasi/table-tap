@@ -6255,3 +6255,11 @@ whether that attempt ever arrived; past 24 hours with none, it is retired as
 and sent after a recount took its portions off a count that already left them
 out; a dish counted after the sale was made now keeps its count, and the
 money and the order are recorded as before (`recovery-sql.spec.ts`).
+
+Account money had to agree with the currency someone actually saw (sweep 8).
+A collection screen that sent no currency went through the legacy writer,
+which settled a US$100 debt against a MX$100 screen after the restaurant
+switched; the route now refreshes such a screen instead (an api case pins it).
+And the statement's payment history used the phone's day while its charges
+used the restaurant's, so a 00:30 payment showed under the day before
+(`collection-currency.spec.tsx`).

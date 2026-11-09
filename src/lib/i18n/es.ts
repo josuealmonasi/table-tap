@@ -1414,6 +1414,7 @@ foundingLeftBody: "Quien contrata ahora conserva este precio de suscripción mie
     collectionTipLimit: "Este abono admite una propina de hasta {max}. Revisa la propina antes de recibir el dinero.",
     collectionBalanceChanged: "La cuenta cambió. Ahora faltan {owed}. Revisa el dinero con el cliente y entrega el cambio que corresponda.",
     refreshToCollect: "Esta pantalla está desactualizada. Actualiza la página para cobrar esta mesa.",
+    refreshToCollectAccount: "Esta pantalla está desactualizada. Actualiza la página para cobrar esta cuenta.",
     tableJoin: "Espera a que alguien de la mesa o un mesero deje entrar a este teléfono.",
     badCurrency: "Elige MXN o USD como moneda.",
     mixedCurrencies: "Estos pedidos están en monedas distintas. Pide ayuda a tu mesero para pagar cada moneda por separado.",

@@ -1420,6 +1420,7 @@ foundingLeftBody: "Subscribe now and keep this subscription price for as long as
     collectionTipLimit: "This payment can carry a tip of up to {max}. Check the tip before taking the money.",
     collectionBalanceChanged: "The bill changed. It now owes {owed}. Check the money with the customer and return any change.",
     refreshToCollect: "This screen is out of date. Refresh the page to collect this table.",
+    refreshToCollectAccount: "This screen is out of date. Refresh the page to collect this account.",
     tableJoin: "Wait for someone at the table or a waiter to let this phone in.",
     badCurrency: "Choose MXN or USD for your currency.",
     mixedCurrencies: "These orders use different currencies. Please ask your waiter to help you pay each currency separately.",
