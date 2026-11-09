@@ -9,6 +9,7 @@ import { formatMoney } from "@/lib/format";
 import { useToast } from "@/components/ui/Toast";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import type { RefundOperation } from "@/lib/refunds/operations";
+import { orderCode } from "@/lib/types";
 
 interface Props { refunds: RefundOperation[] }
 
@@ -25,7 +26,8 @@ export default function OrderRefunds({ refunds }: Props) {
     const drawer = drawers[row.id] ?? (row.original_collector ? "original" : "me");
     if (row.source !== "stripe" && !await confirm({
       title: t("returns.confirm"),
-      message: t("returns.drawer", { amount: formatMoney(Number(row.amount), row.currency), collector: drawer === "me" ? t("returns.myDrawer") : row.original_collector ?? "—" }),
+      // Which guest: two MX$100 cash returns were otherwise the same row (B5).
+      message: `${identity(row)}\n${t("returns.drawer", { amount: formatMoney(Number(row.amount), row.currency), collector: drawer === "me" ? t("returns.myDrawer") : row.original_collector ?? "—" })}`,
       confirmLabel: t("returns.returned"),
     })) return;
     setBusy(row.id);
@@ -42,6 +44,13 @@ export default function OrderRefunds({ refunds }: Props) {
     finally { setBusy(null); }
   }
 
+  /** The order, its table and what kind of return: enough to pay the right guest. */
+  const identity = (row: RefundOperation): string => [
+    row.order_id ? orderCode(row.order_id) : null,
+    row.table_label,
+    row.kind ? t(row.kind === "cancel" ? "returns.kindCancel" : "returns.kindReturn") : null,
+  ].filter(Boolean).join(" · ");
+
   return <section className="tt-section">
     <h3 className="tt-serif">{t("returns.title")}</h3>
     <p className="tt-muted">{t("returns.intro")}</p>
@@ -50,6 +59,7 @@ export default function OrderRefunds({ refunds }: Props) {
         <strong>{formatMoney(row.outstanding_cents === undefined ? Number(row.amount) : row.outstanding_cents / 100, row.currency)}</strong>
         {row.outstanding_cents !== undefined && row.outstanding_cents < Math.round(Number(row.amount) * 100)
           && <span className="tt-muted tt-bill-sub">{t("returns.alreadyReturned", { amount: formatMoney(Number(row.amount) - row.outstanding_cents / 100, row.currency) })}</span>}
+        {identity(row) && <span className="tt-bill-sub">{identity(row)}</span>}
         <span className="tt-muted tt-bill-sub">{t(`returns.${row.source}`)} · {t(`returns.${row.status}`)}</span>
       </div>
       <div className="tt-bill-actions-row" style={{ flexWrap: "wrap" }}>

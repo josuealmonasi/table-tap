@@ -1110,6 +1110,8 @@ foundingLeftBody: "Subscribe now and keep this subscription price for as long as
     manualSave: "Use this refund",
     manualRecorded: "The refund was recorded. Check the return to send only what is still owed.",
     alreadyReturned: "Already returned: {amount}",
+    kindCancel: "Cancelled order",
+    kindReturn: "Return",
     unconfirmed: "We could not confirm this return. Send the same request again to find out.",
 
     action: "Return",

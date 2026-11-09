@@ -1107,6 +1107,8 @@ foundingLeftBody: "Quien contrata ahora conserva este precio de suscripción mie
     manualSave: "Usar este reembolso",
     manualRecorded: "Registramos el reembolso. Revisa la devolución para enviar solo lo que falta.",
     alreadyReturned: "Ya devuelto: {amount}",
+    kindCancel: "Pedido cancelado",
+    kindReturn: "Devolución",
     unconfirmed: "No pudimos confirmar esta devolución. Envía la misma solicitud otra vez para saber qué pasó.",
 
     action: "Devolver",
