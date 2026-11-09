@@ -1497,6 +1497,7 @@ foundingLeftBody: "Quien contrata ahora conserva este precio de suscripción mie
     accountLimitBelowOwed: "Esta cuenta ya debe {owed}: el límite no puede ser menor.",
     accountStillOwes: "Esta cuenta todavía debe dinero: cóbrala antes de cerrarla.",
     accountOverLimit: "Este cargo pasaría el límite de la cuenta (debe {owed} de {limit}). Un gerente puede subirlo.",
+    accountLimitCurrency: "El límite de {limit} de esta cuenta se aprobó en otra moneda. Un gerente puede fijarlo de nuevo en {currency}.",
     accountClosed: "Esa cuenta está cerrada.",
     accountPartlyPaid: "Parte de esta cuenta ya se cobró o se está dividiendo: cobra el resto aquí.",
     accountBillPaying: "Hay un pago en línea de esta cuenta sin confirmar. Vuelve a intentarlo en unos minutos; si sigue igual, pide a un gerente que lo revise.",

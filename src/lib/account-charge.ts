@@ -8,6 +8,7 @@ import { formatMoney } from "@/lib/format";
 export type ChargeResult =
   | { outcome: "charged"; amount: number; owed: number }
   | { outcome: "limit"; owed: number; limit: number; currency?: string }
+  | { outcome: "limit_currency"; limit: number; limitCurrency: string; currency: string }
   | { outcome: "closed" | "stale" | "partly_paid" | "paying" | "mixed_currency" };
 
 /**
@@ -30,9 +31,12 @@ export async function chargeAccount(
     p_actor: actor,
   });
   if (error) throw new Error(`Could not charge the account: ${error.message}`);
-  const r = data as { outcome: string; amount?: number; owed?: number; limit?: number; currency?: string };
+  const r = data as { outcome: string; amount?: number; owed?: number; limit?: number; currency?: string; limit_currency?: string };
   if (r.outcome === "charged") return { outcome: "charged", amount: Number(r.amount), owed: Number(r.owed) };
   if (r.outcome === "limit") return { outcome: "limit", owed: Number(r.owed), limit: Number(r.limit), currency: r.currency };
+  if (r.outcome === "limit_currency") {
+    return { outcome: "limit_currency", limit: Number(r.limit), limitCurrency: String(r.limit_currency), currency: String(r.currency) };
+  }
   return { outcome: r.outcome as "closed" | "stale" | "partly_paid" | "paying" | "mixed_currency" };
 }
 
@@ -48,6 +52,13 @@ export async function chargeRefusal(
       return await apiError("apiErr.accountOverLimit", 409, {
         owed: formatMoney(result.owed, result.currency ?? currency),
         limit: formatMoney(result.limit, result.currency ?? currency),
+      });
+    case "limit_currency":
+      // A ceiling has no exchange rate: a manager approves one in the new currency (sweep 8, finding 2).
+      return await apiError("apiErr.accountLimitCurrency", 409, {
+        // The till hands over the database's own answer, spelled `limit_currency`.
+        limit: formatMoney(Number(result.limit), result.limitCurrency ?? (result as { limit_currency?: string }).limit_currency ?? currency),
+        currency: result.currency ?? currency,
       });
     case "closed":
       return await apiError("apiErr.accountClosed", 409);

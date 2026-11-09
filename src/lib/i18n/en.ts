@@ -1503,6 +1503,7 @@ foundingLeftBody: "Subscribe now and keep this subscription price for as long as
     accountLimitBelowOwed: "This account already owes {owed}: the limit cannot be lower.",
     accountStillOwes: "This account still owes money: collect it before closing it.",
     accountOverLimit: "This would take the account past its limit (it owes {owed} of {limit}). A manager can raise it.",
+    accountLimitCurrency: "This account's limit of {limit} was approved in another currency. A manager can set its limit again in {currency}.",
     accountClosed: "That account is closed.",
     accountPartlyPaid: "Part of this bill was already collected or is being split: collect the rest here.",
     accountBillPaying: "An online payment for this bill is unconfirmed. Try again in a few minutes; if it is still unconfirmed, ask a manager to check.",

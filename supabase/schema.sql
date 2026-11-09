@@ -7512,6 +7512,7 @@ declare
   v_sessions uuid[];
   v_owed     numeric;
   v_currency text;
+  v_limit_currency text;
 begin
   perform public.lock_restaurant_money(p_restaurant);
   perform set_config('tabletap.allocation_writer', 'v1', true);
@@ -7565,12 +7566,24 @@ begin
     return jsonb_build_object('outcome','mixed_currency');
   end if;
   v_owed := public.account_owed(p_account);
+  -- A ceiling is approved in one currency. After the restaurant switched, a
+  -- MX$500 ceiling silently allowed US$500 once the old debt was paid
+  -- (sweep 8, finding 2). An account from before this column takes the
+  -- currency of its last charge, or the restaurant's if it has none.
+  v_limit_currency := coalesce(v_account.credit_currency,
+    (select currency from orders where account_id = p_account and written_off = false order by created_at desc limit 1),
+    (select currency from restaurants where id = p_restaurant));
+  if v_currency is distinct from v_limit_currency then
+    return jsonb_build_object('outcome', 'limit_currency', 'limit', v_account.credit_limit,
+      'limit_currency', v_limit_currency, 'currency', v_currency);
+  end if;
   if v_owed + v_amount > v_account.credit_limit then
     return jsonb_build_object('outcome', 'limit', 'owed', v_owed, 'limit', v_account.credit_limit, 'currency', v_currency);
   end if;
 
   update orders set account_id = p_account, charged_by = p_actor, charged_at = now()
    where id = any(p_orders);
+  update customer_accounts set credit_currency = v_limit_currency where id = p_account and credit_currency is null;
   perform public.close_session_if_clear(s, 'account') from unnest(coalesce(v_sessions, '{}')) s;
 
   return jsonb_build_object('outcome', 'charged', 'amount', v_amount, 'owed', v_owed + v_amount);
@@ -7599,7 +7612,11 @@ begin
       return jsonb_build_object('outcome', 'invalid');
     end if;
     if p_limit < v_owed then return jsonb_build_object('outcome', 'limit', 'owed', v_owed); end if;
-    update customer_accounts set credit_limit = p_limit where id = p_account;
+    -- A ceiling set now is approved in the currency the account owes in, or
+    -- the restaurant's today (sweep 8, finding 2).
+    update customer_accounts set credit_limit = p_limit, credit_currency = coalesce(
+      (select min(currency) from orders where account_id = p_account and not paid and written_off = false and status <> 'cancelled'),
+      (select currency from restaurants where id = p_restaurant)) where id = p_account;
   elsif p_action = 'close' then
     if v_owed > 0 then return jsonb_build_object('outcome', 'owes', 'owed', v_owed); end if;
     update customer_accounts set status = 'closed', closed_by = p_actor, closed_at = now() where id = p_account;
@@ -12599,3 +12616,19 @@ begin
 end $$;
 revoke all on function public.retire_unsent_refund_attempt_v1(uuid, uuid, uuid, text) from public, anon, authenticated;
 grant execute on function public.retire_unsent_refund_attempt_v1(uuid, uuid, uuid, text) to service_role;
+
+-- ── A credit ceiling's currency (sweep 8, finding 2) ──
+-- Null on accounts opened before it: their first charge records it.
+alter table customer_accounts add column if not exists credit_currency text check (credit_currency ~ '^[A-Z]{3}$');
+create or replace function public.stamp_account_credit_currency()
+returns trigger language plpgsql security definer set search_path = public as $$
+begin
+  if new.credit_currency is null then
+    select currency into new.credit_currency from restaurants where id = new.restaurant_id;
+  end if;
+  return new;
+end $$;
+revoke all on function public.stamp_account_credit_currency() from public, anon, authenticated;
+drop trigger if exists stamp_account_credit_currency on customer_accounts;
+create trigger stamp_account_credit_currency before insert on customer_accounts
+  for each row execute function public.stamp_account_credit_currency();

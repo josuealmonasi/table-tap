@@ -205,7 +205,7 @@ export async function POST(req: NextRequest) {
     // Every account refusal is final, including the currency one: answered
     // as `held`, the till kept the refused account request and sent it
     // again even when the cashier then chose cash.
-    if (onAccount && ["limit", "closed", "stale", "paying", "partly_paid", "mixed_currency"].includes(ticket.outcome)) {
+    if (onAccount && ["limit", "limit_currency", "closed", "stale", "paying", "partly_paid", "mixed_currency"].includes(ticket.outcome)) {
       return await chargeRefusal(ticket as Exclude<ChargeResult, { outcome: "charged" }>, restaurant.currency);
     }
     // A reference that belongs to another order, here or anywhere: refused,
