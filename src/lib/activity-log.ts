@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { withOrderCurrency } from "@/lib/log-money";
 
@@ -67,6 +68,8 @@ export type LogAction =
 
 export interface LogEvent {
   restaurantId: string;
+  /** Stable identity of the saved operation, so retries cannot append it twice. */
+  operationKey?: string;
   /** Who did it, by email — the only identity we have for staff. */
   actor: string;
   entity: LogEntity;
@@ -82,7 +85,7 @@ export interface LogEvent {
 
 export async function logEvent(event: LogEvent): Promise<void> {
   try {
-    await createAdminClient().from("user_logs").insert({
+    const row = {
       restaurant_id: event.restaurantId,
       actor_email: event.actor,
       entity: event.entity,
@@ -90,8 +93,26 @@ export async function logEvent(event: LogEvent): Promise<void> {
       detail: event.orderIds ? await withOrderCurrency(event.detail, event.restaurantId, event.orderIds) : event.detail ?? null,
       target_email: event.targetEmail ?? null,
       target_role: event.targetRole ?? null,
-    });
+    };
+    const logs = createAdminClient().from("user_logs");
+    // The primary key arbitrates concurrent retries. Ignore rather than update:
+    // another cashier repeating the request must not rewrite who did it first.
+    const { error } = event.operationKey
+      ? await logs.upsert({ ...row, id: activityId(event) }, { onConflict: "id", ignoreDuplicates: true })
+      : await logs.insert(row);
+    if (error) throw new Error(`Could not write activity: ${error.message}`);
   } catch (err) {
     console.error("activity log:", err);
   }
+}
+
+/** Namespace each identity by restaurant and action without adding a schema key. */
+function activityId(event: LogEvent): string {
+  const bytes = createHash("sha256").update(JSON.stringify([
+    "TableTap activity v1", event.restaurantId, event.entity, event.action, event.operationKey,
+  ])).digest().subarray(0, 16);
+  bytes[6] = (bytes[6] & 0x0f) | 0x80;
+  bytes[8] = (bytes[8] & 0x3f) | 0x80;
+  const hex = bytes.toString("hex");
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
 }

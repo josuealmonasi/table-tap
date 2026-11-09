@@ -26,6 +26,10 @@ class Query implements PromiseLike<Result> {
   select() { return this; }
   eq(key: string, value: unknown) { this.filters.push(row => row[key] === value); return this; }
   is(key: string, value: unknown) { return this.eq(key, value); }
+  // `orders.status` filters a job by its order's status, as the inner embed does.
+  neq(key: string, value: unknown) {
+    this.filters.push(row => (key === "orders.status" ? row.order_status ?? "received" : row[key]) !== value); return this;
+  }
   not(key: string, _operator: string, value: unknown) {
     this.filters.push(row => row[key] !== value); return this;
   }
@@ -47,7 +51,7 @@ class Query implements PromiseLike<Result> {
     const rows = this.table === "print_jobs" ? state.jobs
       : this.table === "restaurants" ? [{ id: "r1", print_token: TOKEN, name: "Bistro", timezone: "UTC" }]
       : state.jobs.map(row => ({ id: row.order_id, restaurant_id: row.restaurant_id,
-        items: [], created_at: "2026-10-21T00:00:00Z" }));
+        items: [], created_at: "2026-10-21T00:00:00Z", status: row.order_status ?? "received" }));
     const row = rows.find(row => this.filters.every(filter => filter(row)));
     if (row && this.values) Object.assign(row, this.values);
     return { data: row ? { ...row } : null, error: null };

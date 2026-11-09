@@ -16,7 +16,7 @@ export async function currentOfflinePrice(db: ReturnType<typeof createAdminClien
   const refs = cartReferences(body.items ?? [], promotions);
   if (!refs.ok) return null;
   const { data, error } = await db.from("menu_items")
-    .select("id, name, price, emoji, available, discount_pct, modifiers, category_id, skips_kitchen, categories(station)")
+    .select("id, name, price, emoji, available, discount_pct, modifiers, category_id, menu_id, is_addon, item_addons!product_id(addon_id), skips_kitchen, categories(station)")
     .in("id", refs.ids).eq("restaurant_id", restaurantId);
   if (error) throw new Error(`Could not check offline prices: ${error.message}`);
   const verified = data ? verifyCart({ items: body.items ?? [], promotions,

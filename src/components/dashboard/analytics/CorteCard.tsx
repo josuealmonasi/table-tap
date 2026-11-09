@@ -6,6 +6,7 @@ import { escapeHtml } from "@/lib/html";
 import { hasCorteActivity, type Corte } from "@/lib/corte";
 import type { ShiftView } from "@/lib/cash-shift";
 import ShiftBlock from "@/components/dashboard/cash/ShiftBlock";
+import { corteShiftRows } from "@/lib/corte-print";
 
 /**
  * The register close, as a manager reads it and as they print it.
@@ -62,15 +63,7 @@ export default function CorteCard({
             `<tr style="text-align:left;color:#70707a"><th style="padding:2px 18px 4px 0">${escapeHtml(t("corte.drawer"))}</th>` +
             `<th style="padding:2px 18px 4px 0">${escapeHtml(t("corte.expected"))}</th><th style="padding:2px 18px 4px 0">${escapeHtml(t("shift.countedLabel"))}</th>` +
             `<th style="padding:2px 0 4px">${escapeHtml(t("shift.difference"))}</th></tr>` +
-            shifts
-              .map(
-                ({ shift, sum }) =>
-                  `<tr><td style="padding:2px 18px 2px 0">${escapeHtml(shift.closed_by ?? shift.opened_by)}${shift.closed_at ? "" : ` (${escapeHtml(t("shift.stillOpen"))})`}</td>` +
-                  `<td style="padding:2px 18px 2px 0">${money(Number(shift.expected_cash ?? sum.expected))}</td>` +
-                  `<td style="padding:2px 18px 2px 0">${shift.counted_cash == null ? "—" : money(Number(shift.counted_cash))}</td>` +
-                  `<td>${shift.difference == null ? "—" : money(Number(shift.difference))}</td></tr>`,
-              )
-              .join("") +
+            corteShiftRows(shifts, currency, t) +
             `</table>`
           : "") +
         `<table style="width:100%;border-collapse:collapse;font-size:14px">` +

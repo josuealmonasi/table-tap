@@ -202,3 +202,21 @@ describe("typedTiers (audit K, finding 8)", () => {
     expect(typedTiers([]).complete).toBe(false);
   });
 });
+
+describe("promoCost — a deal only ever lowers the bill (sweep 1)", () => {
+  const tiered = (tiers: { qty: number; price: number }[]) => ({ id: "t", name: "t", kind: "tiered" as const, tiers });
+  it("takes the cheapest combination, not the largest bracket first", () => {
+    // Four MX$10 items under "2 for 15" and "3 for 25": two pairs are 30, not 25 + 10.
+    expect(promoCost(tiered([{ qty: 2, price: 15 }, { qty: 3, price: 25 }]), 4, 10)).toBe(30);
+    expect(promoCost(tiered([{ qty: 2, price: 15 }, { qty: 3, price: 25 }]), 5, 10)).toBe(40);
+  });
+  it("never charges more than the units would cost, after the price drops", () => {
+    // "2 for MX$180" saved at MX$100 each; the product now costs MX$80.
+    expect(promoCost(tiered([{ qty: 2, price: 180 }]), 2, 80)).toBe(160);
+    expect(promoCost(tiered([{ qty: 2, price: 180 }]), 3, 80)).toBe(240);
+  });
+  it("is never dearer than the units for any basket", () => {
+    const deal = tiered([{ qty: 2, price: 15 }, { qty: 3, price: 21 }, { qty: 5, price: 52 }]);
+    for (let n = 1; n <= 30; n++) expect(promoCost(deal, n, 10)).toBeLessThanOrEqual(n * 10);
+  });
+});

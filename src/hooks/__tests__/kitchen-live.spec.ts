@@ -55,7 +55,7 @@ it.each([true, false])("keeps status and station updates live, kitchen=%s", asyn
 });
 it("keeps kitchen calls live and removes a call answered elsewhere", async () => {
   useServiceRequests("r1", [], true);
-  const cleanup = state.effects[1]();
+  const cleanup = state.effects[2]();
   await Promise.resolve();
   expect(state.listeners.every(l => l.table === "kitchen_requests")).toBe(true);
   const call = { id: "call", kind: "bill", table_label: "8", status: "open" };

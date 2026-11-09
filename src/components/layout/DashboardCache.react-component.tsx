@@ -33,6 +33,14 @@ function SessionCache({ identity, children }: CacheProps): React.ReactNode {
       const matches = current !== null && current.split(":").slice(0, 4).join(":") === identity;
       if (event === "SIGNED_OUT" || (current !== null && !matches)) retired.current = true;
       setActive(!retired.current && matches);
+      // Retiring the cache cleared the navigation and nothing else: a page
+      // signed out in another tab stayed mounted and readable, account
+      // statement and all (sweep 3, finding 1). The whole page goes instead,
+      // to the sign-in screen or to a fresh server check of the new login.
+      if (retired.current && window.location.pathname.startsWith("/dashboard")) {
+        if (event === "SIGNED_OUT") window.location.assign("/login");
+        else window.location.reload();
+      }
     });
     return () => subscription.unsubscribe();
   }, [identity]);

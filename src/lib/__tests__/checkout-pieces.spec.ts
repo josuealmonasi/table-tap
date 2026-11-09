@@ -142,7 +142,7 @@ describe("pricing a cart from the database", () => {
   });
 
   it("prices from the row, not from what the phone said", async () => {
-    const row = { id: "t", name: "Taco", price: 45, emoji: "🌮", available: true, discount_pct: 0, modifiers: null, category_id: null, skips_kitchen: false };
+    const row = { id: "t", name: "Taco", price: 45, emoji: "🌮", available: true, discount_pct: 0, modifiers: null, category_id: null, menu_id: "dinner", is_addon: false, item_addons: [], skips_kitchen: false };
     const r = await verifiedLines(fakeDb([row]).db, "r", input);
     expect(r.ok && r.lines[0].price).toBe(45);
   });

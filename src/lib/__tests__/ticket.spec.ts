@@ -117,6 +117,22 @@ describe("kitchenTicket", () => {
 });
 
 describe("wrap", () => {
+  it.each(["😀", "👩🏽‍🍳", "e\u0301", "🇲🇽"])("keeps the grapheme %s whole at the paper edge", emoji => {
+    const name = "x".repeat(47) + emoji;
+    expect(wrap(name)).toEqual([name]);
+    expect(wrap(name + "end")).toEqual([name, "end"]);
+  });
+
+  it("strips printer commands and bidi controls from every printed field, keeping RTL letters", () => {
+    const controls = "\u0000\u0008\u0009\u000b\u000c\u000d\u001b\u001d\u007f\u0085\u009b\u009f\u202a\u202b\u202c\u202d\u202e\u2066\u2067\u2068\u2069";
+    const text = kitchenTicket(order([dish({ name: `Soup${controls}`, notes: "no salt\u001b@ please مرحبا" })],
+      { note: `Order${controls}note`, customer_name: `Guest${controls}` }), { ...place, name: `Place${controls}` }, t);
+    for (const control of controls) expect(text).not.toContain(control);
+    expect(text).toContain("no salt@ please مرحبا");
+    expect(text).toContain("Ordernote");
+    expect(text).toContain("\n");
+  });
+
   it("indents every line, not only the ones after a break", () => {
     // The split eats leading whitespace, so an indent written into the text
     // survives on the continuation lines and vanishes from the first — which

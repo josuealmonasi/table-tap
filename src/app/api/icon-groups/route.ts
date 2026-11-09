@@ -1,8 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { apiError } from "@/lib/api-error";
 import { jsonBody } from "@/lib/json-body";
-import { actingManager } from "@/lib/api-guard";
-import { frozenBlocks } from "@/lib/plan-guard";
+import { deskMutation } from "@/lib/desk-mutation";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isEmoji, type IconVariant } from "@/lib/icon-groups";
 
@@ -64,12 +63,7 @@ async function writeIcons(groupId: string, icons: ReturnType<typeof cleanIcons>)
   return false;
 }
 
-export async function POST(req: NextRequest) {
-  const actor = await actingManager();
-  if (!actor) return await apiError("apiErr.forbidden", 403);
-  const frozen = await frozenBlocks(actor.restaurantId);
-  if (frozen) return frozen;
-
+export const POST = deskMutation(async (req: NextRequest, actor) => {
   const body = await jsonBody<Body>(req);
   if (!body) return await apiError("apiErr.invalidRequest", 400);
   const name = body.name?.trim();
@@ -103,14 +97,9 @@ export async function POST(req: NextRequest) {
     return await apiError("apiErr.iconGroupSave", 500);
   }
   return NextResponse.json({ id: data.id });
-}
+});
 
-export async function PATCH(req: NextRequest) {
-  const actor = await actingManager();
-  if (!actor) return await apiError("apiErr.forbidden", 403);
-  const frozen = await frozenBlocks(actor.restaurantId);
-  if (frozen) return frozen;
-
+export const PATCH = deskMutation(async (req: NextRequest, actor) => {
   const body = await jsonBody<Body>(req);
   if (!body) return await apiError("apiErr.invalidRequest", 400);
   if (!body.id) return await apiError("apiErr.invalidRequest", 400);
@@ -140,12 +129,9 @@ export async function PATCH(req: NextRequest) {
     if (!(await writeIcons(mine.id, icons))) return await apiError("apiErr.iconGroupSave", 500);
   }
   return NextResponse.json({ ok: true });
-}
+});
 
-export async function DELETE(req: NextRequest) {
-  const actor = await actingManager();
-  if (!actor) return await apiError("apiErr.forbidden", 403);
-
+export const DELETE = deskMutation(async (req: NextRequest, actor) => {
   const body = await jsonBody<Body>(req);
   if (!body) return await apiError("apiErr.invalidRequest", 400);
   const { id } = body;
@@ -166,4 +152,4 @@ export async function DELETE(req: NextRequest) {
   if (error) return await apiError("apiErr.invalidRequest", 500);
   if (!data?.length) return await apiError("apiErr.notFound", 404);
   return NextResponse.json({ ok: true });
-}
+});

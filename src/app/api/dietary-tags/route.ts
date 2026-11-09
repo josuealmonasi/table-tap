@@ -3,6 +3,7 @@ import { apiError } from "@/lib/api-error";
 import { jsonBody } from "@/lib/json-body";
 import { actingManager } from "@/lib/api-guard";
 import { frozenBlocks } from "@/lib/plan-guard";
+import { deskMutation } from "@/lib/desk-mutation";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isEmoji } from "@/lib/icon-groups";
 import { tagKey } from "@/lib/dietary";
@@ -98,9 +99,9 @@ export async function PATCH(req: NextRequest) {
   return NextResponse.json({ ok: true });
 }
 
-export async function DELETE(req: NextRequest) {
-  const actor = await actingManager();
-  if (!actor) return await apiError("apiErr.forbidden", 403);
+// The same freeze as create and edit: a locked restaurant's tags cannot be
+// removed from its dishes either (Codex sweep 3).
+export const DELETE = deskMutation(async (req: NextRequest, actor) => {
 
   const body = await jsonBody<Body>(req);
   if (!body) return await apiError("apiErr.invalidRequest", 400);
@@ -142,4 +143,4 @@ export async function DELETE(req: NextRequest) {
 
   if (error) return await apiError("apiErr.invalidRequest", 500);
   return NextResponse.json({ ok: true, unlinked: tagged?.length ?? 0 });
-}
+});

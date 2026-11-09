@@ -24,6 +24,8 @@ export interface QuantityPromo {
  */
 /** The furthest ahead the cart's "add N more" hint looks. */
 const MAX_HINT_UNITS = 12;
+/** The largest basket of one product the deal maths prices exactly. */
+const MAX_PRICED_UNITS = 10000;
 
 export function promoCost(promo: QuantityPromo, qty: number, unit: number): number {
   if (qty <= 0 || unit < 0) return 0;
@@ -38,27 +40,57 @@ export function promoCost(promo: QuantityPromo, qty: number, unit: number): numb
     return round2((groups * pay + remainder) * unit);
   }
 
-  // Tiered: repeatedly take the largest bracket that still fits, then charge
-  // the leftovers at the normal unit price. Largest-first keeps it predictable
-  // and means a bigger basket is never worse than a smaller one.
+  // Tiered: the cheapest way to make up `qty` from the brackets and single
+  // units at their normal price. Largest-first charged four MX$10 items under
+  // "2 for 15" and "3 for 25" as 25 + 10 = 35 when two pairs cost 30, and a
+  // bracket that ended up dearer than its units (the product's price dropped
+  // after the deal was saved) was still applied: a surcharge called a
+  // promotion. Single units are always an option, so a deal can only ever
+  // lower the bill, and a bigger basket is never priced above its units.
   // Whole units only, as the guard reads them. A tier of 1e-20 passed the
   // "positive" check, and subtracting it from 1 never changed the number: the
   // loop below spun for ever and froze the server for every restaurant.
   const tiers = (promo.tiers ?? [])
     .map(t => ({ qty: Math.floor(Number(t.qty)), price: Number(t.price) }))
-    .filter(t => Number.isFinite(t.qty) && t.qty >= 1 && Number.isFinite(t.price) && t.price >= 0)
-    .sort((a, b) => b.qty - a.qty);
-  if (tiers.length === 0) return round2(qty * unit);
+    .filter(t => Number.isFinite(t.qty) && t.qty >= 1 && Number.isFinite(t.price) && t.price >= 0);
+  if (tiers.length === 0 || !Number.isFinite(qty)) return round2(qty * unit);
+  const unitCents = Math.round(unit * 100);
+  let units = Math.floor(qty);
+  // A huge basket is mostly copies of the best-value bracket: take those off
+  // the top and price the last few thousand exactly. That is exact while the
+  // brackets are small (every real deal); with a giant bracket the old
+  // largest-first count is used, still never above the units' own price.
+  let bulkCents = 0;
+  if (units > MAX_PRICED_UNITS) {
+    if (tiers.some(t => t.qty > 100)) return round2(Math.min(qty * unit, largestFirst(tiers, units, unit)));
+    const bestTier = tiers.reduce((a, b) => b.price / b.qty < a.price / a.qty ? b : a);
+    if (bestTier.price / bestTier.qty < unit) {
+      const copies = Math.floor((units - MAX_PRICED_UNITS) / bestTier.qty) + 1;
+      bulkCents = copies * Math.round(bestTier.price * 100);
+      units -= copies * bestTier.qty;
+    } else return round2(qty * unit);
+  }
+  const best = new Array<number>(units + 1).fill(Infinity);
+  best[0] = 0;
+  for (let n = 1; n <= units; n++) {
+    let cheapest = best[n - 1] + unitCents;
+    for (const tier of tiers) {
+      if (tier.qty <= n) cheapest = Math.min(cheapest, best[n - tier.qty] + Math.round(tier.price * 100));
+    }
+    best[n] = cheapest;
+  }
+  return round2((bulkCents + best[units]) / 100);
+}
 
-  let left = qty;
-  let cost = 0;
-  for (const tier of tiers) {
-    // As many whole brackets as fit, counted rather than taken one at a time.
+/** The previous count: as many of the largest bracket as fit, then the next. */
+function largestFirst(tiers: { qty: number; price: number }[], qty: number, unit: number): number {
+  let left = qty, cost = 0;
+  for (const tier of [...tiers].sort((a, b) => b.qty - a.qty)) {
     const times = Math.floor(left / tier.qty);
     cost += times * tier.price;
     left -= times * tier.qty;
   }
-  return round2(cost + left * unit);
+  return cost + left * unit;
 }
 
 /**

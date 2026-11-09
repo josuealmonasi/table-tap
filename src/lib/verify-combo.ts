@@ -12,12 +12,12 @@ export function verifyCombo(
   qty: number,
   priceMap: Map<string, VerifiableItem>,
   removedExtras: Map<string, string>,
+  isOnOpenMenu: (menuId: string | null) => boolean,
 ): { ok: true; line: OrderLineItem } | { ok: false; rejection: CartRejection } {
   // Extras chosen inside the bundle are charged on top of it, so they get the
   // same treatment as an ordinary line's. Trusting the client here would let
   // a forged payload attach a MX$0 truffle oil to a MX$5 deal.
-  const parentExtras = verifyExtras(line.extras, priceMap, removedExtras);
-  const unmatchedParentExtras = [...parentExtras];
+  const unmatchedParentExtras = [...(line.extras ?? [])];
   const components: ComboComponent[] = [];
 
   // Required option groups apply per component: a deal containing a steak
@@ -33,7 +33,7 @@ export function verifyCombo(
         forName: product.name, itemId: product.id,
       } };
     }
-    const extras = verifyExtras(chosen?.extras, priceMap, removedExtras);
+    const extras = verifyExtras(chosen?.extras, product, priceMap, removedExtras, isOnOpenMenu);
     // The UI copies each upgrade onto the parent. Match one copy at a time:
     // cheese on two plates is two upgrades, while its two views are only one.
     for (const extra of extras) {
@@ -42,11 +42,19 @@ export function verifyCombo(
     }
     components.push({ ...component, mods: result.mods, ...(extras.length ? { extras } : {}) });
   }
-  // Older carts put extras only on the parent. Give those a plate too, so the
-  // ticket cannot omit something the diner paid for. Component-only extras
-  // stay on their plate and are included in the flattened charge below.
-  if (unmatchedParentExtras.length && components.length) {
-    components[0].extras = [...(components[0].extras ?? []), ...unmatchedParentExtras];
+  // Older carts put extras only on the parent. Give those a plate that offers
+  // them, so the ticket cannot omit something the diner paid for or put it on
+  // the wrong dish. Component-only extras stay on their plate and are included
+  // in the flattened charge below.
+  for (const extra of unmatchedParentExtras) {
+    const plate = components.find(component => priceMap.get(component.itemId)?.item_addons
+      ?.some(link => link.addon_id === extra.id));
+    if (!plate) {
+      removedExtras.set(extra.id, extra.name);
+      continue;
+    }
+    const extras = verifyExtras([extra], priceMap.get(plate.itemId)!, priceMap, removedExtras, isOnOpenMenu);
+    if (extras.length) plate.extras = [...(plate.extras ?? []), ...extras];
   }
   const comboExtras = components.flatMap(component => component.extras ?? []);
 

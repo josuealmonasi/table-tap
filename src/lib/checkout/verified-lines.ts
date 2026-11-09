@@ -18,8 +18,8 @@ interface VerifiedLinesInput {
   items: OrderLineItem[];
   /** Active promotions for this restaurant, from the DB. */
   promotions: PromotionWithItems[];
-  /** Whether a category sits on a menu that is serving right now. */
-  onOpenMenu: (categoryId: string | null) => boolean;
+  /** Whether the item's own menu is serving right now. */
+  onOpenMenu: (menuId: string | null) => boolean;
   /** Defaults to `MAX_CART_LINES`; the card path has a lower one. */
   maxLines?: number;
 }
@@ -43,7 +43,7 @@ export async function verifiedLines(
 
   const { data: dbItems, error } = await supabase
     .from("menu_items")
-    .select("id, name, price, emoji, available, discount_pct, modifiers, category_id, skips_kitchen, categories(station)")
+    .select("id, name, price, emoji, available, discount_pct, modifiers, category_id, menu_id, is_addon, item_addons!product_id(addon_id), skips_kitchen, categories(station)")
     .in("id", refs.ids)
     .eq("restaurant_id", restaurantId);
   if (error || !dbItems) return { ok: false, rejection: null };

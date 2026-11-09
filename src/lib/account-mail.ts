@@ -23,6 +23,8 @@ export function statementMail(
   const time = (iso: string) =>
     new Intl.DateTimeFormat(dateLocale(opts.locale), { hour: "numeric", minute: "2-digit", timeZone: opts.timeZone })
       .format(new Date(iso));
+  const date = (iso: string) =>
+    new Intl.DateTimeFormat(dateLocale(opts.locale), { dateStyle: "medium", timeZone: opts.timeZone }).format(new Date(iso));
 
   const subject = t("account.mailSubject", { restaurant: opts.restaurant });
   const lines: string[] = [t("account.mailIntro", { name: opts.name, restaurant: opts.restaurant }), ""];
@@ -39,7 +41,21 @@ export function statementMail(
     }
     html += "</ul>";
   }
-  const owed = t("account.mailOwed", { amount: balancesLabel(statement.balances ?? [{ currency: statement.currency ?? opts.currency, amount: statement.owed }]) });
+  // The email and the page must tell the same payment and return story.
+  const section = (title: string, rows: string[]): void => {
+    if (!rows.length) return;
+    lines.push("", title, ...rows.map(row => `  ${row}`));
+    html += `<h3>${esc(title)}</h3><ul>${rows.map(row => `<li>${esc(row)}</li>`).join("")}</ul>`;
+  };
+  section(t("account.paidBefore"), statement.payments.map(p => {
+    const amount = p.currency ? formatMoney(p.amount, p.currency) : `${Number(p.amount).toFixed(2)} · ${t("attribution.currencyUnknown")}`;
+    return `${date(p.at)} · ${amount} · ${t(p.method === "cash" ? "account.byCash" : "account.byCard")}`;
+  }));
+  section(t("returns.title"), (statement.returns ?? []).map(r =>
+    `${formatMoney(Number(r.amount), r.currency)} · ${t(`returns.${r.status}`)}`));
+  const balances = statement.balances ?? [{ currency: statement.currency ?? opts.currency, amount: statement.owed }];
+  // Paying the last charge leaves an empty list, not an empty amount on paper.
+  const owed = t("account.mailOwed", { amount: balancesLabel(balances) || formatMoney(0, statement.currency ?? opts.currency) });
   lines.push("", owed, t("account.mailPay", { link: opts.link }));
   html += `<p style="font-size:18px;font-weight:700">${esc(owed)}</p><p><a href="${esc(opts.link)}">${esc(t("account.mailPayLink"))}</a></p>`;
   return { subject, text: lines.join("\n"), html };

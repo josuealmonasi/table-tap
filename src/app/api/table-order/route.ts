@@ -9,11 +9,11 @@ import { frozenBlocks, planBlocks } from "@/lib/plan-guard";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { capNote } from "@/lib/notes";
 import { priceCart } from "@/lib/pricing";
-import { cartReferences, verifyCart, type VerifiableItem } from "@/lib/verify-cart";
+import { verifiedLines } from "@/lib/checkout/verified-lines";
+import { orderableNow } from "@/lib/checkout/orderable-now";
 import { promotionsOnSale } from "@/lib/promotions-on-sale";
-import { getPlan, tierIncludes } from "@/lib/plan-server";
+import { getPlan } from "@/lib/plan-server";
 import { toCartPromos } from "@/lib/promotions";
-import { DEFAULT_TIME_ZONE, openMenuIds, type MenuOpenState } from "@/lib/open-menus";
 import { raiseStockNotifications, releaseStock, reserveStock } from "@/lib/stock-service";
 import { openSession } from "@/lib/table-session";
 import { logEvent } from "@/lib/activity-log";
@@ -103,52 +103,17 @@ export async function POST(req: NextRequest) {
     .maybeSingle();
   if (!restaurant) return await apiError("apiErr.restaurantNotFound", 404);
 
-  const [menusRes, catsRes] = await Promise.all([
-    db.from("menus").select("id, active, schedule").eq("restaurant_id", actor.restaurantId),
-    db.from("categories").select("id, menu_id").eq("restaurant_id", actor.restaurantId),
-  ]);
-
   // Only what the restaurant is actually serving. A waiter should no more be
   // able to write down a dish from a menu that closed at lunch than a diner can
   // order one — the same decision, from the same function.
-  const { ids: openIds, closedNow } = openMenuIds(
-    (menusRes.data as MenuOpenState[] | null) ?? [],
-    (restaurant.timezone as string | null) ?? DEFAULT_TIME_ZONE,
-    { schedules: await tierIncludes(actor.restaurantId, "menuSchedules") },
-  );
+  const { closedNow, onOpenMenu } = await orderableNow(db, actor.restaurantId);
   if (closedNow) return await apiError("apiErr.closedNow", 409);
 
-  const menuOfCategory = new Map(
-    ((catsRes.data as { id: string; menu_id: string | null }[] | null) ?? []).map(c => [c.id, c.menu_id]),
-  );
-  /** Extras have no category of their own; they ride with their product. */
-  const isOnOpenMenu = (categoryId: string | null): boolean => {
-    if (!categoryId) return true;
-    const menuId = menuOfCategory.get(categoryId);
-    return !menuId || openIds.includes(menuId);
-  };
-
   const promotions = await promotionsOnSale(db, actor.restaurantId);
-  const refs = cartReferences(items, promotions);
-  if (!refs.ok) {
-    const { key, vars } = rejectionMessage(refs.rejection);
-    return await apiError(key, 400, vars);
-  }
-  const referencedIds = refs.ids;
-  const { data: dbItems } = await db
-    .from("menu_items")
-    .select("id, name, price, emoji, available, discount_pct, modifiers, category_id, skips_kitchen, menu_id, categories(station)")
-    .in("id", referencedIds)
-    .eq("restaurant_id", actor.restaurantId);
-  if (!dbItems) return await apiError("apiErr.verifyItems", 400);
-
-  const result = verifyCart({
-    items,
-    promotions,
-    dbItems: dbItems as VerifiableItem[],
-    isOnOpenMenu,
-  });
+  // Extras have their own menu; a section is only where a dish is shown.
+  const result = await verifiedLines(db, actor.restaurantId, { items, promotions, onOpenMenu });
   if (!result.ok) {
+    if (!result.rejection) return await apiError("apiErr.verifyItems", 400);
     const { key, vars } = rejectionMessage(result.rejection);
     return await apiError(key, 400, vars);
   }

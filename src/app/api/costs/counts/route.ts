@@ -48,6 +48,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   if (!data) return await apiError("apiErr.notFound", 404);
   const rows = data as { ingredient_id: string; counted: number; expected: number | null; movement_cutoff?: number }[];
   await logEvent({
+    operationKey: ref ? `count:${ref.toLowerCase()}` : undefined,
     restaurantId: actor.restaurantId, actor: actor.email, entity: "costs", action: "closed",
   });
   return NextResponse.json({

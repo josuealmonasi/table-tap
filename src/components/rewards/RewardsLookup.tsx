@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useLocale, useT } from "@/lib/i18n/context";
 import { formatCode, normalizeCode } from "@/lib/loyalty/code";
+import { forgetDeviceCode } from "@/lib/loyalty/device";
 import RewardsCard, { type CardStanding } from "./RewardsCard";
 import CardDownload from "@/components/loyalty/CardDownload";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
@@ -53,6 +54,7 @@ export default function RewardsLookup({ initialCode = "", back = null }: Rewards
         setError(data.error ?? t("apiErr.generic"));
         return;
       }
+      forgetDeviceCode(normal);
       setCard(null);
       setCode("");
       setNotice(t("loyaltyOffer.forgotten"));
@@ -74,6 +76,8 @@ export default function RewardsLookup({ initialCode = "", back = null }: Rewards
         const res = await fetch(`/api/rewards?c=${normal}`);
         const data = await res.json();
         if (!res.ok) {
+          // No such card any more: the menu's "My card" must stop opening it.
+          if (res.status === 404) forgetDeviceCode(normal);
           setCard(null);
           setError(data.error ?? t("apiErr.generic"));
         } else {

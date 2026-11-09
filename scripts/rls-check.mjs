@@ -598,8 +598,9 @@ if (!signIn.error && theirs) {
       ? ok("the kitchen cannot read the takings")
       : bad("the kitchen reads payments — it can see what the floor collected");
 
-    // And the floor still can, or the corte stops working for the people who
-    // actually count the drawer.
+    // Nor the floor: every money screen reads on the server behind its own
+    // role check, and a direct select handed a cashier every collector's
+    // receipts (Codex sweep 2).
     const floor = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL,
       process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY,
@@ -610,9 +611,9 @@ if (!signIn.error && theirs) {
     });
     const paid = await floor.from("payments").select("id").limit(1);
     if (floorErr) bad(`cannot sign in as the cashier — whether they read payments went unchecked (${floorErr.message})`);
-    else (!paid.error && (paid.data ?? []).length > 0)
-      ? ok("a cashier still reads the takings they took")
-      : bad("a cashier cannot read payments — the corte will not build");
+    else (paid.error || (paid.data ?? []).length === 0)
+      ? ok("a cashier cannot read the payment ledger directly")
+      : bad("a cashier reads payments — every collector's receipts, restaurant-wide");
   }
 }
 

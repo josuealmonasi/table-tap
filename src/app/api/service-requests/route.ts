@@ -1,3 +1,4 @@
+import { serviceRequestCutoff } from "@/lib/service-requests";
 import { ownBillAccess } from "@/lib/legacy-bill-access";
 import { NextRequest, NextResponse } from "next/server";
 import { apiError } from "@/lib/api-error";
@@ -66,6 +67,7 @@ export async function POST(req: NextRequest) {
   }
 
   // Don't stack duplicates: one open request per table+kind is enough.
+  // An expired call is no longer on the board and must not swallow a new tap.
   // Scoped to this restaurant too: matched on the table alone, a row another
   // restaurant's staff had pointed at this table answered "already asked", and
   // this table's call for the bill reached nobody.
@@ -76,6 +78,7 @@ export async function POST(req: NextRequest) {
     .eq("table_id", tableId)
     .eq("kind", kind)
     .eq("status", "open")
+    .gte("created_at", serviceRequestCutoff())
     .limit(1);
   if (existing?.length) return NextResponse.json({ ok: true, duplicate: true });
 

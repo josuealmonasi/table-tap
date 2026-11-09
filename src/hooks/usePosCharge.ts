@@ -9,8 +9,7 @@ import { useT } from "@/lib/i18n/context";
 import { useToast } from "@/components/ui/Toast";
 import { shortMessage } from "@/lib/stock-message";
 import { formatMoney } from "@/lib/format";
-import { printableReceipt } from "@/lib/print-document";
-import { printWhenReady } from "@/lib/print-window";
+import { reserveReceiptPopup, type ReceiptPopup } from "@/lib/receipt-popup";
 import type { Restaurant } from "@/lib/types";
 import type { AccountListItem } from "@/hooks/useOpenAccounts";
 import type { usePosCart } from "@/hooks/usePosCart";
@@ -89,17 +88,18 @@ export function usePosCharge({ collector, collectorContext, restaurant, cart, de
    * with the screen's greys pushed to black — so a printed ticket cannot drift
    * away from an emailed one.
    */
-  function printReceipt(html: string): void {
-    const w = window.open("", "_blank", "width=380,height=640");
-    if (!w) {
-      // A blocked pop-up must not look like a printed ticket.
-      toast(t("pos.printBlocked"), "error");
-      return;
-    }
-    w.document.write(printableReceipt(html, restaurant.name));
-    w.document.close();
-    w.focus();
-    printWhenReady(w);
+  function printReceipt(html: string, paper?: ReceiptPopup): void {
+    paper?.print(html, restaurant.name);
+  }
+
+  /** Paper opened only if it turns out to be needed: the email fallback. */
+  function reserveLate(): ReceiptPopup | undefined {
+    if (details.noTicket) return undefined;
+    let real: ReceiptPopup | null = null;
+    const open = () => real ??= reserveReceiptPopup(reason => {
+      toast(t(reason === "blocked" ? "pos.printBlocked" : "pos.printFailed"), "error");
+    });
+    return { print: (html, title) => open().print(html, title), close: () => real?.close() };
   }
 
   /**
@@ -108,12 +108,12 @@ export function usePosCharge({ collector, collectorContext, restaurant, cart, de
    * taken, so a late send records it as it happened. Only money already in
    * hand — an account's ceiling cannot be checked without the server.
    */
-  function showHeld(sale: HeldSale, answered = false): void {
+  function showHeld(sale: HeldSale, answered = false, paper?: ReceiptPopup): void {
     if (!details.noTicket) {
       printReceipt(offlineReceipt(
         { posRef: sale.posRef, at: sale.at, lines: sale.items, charge: sale.charge, method: sale.method, currency: restaurant.currency },
         { name: restaurant.name, timeZone: restaurant.timezone ?? "America/Mexico_City", locale: dateLocale(locale) }, t,
-      ));
+      ), paper);
     }
     setTicket({ code: orderCode(sale.posRef), total: sale.charge.total, handedOver: true, offline: true, answered });
     rememberLastSale(restaurant.id, sale.items);
@@ -146,10 +146,20 @@ export function usePosCharge({ collector, collectorContext, restaurant, cart, de
       toast(t("pos.offlineNoStorage"), "error");
       return;
     }
+    // Reserved during the tap only when the ticket will print: a sale sent by
+    // email would otherwise flash an empty window (a new tab on an iPad) on
+    // every charge. If that email fails, the fallback print opens late and may
+    // be blocked; the toast says so and Orders reprints it.
+    const printsHere = !details.noTicket && !(canEmailReceipt && details.email.trim());
+    const paper = !printsHere ? reserveLate() : reserveReceiptPopup(reason => {
+      // A blocked pop-up must not look like a printed ticket.
+      toast(t(reason === "blocked" ? "pos.printBlocked" : "pos.printFailed"), "error");
+    });
     if (!navigator.onLine) {
       offline.setOnline(false);
-      if (sale) showHeld(sale);
+      if (sale) showHeld(sale, false, paper);
       else toast(t("pos.offlineNoAccount"), "error");
+      paper?.close();
       return;
     }
     setBusy(true);
@@ -192,7 +202,7 @@ export function usePosCharge({ collector, collectorContext, restaurant, cart, de
         // only record of the sale; if it did, sending it again is answered
         // with the sale it already rang.
         offline.setOnline(false);
-        if (sale) showHeld(sale);
+        if (sale) showHeld(sale, false, paper);
         else toast(t("done.networkError"), "error");
         return;
       }
@@ -209,7 +219,7 @@ export function usePosCharge({ collector, collectorContext, restaurant, cart, de
         // that was refused. Only an answer that says nothing (a 5xx), or one
         // that says the money is already in the drawer (`held`), keeps the
         // sale on this device.
-        if (sale && (res.status >= 500 || data.held)) showHeld(sale, true);
+        if (sale && (res.status >= 500 || data.held)) showHeld(sale, true, paper);
         else if (sale) offline.discard(sale);
         if (data.code === "outOfStock") {
           // With the numbers in it. The refusal has always known how many are
@@ -222,7 +232,7 @@ export function usePosCharge({ collector, collectorContext, restaurant, cart, de
         return;
       }
       if (sale && !offline.acknowledge(sale, data)) {
-        showHeld(sale, true);
+        showHeld(sale, true, paper);
         toast(t("pos.saleNeedsReview"), "error");
         return;
       }
@@ -242,7 +252,7 @@ export function usePosCharge({ collector, collectorContext, restaurant, cart, de
       if (data.receipt === "failed") toast(t("pos.receiptFailed"), "error");
       else if (data.receipt === "sent") toast(t("pos.receiptSent"));
       // No address, or an address the mail never reached: it prints.
-      if (data.receiptHtml) printReceipt(data.receiptHtml);
+      if (data.receiptHtml) printReceipt(data.receiptHtml, paper);
       setTicket({
         code: data.code,
         total: data.total,
@@ -255,9 +265,10 @@ export function usePosCharge({ collector, collectorContext, restaurant, cart, de
       // The kitchen board and the badges have a new ticket to show.
       router.refresh();
     } catch {
-      if (sale) showHeld(sale);
+      if (sale) showHeld(sale, false, paper);
       toast(t("done.networkError"), "error");
     } finally {
+      paper?.close();
       inFlight.current = false;
       setBusy(false);
     }

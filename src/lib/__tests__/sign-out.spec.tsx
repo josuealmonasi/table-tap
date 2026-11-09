@@ -110,3 +110,36 @@ describe("sign-out waits for the worker to clear disk, but never on it", () => {
     expect(postMessage).toHaveBeenCalledOnce();
   });
 });
+
+describe("held sales and a login that cannot send them (sweep 3, finding 2)", () => {
+  it("still refuses a login that can send them", async () => {
+    readHeld.mockReturnValue([{}]);
+    const onHeld = vi.fn();
+    await signOutEverywhere(onHeld);
+    expect(onHeld).toHaveBeenCalledWith(1);
+    expect(signOut).not.toHaveBeenCalled();
+  });
+
+  it("signs out a login that cannot, leaving the sales on the device", async () => {
+    readHeld.mockReturnValue([{}]);
+    const onHeld = vi.fn();
+    const signingOut = signOutEverywhere(onHeld, false);
+    await dispatched();
+    acknowledge("CLEARED");
+    await signingOut;
+    expect(onHeld).not.toHaveBeenCalled();
+    expect(signOut).toHaveBeenCalledOnce();
+    expect(assign).toHaveBeenCalledWith("/login");
+  });
+});
+
+describe("the navbar's held-sales rule", () => {
+  it("is TAKES_COUNTER_ORDERS for every role, without importing the server's membership reads", async () => {
+    vi.doMock("@/lib/current-user", () => ({ currentUser: vi.fn() }));
+    vi.doMock("@/lib/supabase/admin", () => ({ createAdminClient: vi.fn() }));
+    const { ROLES, TAKES_COUNTER_ORDERS } = await import("@/lib/membership");
+    const { sendsHeldSales } = await import("@/hooks/useSignOut");
+    for (const role of ROLES) expect(sendsHeldSales(role), role).toBe(TAKES_COUNTER_ORDERS(role));
+    expect(sendsHeldSales("admin")).toBe(false);
+  });
+});

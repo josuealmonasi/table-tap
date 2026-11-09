@@ -28,11 +28,12 @@ export function useTableMembership(restaurantId: string, tableId: string | null)
     if (!targetTable) return;
     let active = true;
     let running = false;
+    const controller = new AbortController();
     const read = async () => {
       if (running) return;
       running = true;
       try {
-        const next = await requestPhoneMembership(restaurantId, targetTable);
+        const next = await requestPhoneMembership(restaurantId, targetTable, controller.signal);
         if (!active) return;
         const approved = next.status === "approved" && next.sessionId !== null;
         if (approved && next.sessionId) rememberSitting(restaurantId, next.sessionId, targetTable);
@@ -52,6 +53,7 @@ export function useTableMembership(restaurantId: string, tableId: string | null)
     document.addEventListener("visibilitychange", visible);
     return () => {
       active = false;
+      controller.abort();
       clearInterval(timer);
       document.removeEventListener("visibilitychange", visible);
     };

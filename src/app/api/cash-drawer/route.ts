@@ -46,6 +46,7 @@ export async function POST(req: NextRequest) {
   if (!data) return await apiError("apiErr.noOpenShift", 409);
 
   await logEvent({
+    operationKey: `withdrawal:${data.id}`,
     restaurantId: actor.restaurantId,
     actor: actor.email,
     entity: "cash",

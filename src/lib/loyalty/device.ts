@@ -10,6 +10,8 @@
 // wrapped: a phone that cannot remember is offered the card, never broken.
 // ============================================================================
 
+import { normalizeCode } from "./code";
+
 export type DeviceCard = { code: string } | { declined: true } | null;
 
 const key = (restaurantId: string) => `tt-loyalty:${restaurantId}`;
@@ -48,4 +50,22 @@ export function rememberDeclined(restaurantId: string): void {
 /** Whether to offer a card at all: nothing made here, and not told no. */
 export function shouldOffer(restaurantId: string): boolean {
   return readDeviceCard(restaurantId) === null;
+}
+
+/**
+ * Forgets a card this phone saved, wherever it was saved. Deleting the card
+ * left its code here, and "My card" on the menu then opened a card that no
+ * longer existed (sweep 3, finding 6).
+ */
+export function forgetDeviceCode(code: string): void {
+  try {
+    for (let i = window.localStorage.length - 1; i >= 0; i--) {
+      const name = window.localStorage.key(i);
+      if (!name?.startsWith("tt-loyalty:")) continue;
+      const saved = readDeviceCard(name.slice("tt-loyalty:".length));
+      if (saved && "code" in saved && normalizeCode(saved.code) === normalizeCode(code)) window.localStorage.removeItem(name);
+    }
+  } catch {
+    // Storage refused: nothing was saved to forget.
+  }
 }

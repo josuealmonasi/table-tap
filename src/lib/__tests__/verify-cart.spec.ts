@@ -24,6 +24,9 @@ const item = (over: Partial<VerifiableItem> = {}): VerifiableItem => ({
   discount_pct: 0,
   modifiers: null,
   category_id: "mains",
+  menu_id: "dinner",
+  is_addon: false,
+  item_addons: [{ addon_id: "truffle" }, { addon_id: "bacon" }],
   ...over,
 });
 
@@ -62,7 +65,7 @@ describe("verifyCart — prices come from the database", () => {
   it("re-prices extras, so a forged free upgrade still costs money", () => {
     const res = run(
       [line({ extras: [{ id: "truffle", name: "Truffle oil", emoji: "🍄", price: 0 }] })],
-      [item(), item({ id: "truffle", name: "Truffle oil", price: 45, emoji: "🍄" })],
+      [item(), item({ id: "truffle", name: "Truffle oil", price: 45, emoji: "🍄", is_addon: true })],
     );
     expect(res.ok).toBe(true);
     if (res.ok) expect(res.lines[0].extras?.[0].price).toBe(45);
@@ -191,7 +194,7 @@ describe("verifyCart — combos are priced by the promotion, not the cart", () =
           extras: [{ id: "truffle", name: "Truffle oil", emoji: "🍄", price: 0 }],
         }),
       ],
-      [...parts, item({ id: "truffle", name: "Truffle oil", price: 45, emoji: "🍄" })],
+      [...parts, item({ id: "truffle", name: "Truffle oil", price: 45, emoji: "🍄", is_addon: true })],
       [combo],
     );
     expect(res.ok).toBe(true);

@@ -14,13 +14,13 @@ vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({ from: (tabl
   const result = () => ({ error: null, data: table === "restaurants"
     ? { id: "r", currency: "MXN", low_stock_alerts_enabled: state.enabled, low_stock_threshold: 2 }
     : table === "restaurant_tables" ? { id: "00000000-0000-4000-8000-0000000000f3", label: "1" } : table === "orders" ? { id: "o" } : [] });
-  const q = { select: (columns: string) => { if (table === "restaurants") state.selected = columns; return q; },
+  const q = { select: (columns: string) => { if (table === "restaurants") state.selected += columns; return q; },
     eq: () => q, in: () => q, insert: () => q, maybeSingle: async () => result(), single: async () => result(),
     then: (resolve: (v: unknown) => unknown) => Promise.resolve(result()).then(resolve) };
   return q;
 } }) }));
 const { POST } = await import("../route");
-beforeEach(() => { vi.clearAllMocks(); state.reserve.mockResolvedValue({ ok: true, reservationId: "res", low: [{ itemId: "dish", stock: 1, kind: "low_stock" }] }); });
+beforeEach(() => { vi.clearAllMocks(); state.selected = ""; state.reserve.mockResolvedValue({ ok: true, reservationId: "res", low: [{ itemId: "dish", stock: 1, kind: "low_stock" }] }); });
 it.each([false, true])("J18: waiter stock alerts respect the manager's preference (%s)", async enabled => {
   state.enabled = enabled;
   const response = await POST(new NextRequest("https://test/api/table-order", { method: "POST", body: JSON.stringify({ tableId: "00000000-0000-4000-8000-0000000000f3", items: [{ itemId: "dish", name: "Dish", price: 10, qty: 1 }] }) }));

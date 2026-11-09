@@ -34,6 +34,14 @@ and that a new party cannot see the previous party's waiting phones.
 | A duplicate refund tracks customer completion and fee completion separately (S11 I5) | A failed fee return disappeared behind an already-refunded customer payment |
 | A duplicate refund keeps its original charge currency everywhere (S11 I9) | Changing the menu currency relabelled money owed back and the approval amount |
 |---|---|
+| A retried financial operation writes one activity row (Sweep 1 #8) | One saved withdrawal, shift close, waste entry or count appeared two or more times after a lost reply |
+| A floor ticket without a stage button still names its actual stage (Sweep 1 #7) | A waiter saw “Listo” on new and preparing food because only the kitchen could advance it |
+| A call expires for deduplication and the board together (Sweep 1 #6) | An eight-hour-old call disappeared on reload but swallowed the diner’s next tap; an open board kept it forever |
+| A failed Pedidos feed says so and offers retry (Sweep 1 #5) | A refused first orders or calls read became an empty board saying nobody was waiting |
+| Membership polls release their running latch after a stalled read (Sweep 1 #4) | One unanswered admission read stopped every later poll on the staff board and diner phone |
+| An extra belongs to its plate and can be sold now (Sweep 2 finding 2) | A dinner cart bought a closed-lunch steak as an extra without its required choices; combo extras bypassed the same saved links |
+| Each item's own menu decides availability (Sweep 2 finding 3) | An uncategorized item from a closed menu, or one shown under an open menu's section, was still sold |
+| Every icon-group write shares the desk freeze (Sweep 2 finding 4) | Creating and editing stopped on a frozen subscription while deleting still worked |
 | Write-off confirmations use per-order decimal cents (#576 R4) | Frozen slot totals and binary rounding quoted 2.01 instead of 2.02, or 0.50 instead of 0.51, while the writer required more |
 | Receipt suppression uses discovery begun for the settlement decision (#576 R3) | An earlier unsplit read, or a failed latest read, offered a whole-order receipt after parts paid |
 | Write-off confirms only the unpaid remainder (#574-5) | The open-bill row showed MX$20 left while its confirmation claimed MX$100 lost |
@@ -5626,6 +5634,145 @@ logged; its parts stay held, so nothing can be paid twice. The fixture now
 writes the card path's own key, and the seed picks a bill large enough for
 three card parts, so its card hold is never refused at random.
 
+### A deal only ever lowers the bill
+
+The saved deal and today's product price had to agree. Tiered deals were
+priced largest bracket first, and a bracket was applied even when it cost more
+than its units: "2 for MX$180" saved when the dish cost MX$100 charged MX$180
+for two once the dish dropped to MX$80, and four MX$10 items under "2 for 15"
+and "3 for 25" cost 35 instead of two pairs at 30 (Codex sweep 1). The tier
+maths now finds the cheapest combination with single units always allowed at
+their normal price, so no basket is ever dearer than its units, and pricing
+clamps a deal's saving at zero. `promo-math.spec.ts`.
+
+## An admission read that stopped the clock (Sweep 1 #4)
+
+The next poll and the previous read had to agree about when a read ends. A
+connection that never answered kept `running` true forever. Both membership
+pollers now abort a read after twenty seconds, including its response body,
+and cancel it on teardown. The serialized diner reader also releases its
+queue, and waiting for another tab’s Web Lock has the same deadline. Other interval hooks have no matching running latch.
+`membership-timeout.spec.tsx` stalls each reader, checks cancellation and the
+next poll, and checks teardown; the existing membership tests retain slow-read
+serialization and last-good data coverage.
+
+
+## Nobody waiting, or a read that failed (Sweep 1 #5)
+
+The server read and the board's empty message had to agree about whether
+there was an answer. Supabase returned an error, but Pedidos discarded it and
+painted empty lists. Both kitchen and floor feeds now carry their failure to
+the board, which offers Retry in both languages and never claims there are no
+live orders while either feed has failed. Available tickets remain usable; a
+failed calls refresh keeps the last good list. `kitchen-orders-page.spec.tsx`
+refuses each initial feed; `inactive-orders.react-component.spec.tsx` checks the
+error, retry click and successful recovery.
+
+
+## The raised hand nobody could see (Sweep 1 #6)
+
+The duplicate check and the board had to agree about which open calls still
+count. Pedidos loaded eight hours, but the route matched all time, so an old
+call hidden from staff made a new tap say success without calling anybody.
+Both now use `serviceRequestCutoff`; the live calls list also ages out every
+thirty seconds, including late realtime inserts. The existing eight-hour
+window stays the same and never prevents a fresh call.
+`service-request-expiry.spec.ts` checks one millisecond before, at and after
+the cutoff; `service-request-expiry.spec.tsx` keeps a board open across it.
+
+
+## Listo before the food was ready (Sweep 1 #7)
+
+The stage badge and the footer had to agree about the food. A waiter cannot
+start preparation, so the missing button fell through to a green “Listo”.
+That fallback now uses the same stage label and colour as the badge. Existing
+English and Spanish stage names cover it; ready tickets still offer delivery
+and kitchen tickets still offer preparation. `order-card-stage.spec.tsx`
+renders both languages and checks those permissions as well as the footer.
+
+
+## One withdrawal, three lines in the drawer (Sweep 1 #8)
+
+The saved operation and its activity had to agree about what a retry means.
+Withdrawal, shift-close, waste and count RPCs replay their saved result, but
+the routes appended another log every time. Their activity now has a stable
+UUID derived from restaurant, entity, action and operation identity, inserted
+with `onConflict: "id", ignoreDuplicates: true`. Concurrent retries cannot
+append or replace the first line. A failed log stays best-effort, so money
+operations still succeed and a retry can repair the missing line. No schema
+change is needed; previously duplicated rows are not rewritten.
+
+`financial-activity-retry.spec.ts` exercises each route through the real
+logger with a mocked database, including concurrent retries, a failed log,
+another actor's replay, distinct operations and restaurant separation. The
+purchase retry already logs in its SQL transaction; account collections and
+POS/table orders skip duplicate results, split-slot receipts already use their
+receipt id, and terminal deposits refuse an already marked day before logging.
+Those do not append activity on a successful replay.
+### A receipt is recorded when it was written, not when its transaction began
+
+The cash close and its receipts had to agree on which side of the cutoff each
+receipt fell. The close stamps its cutoff with `clock_timestamp()` after taking
+the money lock, but payments defaulted `recorded_at` to `now()`, the
+transaction's start. A POS sale that began before a close and waited for the
+lock committed afterwards with a recorded time before the cutoff, so the
+close's reconstruction included a receipt the close never counted and
+reported its expected cash as inconsistent (Codex sweep 1). `recorded_at`
+now defaults to `clock_timestamp()`. `close-receipt-time.spec.ts`.
+### The payment ledger is management's to read
+
+The table's policy and the app's own role checks had to agree. Every money
+screen reads payments on the server with the secret key, behind a role check
+(the takings route refuses a cashier), yet the policy let any waiter or
+cashier select the whole ledger directly: every collector's receipts, amounts
+and tips (Codex sweep 2). Only managers and owners read it now; `pnpm rls`
+asserts a cashier cannot, where it used to assert the opposite.
+
+## Extras belong to a plate, not just to a restaurant (Sweep 2 finding 2)
+
+The extras a dish offers and the extras the server accepted had to agree.
+Checkout and POS fetched prices but never checked the product's saved links,
+the extra flag, its menu, or required choices. A closed-lunch steak could ride
+along with dinner as an extra without anyone choosing how to cook it.
+
+`verifiedLines` now reads the saved links with each restaurant-scoped item.
+`verifyExtras` checks those links, the extra flag, availability, its own open
+menu and required choices for plain dishes and every combo plate. Extras carry
+no choices, so one that now needs an answer follows the existing extras-changed
+confirmation: remove that extra and let the rest of the cart be ordered.
+Legacy combo extras saved only on the parent go to a plate that offers them.
+Waiter orders use the same verification; offline price comparison reads the
+same fields while preserving its existing closed/sold-out waiver and manager
+approval path for changed sales.
+
+`sale-menu-verification.spec.ts` first reproduced the closed-lunch steak and
+checks each rule on plain lines, combo parents and combo components.
+`cart-integrity.spec.ts` keeps combo price, stock and ticket copies in agreement.
+
+## A section does not open an item's menu (Sweep 2 finding 3)
+
+The item's own menu and the availability check had to agree. The check instead
+followed its category, treating a missing category as always open. A closed-menu
+item could be sold uncategorized or under another menu's section.
+
+`orderableNow` now checks menu ids directly. `verifyCart` passes each product's
+and combo component's saved `menu_id`, as `verifyExtras` does for extras.
+An item without an open menu cannot be sold. `sale-menu-verification.spec.ts`
+checks closed-menu items with no category and with an open menu's category,
+open uncategorized items, and closed combo components.
+
+## Deleting an icon group is desk work too (Sweep 2 finding 4)
+
+The subscription freeze and every icon-group write had to agree. POST and
+PATCH checked the freeze but DELETE forgot it. `freeze.spec.ts` first reproduced
+a successful deletion on a frozen restaurant.
+
+All three handlers now run through `deskMutation`, which resolves a manager
+and checks the freeze before reading a body or reaching the database. Use that
+shared wrapper for new unconditional manager desk writes. Payments, sign-out
+and floor work keep their existing guards. The spec checks every verb refuses
+before database access, and that an open desk can still delete only its own
+group without claiming another restaurant's group was deleted.
 ### A split start ends when its operation ends (#574-3)
 
 The phone's retry reference and the split's lifetime had to agree. A successful
@@ -5765,3 +5912,87 @@ open or paid page, or Stripe being unreachable, keeps the refusal. The
 walkout write-off reads open pages too instead of `card_checkout_at`, which a
 divided bill's own part pages stamp and never clear (R2).
 `whole-bill-pages.spec.ts`, `split-574-sql.spec.ts`.
+
+A shared tablet has one browser and many people, and three things on it had
+to agree with who is signed in now (sweep 3). The kitchen board's offline
+queue replayed the last person's stored moves under the next login's cookies,
+and a flush wrote back its own snapshot, erasing any move queued while it
+waited; moves now carry their user, another login's are dropped unsent, and a
+flush removes exactly what it handled (`useRestaurantOrders.spec.tsx`).
+Signing out in one tab retired the navigation's cache but left the page
+itself mounted in the others, account statement included; a dashboard tab now
+leaves for the sign-in screen, or reloads for a fresh check of a new login.
+Deleting a visit card left its code saved on the phone, so the menu's
+"My card" kept opening a card that no longer existed
+(`loyalty-device.spec.ts`). A token refresh renewed the offline window from
+the page's own restaurant and role, so a demoted manager's pages stayed
+renewable while the tab was open; the server now reads the membership again
+(`service-worker-registrar.spec.tsx`). And a cashier moved to the kitchen with
+sales held could neither send them nor sign out; a login that cannot send them
+now signs out and leaves them for a manager (`sign-out.spec.tsx`).
+What a receipt, a corte or a printer says had to agree with the money behind
+it (sweep 4). A paid order cancelled and refunded in full still printed
+"Total MX$100.00": a fresh receipt read returns and forgiveness but not a
+cancellation, which is now read as the return of what was left, proved by its
+refund operations like any return (`returns-receipt-source.spec.ts`). The
+receipt route kept the first 40 of a sitting's orders and emailed them as the
+whole bill, MX$10 short at 41; it now takes up to 100 and refuses more, never
+cutting the bill (`receipt-print-route.spec.ts`). The printed corte showed
+each shift in the restaurant's current currency while the shift's record used
+its own; both use the shift's now (`corte-print.spec.ts`). And a cancelled
+order's job stayed in the printer queue, so a printer coming back online
+printed the cancelled meal as an ordinary ticket; the queue skips it and the
+fetch refuses it (`cloudprnt-delivery.spec.ts`).
+## Print sweep 4
+
+| Rule | Two places that had to agree | Regression coverage |
+|---|---|---|
+| A slow receipt read keeps its click and cannot undo a sale (print sweep 4, finding 5) | The browser popup and the completed sale | `pos-receipt-popup.spec.tsx`, `return-reprint.spec.tsx` |
+| Statement mail includes payments, returns and zero debt (print sweep 4, finding 6) | The statement screen and the emailed copy | `account-mail.spec.ts` |
+| Kitchen paper keeps whole graphemes and strips commands (print sweep 4, finding 7) | A person's name or note and the printer's text boundary | `ticket.spec.ts` |
+
+### The same statement by email (print sweep 4, finding 6)
+
+The statement screen and its email had to agree about earlier payments,
+returns and what remains to pay. The email dropped both history sections and
+left an empty amount when the last debt disappeared. It now includes the same
+payment dates, amounts, methods and return amounts/statuses, with an explicit
+zero when no balance remains. Saved currencies stay separate and an unknown
+payment currency stays unknown. `account-mail.spec.ts` first failed on missing
+history and zero debt in both languages; it also checks HTML escaping for
+names, extras, return labels and the link. No new statement fields are exposed.
+
+### Whole characters and safe kitchen notes (print sweep 4, finding 7)
+
+The wrapping code and the printer had to agree about a character. UTF-16
+slices tore emoji and combining marks at the roll's edge. Wrapping and
+centring now count graphemes with `Intl.Segmenter`. Every name, option and
+note passes through the text boundary before wrapping: C0 except newline,
+DEL, C1 and bidi override/isolate controls cannot reach the printer. Ordinary
+RTL letters remain. `ticket.spec.ts` first failed on a 47-character name plus
+an emoji and an ESC inside a note; it also checks joined emoji, flags and accents.
+
+### Printing cannot turn a sale into a failed sale (print sweep 4, finding 5)
+
+The click and the receipt response had to agree about the same browser window.
+Staff and POS now reserve it before waiting, including the possible paper
+fallback for an email. Failed reads close unused paper and show a message;
+emailed receipts close it too. A blocked, closed or unusable popup cannot
+interrupt a completed sale or turn it back into a held sale. The order stays
+reprintable. Declining a receipt reserves no window, and kitchen printing
+continues through the configured printer without a browser popup.
+
+`pos-receipt-popup.spec.tsx` and `return-reprint.spec.tsx` first failed the
+slow-response and failure paths. They now check the reservation, cleanup,
+email fallback, reprint version and sale result, including English/Spanish
+failure copy and offline sales. The product choice is to finish selling even
+when paper fails. Claude checks the popup and toast on Orders, Analytics and
+POS, including a slow response and the browser's popup blocker.
+The bell had to agree with what happened (sweep 5). An account page paid by
+card after the till had collected the same debt rang "MX$100 to refund" for a
+US$100 charge: the alert read the restaurant's currency of the day, while the
+refund it announced kept the charge's. Both account writers now name the
+charge's currency (`refund-alert-currency.spec.ts`). And a stock warning
+whose insert was refused was taken as written, because its error was never
+read; the sale cannot raise it again, so the write is now retried and a last
+failure logged (`stock-alert-retry.spec.ts`).

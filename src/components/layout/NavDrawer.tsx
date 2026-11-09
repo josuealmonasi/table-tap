@@ -31,7 +31,7 @@ export default function NavDrawer({
   features?: PlanFeature[];
 }) {
   const t = useT();
-  const signOut = useSignOut();
+  const signOut = useSignOut(role);
   const [open, setOpen] = useState(false);
   const pathname = usePathname();
 

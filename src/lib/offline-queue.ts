@@ -27,6 +27,26 @@ export interface QueuedMove {
   to: OrderStatus;
   /** When they moved it, for showing how long the board has been waiting. */
   at: number;
+  /**
+   * The user who made it. A shared tablet's next login sent the last person's
+   * stored moves with its own cookies, moves it never chose and the first
+   * person may not have been allowed (sweep 3, finding 3). Old entries have none.
+   */
+  by?: string;
+}
+
+/** One move's identity in the queue: a flush removes exactly what it sent. */
+export const moveKey = (m: QueuedMove): string => `${m.id}:${m.from}:${m.to}:${m.at}`;
+
+/**
+ * What is left once a flush has answered: everything stored now, minus the
+ * moves it handled and did not keep. Writing back the flush's own snapshot
+ * erased any move another tap or tab queued while it waited (sweep 3, finding 4).
+ */
+export function afterFlush(stored: QueuedMove[], handled: QueuedMove[], kept: QueuedMove[]): QueuedMove[] {
+  const done = new Set(handled.map(moveKey));
+  const keep = new Set(kept.map(moveKey));
+  return stored.filter(m => !done.has(moveKey(m)) || keep.has(moveKey(m)));
 }
 
 /**

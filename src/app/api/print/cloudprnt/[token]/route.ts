@@ -49,8 +49,13 @@ async function pendingJob(restaurantId: string) {
   const db = createAdminClient();
   const { data } = await db
     .from("print_jobs")
-    .select("delivery_token")
+    // A cancelled order is not work for the kitchen. Its job stayed in the
+    // queue, and a printer that came back online printed the cancelled meal as
+    // an ordinary ticket (sweep 4, finding 4). It is skipped, not deleted:
+    // nothing else in the queue waits behind it.
+    .select("delivery_token, orders!inner(status)")
     .eq("restaurant_id", restaurantId)
+    .neq("orders.status", "cancelled")
     .is("printed_at", null)
     .order("created_at", { ascending: true })
     .limit(1)
@@ -107,13 +112,14 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ token: stri
   if (!job) return new NextResponse(null, { status: 404 });
   const { data: order } = await db
     .from("orders")
-    .select("id, items, note, table_label, customer_name, created_at")
+    .select("id, items, note, table_label, customer_name, created_at, status")
     .eq("id", job.order_id as string)
     // Belt and braces: the job already named this restaurant, and the order
     // has to agree before a single character is printed.
     .eq("restaurant_id", printer.restaurantId)
     .maybeSingle();
-  if (!order) return new NextResponse(null, { status: 404 });
+  // Cancelled between the heartbeat and this fetch: no paper.
+  if (!order || order.status === "cancelled") return new NextResponse(null, { status: 404 });
 
   // A reprint can replace this copy while the order is being read. Claim only
   // the generation we looked up, or do not hand out any paper.

@@ -1,5 +1,5 @@
 import { readReturnAdjustments, returnComponents, verifyReturnedOrder } from "@/lib/return-components";
-import { readReceiptReturns } from "@/lib/receipt-return-source";
+import { readCancelReturns, readReceiptReturns } from "@/lib/receipt-return-source";
 import { slotReceiptReturns } from "@/lib/slot-receipt-returns";
 import { sealSlotVersion, openSlotVersion, sealReceiptVersion, openReceiptVersion } from "@/lib/receipt-version";
 import { receiptCents as cents } from "@/lib/receipt-amount";
@@ -7,6 +7,8 @@ import type { createAdminClient } from "@/lib/supabase/admin";
 import type { ReceiptForgiveness, ReceiptOrder, ReceiptVersion, SlotReceiptPayment } from "@/lib/receipt";
 
 type Database = ReturnType<typeof createAdminClient>;
+/** One receipt's orders: a long sitting, not a whole day. Above it the receipt is refused, never cut short. */
+export const MAX_RECEIPT_ORDERS = 100;
 interface StoredOrder extends ReceiptOrder { restaurant_id: string; table_id: string | null; paid: boolean }
 interface Adjustment extends ReceiptForgiveness { restaurant_id: string; order_id: string; currency: string }
 export interface ReceiptSource {
@@ -65,8 +67,10 @@ async function orderVersion(db: Database, orders: StoredOrder[], version: Receip
     return { ...order, total: a.previous_total, tip: a.previous_tip, service_fee: a.previous_service_fee };
   });
   const receiptVersion: ReceiptVersion = { adjustmentIds: ids };
-  if (!version && returns.length) {
-    result = await readReceiptReturns(db, orders[0].restaurant_id, result, returns);
+  const cancels = version ? [] : await readCancelReturns(db, orders[0].restaurant_id, orders);
+  if (cancels.some(c => c.currency !== orders.find(o => o.id === c.order_id)?.currency)) throw new ReceiptReadError(503);
+  if (!version && (returns.length || cancels.length)) {
+    result = await readReceiptReturns(db, orders[0].restaurant_id, result, [...returns, ...cancels]);
     receiptVersion.returnCopy = sealReceiptVersion(orders[0].restaurant_id, result);
   }
   return { orders: result, restaurantId: orders[0].restaurant_id, tableId: orders[0].table_id, version: receiptVersion };
@@ -96,7 +100,7 @@ export async function readOrderReceipt(db: Database, ids: string[], printing: bo
   if (orders.some(o => o.currency !== order.currency)) throw new ReceiptReadError(404);
   // Paper confirms a complete paid bill. A partial read or mixed currency
   // cannot become a plausible-looking total on a saved receipt.
-  if (printing && (orders.length !== new Set(ids).size || (Array.isArray(orderIds) && orderIds.length > 40)
+  if (printing && (orders.length !== new Set(ids).size || (Array.isArray(orderIds) && orderIds.length > MAX_RECEIPT_ORDERS)
     || orders.some(o => !o.paid || o.currency !== order.currency || o.table_id !== order.table_id))) {
     throw new ReceiptReadError(404);
   }
