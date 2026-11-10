@@ -1930,6 +1930,13 @@ Next.js 15 (App Router) · Supabase (Postgres, Auth, Realtime, RLS) · Stripe
 Connect · TypeScript · pnpm · Node 22. Deployed on Vercel. Email/password auth
 for staff, invitations for the team.
 
+The production database is in Supabase's `us-west-2` (Oregon), and `vercel.json`
+pins every server function to `pdx1` (Portland) beside it. Vercel's default,
+`iad1`, put a cross-country round trip under every database read: the table
+menu reads six to eight times in a row, took 1–2 s when quiet, and was the first
+page to time out under load. Moving either one means moving the other in the
+same change; an invariant test holds the pin.
+
 ## Still open
 
 Not code — the things only the business can do: registering the two Stripe
