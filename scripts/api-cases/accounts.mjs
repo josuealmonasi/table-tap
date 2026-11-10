@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { MARK } from "../api-fixtures.mjs";
 
 export function accountsCases(fx) {
@@ -95,6 +96,6 @@ export function accountsCases(fx) {
     // Dev carries a placeholder mail key, so a real send fails there: either
     // answer is one the route gives, and neither keeps the address.
     { name: "POST /api/account/email (the statement)", as: "diner", method: "POST", path: "/api/account/email",
-      body: { c: fx.accountCode, email: "cliente@example.com" }, expect: [200, 409, 502] },
+      body: { c: fx.accountCode, email: "cliente@example.com", ref: randomUUID() }, expect: [200, 409, 502] },
   ];
 }

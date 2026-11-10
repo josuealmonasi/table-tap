@@ -1,5 +1,7 @@
 "use client";
 
+import { usePaymentCheck } from "@/hooks/usePaymentCheck";
+
 import { useCallback, useEffect, useState } from "react";
 import { useStaffSlotReceipts } from "@/hooks/useStaffSlotReceipts";
 import SlotReceiptPrints from "./SlotReceiptPrints";
@@ -94,10 +96,12 @@ export default function TableCalculator({
       setSplits(data?.splits ?? []);
       setOrders(data?.orders ?? []);
       setLost(!data?.outstanding);
+      return Boolean(data?.outstanding);
     } catch {
       // Offline. Said plainly rather than left spinning: a waiter waiting on a
       // number that is never coming will collect from memory instead.
       setLost(true);
+      return false;
     }
   }, [tableId]);
 
@@ -115,6 +119,11 @@ export default function TableCalculator({
     const timer = setInterval(() => void load(), SPLIT_POLL_MS);
     return () => clearInterval(timer);
   }, [open, load]);
+
+  async function refreshBill(): Promise<void> {
+    if (!await load()) throw new Error("Could not refresh the bill");
+  }
+  const paymentCheck = usePaymentCheck(refreshBill, `${open}:${tableId}`);
 
   const balance = bill?.balances?.find(b => b.currency === chosenCurrency && b.owed > 0) ?? bill?.balances?.find(b => b.owed > 0) ?? bill;
   const currency = balance?.currency ?? menuCurrency;
@@ -146,6 +155,7 @@ export default function TableCalculator({
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
+        paymentCheck.capture(data, { kind: "table", tableId, currency });
         toast(data.error ?? t("settle.failed"), "error");
         if (data.code === "balance_changed" || data.code === "split") { setPlan([]); setDone(0); setMode("full"); await load(); }
         return;
@@ -195,6 +205,7 @@ export default function TableCalculator({
         {t("settle.partsTitle", { label: tableLabel })}
       </h3>
 
+      {paymentCheck.action}
       <SlotReceiptPrints receipts={receipts} />
 
       {lost ? (
@@ -227,7 +238,7 @@ export default function TableCalculator({
             </div>
           </div>
 
-          {splits.some(s => s.currency === currency) ? <TableSplitCollection canApprove={canApprove} onWriteOff={setWritingOff} splits={splits.filter(s => s.currency === currency)} remaining={owed} refresh={load} onCollected={onCollected} onReceipt={rememberReceipt} /> : <>
+          {splits.some(s => s.currency === currency) ? <TableSplitCollection canApprove={canApprove} onWriteOff={setWritingOff} splits={splits.filter(s => s.currency === currency)} remaining={owed} refresh={refreshBill} onCollected={onCollected} onReceipt={rememberReceipt} /> : <>
           <CollectionAmount
             mode={mode}
             plan={plan}
@@ -289,7 +300,7 @@ export default function TableCalculator({
       )}
     </Modal>
     {open && writingOff && <SplitWriteOffDialog split={writingOff} orders={orders} canApprove={canApprove}
-      onClose={() => setWritingOff(null)} onApplied={() => { void load(); onCollected(); }} />}
+      onRefresh={refreshBill} onClose={() => setWritingOff(null)} onApplied={() => { void load(); onCollected(); }} />}
     </>
   );
 }

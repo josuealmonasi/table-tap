@@ -42,6 +42,16 @@ describe("the difference from today's menu", () => {
 });
 
 describe("the till's own lines, for a dish the menu no longer has", () => {
+  it("keeps Milk = Oat on every component of two offline combos", () => {
+    const lines = offlineLines([1, 2].map(n => ({
+      itemId: `combo-${n}`, comboId: `combo-${n}`, name: "Breakfast", price: 100, qty: 1,
+      components: [{ itemId: "latte", qty: 2, mods: { Milk: "Oat", Extras: ["Shot", 3] } }],
+    })));
+    expect(lines.map(l => l.components?.[0].mods)).toEqual([
+      { Milk: "Oat", Extras: ["Shot"] }, { Milk: "Oat", Extras: ["Shot"] },
+    ]);
+  });
+
   it("keeps names and prices bounded, and drops what is not a line", () => {
     const lines = offlineLines([
       { itemId: "x", name: "Croissant de almendra", emoji: "🥐", price: 45, qty: 2, mods: { Tamaño: "Grande", Extras: ["Miel", 3] } },

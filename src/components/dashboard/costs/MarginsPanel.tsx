@@ -29,7 +29,7 @@ export default function MarginsPanel({ view, currency }: MarginsPanelProps) {
   return (
     <>
       <p className="tt-muted tt-costs-intro">{t("costs.intro")}</p>
-      {hasRecipes ? (
+      {hasRecipes || view.period.rows.length > 0 ? (
         <PeriodSummary period={view.period} currency={currency} />
       ) : (
         <section className="tt-section tt-costs-start">

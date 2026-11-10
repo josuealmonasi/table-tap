@@ -42,6 +42,25 @@ and that a new party cannot see the previous party's waiting phones.
 | An extra belongs to its plate and can be sold now (Sweep 2 finding 2) | A dinner cart bought a closed-lunch steak as an extra without its required choices; combo extras bypassed the same saved links |
 | Each item's own menu decides availability (Sweep 2 finding 3) | An uncategorized item from a closed menu, or one shown under an open menu's section, was still sold |
 | Every icon-group write shares the desk freeze (Sweep 2 finding 4) | Creating and editing stopped on a frozen subscription while deleting still worked |
+| Every collector and account transfer resolves the same refused card scope (unresolved pages) | Ordinary collection and account transfer offered no expiry recovery, including after minute 35 |
+| Account displays and serialization follow either unresolved row (unresolved pages) | The clock cleared the displayed hold while a saved card page could still charge |
+| Cancellation rebuilds its plan after verified account expiry (unresolved pages) | An old deadline allowed cancellation, while a future deadline rejected an already-expired page |
+| Selected held parts recover only their own attempts (unresolved pages) | An expired part stayed unavailable; recovering the whole split would touch another diner's page |
+| Expiry matches frozen provenance and keeps full cart cleanup (unresolved pages) | Closing only an attempt could free a quote without returning a pending cart's stock |
+| Card refusals describe an unconfirmed result in both languages (unresolved pages) | Staff were told someone was paying right now when the result was unknown |
+| A refused money action offers a separate payment check (unresolved pages, finding 7) | Staff had to retry a collection or decision just to ask whether its online payment had finished |
+| Every unread bell entry stays reachable (notify sweep 5-5) | The badge counted an old refund that the newest-ten list could never show |
+| Statement retries name the same email send (notify sweep 5-7) | A lost reply sent another copy from a second request |
+| Bell times follow the restaurant clock (notify sweep 5-8) | The same event appeared on different days on staff devices |
+| Staff seats commit before invite mail (notify sweep 5-6) | An insert failed after the waiter already received a dead invitation |
+| Failed card checkouts return their own bell warnings (notify sweep 5-3) | Stock returned while the sold-out message stayed behind |
+| Pending provider refunds recover without a page visit (Recovery R6-3) | Stripe completed the refund but the local attempt stayed processing until somebody retried it |
+| Orphan stock recovers without a page visit (Recovery R6-4) | A request reserved stock and died before its order existed, leaving portions unavailable |
+| The fee queue drains without Bills opening (Recovery R6-5) | Durable fee work waited forever when nobody opened the page that drained it |
+| Locked subscriptions recover from missed events (Recovery R6-6) | Stripe accepted payment while the local restaurant stayed locked or past due |
+| Recovery reports remaining work and its age (Recovery R6-7) | A stuck queue had no scheduled counts or overdue signal |
+| Scheduled subscription snapshots respect later admin moves | An old active snapshot could relink the subscription an admin just removed |
+| Offline combo recovery keeps each component's choices (Inventory R7-5) | The recovered combo used default milk because its component choices were dropped |
 | Write-off confirmations use per-order decimal cents (#576 R4) | Frozen slot totals and binary rounding quoted 2.01 instead of 2.02, or 0.50 instead of 0.51, while the writer required more |
 | Receipt suppression uses discovery begun for the settlement decision (#576 R3) | An earlier unsplit read, or a failed latest read, offered a whole-order receipt after parts paid |
 | Write-off confirms only the unpaid remainder (#574-5) | The open-bill row showed MX$20 left while its confirmation claimed MX$100 lost |
@@ -5996,3 +6015,243 @@ charge's currency (`refund-alert-currency.spec.ts`). And a stock warning
 whose insert was refused was taken as written, because its error was never
 read; the sale cannot raise it again, so the write is now retried and a last
 failure logged (`stock-alert-retry.spec.ts`).
+
+## Ordinary collections and account transfers share card-page recovery
+
+The SQL refusal and its caller had to agree about unresolved debt. Only divided
+bills asked Stripe about an expired page; ordinary collection and moving a bill
+to an account returned `paying` without recovery. `unresolved-writers.spec.ts`
+first failed on both writers, then verifies minute-36 paid pages remain refused
+and expired unpaid pages cause one identical retry. The source orders scope is
+kept separate from the destination account, so adding new food remains possible.
+`checkout-page-rpc.spec.ts` covers text, JSON, batch and exception refusals, and
+keeps ambiguous writes out of automatic retry. `unresolved-staff-routes.spec.ts`
+exercises full, partial and counter collection plus source-order transfer,
+including no success log or closure while unverified. Claude's SQL probes must prove
+that fresh collection at minute 36 changes no ledger or order before the webhook.
+
+## Account rows and the displayed hold agree at every age
+
+The deadline and the provider's result had to agree, but only the clock was read.
+`account-checkout-state.spec.ts` covers an open account row, an open linked diner
+attempt, tenant isolation, pagination below the requested page size, and failed
+reads. `unresolved-account-picker.spec.tsx` first fails against the old picker:
+an old timestamp hides an unresolved page. The new sale remains selectable and
+the public card action remains available to resume its original saved request.
+`unresolved-account-routes.spec.ts` covers both account collection and opening,
+including each currency variant, unchanged quotes, and unconfirmed refusals.
+
+## Cancellation's preview and locked write share the same payment state
+
+The account's timestamp and its saved payment page had to agree. They did not:
+an old deadline let a cancellation through, and a future deadline refused an
+already-expired page. `cancel-read.spec.tsx` verifies that unresolved rows block
+even when both old hold fields are absent, and confirmed expiry rebuilds the
+cancellation plan before the writer checks it. `cancel-race.spec.tsx` keeps the
+snapshot and provider refund ordering covered. SQL remains authoritative when
+another payment wins after the preview.
+
+## Recover the selected part, leaving the other parts alone
+
+A selected slot and its durable owner had to agree before another collection.
+The split wrapper handled `paying` but did not recover `reserved` or `taken`.
+`split-page-recovery.spec.ts` fails against the old wrapper and passes with
+recovery of only the selected owner IDs, preserving the original selection,
+quote, tip and reference on one retry. `whole-bill-pages.spec.ts` keeps modern
+part pages out of whole-bill conflict recovery; `split-slots-pay.spec.ts` keeps
+the owner's original request ahead of a new reservation or fee.
+
+## Expiry proves identity and completes the right cleanup
+
+Stripe's response and the saved checkout had to name the same page, amount,
+currency, mode, metadata and connected account. `unresolved-pages.spec.ts`
+rejects each mismatch, paid contradictions, failed reads and cleanup, old
+unbound keys, and multiple blockers. A recent unbound replay also names its
+exact attempt ID, so a newer page reusing the scope cannot be reopened instead.
+Ordinary expiry finishes only as unpaid; parts retire atomically; pay-now carts
+use the full abandonment path so stock and coupons return together.
+`unresolved-attempt.spec.ts` first fails on conflicting checkout opening, then
+checks one unchanged retry and no Stripe creation on an unverified refusal.
+
+## Unconfirmed payment copy means the same thing on every staff door
+
+The recorded outcome and the staff explanation had to agree. Ordinary bill,
+account and write-off messages claimed an active payer while split copy already
+said the result was unconfirmed. `unresolved-copy.spec.ts` first fails in both
+languages, then requires an unconfirmed result, retry and manager help for all
+applicable refusals. `unresolved-api-error.spec.ts` checks the shared
+`checkoutCode: checkout_unresolved` while preserving each route's existing
+outcome code and keeping historical attribution separate. The existing split
+message was already correct and is kept.
+
+### A refused money action offers a separate payment check (finding 7)
+
+The refusal and the screen had to agree on the exact payment being checked.
+`checkoutCode` reached the browser, but no screen offered a status-only action:
+staff had to send the collection, transfer or decision again just to ask.
+`CheckPayment` now checks the saved refused scope at `/api/checkout/check` and
+refreshes the balance. It never resends the original action. Selected split
+parts keep their own selection even if staff edit the form afterward; approvals
+use their saved request orders, and account cancellation includes its account.
+The route confines every identity to the signed-in restaurant, with approvals
+still limited to management and no subscription gate on checking past money.
+
+`unresolved-pages.spec.ts` first fails because a paid page and an unbound page
+have no distinct check outcomes. Status checks now distinguish closure, paid
+money waiting for the bill, an unverified answer, and missing payment identity.
+They never reopen an unbound page or record a paid page themselves: the verified
+webhook owns that money. Missing identity asks for a manager; it does not impose
+a new deadline or disable another way to pay or sell.
+
+`split-slots-collection-screen.spec.tsx` first fails because both collection
+doors have no Check payment button. `payment-check-screens.spec.tsx` covers
+collection, account transfer and settlement, discounts, write-offs and both
+approvals in both languages. `cancel-payment-check.spec.tsx` and
+`orders-money-actions.spec.tsx` cover the cancellation preview and POST refusal.
+`payment-check-route.spec.ts` covers all four answers, roles, mixed-tenant
+identities, currency and selected parts. `check-payment.spec.tsx` checks both
+languages, failed reads and duplicate taps. Both layout and dialog sweeps
+register every outcome through Pedidos and Cuentas for every floor role;
+their browser responses are held, so those visits never collect or query Stripe.
+
+## Failed card stock warnings (notify sweep 5-3)
+
+The pending reservation and its bell entry must agree. A refused Stripe session
+returned the portions but left the sold-out warning. Pending card warnings now
+have attempt-owned IDs; only after the pending order and its claims return does
+cleanup delete those IDs, restaurant and item together. Committed sale warnings
+stay. `checkout/__tests__/route.spec.ts` reproduces the refusal and checks both
+other-sale and other-restaurant warnings survive, while a successful checkout
+keeps its warning.
+
+
+## Staff membership before mail (notify sweep 5-6)
+
+The seat writer and the invitation sender must agree. Create the password-less
+login without mail, commit its membership through the existing seat guard, then
+send the Supabase invitation. A failed send removes its membership first, then
+deletes only that new login; its cascade also returns the seat if the first
+cleanup failed. `staff-seat-limit.spec.ts`
+reproduces the last-seat race; `staff-invite-order.spec.ts` checks send ordering,
+returned and thrown mail failures, and protection of existing accounts.
+
+
+## Reachable unread notifications (notify sweep 5-5)
+
+The badge count and the bell list must agree. Newer read warnings hid an older
+unread refund behind a ten-row limit. The bell now pages 50 entries at a time,
+unread first, with a time-and-ID cursor so matching timestamps do not hide rows.
+The read button sends only the displayed unread IDs, never an unrestricted
+restaurant-wide update. New arrivals and unloaded pages remain unread.
+`notification-pagination.spec.ts` checks ordering, cursor boundaries, restaurant
+scope and bounded updates; `dashboard-session.react-component.spec.tsx` checks
+that the optimistic badge subtracts only loaded entries. The menu spec checks
+both languages' older-page and read buttons.
+
+## One statement email per retry (notify sweep 5-7)
+
+The customer's send action and the provider request must agree. A lost answer
+used to send a second email. `useStatementMail` keeps its operation reference
+through thrown requests and failed replies, changes it for a different recipient
+or account, and clears it after success so an intentional resend is new.
+The route requires that reference and passes an account-scoped key to Resend's
+`Idempotency-Key` header. All existing rate limits still apply, including to
+retries. Resend retains keys for 24 hours; this is provider deduplication within
+that window, not a permanent sent-mail record. `statement-mail.spec.tsx`,
+`account-mail-limits.spec.ts` and `mail-idempotency.spec.ts` cover both ends.
+
+## Restaurant-local bell timestamps (notify sweep 5-8)
+
+The restaurant clock and its bell must agree. A manager in another time zone
+saw a warning on the wrong day. The authorized bell response now includes the
+restaurant's time zone, with the same default used for receipts, and the menu
+uses it for both date and time. `notifications-menu.spec.tsx` checks English and
+Spanish across midnight; the pagination spec checks the API supplies the zone.
+## A saved provider refund must not wait for a page (Recovery R6-3)
+
+Stripe's current refund state and the saved attempt must agree even if the
+webhook never arrives and nobody opens Bills. The cron refund job retrieves
+only saved provider IDs, verifies their original account, intent, currency and
+exact cents, and uses the existing locked finish writers for order returns and
+duplicate payments. It never opens an attempt or creates a customer refund.
+`recovery/__tests__/jobs.spec.ts` reproduces the missing scheduled path;
+`recovery/__tests__/refunds.spec.ts` covers pending, succeeded and failed states,
+mismatched evidence, stale writes and isolation between the two refund sources.
+
+## Orphan stock must recover while the restaurant is closed (Recovery R6-4)
+
+A reserved portion and the order meant to own it had to agree. An interrupted
+request could leave only the reservation, and its page-triggered cleanup did
+nothing until somebody visited. The scheduled stock job calls the existing
+one-orphan SQL recovery across restaurants, keeping its grace period, locking
+and late-order check. `recovery/__tests__/jobs.spec.ts` verifies recovery without
+a page, while `bounds.spec.ts` checks the batch and observation budget.
+
+## The fee queue must have a caller that does not need Bills (Recovery R6-5)
+
+The durable queue and the page draining it had to agree that someone would
+eventually open Bills. The cron fee job now shares the page's original-account
+lookup and charge reconciler, including its generation acknowledgements and
+immutable provider requests. A missing original account leaves work pending;
+one failed charge does not stop the rest. `recovery/__tests__/jobs.spec.ts`
+checks the frozen account, independent charges and remaining queue count.
+
+## Stripe's subscription and local access must agree after a missed event (Recovery R6-6)
+
+A paid subscription and the local locked or past-due status could disagree
+forever after a missed webhook. The scheduled job reads the linked Stripe
+subscription and uses the same revision-checked transition as the webhook.
+Still-unpaid subscriptions remain pending, and rotating batches let later
+restaurants recover too. `recovery/__tests__/jobs.spec.ts` checks the shared
+transition; `bounds.spec.ts` proves a full pending batch does not starve the next.
+
+## A recovery response must say what is still waiting (Recovery R6-7)
+
+Successful HTTP responses and unfinished work had nothing checking that they
+agreed. Every job now returns and logs done, pending, failed and the oldest
+pending item's date and age. Failed observations report unknown counts instead
+of an empty queue. Overdue work logs its restaurant; duplicate-payment refunds
+reuse the existing bilingual bell kind, with a deterministic notification ID
+that also deduplicates overlapping requests. Other job kinds only log.
+Subscription age explicitly uses restaurant creation as an upper bound because
+there is no saved status-change date. `jobs.spec.ts`, `refunds.spec.ts` and
+`bounds.spec.ts` check ages, reminders and failed observations; `route.spec.ts`
+checks secret refusal and isolation. The API case checks an authorized clean
+seed leaves its sales, payments and stock unchanged.
+
+## A scheduled subscription snapshot cannot undo a later admin move
+
+The worker's initial linked subscription and the webhook helper's later read
+had to agree. An admin could unlink the contract between them, and an active
+old snapshot would relink it as if it were a new checkout. Worker calls now
+require the expected subscription to remain linked on every revision retry.
+`subscription-sync.spec.ts` first reproduced the unwanted plan write and now
+checks that the scheduled snapshot leaves the admin's move alone. Webhook calls
+still accept a genuinely new subscription.
+## Inventory R7-5: recovered combos keep their choices
+
+The offline normalizer and ingredient consumption must agree on each combo
+component, including its choices. `offline-sale.spec.ts` keeps Milk = Oat on
+two offline combos and bounds their choices just like ordinary lines.
+The ingredient ledger had to agree with the shelf (sweep 7). A dish sent back
+and recorded as waste took its 200 ml a second time: its sale had already
+consumed it. A new reason, "sent back by a customer", records the loss and
+its cost and moves no stock, and only a product can have it. Deleting a
+mistaken spill after a recount added it back on top of the count, because the
+correction was dated now; a correction to a waste or purchase record is now
+dated with that record, so the count that already saw the truth absorbs it. A
+recipe saved while its ingredient was being archived attached the hidden
+ingredient at zero cost; the save now holds those ingredients. And a pack
+price derived from a purchase was rounded to cents, valuing 10,000 one-piece
+packs bought for MX$149 at MX$100; it keeps six places, and the ingredient
+dialog sends it back unchanged (`inventory-sql.spec.ts`).
+Recovery had to agree with what Stripe and the shelf actually hold (sweep 6).
+A refund attempt saved but never sent stayed unfinishable after its
+idempotency key expired: resending the key could refund twice, so the
+executor refused for ever. Stripe's full list of the charge's refunds proves
+whether that attempt ever arrived; past 24 hours with none, it is retired as
+`never_sent` and a new attempt with a new key carries what is still owed
+(`returns-provider.spec.ts`, `recovery-sql.spec.ts`). And a sale held offline
+and sent after a recount took its portions off a count that already left them
+out; a dish counted after the sale was made now keeps its count, and the
+money and the order are recorded as before (`recovery-sql.spec.ts`).

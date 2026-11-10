@@ -15,6 +15,8 @@ export interface Mail {
   html: string;
   /** Shown as the sender's name — the restaurant, not us. */
   fromName?: string;
+  /** One send, even when its first reply is lost on the way back. */
+  idempotencyKey?: string;
 }
 
 export type MailResult = { sent: true } | { sent: false; reason: "unconfigured" | "failed" };
@@ -33,6 +35,7 @@ export async function sendMail(mail: Mail): Promise<MailResult> {
       headers: {
         Authorization: `Bearer ${process.env.RESEND_API_KEY}`,
         "Content-Type": "application/json",
+        ...(mail.idempotencyKey ? { "Idempotency-Key": mail.idempotencyKey } : {}),
       },
       body: JSON.stringify({
         // The restaurant's name over our verified domain: the diner bought

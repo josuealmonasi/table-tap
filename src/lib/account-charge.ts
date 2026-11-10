@@ -1,6 +1,7 @@
 import type { NextResponse } from "next/server";
 import { apiError } from "@/lib/api-error";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { checkoutPageRpc } from "@/lib/checkout-page-rpc";
 import { formatMoney } from "@/lib/format";
 
 /** What `account_charge()` answered. */
@@ -21,7 +22,7 @@ export async function chargeAccount(
   expected: number,
   actor: string,
 ): Promise<ChargeResult> {
-  const { data, error } = await createAdminClient().rpc("account_charge_v2", {
+  const { data, error } = await checkoutPageRpc("account_charge_v2", {
     p_restaurant: restaurantId,
     p_account: accountId,
     p_orders: orderIds,

@@ -94,6 +94,13 @@ it("still records a brand-new subscription when none is linked yet", async () =>
   expect(patches[0]).toMatchObject({ stripe_subscription_id: "sub_new", subscription_sync_revision: 1 });
 });
 
+it("a scheduled snapshot cannot relink a subscription after an admin move", async () => {
+  reads.push({ data: { stripe_subscription_id: null, subscription_sync_revision: 3 }, error: null });
+  await applySubscription(sub(), undefined, undefined, "sub_new");
+  expect(patches).toEqual([]);
+  expect(retrieve).not.toHaveBeenCalled();
+});
+
 it("propagates a Stripe read failure so it can be retried", async () => {
   reads.push(current()); retrieve.mockRejectedValue(new Error("Stripe unavailable"));
   await expect(applySubscription(sub())).rejects.toThrow("Stripe unavailable");

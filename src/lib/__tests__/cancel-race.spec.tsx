@@ -1,6 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { NextRequest, NextResponse } from "next/server";
 const rpc = vi.fn();
+const resolve = vi.hoisted(() => vi.fn());
+vi.mock("@/lib/whole-bill-pages", () => ({ resolveCheckoutPages: resolve }));
 const refunds = vi.fn();
 const execute = vi.fn();
 const previous = vi.fn();
@@ -19,7 +21,7 @@ const { POST } = await import("@/app/api/orders/cancel/route");
 const cancel = () => POST(new NextRequest("https://test/api/orders/cancel", {
   method: "POST", body: JSON.stringify({ id: "o1" }),
 }));
-beforeEach(() => { vi.clearAllMocks(); snapshot.hold = null; previous.mockResolvedValue({ data: null, error: null }); refunds.mockResolvedValue([]); });
+beforeEach(() => { vi.clearAllMocks(); resolve.mockReset().mockResolvedValue("unverified"); snapshot.hold = null; previous.mockResolvedValue({ data: null, error: null }); refunds.mockResolvedValue([]); });
 describe("cancellation and collection agree on the plan's state", () => {
   it("passes the unpaid snapshot so collection winning the lock refuses cancellation", async () => {
     rpc.mockResolvedValue({ data: { outcome: "changed" }, error: null });
@@ -40,4 +42,12 @@ describe("cancellation and collection agree on the plan's state", () => {
     expect((await cancel()).status).toBe(200);
     expect(refunds).toHaveBeenCalledWith("r1", "a1");
   });
+});
+
+it.each(["paying", "changed"])("cancellation retries its identical snapshot after a %s page refusal", async outcome => {
+  resolve.mockResolvedValue("closed");
+  rpc.mockResolvedValueOnce({ data: { outcome }, error: null })
+    .mockResolvedValueOnce({ data: { outcome: "cancelled", adjustment: "a1" }, error: null });
+  expect((await cancel()).status).toBe(200);
+  expect(rpc).toHaveBeenCalledTimes(2); expect(rpc.mock.calls[1]).toEqual(rpc.mock.calls[0]);
 });

@@ -63,7 +63,7 @@ export default function AccountPicker({ active, amount, currency, onPick, busy =
           const room = headroom(debt, Number(a.credit_limit));
           const otherCurrency = a.balances?.some(b => b.amount > 0 && b.currency !== currency) ?? false;
           const fits = !otherCurrency && amount <= room + 0.005;
-          const paying = Boolean(a.checkout_until && new Date(a.checkout_until) > new Date());
+          const paying = Boolean(a.payingOnline);
           return (
             <li key={a.id}>
               <button

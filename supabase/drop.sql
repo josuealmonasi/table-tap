@@ -295,6 +295,8 @@ drop function if exists public.refund_owned_by_return_v1(uuid, text);
 drop function if exists public.refund_success_time_v1(jsonb);
 drop function if exists public.retire_split_attempt_v1(uuid, uuid);
 drop function if exists public.whole_bill_card_open_v1(uuid, uuid[]);
+drop function if exists public.unresolved_account_page_v1(uuid, uuid);
+drop function if exists public.release_unreached_account_page_v1(uuid, uuid);
 drop function if exists public.write_off_remainder_v1(uuid, uuid[], int, text, text, text, text, uuid, uuid);
 drop function if exists public.guard_order_adjustment();
 drop function if exists public.settle_split_slots_v1(uuid, uuid, text, int);
@@ -346,3 +348,9 @@ drop function if exists public.account_checkout_currency_v1(uuid, uuid, numeric,
 drop function if exists public.account_settle_currency_v1(uuid, uuid, numeric, numeric, text, text, text, text) cascade;
 drop function if exists public.collect_table_reviewed_v1(uuid,uuid,numeric,text,numeric,numeric,text,text,text) cascade;
 drop function if exists public.save_product_addons_v1(uuid, uuid, uuid[], jsonb, uuid, uuid) cascade;
+drop function if exists public.guard_recipe_choices() cascade;
+drop function if exists public.waste_ingredient_usage_v2(uuid, uuid, uuid, numeric, jsonb);
+drop function if exists public.record_waste_v2(uuid, uuid, uuid, numeric, text, text, numeric, text, jsonb);
+drop function if exists public.record_waste_once_v2(uuid, uuid, uuid, numeric, text, text, numeric, text, uuid, jsonb);
+drop function if exists public.retire_unsent_refund_attempt_v1(uuid, uuid, uuid, text);
+drop function if exists public.sale_line_costs(uuid, jsonb);

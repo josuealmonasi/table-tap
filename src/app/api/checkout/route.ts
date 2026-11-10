@@ -27,6 +27,7 @@ import { checkoutOrderRow } from "@/lib/checkout/order-row";
 import { payLaterAllowed } from "@/lib/checkout/pay-later";
 import { checkoutFee } from "@/lib/checkout/app-fee";
 import { NO_FEE, releaseFee, stripeRefusedOutright, type FeeHold } from "@/lib/platform-fee";
+import { checkoutStockAlerts } from "@/lib/checkout/stock-alerts";
 import { checkoutHold } from "@/lib/checkout/hold";
 import { uuidOf } from "@/lib/costs/guard";
 import { readOrderIntent, writeOrderIntent } from "@/lib/order-intent";
@@ -319,19 +320,22 @@ export async function POST(req: NextRequest) {
     }
     // A pay-later order is the kitchen's now. A card order is still ours until
     // its session is open and its coupon written down: give it back, row and all.
+    const alerts = checkoutStockAlerts(restaurantId, restaurant.low_stock_alerts_enabled ? reservation.low : []);
     if (deferred) held.handOver();
     else
       held.hold(async () => {
         const { error } = await supabase.from("orders").delete().eq("id", order.id);
         if (error) throw new Error(`Could not remove failed checkout: ${error.message}`);
         await undoClaim();
+        await alerts.clear();
       });
 
     // Only once the order is real: a warning about stock an order never took
     // would send someone to count a shelf that is still full. Off by default,
     // because a restaurant that tracks nothing would only get noise.
     if (restaurant.low_stock_alerts_enabled) {
-      await raiseStockNotifications(restaurantId, reservation.low);
+      if (deferred) await raiseStockNotifications(restaurantId, reservation.low);
+      else await alerts.raise();
     }
 
     // Nothing to charge now: the order is with the kitchen and the table owes

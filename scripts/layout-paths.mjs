@@ -219,5 +219,8 @@ export const SPLIT_SCREENS = [
     { name: "divided-bill actions from the open-bill row", role, door: "bills", state: "promotion" },
     { name: "write off the divided bill from Pedidos", role, door: "orders", state: "writeoff" },
     { name: "write off the divided bill from Cuentas abiertas", role, door: "bills", state: "writeoff" },
+    ...["orders", "bills"].flatMap(door => ["closed", "paid", "unverified", "missing_identity"].map(outcome => ({
+      name: `check payment from ${door}: ${outcome}`, role, door, state: "payment-check", outcome,
+    }))),
   ]),
 ];

@@ -1,3 +1,5 @@
+const recover = vi.hoisted(() => vi.fn());
+vi.mock("@/lib/split-page-recovery", () => ({ resolveSelectedSplitPages: recover }));
 import { beforeEach, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
 const s = vi.hoisted(() => ({ revision: 1, paid: false, held: false, amount: 5500, currency: "MXN", prior: false,
@@ -32,7 +34,7 @@ const { POST } = await import("@/app/api/split/pay/route");
 const body = { restaurantId: "r", tableId: "t", sessionId: "session", splitId: "split", revision: 1,
   slots: [1, 0], expectedCents: 11000, tipCents: 1000 };
 const req = (data: unknown = body) => new NextRequest("http://localhost/api/split/pay", { method: "POST", body: JSON.stringify(data) });
-beforeEach(() => { s.revision = 1; s.paid = false; s.held = false; s.amount = 5500; s.currency = "MXN"; s.prior = false;
+beforeEach(() => { recover.mockReset().mockResolvedValue("unverified"); s.revision = 1; s.paid = false; s.held = false; s.amount = 5500; s.currency = "MXN"; s.prior = false;
   s.params = null; s.quote = null; s.fee.mockReset().mockResolvedValue({ id: "fee", cents: 125 }); s.waiter.mockReset().mockResolvedValue(true); });
 it("staff-opened model 2 bill charges the selected parts plus new tip and reserves only their fee slices", async () => {
   expect((await POST(req())).status).toBe(200);
@@ -72,4 +74,13 @@ it("saved USD remains USD even if the menu's currency changes", async () => {
 it.each([{ slots: [0, 0] }, { slots: [null] }, { tipCents: 11001 }, { couponCode: "SAVE" }, { tipCents: Infinity }])("rejects malformed selection or tip %s", async change => {
   expect((await POST(req({ ...body, ...change }))).status).toBe(400);
   expect(s.fee).not.toHaveBeenCalled();
+});
+
+it("an expired selected reservation recovers before quoting the same parts and tip", async () => {
+  s.held = true;
+  recover.mockImplementation(async () => { s.held = false; return "closed"; });
+  expect((await POST(req())).status).toBe(200);
+  expect(recover).toHaveBeenCalledWith("r", "split", [0, 1]);
+  expect(s.fee).toHaveBeenCalledTimes(1);
+  expect(s.params).toMatchObject({ metadata: { split_slots: "[0,1]", settle_tip: "10" } });
 });

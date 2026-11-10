@@ -13,6 +13,7 @@ vi.mock("@/lib/supabase/admin", () => ({
     const q = {
       select: () => q,
       eq: (k: string, v: unknown) => { filters.push(r => r[k] === v); return q; },
+      in: (k: string, values: unknown[]) => { filters.push(r => values.includes(r[k])); return q; },
       neq: (k: string, v: unknown) => { filters.push(r => r[k] !== v); return q; },
       not: (k: string) => { filters.push(r => r[k] != null); return q; },
       order: (k: string) => { orders.push(k); return q; },

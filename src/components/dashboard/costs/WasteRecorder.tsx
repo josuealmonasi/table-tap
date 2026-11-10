@@ -1,5 +1,9 @@
 "use client";
 
+import WasteProductChoices from "./WasteProductChoices";
+import type { Modifier } from "@/lib/types";
+import type { Choices } from "@/lib/costs/recipe-cost";
+import { satisfiesRequired } from "@/lib/modifiers";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useT } from "@/lib/i18n/context";
@@ -7,7 +11,7 @@ import { useToast } from "@/components/ui/Toast";
 import { formatMoney } from "@/lib/format";
 import { amount, fromShown, inShown } from "@/lib/costs/display";
 import { decimal, type IngredientUnit } from "@/lib/costs/input";
-import { WASTE_REASONS, type WasteReason } from "@/lib/costs/usage";
+import { PRODUCT_ONLY_REASONS, WASTE_REASONS, type WasteReason } from "@/lib/costs/usage";
 import PendingAttempt from "@/components/ui/PendingAttempt";
 import { useCostsSend } from "@/hooks/useCostsSend";
 import { useWhen } from "@/hooks/useWhen";
@@ -17,6 +21,8 @@ export interface WasteChoice {
   id: string;
   label: string;
   unit: IngredientUnit;
+  modifiers?: Modifier[];
+  extras?: { id: string; label: string }[];
 }
 
 export interface TodayEntry {
@@ -55,6 +61,8 @@ export default function WasteRecorder({ choices, today, canSeeCost, currency, ti
   if (!pending && reviewedChoices !== choices) setReviewedChoices(choices);
   const formChoices = pending ? reviewedChoices : choices;
   const [picked, setPicked] = useState("");
+  const [mods, setMods] = useState<Choices>({});
+  const [extraIds, setExtraIds] = useState<string[]>([]);
   const [quantity, setQuantity] = useState("");
   const [reason, setReason] = useState<WasteReason | null>(null);
   const [note, setNote] = useState("");
@@ -73,11 +81,14 @@ export default function WasteRecorder({ choices, today, canSeeCost, currency, ti
     const sent = choice.kind === "ingredient" && typed !== null ? fromShown(typed, choice.unit) : quantity;
     const failed = await send("/api/costs/waste", "POST", {
       [choice.kind === "ingredient" ? "ingredientId" : "itemId"]: choice.id, quantity: sent, reason, note: note.trim() || undefined,
+      ...(choice.kind === "product" ? { mods, extras: extraIds } : {}),
     });
     setBusy(false);
     if (failed) return setError(failed);
     toast(t("waste.saved", { name: choice.label }));
     setPicked("");
+    setMods({});
+    setExtraIds([]);
     setQuantity("");
     setReason(null);
     setNote("");
@@ -98,7 +109,10 @@ export default function WasteRecorder({ choices, today, canSeeCost, currency, ti
           {send.unconfirmed() && <PendingAttempt message={t("pending.waste")} busy={busy} onDiscard={send.discard} />}
           <label className="tt-field">
             <span className="tt-mod-label">{t("waste.what")}</span>
-            <select disabled={busy || pending} className="tt-input" value={picked} onChange={e => setPicked(e.target.value)} required>
+            <select disabled={busy || pending} className="tt-input" value={picked} onChange={e => {
+              setPicked(e.target.value); setMods({}); setExtraIds([]);
+              if (e.target.value.startsWith("ingredient:") && reason && PRODUCT_ONLY_REASONS.includes(reason)) setReason(null);
+            }} required>
               <option value="">{t("waste.choose")}</option>
               <optgroup label={t("waste.ingredients")}>
                 {formChoices.filter(c => c.kind === "ingredient").map(c => <option key={c.id} value={`ingredient:${c.id}`}>{c.label}</option>)}
@@ -108,6 +122,10 @@ export default function WasteRecorder({ choices, today, canSeeCost, currency, ti
               </optgroup>
             </select>
           </label>
+          {choice?.kind === "product" && ((choice.modifiers?.length ?? 0) > 0 || (choice.extras?.length ?? 0) > 0) && (
+            <WasteProductChoices modifiers={choice.modifiers ?? []} extras={choice.extras ?? []} mods={mods} extraIds={extraIds}
+              disabled={busy || pending} onMods={setMods} onExtras={setExtraIds} />
+          )}
           <label className="tt-field">
             <span className="tt-mod-label">{t("waste.quantity")}</span>
             <span className="tt-costs-count-input">
@@ -118,7 +136,8 @@ export default function WasteRecorder({ choices, today, canSeeCost, currency, ti
           <fieldset className="tt-field tt-waste-reasons">
             <legend className="tt-mod-label">{t("waste.why")}</legend>
             <div className="tt-station-filter" role="radiogroup" aria-label={t("waste.why")}>
-              {WASTE_REASONS.map(r => (
+              {/* An ingredient never left the kitchen, so it cannot be sent back. */}
+              {WASTE_REASONS.filter(r => !picked.startsWith("ingredient:") || !PRODUCT_ONLY_REASONS.includes(r)).map(r => (
                 <button type="button" disabled={busy || pending} key={r} role="radio" aria-checked={reason === r}
                   className={`tt-chip${reason === r ? " tt-chip-on" : ""}`} onClick={() => setReason(r)}>
                   {t(`costs.reason.${r}`)}
@@ -133,7 +152,7 @@ export default function WasteRecorder({ choices, today, canSeeCost, currency, ti
           <p className="tt-muted tt-costs-hint">{t("waste.stockNote")}</p>
           {error && <p className="tt-field-error" role="alert">{error}</p>}
           <div>
-            <button type="submit" className="tt-btn tt-btn-primary" disabled={busy || !choice || !quantity || !reason}>
+            <button type="submit" className="tt-btn tt-btn-primary" disabled={busy || !choice || !quantity || !reason || !satisfiesRequired(choice.modifiers ?? [], mods)}>
               {busy ? t("common.saving") : pending ? t("pending.sendAgain") : t("waste.save")}
             </button>
           </div>

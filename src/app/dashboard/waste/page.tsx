@@ -1,9 +1,10 @@
+import type { Modifier } from "@/lib/types";
 import { requireMembership } from "@/lib/page-guard";
 import { MANAGES } from "@/lib/membership";
 import { allPlans, getPlan } from "@/lib/plan-server";
 import { can, cheapestWith } from "@/lib/plan";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { everyRow } from "@/lib/paged";
+import { everyRow, everyRowIn } from "@/lib/paged";
 import { DEFAULT_TIME_ZONE } from "@/lib/open-menus";
 import { startOfLocalDay } from "@/lib/day-window";
 import Breadcrumb from "@/components/layout/Breadcrumb";
@@ -42,8 +43,8 @@ export default async function WastePage() {
   const [ingredients, products, menus, today] = await Promise.all([
     everyRow<{ id: string; name: string; unit: "g" | "ml" | "pza" }>((a, b) => db.from("ingredients")
       .select("id, name, unit").eq("restaurant_id", r.id).is("archived_at", null).order("id").range(a, b), "the ingredients"),
-    everyRow<{ id: string; name: string; emoji: string | null; menu_id: string | null }>((a, b) => db.from("menu_items")
-      .select("id, name, emoji, menu_id").eq("restaurant_id", r.id).eq("is_addon", false).order("id").range(a, b), "the products"),
+    everyRow<{ id: string; name: string; emoji: string | null; menu_id: string | null; modifiers: Modifier[]; is_addon: boolean }>((a, b) => db.from("menu_items")
+      .select("id, name, emoji, menu_id, modifiers, is_addon").eq("restaurant_id", r.id).order("id").range(a, b), "the products"),
     everyRow<{ id: string; name: string }>((a, b) => db.from("menus")
       .select("id, name").eq("restaurant_id", r.id).order("id").range(a, b), "the menus"),
     everyRow<TodayEntry>((a, b) => db.from("waste_entries")
@@ -51,12 +52,19 @@ export default async function WastePage() {
       .eq("restaurant_id", r.id).gte("created_at", startOfLocalDay(new Date(), timeZone).toISOString())
       .order("id").range(a, b), "today's waste"),
   ]);
+  const links = await everyRowIn<{ product_id: string; addon_id: string }>(
+    products.filter(p => !p.is_addon).map(p => p.id),
+    (ids, a, b) => db.from("item_addons").select("product_id, addon_id")
+      .in("product_id", ids).order("product_id").order("addon_id").range(a, b), "the products' extras",
+  );
 
   const menuName = new Map(menus.map(m => [m.id, m.name]));
   const choices: WasteChoice[] = [
     ...ingredients.map(i => ({ kind: "ingredient" as const, id: i.id, label: i.name, unit: i.unit })),
-    ...products.map(p => ({
-      kind: "product" as const, id: p.id, unit: "pza" as const,
+    ...products.filter(p => !p.is_addon).map(p => ({
+      kind: "product" as const, id: p.id, unit: "pza" as const, modifiers: p.modifiers ?? [],
+      extras: products.filter(a => a.is_addon && links.some(link => link.product_id === p.id && link.addon_id === a.id))
+        .map(a => ({ id: a.id, label: [a.emoji, a.name].filter(Boolean).join(" ") })),
       label: [p.emoji, p.name].filter(Boolean).join(" ") + (menus.length > 1 && p.menu_id ? ` · ${menuName.get(p.menu_id) ?? ""}` : ""),
     })),
   ].sort((a, b) => a.label.localeCompare(b.label));

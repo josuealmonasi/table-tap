@@ -4,7 +4,7 @@ import { jsonBody } from "@/lib/json-body";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { actingOwner } from "@/lib/api-guard";
 import { frozenBlocks, seatBlocks } from "@/lib/plan-guard";
-import { parsePlanLimit, planLimitText } from "@/lib/plan-error";
+import { inviteStaff } from "@/lib/staff-invite";
 import { logUserChange } from "@/lib/user-log";
 import { getPlan, allPlans } from "@/lib/plan-server";
 import { assignableRoles, cheapestWith, planLabel, type TeamRole } from "@/lib/plan";
@@ -81,44 +81,8 @@ export async function POST(req: NextRequest) {
     return await apiError("apiErr.ownerCap", 409, { n: MAX_OWNERS });
   }
 
-  const admin = createAdminClient();
-  const origin = siteOrigin(req);
-
-  // Creates the (password-less) user and emails them an invite. They set their
-  // own password via the link → /auth/callback → /reset-password.
-  const { data: invited, error: inviteErr } = await admin.auth.admin.inviteUserByEmail(
-    email,
-    { redirectTo: `${origin}/auth/callback?next=/reset-password` },
-  );
-  if (inviteErr || !invited.user) {
-    const raw = inviteErr?.message?.toLowerCase() ?? "";
-    const already = raw.includes("already");
-    // Supabase says "invalid" or "rate limit" when it is the one that cannot send
-    // the mail, not when the address is wrong. Telling the owner their waiter's
-    // email is invalid sends them to check the one thing that is actually fine.
-    const mailer = raw.includes("rate limit") || raw.includes("invalid");
-    console.error("staff invite failed", inviteErr?.message);
-    return await apiError(
-      already ? "apiErr.emailHasAccount" : mailer ? "apiErr.inviteMailerOff" : "apiErr.inviteFailed",
-      400,
-    );
-  }
-
-  const { error: staffErr } = await admin.from("staff").insert({
-    restaurant_id: actor.restaurantId,
-    user_id: invited.user.id,
-    email,
-    role,
-  });
-  if (staffErr) {
-    await admin.auth.admin.deleteUser(invited.user.id); // roll back the invite
-    const hit = parsePlanLimit(staffErr.message);
-    if (hit) {
-      const text = planLimitText(hit);
-      return await apiError(text.key, 403, { ...text.vars, plan: planLabel(hit.plan) });
-    }
-    return await apiError("apiErr.staffAdd", 500);
-  }
+  const refused = await inviteStaff(actor.restaurantId, email, role, siteOrigin(req));
+  if (refused) return refused;
 
   await logUserChange(actor.restaurantId, actor.email, "created", role, email);
   return NextResponse.json({ ok: true });

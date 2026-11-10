@@ -399,9 +399,9 @@ dishes on a bill the restaurant has just cancelled.
   alone is every order whose total is already promised: paid, written off,
   cancelled or waiting for its own card payment; with money against it or its
   sitting; being divided; named in a discount or write-off a manager has not
-  decided; or in a card checkout opened in the last 35 minutes
-  (`orders.card_checkout_at`, set by `/api/bill/pay` before the Stripe session
-  exists, which expires after 30).
+  decided; or covered by a saved unresolved card page, at any age and even
+  before its Stripe session ID has been saved. Bulk repricing skips those
+  quotes without asking Stripe about every page.
 - **Our fee on a divided bill is the table's, not each person's.** It is
   computed only when no share has yet been paid and rides on the first one, the
   same way settling a whole table puts it on the first order. Charging it per
@@ -1410,7 +1410,11 @@ read immediately.
 Notification read markers update optimistically and reconcile on the next
 poll; their POSTs are not retried automatically. Markers carry the restaurant
 shown in the bell, and the server refuses a different active restaurant.
-Legacy requests still use the authorized actor's restaurant. A forbidden badge
+Legacy requests still use the authorized actor's restaurant. The bell loads 50
+entries per page, unread first, then read history, with a time-and-ID cursor and
+an older-page button. Marking the shown entries sends only their unread IDs;
+unseen pages and new arrivals stay unread. Dates and times use the restaurant's
+time zone, matching receipts. A forbidden badge
 read clears its counts and stops polling. Sign-out or a new identity retires the cache,
 including late responses. Token refresh keeps the same cache; a different
 sign-in needs fresh server membership proof. None of this cache is persisted
@@ -1841,18 +1845,20 @@ lean on who is trusted with what:
   whole balance, the tip on the latest order, the orders marked paid, a
   retried tap answered as the same payment. Online: the statement's "Pagar en
   línea" opens `account_checkout_open()`, which snapshots exactly the orders
-  owed and holds the account against the till for 35 minutes. The
-  hold names its checkout with `checkout_id`; only that checkout's settlement
+  owed and holds that debt against another collection until Stripe confirms
+  expiry or its verified webhook records payment. The hold names its checkout
+  with `checkout_id`; only that checkout's settlement
   or release can clear it. Settlement locks orders before summing what is owed.
   A cancellation rechecks its planned paid state and hold under account/order
   locks; a 409 makes the dialog fetch and confirm a fresh plan. Stripe's
   webhook settles that checkout with `account_checkout_settle()` (once, and a
   failure throws so Stripe retries), and an abandoned session lifts the hold
-  through `account_checkout_release()` — only an open checkout's, and opening
-  a checkout closes the account's dead open ones first, so an expiry Stripe
-  delivers late cannot lift the hold of the checkout being paid now. A card
-  payment whose webhook arrives after the hold ran out, for food the till
-  collected meanwhile, is not booked against that food: what it paid twice is
+  through `account_checkout_release()` — only the named open checkout's, so
+  an expiry Stripe delivers late cannot lift a newer checkout's hold. Neither
+  an old `checkout_until` nor a missing session ID proves that a page expired.
+  New food can still go onto an account while an older frozen checkout is
+  unresolved. A duplicate card payment for food the till collected before
+  this protection shipped is not booked against that food: what it paid twice is
   a refund due (`refunds_due.account_name`), shown in Cuentas abiertas and
   announced on the bell, exactly like a card payment on a settled table.
 - **The statement** is `/cuenta/<code>`: a random twelve-character code (the
@@ -2447,6 +2453,21 @@ each total and retained amount before subtraction, as SQL does. These changes
 do not change collection rounding or add a database function.
 
 
+## Unconfirmed card-page recovery
+
+Every collection, account transfer, cancellation and forgiveness writer checks
+saved unresolved diner/account pages under its money lock, without an age window.
+`whole-bill-pages.ts` resolves the refused scope on its saved connected account:
+confirmed unpaid expiry uses ordinary completion, atomic part retirement, or full
+pay-now abandonment as appropriate. Paid pages wait for the verified webhook;
+open, unreadable, mismatched and unrecoverable unbound pages stay refused.
+An expiry cleanup permits one identical writer retry, preserving the quote,
+reference, currency, tip, selected parts and approval. Only selected held parts
+are recovered for part collection; another free part stays usable. Account state
+on both screens follows unresolved rows, and the card action stays available to
+resume its original page. Staff read that the payment is unconfirmed, to try
+again, then ask a manager. No force-clear action is offered.
+
 ## Returns on completed sales
 
 An owner or manager can find a completed, paid sale in Pedidos or Analytics
@@ -2510,3 +2531,85 @@ The completed-sale API cases and both dialog openers are registered for Claude's
 integration and browser gates. Unit RPC fixtures verify the TypeScript boundary;
 real transaction races, SQL enforcement and 390/1280 screenshots remain release
 checks owned by Claude.
+
+#### Checking an unconfirmed online payment
+
+When a staff collection, account transfer or settlement, divided-bill action,
+discount, write-off, approval or order cancellation returns
+`checkoutCode: checkout_unresolved`, its screen offers **Revisar pago / Check
+payment**. This is a separate status request at `POST /api/checkout/check` for
+the exact refused scope. It refreshes the balance and never resends the original
+collection or decision. The floor roles already allowed on each screen can
+check; approval requests remain management-only. Every identity is checked
+against the signed-in restaurant, independently of the browser's tenant data.
+Checking past money is available even after a subscription ends.
+
+| Check result | What staff see and can do |
+| --- | --- |
+| Confirmed expired and closed | The balance is refreshed; staff choose their next action themselves. |
+| Paid online | The payment is waiting to appear on the bill; do not collect it again. Only the verified webhook records it. |
+| Open, mismatched or unreadable | The payment could not be confirmed; check again later or ask a manager. |
+| No recoverable saved identity | Ask a manager to review the payment before collecting again. A status check never opens a new payable page. |
+
+All four answers and the action are translated in English and Spanish. An
+unconfirmed result does not add a new time limit or block signing out, selling
+or other payment scopes. Closing confirmed expired pages uses the existing
+resolver's expiry cleanup; no SQL or resolver write contract changes are needed.
+
+**Notification sweep 5: delivery and rollback.** Pending card checkout warnings
+have attempt-owned IDs. If the request returns its stock and deletes the pending
+order, it removes only those warning IDs for that restaurant and item; committed
+sale warnings stay. Staff invitation mail is sent only after a password-less
+login and its guarded membership insert commit. A failed send removes the new
+membership and login, returning the seat. Statement email sends require a client
+operation reference; retries keep it and confirmed sends renew it. The account
+and reference form the Resend idempotency key (provider retention: 24 hours).
+The existing IP, account and restaurant mail rate limits also apply to retries.
+## Scheduled recovery
+
+`GET /api/cron/recover` runs in production once a day (09:00 UTC, 03:00 in
+Mexico City) through Vercel Cron: the schedule every plan accepts, since a
+schedule the plan refuses fails the deploy. On a plan that allows it, set
+`vercel.json` to every ten minutes; the jobs are bounded per run either way. Configure a random `CRON_SECRET` in Vercel production before deploying;
+Vercel sends it as a Bearer authorization header. Missing, empty and incorrect
+secrets return 401 before any recovery client is created. The route compares
+fixed-size hashes in constant time and never needs a signed-in user.
+
+Four isolated jobs use the admin client and the existing locked writers:
+
+- Stock calls `recover_stock_reservations` across restaurants. SQL keeps its
+  one-hour grace period, checks that no order owns the reservation, and releases
+  at most one orphan per call, at most ten calls per invocation.
+- Customer refunds retrieve only saved provider refund IDs for pending app
+  attempts, including duplicate-payment refunds. Charge, frozen account,
+  currency and exact amount must match before the existing finish functions
+  record the result. Recovery never starts an attempt or creates a refund.
+  Successful evidence enqueues the existing fee reconciliation path.
+- Fees drain the existing charge queue through the same frozen-account lookup,
+  generation checks and provider requests as Bills.
+- Linked subscriptions for locally locked or past-due restaurants are read
+  from Stripe and passed through the webhook's revision-checked transition.
+  Recovery cannot relink a subscription that an admin has since replaced.
+
+Each job has ten seconds, with bounded network requests and no Stripe network
+retries. Each source reads at most ten items per batch (refunds have two
+sources sharing one budget). A rotating page prevents a full batch of pending
+items from permanently hiding later restaurants. Work stops before the budget
+to leave time for observation; four jobs fit within the route's 60-second limit.
+An item or job failure does not prevent subsequent items or jobs from running.
+
+The JSON response and logs report each job's completed items, remaining
+eligible count, failures, oldest pending date and age in seconds. Failed queue
+observations return `pending: null` with `observation_failed`, never a false
+zero. Subscription age is explicitly a restaurant-creation upper bound: the
+schema has no date for entering locked or past-due status. Over-six-hour work
+is logged with the affected restaurant. Duplicate-payment refunds also reuse
+the existing bilingual `refund_due` bell message, with one conflict-safe
+reminder per restaurant, including repeated or overlapping invocations. Other
+jobs have no matching bell kind and only log. Reading a reminder does not cause
+cron to ring it again. Recovery does not block selling, paying or signing out.
+
+The API gate covers both unauthorized refusal and an authorized clean-seed
+invocation, including unchanged sales, payment and stock records. Set
+`CRON_SECRET` in the dev server environment for that authorized case. Cron
+setup follows [Vercel's authorization contract](https://vercel.com/docs/cron-jobs/manage-cron-jobs#securing-cron-jobs).

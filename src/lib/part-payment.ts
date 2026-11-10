@@ -1,3 +1,4 @@
+import { checkoutPageRpc } from "@/lib/checkout-page-rpc";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { Actor } from "@/lib/api-guard";
 import { closeSessionsFor, openSession } from "@/lib/table-session";
@@ -37,7 +38,7 @@ export async function record(
   method: "cash" | "card",
   ref: string,
   requested = taken.amount,
-): Promise<{ wrote: boolean; refused: boolean; covered: boolean; landed: number; split?: boolean }> {
+): Promise<{ wrote: boolean; refused: boolean; covered: boolean; landed: number; split?: boolean; paying?: boolean }> {
   // The first sitting is credited with the gratuity it is ABOUT to receive:
   // the transaction puts it on the oldest order, and splitting the
   // money against totals that do not include it yet spills the tip into the
@@ -58,12 +59,11 @@ export async function record(
   // this request started from is already stale by
   // now if anybody else is collecting on the same table — which is how two
   // waiters took MX$400 for a MX$200 dinner.
-  const db = createAdminClient();
   let wrote = false;
   let refused = false;
   let covered = false;
   let landedTotal = 0;
-  const { data, error } = await db.rpc("collect_on_sittings_v1", {
+  const { data, error } = await checkoutPageRpc("collect_on_sittings_v1", {
     p_restaurant: actor.restaurantId,
     p_method: method,
     p_actor: actor.email,
@@ -81,12 +81,13 @@ export async function record(
       // the same one whose order receives it inside the transaction.
       tip: n === 0 ? taken.tip : 0,
     })),
-  });
+  }, { orderIds: before.orders.map(o => o.id) });
   if (error) {
     console.error("could not record the table collection:", error.message);
     return { wrote: false, refused: false, covered: false, landed: 0 };
   }
   for (const outcome of (data ?? []) as { taken: number; outcome: string }[]) {
+    if (outcome.outcome === "paying") return { wrote, refused, covered, landed: landedTotal, paying: true };
     if (outcome.outcome === "split") return { wrote, refused, covered, landed: landedTotal, split: true };
     if (outcome.outcome === "written") {
       wrote = true;
@@ -202,7 +203,7 @@ export async function closeBill(
   // Nothing left unpaid: somebody closed it a moment ago, and it is settled.
   if (!owed?.length) return true;
 
-  const { error } = await db.rpc("settle_orders_v2", {
+  const { error } = await checkoutPageRpc("settle_orders_v2", {
     p_restaurant: actor.restaurantId,
     p_orders: owed.map(o => o.id),
     p_method: method,

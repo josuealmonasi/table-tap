@@ -4,6 +4,8 @@
 // Read the same way for the dialog that asks first and for the cancel itself,
 // so the two cannot disagree about what the money does.
 // ============================================================================
+import { unresolvedAccounts } from "@/lib/account-checkout-state";
+import { resolveCheckoutPages } from "@/lib/whole-bill-pages";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { cancelPlan, type CancelPayment, type CancelPlan } from "@/lib/cancel-plan";
 import type { OrderLineItem } from "@/lib/types";
@@ -30,6 +32,7 @@ export async function readCancel(
   admin: SupabaseClient,
   restaurantId: string,
   id: string,
+  recover = true,
 ): Promise<CancelRead> {
   // Scoped to the caller's restaurant, so another tenant's order id is simply
   // not found. The write that follows is scoped the same way, on a path that
@@ -50,10 +53,10 @@ export async function readCancel(
     return { error: "apiErr.cancelStatus", status: 409 };
   }
 
-  // On an account the customer is paying online right now: Stripe will charge
-  // the orders the payment was opened for, this one among them, and a dish
-  // cancelled in between would be paid for anyway. Wait for it to land or
-  // run out — the hold is half an hour at most.
+  // Stripe can still charge the orders an account page was opened for, this
+  // one among them; cancelling a dish in between would charge it anyway.
+  // A hold's old timestamp proves nothing about a late webhook. Ask about
+  // the saved page before refusing, so a confirmed expiry can free the bill.
   let hold: string | null = null;
   let holdId: string | null = null;
   if (order.account_id) {
@@ -69,8 +72,17 @@ export async function readCancel(
     }
     hold = account?.checkout_until ?? null;
     holdId = account?.checkout_id ?? null;
-    if (!order.paid && hold && new Date(hold) > new Date()) {
-      return { error: "apiErr.accountPayingOnline", status: 409 };
+    if (!order.paid) {
+      const unresolved = await unresolvedAccounts(restaurantId, [order.account_id]).catch(() => null);
+      if (!unresolved) return { error: "apiErr.verifyOrders", status: 503 };
+      if (unresolved.has(order.account_id)) {
+        if (!recover || await resolveCheckoutPages(restaurantId, { orderIds: [id], accountId: order.account_id }) !== "closed") {
+          return { error: "apiErr.accountPayingOnline", status: 409 };
+        }
+        // Expiry changed the hold. Rebuild the whole plan before the writer
+        // compares it, rather than cancelling from a stale payment snapshot.
+        return await readCancel(admin, restaurantId, id, false);
+      }
     }
   }
 

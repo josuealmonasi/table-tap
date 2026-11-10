@@ -2,6 +2,11 @@ import { NextResponse } from "next/server";
 import { messagesFor, translate } from "@/lib/i18n";
 import { getLocale } from "@/lib/i18n/server";
 
+const UNCONFIRMED_PAGES = new Set([
+  "apiErr.accountBillPaying", "apiErr.accountPayingOnline", "apiErr.splitBillPaying",
+  "apiErr.splitSlotPaying", "apiErr.writeOffPaying",
+]);
+
 /**
  * A JSON error whose message is in the caller's language.
  *
@@ -26,5 +31,8 @@ export async function apiError(
   extra?: Record<string, unknown>,
 ): Promise<NextResponse> {
   const messages = messagesFor(await getLocale());
-  return NextResponse.json({ ...extra, error: translate(messages, key, vars) }, { status });
+  // Keep the route's own outcome code too: selected parts use it to refresh
+  // their selection, while every unconfirmed page shares one recovery code.
+  const recovery = status === 409 && UNCONFIRMED_PAGES.has(key) ? { checkoutCode: "checkout_unresolved" } : {};
+  return NextResponse.json({ ...recovery, ...extra, error: translate(messages, key, vars) }, { status });
 }

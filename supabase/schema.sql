@@ -2661,6 +2661,9 @@ begin
   perform public.lock_restaurant_money(p_restaurant);
   -- One collection at a time per sitting. Everything below reads live.
   perform pg_advisory_xact_lock(hashtextextended(p_session::text, 0));
+  if public.whole_bill_card_open_v1(p_restaurant, array(select id from orders where session_id = p_session and restaurant_id = p_restaurant and not paid and not written_off and account_id is null and status not in ('cancelled', 'pending_payment'))) then
+    return jsonb_build_object('taken', 0, 'tip', 0, 'outcome', 'paying');
+  end if;
 
   select coalesce(sum(total), 0) into v_owed
     from orders
@@ -2766,6 +2769,11 @@ declare
   v_count int;
 begin
   perform public.lock_restaurant_money(p_restaurant);
+  if public.whole_bill_card_open_v1(p_restaurant, p_orders) or exists (select 1 from bill_splits b join bill_split_slots x on x.split_id = b.id
+      where b.restaurant_id = p_restaurant and b.status = 'locked' and b.order_ids && p_orders
+        and x.reserved_checkout_id is not null and x.payment_id is null) then
+    raise exception 'paying';
+  end if;
   if p_method not in ('cash', 'card') then
     raise exception 'settle_orders: unknown method %', p_method;
   end if;
@@ -3900,10 +3908,11 @@ begin
 
   perform 1 from orders where id = any(p_orders) order by id for update;
 
-  -- A card checkout open on any of them: the diner is paying it right now.
-  if exists (select 1 from orders where id = any(p_orders)
-              and card_checkout_at is not null and card_checkout_at > now() - interval '35 minutes'
-              and paid = false) then
+  -- A whole-bill card page not yet paid or expired on any of them, at any
+  -- age: Stripe may have charged it with the webhook still on its way. The
+  -- 35-minute window let a late charge be moved onto an account too
+  -- (unresolved-checkout contract).
+  if public.whole_bill_card_open_v1(p_restaurant, p_orders) then
     return jsonb_build_object('outcome', 'paying');
   end if;
 
@@ -3998,7 +4007,9 @@ begin
                                     where restaurant_id = p_restaurant and client_ref = p_ref) then
     return jsonb_build_object('outcome', 'duplicate');
   end if;
-  if v_account.checkout_until is not null and v_account.checkout_until > now() then
+  -- The account's own card checkout, open at any age: checkout_until only
+  -- ever said when the page should have ended, not whether it charged.
+  if public.unresolved_account_page_v1(p_restaurant, p_account) then
     return jsonb_build_object('outcome', 'paying');
   end if;
 
@@ -4046,7 +4057,9 @@ begin
   select * into v_account from customer_accounts
    where id = p_account and restaurant_id = p_restaurant for update;
   if v_account.id is null then return jsonb_build_object('outcome', 'missing'); end if;
-  if v_account.checkout_until is not null and v_account.checkout_until > now() then
+  -- The account's own card checkout, open at any age: checkout_until only
+  -- ever said when the page should have ended, not whether it charged.
+  if public.unresolved_account_page_v1(p_restaurant, p_account) then
     return jsonb_build_object('outcome', 'paying');
   end if;
   perform 1 from orders where account_id = p_account and paid = false
@@ -4063,7 +4076,7 @@ begin
   -- expiry arriving late (Stripe retries for days) finds nothing to release.
   -- Releasing it lifted the hold of the checkout opened now, and the till
   -- could collect the account while the customer was paying it by card.
-  update account_checkouts set status = 'expired' where account_id = p_account and status = 'open';
+  -- No blanket expiry: an open page here is refused above until Stripe resolves it.
   v_tip := least(v_tip, v_owed);
   insert into account_checkouts (restaurant_id, account_id, order_ids, amount, tip, fee)
   values (p_restaurant, p_account, v_ids, v_owed, v_tip, greatest(coalesce(p_fee, 0), 0)) returning id into v_id;
@@ -4314,6 +4327,9 @@ create unique index if not exists orders_stock_reservation_idx
 -- Numeric recounts do the same; only trusted sale, waste and return functions
 -- keep the generation. Browser callers cannot give themselves that exemption.
 alter table menu_items add column if not exists stock_epoch int not null default 0;
+-- When the current generation began: a sale made before it is already
+-- reflected in the count (sweep 6, finding 2). Null: never counted since.
+alter table menu_items add column if not exists stock_epoch_at timestamptz;
 create or replace function public.stock_tracking_epoch()
 returns trigger language plpgsql set search_path = public as $$
 begin
@@ -4325,6 +4341,7 @@ begin
        and current_setting('tabletap.stock_recount', true) = 'on'
        and current_user not in ('anon', 'authenticated')) then
     new.stock_epoch := old.stock_epoch + 1;
+    new.stock_epoch_at := now();
   else
     new.stock_epoch := old.stock_epoch;
   end if;
@@ -4635,6 +4652,13 @@ declare v_count int;
 begin
   perform 1 from menu_items where id = p_item and restaurant_id = p_restaurant for update;
   if not found then return -1; end if;
+  -- Held against an archive running at the same time: checked unlocked, an
+  -- ingredient archived between the check and the insert was attached anyway,
+  -- hidden, and costed at zero (sweep 7, finding 7). The archive's update
+  -- waits for this, or this waits for it and the check below sees it.
+  perform 1 from ingredients where restaurant_id = p_restaurant
+    and id in (select ingredient_id from jsonb_to_recordset(p_lines) as l(ingredient_id uuid))
+    order by id for share;
   if exists (
     select 1 from jsonb_to_recordset(p_lines) as l(ingredient_id uuid)
       left join ingredients i
@@ -4704,6 +4728,11 @@ create table if not exists waste_entries (
   check ((ingredient_id is null) <> (item_id is null))
 );
 create index if not exists waste_entries_recent_idx on waste_entries(restaurant_id, created_at desc);
+-- `returned`: a dish a customer sent back. Its loss is reported; its food
+-- left with the sale, so only a product can be returned.
+alter table waste_entries drop constraint if exists waste_entries_reason_check;
+alter table waste_entries add constraint waste_entries_reason_check
+  check (reason in ('spoiled', 'unsold', 'mistake', 'staff', 'returned') and (reason <> 'returned' or item_id is not null));
 alter table waste_entries enable row level security;
 revoke all on waste_entries from anon;
 revoke all on waste_entries from authenticated;
@@ -4750,9 +4779,14 @@ grant all on ingredient_counts to service_role;
 -- never below zero; reaching zero takes the dish off the way a sale would.
 -- Returns the entry's id, or null when the ingredient or dish is not this
 -- restaurant's (or the ingredient is archived).
-create or replace function public.record_waste(
+-- `p_choices`: the plate that was made, as an order line has it ({mods,
+-- extras}). Without it a product's waste took the first single choice, whole
+-- milk for an oat latte (sweep 7, finding 6). A new name, so the deployed
+-- signature below keeps serving the code that calls it.
+alter table waste_entries add column if not exists choices jsonb;
+create or replace function public.record_waste_v2(
   p_restaurant uuid, p_ingredient uuid, p_item uuid, p_quantity numeric,
-  p_reason text, p_note text, p_cost numeric, p_actor text
+  p_reason text, p_note text, p_cost numeric, p_actor text, p_choices jsonb
 ) returns uuid language plpgsql security definer set search_path = public as $$
 declare
   v_name text;
@@ -4773,17 +4807,30 @@ begin
      where id = p_item and restaurant_id = p_restaurant for update;
   end if;
   if v_name is null then return null; end if;
-  if v_stock is not null then
+  -- A returned plate's portion left with its sale (sweep 7, finding 1).
+  if v_stock is not null and p_reason <> 'returned' then
     update menu_items
        set stock          = greatest(v_stock - ceil(p_quantity)::int, 0),
            available      = case when v_stock - ceil(p_quantity)::int <= 0 then false else available end,
            stock_auto_off = case when v_stock - ceil(p_quantity)::int <= 0 and available then true else stock_auto_off end
      where id = p_item;
   end if;
-  insert into waste_entries (restaurant_id, ingredient_id, item_id, name, quantity, reason, note, cost, recorded_by)
-  values (p_restaurant, p_ingredient, p_item, v_name, p_quantity, p_reason, p_note, p_cost, p_actor)
+  insert into waste_entries (restaurant_id, ingredient_id, item_id, name, quantity, reason, note, cost, recorded_by, choices)
+  values (p_restaurant, p_ingredient, p_item, v_name, p_quantity, p_reason, p_note, p_cost, p_actor,
+    case when p_item is not null then p_choices end)
   returning id into v_id;
   return v_id;
+end;
+$$;
+revoke all on function public.record_waste_v2(uuid, uuid, uuid, numeric, text, text, numeric, text, jsonb) from public, anon, authenticated;
+grant execute on function public.record_waste_v2(uuid, uuid, uuid, numeric, text, text, numeric, text, jsonb) to service_role;
+-- The deployed signature: the same writer, with no choices.
+create or replace function public.record_waste(
+  p_restaurant uuid, p_ingredient uuid, p_item uuid, p_quantity numeric,
+  p_reason text, p_note text, p_cost numeric, p_actor text
+) returns uuid language plpgsql security definer set search_path = public as $$
+begin
+  return public.record_waste_v2(p_restaurant, p_ingredient, p_item, p_quantity, p_reason, p_note, p_cost, p_actor, null);
 end;
 $$;
 revoke all on function public.record_waste(uuid, uuid, uuid, numeric, text, text, numeric, text) from public, anon, authenticated;
@@ -4805,7 +4852,9 @@ begin
   select * into v_ingredient from ingredients
    where id = p_ingredient and restaurant_id = p_restaurant and archived_at is null for update;
   if v_ingredient.id is null then return null; end if;
-  v_pack_price := round(p_total / p_packs, 2);
+  -- Six places: a one-piece pack bought 10,000 at a time costs MX$0.0149;
+  -- two places stored MX$0.01 and valued the lot at MX$100, not MX$149 (sweep 7, finding 8).
+  v_pack_price := round(p_total / p_packs, 6);
   if v_pack_price is distinct from v_ingredient.pack_price then
     update ingredients set pack_price = v_pack_price, updated_by = p_actor where id = p_ingredient;
   end if;
@@ -4985,9 +5034,12 @@ begin
        or v_account.checkout_id is distinct from p_expected_checkout then
       return false;
     end if;
-    if not p_expected_paid and v_account.checkout_until > now() then return false; end if;
+    if not p_expected_paid and public.unresolved_account_page_v1(p_restaurant, v_account.id) then return false; end if;
   end if;
   select * into v_order from orders where id = p_order and restaurant_id = p_restaurant for update;
+  -- An unpaid order on a card page still open may be about to be paid; it is
+  -- not cancelled under it (verification 2). The route reads false as changed.
+  if not v_order.paid and public.whole_bill_card_open_v1(p_restaurant, array[p_order]) then return false; end if;
   if v_order.id is null or v_order.paid is distinct from p_expected_paid
      or v_order.account_id is distinct from p_expected_account then return false; end if;
   update orders set status = 'cancelled', stripe_refund_id = p_refund, cancelled_at = now()
@@ -5432,6 +5484,9 @@ begin
      -- An order moved onto a customer account is the account's debt now.
      and account_id is null;
   if v_count <> cardinality(v_request.order_ids) or round(v_total, 2) <> p_amount then return 'changed'; end if;
+  -- A card page still open on these orders was quoted the current total; the
+  -- debt may not change under it (unresolved-checkout contract, verification 1).
+  if public.whole_bill_card_open_v1(p_restaurant, v_request.order_ids) then return 'paying'; end if;
 
   update orders set written_off = true, write_off_reason = v_request.reason,
     write_off_note = v_request.note, written_off_by = p_actor, written_off_at = now(), status = 'completed'
@@ -5468,6 +5523,9 @@ begin
      and paid = false and written_off = false and status not in ('cancelled', 'pending_payment')
      and coupon_code is null and account_id is null;
   if v_count <> cardinality(v_request.order_ids) or v_total <= 0 then return 'changed'; end if;
+  -- A card page still open on these orders was quoted the current total; the
+  -- debt may not change under it (unresolved-checkout contract, verification 1).
+  if public.whole_bill_card_open_v1(p_restaurant, v_request.order_ids) then return 'paying'; end if;
   select * into v_coupon from coupons
    where restaurant_id = p_restaurant and upper(code) = upper(v_request.code) for update;
   if not found or not v_coupon.active
@@ -6894,6 +6952,10 @@ begin
   perform set_config('tabletap.allocation_scope', '', true);
   -- One collection at a time per sitting. Everything below reads live.
   perform pg_advisory_xact_lock(hashtextextended(p_session::text, 0));
+  if public.whole_bill_card_open_v1(p_restaurant, array(select id from orders where session_id = p_session
+      and restaurant_id = p_restaurant and not paid and not written_off and account_id is null and status not in ('cancelled', 'pending_payment'))) then
+    return jsonb_build_object('taken', 0, 'tip', 0, 'outcome', 'paying');
+  end if;
   -- A divided bill with a slot paid or held is collected by its slots: the
   -- cancel below would free a paid slot (split contract, decision 5).
   if exists(select 1 from bill_splits b join bill_split_slots s on s.split_id = b.id
@@ -7024,6 +7086,15 @@ begin
   for v_session in select (s->>'session_id')::uuid from jsonb_array_elements(p_shares) s order by 1 loop
     perform pg_advisory_xact_lock(hashtextextended(v_session::text, 0));
   end loop;
+  -- Checked for every sitting before any is written: a later blocked sitting
+  -- must not leave an earlier one collected (unresolved-checkout contract).
+  if public.whole_bill_card_open_v1(p_restaurant, array(select o.id from orders o
+      where o.restaurant_id = p_restaurant and not o.paid and not o.written_off and o.account_id is null
+        and o.status not in ('cancelled', 'pending_payment')
+        and o.session_id in (select (x->>'session_id')::uuid from jsonb_array_elements(p_shares) x))) then
+    -- The same shape as each sitting's result, so the caller reads it as one (verification 5).
+    return jsonb_build_array(jsonb_build_object('taken', 0, 'tip', 0, 'outcome', 'paying'));
+  end if;
 
   -- Include old positional receipts too. A retry after an older caller's
   -- partial commit must finish that handful, never collect its first share
@@ -7086,6 +7157,13 @@ declare
 begin
   perform public.lock_restaurant_money(p_restaurant);
   perform set_config('tabletap.allocation_writer', 'v1', true);
+  -- Never settle orders a whole-bill card page may still be paying.
+  -- Nor orders a held split part may be paying (verification 3).
+  if public.whole_bill_card_open_v1(p_restaurant, p_orders) or exists (select 1 from bill_splits b join bill_split_slots x on x.split_id = b.id
+      where b.restaurant_id = p_restaurant and b.status = 'locked' and b.order_ids && p_orders
+        and x.reserved_checkout_id is not null and x.payment_id is null) then
+    raise exception 'paying';
+  end if;
   if p_restaurant is not null then perform public.backfill_payment_allocations(p_restaurant); end if;
   perform set_config('tabletap.allocation_scope', '', true);
   perform set_config('tabletap.allocation_scope', to_json(p_orders)::text, true);
@@ -7450,10 +7528,11 @@ begin
 
   perform 1 from orders where id = any(p_orders) order by id for update;
 
-  -- A card checkout open on any of them: the diner is paying it right now.
-  if exists (select 1 from orders where id = any(p_orders)
-              and card_checkout_at is not null and card_checkout_at > now() - interval '35 minutes'
-              and paid = false) then
+  -- A whole-bill card page not yet paid or expired on any of them, at any
+  -- age: Stripe may have charged it with the webhook still on its way. The
+  -- 35-minute window let a late charge be moved onto an account too
+  -- (unresolved-checkout contract).
+  if public.whole_bill_card_open_v1(p_restaurant, p_orders) then
     return jsonb_build_object('outcome', 'paying');
   end if;
 
@@ -7559,7 +7638,9 @@ begin
                                     where restaurant_id = p_restaurant and client_ref = p_ref) then
     return jsonb_build_object('outcome', 'duplicate');
   end if;
-  if v_account.checkout_until is not null and v_account.checkout_until > now() then
+  -- The account's own card checkout, open at any age: checkout_until only
+  -- ever said when the page should have ended, not whether it charged.
+  if public.unresolved_account_page_v1(p_restaurant, p_account) then
     return jsonb_build_object('outcome', 'paying');
   end if;
 
@@ -7608,7 +7689,9 @@ begin
   select * into v_account from customer_accounts
    where id = p_account and restaurant_id = p_restaurant for update;
   if v_account.id is null then return jsonb_build_object('outcome', 'missing'); end if;
-  if v_account.checkout_until is not null and v_account.checkout_until > now() then
+  -- The account's own card checkout, open at any age: checkout_until only
+  -- ever said when the page should have ended, not whether it charged.
+  if public.unresolved_account_page_v1(p_restaurant, p_account) then
     return jsonb_build_object('outcome', 'paying');
   end if;
   perform 1 from orders where account_id = p_account and paid = false
@@ -7625,7 +7708,7 @@ begin
   -- expiry arriving late (Stripe retries for days) finds nothing to release.
   -- Releasing it lifted the hold of the checkout opened now, and the till
   -- could collect the account while the customer was paying it by card.
-  update account_checkouts set status = 'expired' where account_id = p_account and status = 'open';
+  -- No blanket expiry: an open page here is refused above until Stripe resolves it.
   v_tip := least(v_tip, v_owed);
   insert into account_checkouts (restaurant_id, account_id, order_ids, amount, tip, fee)
   values (p_restaurant, p_account, v_ids, v_owed, v_tip, greatest(coalesce(p_fee, 0), 0)) returning id into v_id;
@@ -7765,9 +7848,12 @@ begin
        or v_account.checkout_id is distinct from p_expected_checkout then
       return false;
     end if;
-    if not p_expected_paid and v_account.checkout_until > now() then return false; end if;
+    if not p_expected_paid and public.unresolved_account_page_v1(p_restaurant, v_account.id) then return false; end if;
   end if;
   select * into v_order from orders where id = p_order and restaurant_id = p_restaurant for update;
+  -- An unpaid order on a card page still open may be about to be paid; it is
+  -- not cancelled under it (verification 2). The route reads false as changed.
+  if not v_order.paid and public.whole_bill_card_open_v1(p_restaurant, array[p_order]) then return false; end if;
   if v_order.id is null or v_order.paid is distinct from p_expected_paid
      or v_order.account_id is distinct from p_expected_account then return false; end if;
   update orders set status = 'cancelled', stripe_refund_id = p_refund, cancelled_at = now()
@@ -7914,6 +8000,9 @@ begin
      -- An order moved onto a customer account is the account's debt now.
      and account_id is null;
   if v_count <> cardinality(v_request.order_ids) or round(v_total, 2) <> p_amount then return 'changed'; end if;
+  -- A card page still open on these orders was quoted the current total; the
+  -- debt may not change under it (unresolved-checkout contract, verification 1).
+  if public.whole_bill_card_open_v1(p_restaurant, v_request.order_ids) then return 'paying'; end if;
   -- Part of the bill was paid after it was asked for: writing it off would
   -- report the whole total as lost (paths audit #5). The guard below would
   -- raise; this says why.
@@ -7971,6 +8060,9 @@ begin
   -- under a held card attempt left the charge unallocatable (split audit #1).
   if exists (select 1 from bill_splits b where b.restaurant_id = p_restaurant and b.status = 'locked'
     and b.order_ids && p_orders) then return jsonb_build_object('outcome', 'split'); end if;
+  -- A card page still open on these orders was quoted the current total; the
+  -- debt may not change under it (unresolved-checkout contract, verification 1).
+  if public.whole_bill_card_open_v1(p_restaurant, p_orders) then return jsonb_build_object('outcome', 'paying'); end if;
   with done as (
     update orders set written_off = true, write_off_reason = p_reason, write_off_note = p_note,
       written_off_by = p_actor, written_off_at = now(), status = 'completed'
@@ -8014,6 +8106,9 @@ begin
      and paid = false and written_off = false and status not in ('cancelled', 'pending_payment')
      and coupon_code is null and account_id is null;
   if v_count <> cardinality(v_request.order_ids) or v_total <= 0 then return 'changed'; end if;
+  -- A card page still open on these orders was quoted the current total; the
+  -- debt may not change under it (unresolved-checkout contract, verification 1).
+  if public.whole_bill_card_open_v1(p_restaurant, v_request.order_ids) then return 'paying'; end if;
   -- Paid in part since it was asked for: a lower total would sit under money
   -- already collected (paths audit #2). The guard would raise; this says why.
   if exists (select 1 from unnest(v_request.order_ids) o(id)
@@ -8086,6 +8181,9 @@ begin
   -- under a held card attempt left the charge unallocatable (split audit #1).
   if exists (select 1 from bill_splits b where b.restaurant_id = p_restaurant and b.status = 'locked'
     and b.order_ids && p_orders) then return 'split'; end if;
+  -- A card page still open on these orders was quoted the current total; the
+  -- debt may not change under it (unresolved-checkout contract, verification 1).
+  if public.whole_bill_card_open_v1(p_restaurant, p_orders) then return 'paying'; end if;
   if v_count = 0 or v_count <> cardinality(p_orders) or v_total <= 0 then return 'changed'; end if;
   if p_amount is null or p_amount <= 0 or p_amount > v_total then return 'changed'; end if;
   if exists (select 1 from unnest(p_orders) o(id)
@@ -8140,9 +8238,10 @@ begin
      where o.restaurant_id = p_restaurant and o.paid = false and o.account_id is null
        and o.written_off = false and o.status not in ('cancelled', 'pending_payment')
        and o.stripe_session_id is null and o.service_fee > 0
-       -- A card checkout opened in the last 35 minutes was priced from this
-       -- total (CHECKOUT_HOLD_MINUTES: 30 for the session, five for the webhook).
-       and (o.card_checkout_at is null or o.card_checkout_at <= now() - interval '35 minutes')
+       -- Any card page still open was priced from this total, at any age; it
+       -- is repriced only once Stripe has resolved it (unresolved-checkout contract).
+       and not exists (select 1 from diner_checkouts c where c.restaurant_id = p_restaurant
+         and c.status = 'open' and o.id = any(c.order_ids))
        -- Money against the order or its sitting.
        and public.retained_order_coverage(p_restaurant, o.id) = 0
        and not exists (select 1 from payments p where p.order_id = o.id)
@@ -8844,7 +8943,7 @@ create or replace function public.record_offline_sale(
   p_at timestamptz, p_terminal text, p_demand jsonb,
   p_manager text, p_reason text, p_original_at text, p_authority text
 ) returns jsonb language plpgsql security definer set search_path = public as $$
-declare v_ticket jsonb; q offline_sale_queue%rowtype;
+declare v_ticket jsonb; q offline_sale_queue%rowtype; v_demand jsonb; v_counted text[];
 begin
   perform public.lock_restaurant_money(p_restaurant);
   select * into q from offline_sale_queue where pos_ref = p_ref for update;
@@ -8889,9 +8988,18 @@ begin
     end if;
     return v_ticket;
   end if;
+  -- A dish counted after the sale was made already left its portions out of
+  -- the count: the shelf held eight when the manager counted eight. Taking
+  -- the sale's two off again showed six (sweep 6, finding 2). The money and
+  -- the order are recorded either way; only that dish's stock is left as counted.
+  select coalesce(jsonb_agg(d.value) filter (where m.stock_epoch_at is null or m.stock_epoch_at <= p_at), '[]'::jsonb),
+         coalesce(array_agg(d.value->>'item_id') filter (where m.stock_epoch_at > p_at), '{}')
+    into v_demand, v_counted
+    from jsonb_array_elements(coalesce(p_demand, '[]'::jsonb)) d
+    left join menu_items m on m.id = (d.value->>'item_id')::uuid and m.restaurant_id = p_restaurant;
   perform set_config('tabletap.offline_queue_writer', p_ref::text, true);
   v_ticket := public.ring_pos_sale_v2(p_restaurant, p_ref, p_order, p_method, p_actor,
-    'completed', p_at, p_terminal, p_demand, false, 0);
+    'completed', p_at, p_terminal, v_demand, false, 0);
   if v_ticket->>'outcome' <> 'settled' then return v_ticket; end if;
   perform set_config('tabletap.offline_audit_writer', p_ref::text, true);
   update orders set offline_collector = p_actor, offline_authority = p_authority,
@@ -8900,6 +9008,10 @@ begin
     where id = p_ref and restaurant_id = p_restaurant;
   insert into user_logs(restaurant_id,actor_email,entity,action,detail)
     values(p_restaurant,p_actor,'bill','paid','code=ORD-' || upper(left(p_ref::text,4)) || ' amount=' || to_char((p_order->>'total')::numeric,'FM999999990.00') || ' currency=' || (p_order->>'currency') || ' method=' || p_method);
+  if cardinality(v_counted) > 0 then
+    insert into user_logs(restaurant_id,actor_email,entity,action,detail)
+      values(p_restaurant,p_actor,'stock','offline_counted','code=ORD-' || upper(left(p_ref::text,4)) || ' items=' || array_to_string(v_counted, ','));
+  end if;
   if p_manager is not null then
     insert into user_logs(restaurant_id,actor_email,entity,action,detail)
       values(p_restaurant,p_manager,'order','offline_recovered','code=ORD-' || upper(left(p_ref::text,4)) || ' note=' || replace(p_reason,' ','_'));
@@ -9093,6 +9205,12 @@ declare
 begin
   v_new := jsonb_populate_record(null::diner_checkouts, p_record);
   perform public.lock_restaurant_money(v_new.restaurant_id);
+  -- An account's page is opened only for its open account checkout: one
+  -- released as never reaching Stripe must not get a live page afterwards.
+  if v_new.metadata ? 'account_checkout' and not exists (select 1 from account_checkouts a
+      where a.id = (v_new.metadata->>'account_checkout')::uuid and a.restaurant_id = v_new.restaurant_id and a.status = 'open') then
+    raise exception 'checkout_unavailable';
+  end if;
   perform public.backfill_payment_allocations(v_new.restaurant_id);
   select * into v_prior from diner_checkouts c
    where c.restaurant_id = v_new.restaurant_id and c.status = 'open'
@@ -9486,7 +9604,7 @@ begin
     return jsonb_build_object('outcome', 'refundDue');
   end if;
   if exists (select 1 from refund_attempts where restaurant_id = p_restaurant
-      and (provider_status is null or provider_status not in ('succeeded', 'failed', 'canceled')))
+      and (provider_status is null or provider_status not in ('succeeded', 'failed', 'canceled', 'never_sent')))
     or exists (select 1 from refund_due_attempts where restaurant_id = p_restaurant
       and (provider_status is null or provider_status not in ('succeeded', 'failed', 'canceled')))
     or exists (select 1 from diner_checkouts where restaurant_id = p_restaurant and status = 'open')
@@ -9815,6 +9933,34 @@ $$;
 revoke all on function public.sale_ingredient_usage(uuid, jsonb) from public, anon, authenticated;
 grant execute on function public.sale_ingredient_usage(uuid, jsonb) to service_role;
 
+-- What each sold line cost in ingredients, in the order of the sale's items:
+-- null for a line with no recipe or an ingredient without a price. Frozen on
+-- the sale's snapshot when it is made (sweep 7, finding 3).
+alter table ingredient_consumption add column if not exists cost_currency text;
+alter table ingredient_consumption add column if not exists line_costs jsonb;
+create or replace function public.sale_line_costs(p_restaurant uuid, p_items jsonb)
+returns jsonb language sql stable security definer set search_path = public as $$
+  select coalesce(jsonb_agg((
+    -- Known only when every dish in the line has a recipe: a combo of a costed
+    -- coffee and an uncosted cake was saved as the coffee's cost alone, and
+    -- read back as the whole line's (sweep 7, finding 3; end-to-end review).
+    select case when u.usage = '{}'::jsonb
+        or exists (select 1 from (
+            select c->>'itemId' id from jsonb_array_elements(coalesce(line.value->'components', '[]')) c
+            union all select line.value->>'itemId' where jsonb_array_length(coalesce(line.value->'components', '[]')) = 0
+            union all select e->>'id' from jsonb_array_elements(coalesce(line.value->'extras', '[]')) e
+          ) part where not exists (select 1 from recipe_lines r where r.restaurant_id = p_restaurant and r.item_id::text = part.id))
+        or exists (select 1 from jsonb_each_text(u.usage) e left join ingredients i
+          on i.id = e.key::uuid and i.restaurant_id = p_restaurant where i.unit_cost is null) then null
+      else to_jsonb(round((select sum(-e.value::numeric * i.unit_cost) from jsonb_each_text(u.usage) e
+        join ingredients i on i.id = e.key::uuid and i.restaurant_id = p_restaurant), 4)) end
+    from (select public.sale_ingredient_usage(p_restaurant, jsonb_build_array(line.value)) as usage) u
+  ) order by line.n), '[]'::jsonb)
+  from jsonb_array_elements(coalesce(p_items, '[]'::jsonb)) with ordinality line(value, n);
+$$;
+revoke all on function public.sale_line_costs(uuid, jsonb) from public, anon, authenticated;
+grant execute on function public.sale_line_costs(uuid, jsonb) to service_role;
+
 create or replace function public.waste_ingredient_usage(p_restaurant uuid, p_ingredient uuid, p_item uuid, p_quantity numeric)
 returns jsonb language sql stable security definer set search_path = public as $$
   select case when p_ingredient is not null then jsonb_build_object(p_ingredient, -p_quantity)
@@ -9828,6 +9974,19 @@ returns jsonb language sql stable security definer set search_path = public as $
 $$;
 revoke all on function public.waste_ingredient_usage(uuid, uuid, uuid, numeric) from public, anon, authenticated;
 grant execute on function public.waste_ingredient_usage(uuid, uuid, uuid, numeric) to service_role;
+
+-- The plate that was made, when the waste says so: its own choices and the
+-- extras that went with it, read exactly as a sale's line is. Without choices
+-- (an older row, an ingredient) it is the rule above (sweep 7, finding 6).
+create or replace function public.waste_ingredient_usage_v2(p_restaurant uuid, p_ingredient uuid, p_item uuid, p_quantity numeric, p_choices jsonb)
+returns jsonb language sql stable security definer set search_path = public as $$
+  select case when p_ingredient is not null or p_choices is null
+    then public.waste_ingredient_usage(p_restaurant, p_ingredient, p_item, p_quantity)
+    else public.sale_ingredient_usage(p_restaurant, jsonb_build_array(jsonb_build_object(
+      'itemId', p_item, 'qty', p_quantity, 'mods', coalesce(p_choices->'mods', '{}'), 'extras', coalesce(p_choices->'extras', '[]')))) end;
+$$;
+revoke all on function public.waste_ingredient_usage_v2(uuid, uuid, uuid, numeric, jsonb) from public, anon, authenticated;
+grant execute on function public.waste_ingredient_usage_v2(uuid, uuid, uuid, numeric, jsonb) to service_role;
 
 -- Existing recipes cannot tell us what an older, already edited recipe was.
 -- Freeze the best evidence left at upgrade, once; never recalculate it later.
@@ -9882,7 +10041,7 @@ begin
         return null;
       end if;
     elsif v_kind = 'waste' then
-      v_changed := (new.ingredient_id, new.item_id, new.quantity) is distinct from (old.ingredient_id, old.item_id, old.quantity);
+      v_changed := (new.ingredient_id, new.item_id, new.quantity, new.reason, new.choices) is distinct from (old.ingredient_id, old.item_id, old.quantity, old.reason, old.choices);
       if not v_changed then return null; end if;
     else
       v_changed := (new.ingredient_id, new.quantity) is distinct from (old.ingredient_id, old.quantity);
@@ -9896,21 +10055,37 @@ begin
   v_usage := v_previous.usage;
   if v_usage is null or v_changed then
     if v_kind = 'sale' then v_usage := public.sale_ingredient_usage(v_restaurant, v_row->'items');
-    elsif v_kind = 'waste' then v_usage := public.waste_ingredient_usage(v_restaurant,
-      (v_row->>'ingredient_id')::uuid, (v_row->>'item_id')::uuid, (v_row->>'quantity')::numeric);
+    -- A plate a customer sent back was consumed by its sale: recorded as a
+    -- loss, it must not take the same 200 ml again (sweep 7, finding 1).
+    elsif v_kind = 'waste' and v_row->>'reason' = 'returned' then v_usage := '{}'::jsonb;
+    elsif v_kind = 'waste' then v_usage := public.waste_ingredient_usage_v2(v_restaurant,
+      (v_row->>'ingredient_id')::uuid, (v_row->>'item_id')::uuid, (v_row->>'quantity')::numeric, v_row->'choices');
     else v_usage := jsonb_build_object(v_row->>'ingredient_id', (v_row->>'quantity')::numeric); end if;
   end if;
   if v_kind = 'sale' then v_active := v_active and v_row->>'status' in ('received', 'preparing', 'ready', 'completed'); end if;
   insert into ingredient_movements(restaurant_id, ingredient_id, quantity, kind, created_at)
     select v_restaurant, key::uuid, sum(quantity), v_kind,
-      case when tg_op = 'INSERT' then (v_row->>'created_at')::timestamptz else clock_timestamp() end from (
+      -- A sale's cancellation is a real event, dated now. Editing or deleting a
+      -- waste or purchase record corrects that record, so it is dated with it:
+      -- dated now, it landed after a recount that had already seen the true
+      -- shelf, and deleting a mistaken 200 ml spill showed 1,200 ml for a
+      -- counted 1,000 (sweep 6/7, finding 2).
+      case when tg_op = 'INSERT' or v_kind <> 'sale' then (v_row->>'created_at')::timestamptz else clock_timestamp() end from (
       select key, value::numeric as quantity from jsonb_each_text(v_usage) where v_active
       union all
       select key, -value::numeric from jsonb_each_text(coalesce(v_previous.usage, '{}')) where coalesce(v_previous.active, false)
     ) delta group by key having sum(quantity) <> 0;
-  insert into ingredient_consumption(restaurant_id, source_kind, source_id, usage, active)
-    values(v_restaurant, v_kind, (v_row->>'id')::uuid, v_usage, v_active)
-    on conflict (source_kind, source_id) do update set usage = excluded.usage, active = excluded.active;
+  -- A sale's lines are valued once, when their usage is worked out: today's
+  -- recipe and today's ingredient prices, frozen with the sale's currency. A
+  -- later cancellation keeps them; history never reprices old food (sweep 7,
+  -- finding 3).
+  insert into ingredient_consumption(restaurant_id, source_kind, source_id, usage, active, cost_currency, line_costs)
+    values(v_restaurant, v_kind, (v_row->>'id')::uuid, v_usage, v_active,
+      case when v_kind = 'sale' and (v_previous.usage is null or v_changed) then v_row->>'currency' end,
+      case when v_kind = 'sale' and (v_previous.usage is null or v_changed) then public.sale_line_costs(v_restaurant, v_row->'items') end)
+    on conflict (source_kind, source_id) do update set usage = excluded.usage, active = excluded.active,
+      cost_currency = coalesce(excluded.cost_currency, ingredient_consumption.cost_currency),
+      line_costs = coalesce(excluded.line_costs, ingredient_consumption.line_costs);
   return null;
 end;
 $$;
@@ -9937,7 +10112,9 @@ begin
   select * into v_ingredient from ingredients
    where id = p_ingredient and restaurant_id = p_restaurant and archived_at is null for update;
   if v_ingredient.id is null then return null; end if;
-  v_pack_price := round(p_total / p_packs, 2);
+  -- Six places: a one-piece pack bought 10,000 at a time costs MX$0.0149;
+  -- two places stored MX$0.01 and valued the lot at MX$100, not MX$149 (sweep 7, finding 8).
+  v_pack_price := round(p_total / p_packs, 6);
   if v_pack_price is distinct from v_ingredient.pack_price then
     update ingredients set pack_price = v_pack_price, updated_by = p_actor where id = p_ingredient;
   end if;
@@ -10455,7 +10632,8 @@ begin
     values(p_restaurant, p_ingredient, p_ref, p_packs, p_packs * i.pack_size, p_total, p_actor)
     on conflict (restaurant_id, request_ref) where request_ref is not null do nothing returning id into v_id;
   if v_id is null then raise exception 'purchase reference changed' using errcode = 'PT409'; end if;
-  v_price := round(p_total / p_packs, 2);
+  -- Six places, as above (sweep 7, finding 8).
+  v_price := round(p_total / p_packs, 6);
   if v_price is distinct from i.pack_price then update ingredients set pack_price = v_price, updated_by = p_actor where id = p_ingredient; end if;
   return v_id;
 end;
@@ -10488,9 +10666,9 @@ $$;
 revoke all on function public.record_purchase_once_v2(uuid, uuid, numeric, numeric, text, uuid) from public, anon, authenticated;
 grant execute on function public.record_purchase_once_v2(uuid, uuid, numeric, numeric, text, uuid) to service_role;
 
-create or replace function public.record_waste_once(
+create or replace function public.record_waste_once_v2(
   p_restaurant uuid, p_ingredient uuid, p_item uuid, p_quantity numeric,
-  p_reason text, p_note text, p_cost numeric, p_actor text, p_ref uuid
+  p_reason text, p_note text, p_cost numeric, p_actor text, p_ref uuid, p_choices jsonb
 ) returns uuid language plpgsql security definer set search_path = public as $$
 declare w waste_entries; v_id uuid; v_name text; v_stock int;
 begin
@@ -10499,8 +10677,8 @@ begin
   perform public.lock_ingredient_movements(p_restaurant);
   select * into w from waste_entries where restaurant_id = p_restaurant and request_ref = p_ref;
   -- Cost is calculated by the server and may change after a delivery.
-  if found and (w.ingredient_id, w.item_id, w.quantity, w.reason, w.note) is distinct from
-     (p_ingredient, p_item, p_quantity, p_reason, p_note) then
+  if found and (w.ingredient_id, w.item_id, w.quantity, w.reason, w.note, w.choices) is distinct from
+     (p_ingredient, p_item, p_quantity, p_reason, p_note, case when p_item is not null then p_choices end) then
     raise exception 'reference belongs to another waste entry' using errcode = 'PT409';
   end if;
   if found then return w.id; end if;
@@ -10512,16 +10690,29 @@ begin
   end if;
   if v_name is null then return null; end if;
   perform set_config('tabletap.stock_movement', 'on', true);
-  insert into waste_entries(restaurant_id, ingredient_id, item_id, request_ref, name, quantity, reason, note, cost, recorded_by)
-    values(p_restaurant, p_ingredient, p_item, p_ref, v_name, p_quantity, p_reason, p_note, p_cost, p_actor)
+  insert into waste_entries(restaurant_id, ingredient_id, item_id, request_ref, name, quantity, reason, note, cost, recorded_by, choices)
+    values(p_restaurant, p_ingredient, p_item, p_ref, v_name, p_quantity, p_reason, p_note, p_cost, p_actor,
+      case when p_item is not null then p_choices end)
     on conflict (restaurant_id, request_ref) where request_ref is not null do nothing returning id into v_id;
   if v_id is null then raise exception 'waste reference changed' using errcode = 'PT409'; end if;
-  if v_stock is not null then
+  -- Its portion left with the sale too.
+  if v_stock is not null and p_reason <> 'returned' then
     update menu_items set stock = greatest(v_stock - ceil(p_quantity)::int, 0),
       available = case when v_stock - ceil(p_quantity)::int <= 0 then false else available end,
       stock_auto_off = case when v_stock - ceil(p_quantity)::int <= 0 and available then true else stock_auto_off end where id = p_item;
   end if;
   return v_id;
+end;
+$$;
+revoke all on function public.record_waste_once_v2(uuid, uuid, uuid, numeric, text, text, numeric, text, uuid, jsonb) from public, anon, authenticated;
+grant execute on function public.record_waste_once_v2(uuid, uuid, uuid, numeric, text, text, numeric, text, uuid, jsonb) to service_role;
+-- The deployed signature: the same writer, with no choices.
+create or replace function public.record_waste_once(
+  p_restaurant uuid, p_ingredient uuid, p_item uuid, p_quantity numeric,
+  p_reason text, p_note text, p_cost numeric, p_actor text, p_ref uuid
+) returns uuid language plpgsql security definer set search_path = public as $$
+begin
+  return public.record_waste_once_v2(p_restaurant, p_ingredient, p_item, p_quantity, p_reason, p_note, p_cost, p_actor, p_ref, null);
 end;
 $$;
 revoke all on function public.record_waste_once(uuid, uuid, uuid, numeric, text, text, numeric, text, uuid) from public, anon, authenticated;
@@ -10664,7 +10855,9 @@ begin
   if v_owed <> p_expected then
     return jsonb_build_object('outcome','changed','owed',v_owed,'currency',p_currency);
   end if;
-  if exists(select 1 from orders where id = any(v_ids) and card_checkout_at > now() - interval '35 minutes') then
+  -- An unresolved whole-bill card page at any age (unresolved-checkout contract):
+  -- minute 36 of a charge whose webhook is late is not proof nothing was paid.
+  if public.whole_bill_card_open_v1(p_restaurant, v_ids) then
     return jsonb_build_object('outcome','paying');
   end if;
   if exists(select 1 from orders where id = any(v_ids) and session_id is null) then
@@ -10742,7 +10935,9 @@ begin
     end if;
     return (select jsonb_build_object('outcome','duplicate','amount',amount,'tip',tip,'currency',currency) from payments where restaurant_id = p_restaurant and client_ref = p_ref);
   end if;
-  if v_account.checkout_until is not null and v_account.checkout_until > now() then
+  -- The account's own card checkout, open at any age: checkout_until only
+  -- ever said when the page should have ended, not whether it charged.
+  if public.unresolved_account_page_v1(p_restaurant, p_account) then
     return jsonb_build_object('outcome', 'paying');
   end if;
 
@@ -10797,7 +10992,9 @@ begin
   select * into v_account from customer_accounts
    where id = p_account and restaurant_id = p_restaurant for update;
   if v_account.id is null then return jsonb_build_object('outcome', 'missing'); end if;
-  if v_account.checkout_until is not null and v_account.checkout_until > now() then
+  -- The account's own card checkout, open at any age: checkout_until only
+  -- ever said when the page should have ended, not whether it charged.
+  if public.unresolved_account_page_v1(p_restaurant, p_account) then
     return jsonb_build_object('outcome', 'paying');
   end if;
   perform 1 from orders where restaurant_id = p_restaurant and currency = p_currency and account_id = p_account and paid = false
@@ -10814,7 +11011,7 @@ begin
   -- expiry arriving late (Stripe retries for days) finds nothing to release.
   -- Releasing it lifted the hold of the checkout opened now, and the till
   -- could collect the account while the customer was paying it by card.
-  update account_checkouts set status = 'expired' where account_id = p_account and status = 'open';
+  -- No blanket expiry: an open page here is refused above until Stripe resolves it.
   v_tip := least(v_tip, v_owed);
   insert into account_checkouts (restaurant_id, account_id, order_ids, amount, tip, fee)
   values (p_restaurant, p_account, v_ids, v_owed, v_tip, greatest(coalesce(p_fee, 0), 0)) returning id into v_id;
@@ -11735,6 +11932,40 @@ $$;
 revoke all on function public.whole_bill_card_open_v1(uuid, uuid[]) from public, anon, authenticated;
 grant execute on function public.whole_bill_card_open_v1(uuid, uuid[]) to service_role;
 
+-- A customer account's card checkout not yet paid or expired, at any age, or
+-- the diner page opened for it. Its checkout_until only ever said when the page
+-- should have ended; it never proved the page did not charge.
+create or replace function public.unresolved_account_page_v1(p_restaurant uuid, p_account uuid)
+returns boolean language sql stable security definer set search_path = public as $$
+  select exists (select 1 from account_checkouts a where a.restaurant_id = p_restaurant and a.account_id = p_account and a.status = 'open')
+    or exists (select 1 from diner_checkouts c join account_checkouts a on a.id::text = c.metadata->>'account_checkout'
+      where c.restaurant_id = p_restaurant and a.restaurant_id = p_restaurant and a.account_id = p_account and c.status = 'open');
+$$;
+revoke all on function public.unresolved_account_page_v1(uuid, uuid) from public, anon, authenticated;
+grant execute on function public.unresolved_account_page_v1(uuid, uuid) to service_role;
+
+-- An account checkout saved without any diner attempt never reached Stripe:
+-- the attempt is always saved first. Ten minutes on, no request can still be
+-- about to save one, so it is released instead of blocking the account for
+-- good. Atomic under the money lock with diner_checkout_open, which refuses an
+-- account checkout that is no longer open.
+create or replace function public.release_unreached_account_page_v1(p_restaurant uuid, p_checkout uuid)
+returns boolean language plpgsql security definer set search_path = public as $$
+declare a account_checkouts;
+begin
+  perform public.lock_restaurant_money(p_restaurant);
+  select * into a from account_checkouts where id = p_checkout and restaurant_id = p_restaurant for update;
+  -- A row carrying a Stripe session reached Stripe: that needs its provider, not this (verification 4).
+  if a.id is null or a.status <> 'open' or a.stripe_session_id is not null or a.created_at > now() - interval '10 minutes'
+    or exists (select 1 from diner_checkouts c where c.restaurant_id = p_restaurant and c.metadata->>'account_checkout' = a.id::text) then
+    return false;
+  end if;
+  perform public.account_checkout_release(a.id);
+  return true;
+end $$;
+revoke all on function public.release_unreached_account_page_v1(uuid, uuid) from public, anon, authenticated;
+grant execute on function public.release_unreached_account_page_v1(uuid, uuid) to service_role;
+
 -- ── Returns on completed orders (contract: loop/dialogue/returns-contract.md) ──
 --
 -- A completed order could not get money back through the app: cancellation
@@ -12004,8 +12235,9 @@ returns jsonb language sql stable security definer set search_path = public as $
         where a.operation_id = o.id and a.provider_status = 'succeeded' and a.stripe_refund_id is not null
           and not exists (select 1 from refund_failures f where f.restaurant_id = a.restaurant_id and f.stripe_refund_id = a.stripe_refund_id)
         order by a.stripe_refund_id, a.attempt_no, a.id) z), 0) end,
+    -- `never_sent`: saved, its key expired, and Stripe holds no refund for it.
     'unresolved', exists (select 1 from refund_attempts a where a.operation_id = o.id and a.origin = 'app'
-      and (a.provider_status is null or a.provider_status not in ('succeeded', 'failed', 'canceled'))))
+      and (a.provider_status is null or a.provider_status not in ('succeeded', 'failed', 'canceled', 'never_sent'))))
   from refund_operations o where o.id = p_operation;
 $$;
 revoke all on function public.refund_operation_progress_v1(uuid) from public, anon, authenticated;
@@ -12340,3 +12572,66 @@ revoke all on function public.check_item_addon_restaurant() from public, anon, a
 drop trigger if exists check_item_addon_restaurant on item_addons;
 create trigger check_item_addon_restaurant before insert or update on item_addons
   for each row execute function public.check_item_addon_restaurant();
+-- R7-4: menu choices and recipe conditions must change together. Both recipe
+-- saves and product edits hold the product row, so neither can orphan the other.
+create or replace function public.guard_recipe_choices()
+returns trigger language plpgsql security definer set search_path = public as $$
+declare v_name text; v_modifiers jsonb;
+begin
+  if tg_table_name = 'recipe_lines' then
+    select name, modifiers into v_name, v_modifiers from menu_items
+      where id = new.item_id and restaurant_id = new.restaurant_id for update;
+    if new.mod_label is null and new.mod_option is null then return new; end if;
+    if exists (
+      select 1 from jsonb_array_elements(coalesce(v_modifiers, '[]')) m
+      where m->>'label' = new.mod_label and (m->'options') ? new.mod_option
+    ) then return new; end if;
+  else
+    v_name := new.name;
+    if not exists (
+      select 1 from recipe_lines r where r.item_id = new.id and r.restaurant_id = new.restaurant_id
+      and (r.mod_label is not null or r.mod_option is not null)
+      and not exists (
+        select 1 from jsonb_array_elements(coalesce(new.modifiers, '[]')) m
+        where m->>'label' = r.mod_label and (m->'options') ? r.mod_option
+      )
+    ) then return new; end if;
+  end if;
+  raise exception using errcode = 'PT422', message = 'tt_recipe_choice', detail = coalesce(v_name, '');
+end;
+$$;
+revoke all on function public.guard_recipe_choices() from public, anon, authenticated;
+grant execute on function public.guard_recipe_choices() to service_role;
+drop trigger if exists guard_product_recipe_choices on public.menu_items;
+create trigger guard_product_recipe_choices before update of modifiers on public.menu_items
+  for each row when (old.modifiers is distinct from new.modifiers) execute function public.guard_recipe_choices();
+drop trigger if exists guard_line_recipe_choices on public.recipe_lines;
+create trigger guard_line_recipe_choices before insert or update on public.recipe_lines
+  for each row execute function public.guard_recipe_choices();
+-- ── A refund attempt saved but never sent (sweep 6, finding 1) ──
+-- The process died between saving an app attempt and calling Stripe. Its
+-- idempotency key expires after 24 hours, so resending it could create a
+-- second refund, and the executor rightly refused — for ever: the obligation
+-- stayed open with controls that could not finish it. The caller has just read
+-- Stripe's own list of the charge's refunds (a list, not a search: complete and
+-- current) and found none for this attempt, and no request can still be in
+-- flight a day later. So the attempt never reached Stripe. It is retired, and
+-- the next start opens a new attempt with a new key for what is still owed.
+create or replace function public.retire_unsent_refund_attempt_v1(p_restaurant uuid, p_operation uuid, p_attempt uuid, p_actor text)
+returns boolean language plpgsql security definer set search_path = public as $$
+declare o refund_operations; a refund_attempts;
+begin
+  perform public.lock_restaurant_money(p_restaurant);
+  select * into o from refund_operations where id = p_operation and restaurant_id = p_restaurant for update;
+  if o.id is null or o.source <> 'stripe' or o.status = 'succeeded' then return false; end if;
+  select * into a from refund_attempts where operation_id = o.id and origin = 'app' order by attempt_no desc limit 1 for update;
+  -- Only the latest attempt, never answered, and past the key's lifetime.
+  if a.id is distinct from p_attempt or a.stripe_refund_id is not null or a.provider_status is not null
+    or a.created_at > now() - interval '24 hours' then return false; end if;
+  update refund_attempts set provider_status = 'never_sent', updated_at = now(),
+    last_error = 'No refund on the charge after its key expired; retired by ' || coalesce(nullif(btrim(p_actor), ''), 'system')
+    where id = a.id;
+  return true;
+end $$;
+revoke all on function public.retire_unsent_refund_attempt_v1(uuid, uuid, uuid, text) from public, anon, authenticated;
+grant execute on function public.retire_unsent_refund_attempt_v1(uuid, uuid, uuid, text) to service_role;

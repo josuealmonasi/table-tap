@@ -1,3 +1,4 @@
+import { withSavedCosts } from "./saved-costs";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { withReturnComponents } from "@/lib/return-components";
 import { feesKeptSince } from "@/lib/report-fees";
@@ -90,7 +91,7 @@ export async function readCosts(restaurantId: string, now = new Date()): Promise
     recipes: lines,
     products,
     margins: unitMargins(products, book, costs, fees.rate, taxPct),
-    period: periodContribution(await withReturnComponents(db, restaurantId, orders), book, costs, fees.rate),
+    period: periodContribution(await withSavedCosts(db, restaurantId, await withReturnComponents(db, restaurantId, orders)), fees.rate),
     fees,
     unverifiedFees: platformFees.unverified,
     rises: priceRises(changes, typed, products, book, costs, fees.rate, taxPct),

@@ -27,14 +27,17 @@ import type { PlanName } from "@/lib/plan";
  * `deleted` events arrive with status `canceled`, which the mapping already
  * turns into a free customer rather than a locked one.
  */
-export async function applySubscription(sub: Stripe.Subscription): Promise<void> {
+export async function applySubscription(
+  sub: Stripe.Subscription, database?: ReturnType<typeof createAdminClient>, client = stripe,
+  expectedSubscriptionId?: string,
+): Promise<void> {
   const restaurantId = sub.metadata?.restaurant_id;
   if (!restaurantId) {
     console.error("subscription without our metadata", sub.id);
     return;
   }
 
-  const db = createAdminClient();
+  const db = database ?? createAdminClient();
   // Events can arrive in any order. Read Stripe's current object after the
   // local revision, and only store it while that revision still matches.
   for (let attempt = 0; attempt < 3; attempt++) {
@@ -43,14 +46,17 @@ export async function applySubscription(sub: Stripe.Subscription): Promise<void>
       .eq("id", restaurantId).maybeSingle();
     if (readError) throw new Error(`Subscription lookup failed: ${readError.message}`);
     if (!current) return;
-    const latest = await stripe.subscriptions.retrieve(sub.id);
+    // A scheduled snapshot is not a new checkout. If an admin unlinked or
+    // replaced it, recovering that old snapshot must not undo their move.
+    if (expectedSubscriptionId && current.stripe_subscription_id !== expectedSubscriptionId) return;
+    const latest = await client.subscriptions.retrieve(sub.id);
     // A finished subscription the restaurant no longer has is history, not a
     // plan. Stripe re-delivers a cancellation for days; a platform admin who
     // moved the restaurant in between (which unlinks the subscription) must
     // not see that move quietly reset to the free plan.
     if (!current.stripe_subscription_id && ["canceled", "incomplete_expired"].includes(latest.status)) return;
     if (current.stripe_subscription_id && current.stripe_subscription_id !== latest.id) {
-      const active = await stripe.subscriptions.retrieve(current.stripe_subscription_id);
+      const active = await client.subscriptions.retrieve(current.stripe_subscription_id);
       // A late cancellation from the previous subscription must not replace
       // the newer contract. Equal creation seconds keep the active contract;
       // two live contracts need review rather than silently forgetting one.
@@ -67,7 +73,7 @@ export async function applySubscription(sub: Stripe.Subscription): Promise<void>
     const ended = ["canceled", "incomplete_expired"].includes(latest.status);
     // Ending a contract or failing its first invoice grants no paid tier;
     // an old unregistered Price must not prevent recording that outcome.
-    const latestPlan = ended || latest.status === "incomplete" ? "carta" : await subscriptionPlan(latest);
+    const latestPlan = ended || latest.status === "incomplete" ? "carta" : await subscriptionPlan(latest, db);
     const outcome = subscriptionOutcome(latest.status, latestPlan);
     // Do not link an unpaid first contract: getPlan must still be able to
     // expire the local trial. Customer lookup in checkout finds it for retries.

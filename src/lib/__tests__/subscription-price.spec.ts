@@ -1,5 +1,6 @@
 import { beforeEach, expect, it, vi } from "vitest";
 import type Stripe from "stripe";
+import type { createAdminClient } from "@/lib/supabase/admin";
 const rows: Record<string, unknown>[] = [];
 vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({
   from: () => { const q = { select: () => q, eq: () => q, maybeSingle: async () => rows.shift() }; return q; },
@@ -22,4 +23,11 @@ it("D5 refuses an unknown Price instead of granting the metadata tier", async ()
 it("D5 accepts a configured catalogue Price", async () => {
   rows.push({ data: null, error: null }, { data: { plan: "servicio" }, error: null });
   await expect(subscriptionPlan(sub("price_configured"))).resolves.toBe("servicio");
+});
+
+it("uses the worker's bounded client for the subscription Price lookup too", async () => {
+  const q = { select: () => q, eq: () => q, maybeSingle: async () => ({ data: { plan: "casa" }, error: null }) };
+  const db = { from: vi.fn(() => q) } as unknown as ReturnType<typeof createAdminClient>;
+  await expect(subscriptionPlan(sub("price_casa"), db)).resolves.toBe("casa");
+  expect(db.from).toHaveBeenCalledWith("restaurant_subscription_prices");
 });

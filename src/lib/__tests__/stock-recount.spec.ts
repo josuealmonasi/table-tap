@@ -12,7 +12,7 @@ it("J6: a numeric recount advances the generation under the dish lock", () => {
   // Each trusted movement marks itself inside its own body: Supabase refuses a
   // custom setting attached with ALTER FUNCTION ... SET, and the schema did not
   // apply until it moved.
-  for (const fn of ["release_stock", "release_stock_reservation", "take_stock_floor", "record_waste"]) {
+  for (const fn of ["release_stock", "release_stock_reservation", "take_stock_floor", "record_waste_v2"]) {
     expect(body(fn), fn).toContain("set_config('tabletap.stock_movement', 'on', true)");
   }
   const threeArg = sql.slice(sql.indexOf("create or replace function public.reserve_stock("));

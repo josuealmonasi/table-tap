@@ -26,21 +26,25 @@ export async function recoverQueuedFees(db: Db, client: Stripe, restaurant: stri
     .order("stripe_payment_intent").range(a, b), "the charge fees awaiting reconciliation");
   for (const row of pending) {
     try {
-      // These records freeze the account that owned this charge. Reconnecting
-      // the restaurant must never relabel an older charge with its new account.
-      let account: string | undefined;
-      for (const table of ["fee_returns", "diner_checkouts", "refund_operations", "refunds_due"]) {
-        const { data, error } = await db.from(table).select("stripe_account_id")
-          .eq("restaurant_id", restaurant).eq("stripe_payment_intent", row.stripe_payment_intent)
-          .order("id").limit(1).maybeSingle();
-        if (error) throw new Error(`Could not read the original fee account: ${error.message}`);
-        if (data?.stripe_account_id) { account = data.stripe_account_id; break; }
-      }
-      // With no original account evidence, keep the queue row for review.
-      if (account) await reconcileChargeFee(db, client, restaurant, row.stripe_payment_intent, account);
+      await recoverQueuedFee(db, client, restaurant, row.stripe_payment_intent);
     } catch (error) {
       // One unavailable charge must not starve the rest of the restaurant.
       console.error("Charge fee recovery remains pending", row.stripe_payment_intent, error);
     }
   }
+}
+
+export async function recoverQueuedFee(db: Db, client: Stripe, restaurant: string, intent: string): Promise<boolean> {
+  // These records freeze the account that owned this charge. Reconnecting
+  // the restaurant must never relabel an older charge with its new account.
+  let account: string | undefined;
+  for (const table of ["fee_returns", "diner_checkouts", "refund_operations", "refunds_due"]) {
+    const { data, error } = await db.from(table).select("stripe_account_id")
+      .eq("restaurant_id", restaurant).eq("stripe_payment_intent", intent)
+      .order("id").limit(1).maybeSingle();
+    if (error) throw new Error(`Could not read the original fee account: ${error.message}`);
+    if (data?.stripe_account_id) { account = data.stripe_account_id; break; }
+  }
+  // With no original account evidence, keep the queue row for review.
+  return account ? reconcileChargeFee(db, client, restaurant, intent, account) : false;
 }

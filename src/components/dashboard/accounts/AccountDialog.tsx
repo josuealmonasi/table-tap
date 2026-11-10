@@ -218,6 +218,15 @@ export default function AccountDialog({ account, onClose, currency, timeZone, ca
         name={account.name}
         owed={selected?.amount ?? 0}
         currency={selected?.currency ?? currency}
+        onRefresh={async () => {
+          try {
+            const res = await fetch(`/api/accounts?id=${account.id}`);
+            if (!res.ok) throw new Error("Could not refresh the account");
+            const data = await res.json();
+            if (!data.statement) throw new Error("Could not read the refreshed account");
+            setStatement(data.statement); onChanged();
+          } catch (error) { setFailed(true); throw error; }
+        }}
         onSettled={() => {
           setAttempt(n => n + 1);
           onChanged();

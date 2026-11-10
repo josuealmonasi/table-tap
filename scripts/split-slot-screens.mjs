@@ -44,6 +44,13 @@ export async function splitScreenFixture(admin, restaurantId, start = true, hold
 export async function openSplitScreen({ ctx, tab, phase }, { fixture, screen, base, lang = "es" }) {
   const f = fixture;
   const pending = trackData(tab);
+  if (screen.state === "payment-check") {
+    // A sweep must reach the refusal without collecting or asking Stripe.
+    await tab.route("**/api/split/collect", route => route.fulfill({ status: 409, contentType: "application/json",
+      body: JSON.stringify({ checkoutCode: "checkout_unresolved", code: "reserved" }) }));
+    await tab.route("**/api/checkout/check", route => route.fulfill({ status: 200, contentType: "application/json",
+      body: JSON.stringify({ outcome: screen.outcome }) }));
+  }
   await ctx.addCookies([{ name: "tt-locale", value: lang, url: base }]);
   if (screen.role === "diner") {
     await ctx.addCookies([{ name: "tt-table-member", value: f.cookie.split("=")[1], url: base }]);
@@ -86,6 +93,12 @@ export async function openSplitScreen({ ctx, tab, phase }, { fixture, screen, ba
   const target = screen.state === "start" ? ".tt-split select"
     : screen.state === "writeoff" ? ".tt-writeoff-amount" : "[data-split-model='2']";
   await tab.locator(target).waitFor({ state: "visible" });
+  if (screen.state === "payment-check") {
+    await tab.locator("[data-split-slot='2'] input").check();
+    await tab.getByRole("button", { name: /pagó en efectivo|paid cash/i }).click();
+    await tab.locator("[data-payment-check] button").click();
+    await tab.locator("[data-payment-check] [role=status]").waitFor({ state: "visible" });
+  }
   if (screen.state === "receipt") {
     // Reuse the fixture's paid receipt. A browser sweep never collects more money.
     await tab.route("**/api/split/collect", route => route.fulfill({ status: 200,

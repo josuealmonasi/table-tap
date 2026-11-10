@@ -15,7 +15,7 @@ vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({
   rpc: async (name: string, args: Record<string, unknown>) => {
     const key = JSON.stringify([args.p_restaurant, name, args.p_ref]);
     if (!state.operations.has(key)) state.operations.set(key,
-      name === "record_waste_once" ? crypto.randomUUID()
+      name === "record_waste_once_v2" ? crypto.randomUUID()
         : name === "record_ingredient_counts_once" ? [{ ingredient_id: args.p_ingredient, counted: 2, expected: 3 }]
           : { id: crypto.randomUUID(), currency: "MXN", expected: 100, difference: 0 });
     return { data: state.operations.get(key), error: null };

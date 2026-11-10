@@ -31,6 +31,14 @@ function sameMetadata(a: Record<string, string> | null, b: Record<string, string
   return keys.length === Object.keys(b).length && keys.every(key => a![key] === b[key]);
 }
 
+/** A page read for expiry must match the same frozen provenance as a webhook. */
+export function matchesDinerCheckout(session: Stripe.Checkout.Session, record: DinerCheckoutRecord): boolean {
+  return record.stripe_session_id === session.id && record.livemode === session.livemode
+    && isDinerCurrency(record.currency) && session.mode === "payment"
+    && session.amount_total === record.amount_cents && session.currency === record.currency.toLowerCase()
+    && record.metadata.restaurant_id === record.restaurant_id && sameMetadata(session.metadata, record.metadata);
+}
+
 /** Refuse a stale or cross-tenant scope before any fee, coupon, stock or money write. */
 async function checkScope(record: DinerCheckoutRecord, allowMissing = false): Promise<void> {
   const db = createAdminClient();
@@ -83,10 +91,8 @@ export async function verifyDinerCheckout(session: Stripe.Checkout.Session, cont
     .eq("stripe_session_id", session.id).maybeSingle();
   const record = data as DinerCheckoutRecord | null;
   // No metadata fallback for pre-deploy sessions. There are no connected production accounts yet.
-  if (error || !record || record.stripe_session_id !== session.id || record.stripe_account_id !== context.account
-    || record.livemode !== context.livemode || !isDinerCurrency(record.currency) || session.mode !== "payment"
-    || session.amount_total !== record.amount_cents || session.currency !== record.currency.toLowerCase()
-    || !sameMetadata(session.metadata, record.metadata)) throw new Error("Checkout provenance does not match");
+  if (error || !record || record.stripe_account_id !== context.account
+    || record.livemode !== context.livemode || !matchesDinerCheckout(session, record)) throw new Error("Checkout provenance does not match");
   // An earlier expiry may already have removed its pending order. The frozen
   // record still authenticates the retry; every surviving order must agree.
   await checkScope(record, session.payment_status !== "paid");

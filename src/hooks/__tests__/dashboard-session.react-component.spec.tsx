@@ -70,10 +70,10 @@ it("shares optimistic read markers, avoids duplicate decrements and reconciles f
   await act(async () => latest[1].bell.markRead("n1"));
   expect(latest.map(p => p.bell.unread)).toEqual([1, 1]);
   await act(async () => latest[0].bell.markAllRead());
-  expect(latest.map(p => p.bell.unread)).toEqual([0, 0]);
-  expect(calls.mock.calls.filter(([, init]) => init?.method === "POST")).toHaveLength(3);
+  expect(latest.map(p => p.bell.unread)).toEqual([1, 1]);
+  expect(calls.mock.calls.filter(([, init]) => init?.method === "POST")).toHaveLength(2);
   expect(calls.mock.calls.filter(([, init]) => init?.method === "POST")
-    .map(([, init]) => JSON.parse(String(init?.body)).restaurantId)).toEqual(["restaurant", "restaurant", "restaurant"]);
+    .map(([, init]) => JSON.parse(String(init?.body)).restaurantId)).toEqual(["restaurant", "restaurant"]);
   expect(calls.mock.calls.filter(([, init]) => init?.method !== "POST")).toHaveLength(2);
   answer();
   await advance(30_001);
@@ -102,4 +102,51 @@ it("ignores marker callbacks after their cache is retired", async () => {
   await act(async () => oldMarkAll());
   expect(calls.mock.calls.filter(([, init]) => init?.method === "POST")).toHaveLength(0);
   expect(latest[0].bell.unread).toBe(2);
+});
+
+
+it("mark all sends only the loaded unread IDs and preserves unseen badge counts", async () => {
+  await render();
+  await act(async () => latest[0].bell.markAllRead());
+  expect(latest[0].bell.unread).toBe(1);
+  const [, init] = calls.mock.calls.find(([, options]) => options?.method === "POST")!;
+  expect(JSON.parse(String(init?.body))).toEqual({ all: true, ids: ["n1"], restaurantId: "restaurant" });
+});
+
+
+it("loads older unread pages without dropping the first page or sharing across identities", async () => {
+  const older = { ...notice, id: "old-refund", kind: "refund_due", created_at: "2026-01-01" };
+  calls.mockImplementation(async url => new Response(JSON.stringify(String(url).includes("badges") ? { badges: {} }
+    : String(url).includes("before=") ? { notifications: [older], unread: 2, nextCursor: null }
+    : { notifications: [notice], unread: 2, nextCursor: "older-cursor" })));
+  await render();
+  expect(latest[0].bell.hasMore).toBe(true);
+  await act(async () => latest[0].bell.loadMore());
+  expect(latest[0].bell.notifications.map(n => n.id)).toEqual(["n1", "old-refund"]);
+  expect(latest[0].bell.hasMore).toBe(false);
+  expect(calls.mock.calls.some(([url]) => url === "/api/notifications?before=older-cursor")).toBe(true);
+  const oldLoad = latest[0].bell.loadMore;
+  await emit("SIGNED_OUT");
+  const count = calls.mock.calls.length;
+  await act(async () => oldLoad());
+  expect(calls).toHaveBeenCalledTimes(count);
+  expect(latest[0].bell.notifications).toEqual([]);
+});
+
+it("keeps the first page and offers retry when an older page fails", async () => {
+  calls.mockImplementation(async url => {
+    if (String(url).includes("before=")) throw new TypeError("offline");
+    return new Response(JSON.stringify(String(url).includes("badges") ? { badges: {} }
+      : { notifications: [notice], unread: 2, nextCursor: "older-cursor" }));
+  });
+  await render();
+  await act(async () => latest[0].bell.loadMore());
+  expect(latest[0].bell.notifications.map(n => n.id)).toEqual(["n1"]);
+  expect(latest[0].bell.loadError).toBe(true);
+  calls.mockImplementation(async url => new Response(JSON.stringify(String(url).includes("badges") ? { badges: {} }
+    : String(url).includes("before=") ? { notifications: [{ ...notice, id: "older" }], unread: 2, nextCursor: null }
+    : { notifications: [notice], unread: 2, nextCursor: "older-cursor" })));
+  await act(async () => latest[0].bell.loadMore());
+  expect(latest[0].bell.loadError).toBe(false);
+  expect(latest[0].bell.notifications.map(n => n.id).sort()).toEqual(["n1", "older"]);
 });

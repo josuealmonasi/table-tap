@@ -9,8 +9,9 @@ export function notificationsCases() {
     // of who may call what.
     { name: "GET  /api/notifications", as: "manager", method: "GET",
       path: "/api/notifications", expect: [200],
-      check: d => Array.isArray(d.notifications) || "did not answer with a list" },
-    { name: "POST /api/notifications (all read)", as: "manager", method: "POST",
-      path: "/api/notifications", body: { all: true }, expect: [200] },
+      check: d => Array.isArray(d.notifications) || "did not answer with a list",
+      save: d => ({ notificationIds: d.notifications.filter(n => !n.read_at).map(n => n.id) }) },
+    { name: "POST /api/notifications (shown read)", as: "manager", method: "POST",
+      path: "/api/notifications", body: (_fx, saved) => ({ all: true, ids: saved.notificationIds }), expect: [200] },
   ];
 }

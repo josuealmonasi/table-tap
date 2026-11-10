@@ -1,3 +1,4 @@
+import { checkoutPageRpc } from "@/lib/checkout-page-rpc";
 import { receiptCents } from "@/lib/receipt-amount";
 import { randomUUID } from "node:crypto";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -35,7 +36,7 @@ export async function applyWriteOffRest(p: {
   orders: Pick<Order, "id">[]; restaurantId: string; actorEmail: string; reason: string; note: string;
   expectedCents: number; currency: string; requestId?: string;
 }): Promise<RestOutcome> {
-  const { data, error } = await createAdminClient().rpc("write_off_remainder_v1", {
+  const { data, error } = await checkoutPageRpc("write_off_remainder_v1", {
     p_restaurant: p.restaurantId, p_orders: p.orders.map(o => o.id), p_expected_cents: p.expectedCents,
     p_currency: p.currency, p_actor: p.actorEmail, p_reason: p.reason, p_note: p.note || null,
     p_ref: randomUUID(), p_request: p.requestId ?? null,

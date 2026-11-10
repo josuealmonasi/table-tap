@@ -99,9 +99,27 @@ describe("card returns keep operation identity and actual customer coverage", ()
     expect(rpc).not.toHaveBeenCalledWith("finish_refund_operation", expect.anything());
   });
 
-  it("does not create again when an unknown POST's saved key has expired", async () => {
-    rpc.mockResolvedValue({ data: { ...attempt("return-one"), created_at: "2020-01-01T00:00:00Z" }, error: null });
+  it("never resends an expired key: it retires the attempt Stripe never received and sends a fresh one (sweep 6, finding 1)", async () => {
+    const stale = { ...attempt("return-one"), created_at: "2020-01-01T00:00:00Z" };
+    const fresh = { ...attempt("return-one"), id: "return-one-attempt-2", attempt_no: 2, idempotency_key: "return-return-one-2" };
+    let retired = false;
+    rpc.mockImplementation(async name => ({ error: null, data: name === "start_refund_attempt" ? (retired ? fresh : stale)
+      : name === "retire_unsent_refund_attempt_v1" ? (retired = true)
+      : name === "finish_refund_operation_v2" ? { outcome: "completed" } : true }));
+    const { client, calls } = fakeStripe({ currency: "mxn", create: async () => ({ id: "re_1", status: "succeeded", currency: "mxn", payment_intent: "pi_1" }) });
+    expect(await executeOrderRefund("r1", "return-one", "manager", client)).toBe(true);
+    expect(rpc.mock.calls.find(call => call[0] === "retire_unsent_refund_attempt_v1")?.[1]).toMatchObject({ p_attempt: stale.id });
+    expect(calls.create).toHaveBeenCalledOnce();
+    expect((calls.create.mock.calls[0] as unknown[])[1]).toMatchObject({ idempotencyKey: "return-return-one-2" });
+  });
+
+  it("waits between 23 and 24 hours, and never retires an attempt the database refuses to", async () => {
     const { client, calls } = fakeStripe({ currency: "mxn" });
+    rpc.mockResolvedValue({ data: { ...attempt("return-one"), created_at: new Date(Date.now() - 23.5 * 3600000).toISOString() }, error: null });
+    expect(await executeOrderRefund("r1", "return-one", "manager", client)).toBe(false);
+    expect(rpc.mock.calls.some(call => call[0] === "retire_unsent_refund_attempt_v1")).toBe(false);
+    rpc.mockImplementation(async name => ({ error: null, data: name === "start_refund_attempt"
+      ? { ...attempt("return-one"), created_at: "2020-01-01T00:00:00Z" } : name === "retire_unsent_refund_attempt_v1" ? false : true }));
     expect(await executeOrderRefund("r1", "return-one", "manager", client)).toBe(false);
     expect(calls.create).not.toHaveBeenCalled();
   });

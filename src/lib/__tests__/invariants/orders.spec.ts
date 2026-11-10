@@ -75,7 +75,7 @@ describe("money that stops being owed closes the sitting", () => {
     // the call is what made that look like the same act. A write-off is now
     // written by `write_off_orders` under the money lock (paths audit #5), so
     // calling it counts as settling too.
-    const settlesExisting = /\.update\(\s*\{[\s\S]*?(paid:\s*true|written_off:\s*true)|rpc\(\s*"write_off_orders"/;
+    const settlesExisting = /\.update\(\s*\{[\s\S]*?(paid:\s*true|written_off:\s*true)|(?:rpc|checkoutPageRpc)\(\s*"write_off_orders"/;
     const clearing = sources.filter(f => settlesExisting.test(read(f)));
     expect(clearing.length).toBeGreaterThan(0);
 
@@ -152,9 +152,9 @@ describe("a sale is handed back once", () => {
     // succeed, both log, and the sale leaves the drawer twice — while the
     // stock it held goes back on the shelf twice.
     const src = read("src/app/api/orders/cancel/route.ts");
-    expect(src).toContain('rpc("prepare_order_refund"');
-    expect(src.indexOf('data?.outcome !== "cancelled"')).toBeGreaterThan(src.indexOf('rpc("prepare_order_refund"'));
-    expect(src.indexOf('await executeOrderRefund')).toBeGreaterThan(src.indexOf('rpc("prepare_order_refund"'));
+    expect(src).toContain('checkoutPageRpc("prepare_order_refund"');
+    expect(src.indexOf('data?.outcome !== "cancelled"')).toBeGreaterThan(src.indexOf('checkoutPageRpc("prepare_order_refund"'));
+    expect(src.indexOf('await executeOrderRefund')).toBeGreaterThan(src.indexOf('checkoutPageRpc("prepare_order_refund"'));
     expect(src).not.toContain('action: "refunded"');
     const executor = read("src/lib/refunds/operations.ts");
     expect(executor).toContain('rpc("start_refund_attempt"');

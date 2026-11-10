@@ -1,3 +1,4 @@
+import { checkoutPageRpc } from "@/lib/checkout-page-rpc";
 import { dinerCheckoutOrders } from "@/lib/diner-checkout-orders";
 import { dinerCurrency, isDinerCurrency } from "@/lib/diner-currency";
 import { DinerAttemptRejected, openDinerAttempt, resumeDinerAttempt } from "@/lib/diner-attempt";
@@ -64,7 +65,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   const tip = Math.min(Math.max(0, round2(Number.isFinite(asked) ? asked : 0)), expected);
 
   const refused = async (key: string, status: number) => await apiError(key, status);
-  const { data: opened, error: openError } = await db.rpc(body?.currency ? "account_checkout_currency_v1" : "account_checkout_open_v2", {
+  const { data: opened, error: openError } = await checkoutPageRpc(body?.currency ? "account_checkout_currency_v1" : "account_checkout_open_v2", {
     p_restaurant: restaurant.id,
     p_account: account.id,
     p_expected: expected,
@@ -140,8 +141,9 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ url: session.url });
   } catch (err) {
     // A rejected quote never reached Stripe: the till may collect again. If
-    // releasing fails the hold runs out. An unknown response can still be a
-    // payable session, so its attempt, fee and hold survive for the same retry.
+    // releasing fails the saved hold stays for verified recovery. An unknown
+    // response can still be a payable session, so its attempt, fee and hold
+    // survive for the same retry.
     // The attempt releases an initial Stripe refusal and its own account hold.
     if (err instanceof DinerAttemptRejected) {
       await releaseAccountCheckout(r.checkout);

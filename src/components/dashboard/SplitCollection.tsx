@@ -1,5 +1,7 @@
 "use client";
 
+import { usePaymentCheck } from "@/hooks/usePaymentCheck";
+
 import type { JSX } from "react";
 import { useRef, useState } from "react";
 import SplitSlotSelector, { freeSelection } from "@/components/split/SplitSlotSelector";
@@ -35,6 +37,8 @@ export default function SplitCollection({ split, remaining, refresh, onCollected
   const scope = { restaurantId: split.restaurantId, tableId: split.tableId, sessionId: split.sessionId,
     splitId: split.id, revision: split.revision };
 
+  const paymentCheck = usePaymentCheck(refresh, split.id);
+
   async function send(cancel: boolean, method?: "cash" | "card"): Promise<void> {
     if (sending.current || (!cancel && (cents <= 0 || tooMuch))) return;
     sending.current = true; setBusy(true); setError(null);
@@ -49,7 +53,11 @@ export default function SplitCollection({ split, remaining, refresh, onCollected
         body: JSON.stringify({ ...reviewed, ...(!cancel && { ref: request.current.ref }) }),
       });
       const data = await res.json().catch(() => ({}));
-      if (!res.ok) setError(data.error ?? t("settle.failed"));
+      if (!res.ok) {
+        paymentCheck.capture(data, { kind: "split", splitId: split.id,
+          ...(!cancel && data.code !== "paying" && { slots: chosen.map(s => s.shareNo) }) });
+        setError(data.error ?? t("settle.failed"));
+      }
       else {
         if (!cancel && typeof data.payment === "string") onReceipt({ paymentId: data.payment,
           amountCents: Number(data.amount_cents ?? cents + Math.round(tip * 100)), currency });
@@ -64,6 +72,7 @@ export default function SplitCollection({ split, remaining, refresh, onCollected
   return <section data-split-model="2" aria-label={t("slots.collect")}>
     <strong>{t("slots.progress", { paid: slots.filter(s => s.paid).length, of: split.shares })}</strong>
     <p>{t("slots.remaining", { amount: formatMoney(remaining, currency) })}</p>
+    {paymentCheck.action}
     {error && <p className="tt-field-error" role="alert">{error}</p>}
     <SplitSlotSelector slots={slots} selected={selected} currency={currency} busy={busy} onChange={setSelected} />
     <TipPicker currency={currency} tipPct={tipPct} tipCustom={tipCustom} maxTip={amount}

@@ -1,20 +1,20 @@
 {
   "join_bill_split": "da7bd6f8c76e88f345022154fdace024ac7ac9e2b86e8df6210e5bc8d6fde0f7",
   "close_divided_bill": "36bb5be989af662848b9c837b854e7d74229bb01d75ad17473f3752c1971c3b0",
-  "collect_on_sitting": "35a3bb0c7c140a472e4ec37f77aed0f5a7aae0bf356be3839759010925cbf8f9",
-  "settle_orders": "f6eaec0077b55ab16f7d704355f6450b8eccfe696a06c966b5b68f77326a67a8",
+  "collect_on_sitting": "20754acb80175264f1722e741f3aa7632d682d7446d25ec371c85e7e6d07009e",
+  "settle_orders": "d580140c6dcde1bb26f3b3f88d0e4d45459a560e65353df1fad597eedd705c04",
   "settle_card_orders": "51b1d84acd9663b58a081061e544e5e84d8cd627c1c1137f2bab833dd328aacf",
   "settle_split_share": "a648e5ebb720c9236faa0aa9ce4f50b1f31fa319f60902b283ae2736c4bc7670",
   "settle_sale": "3d28802f5679f85bb0d3e984fbfdb245d2f34bbdc943a98c9beabcba19c2a083",
-  "account_charge": "024a1f965106100435a87b14b6f221e4af46dac4280354f2025aaabe0e61f3f9",
+  "account_charge": "3b553f4533b8a24d382cbfc1d76df97c989c3fa86072d941339d8a4b1f4d345d",
   "account_change": "a2a7cdb1a5d679ffa668958989a71cf96c7b5c3476b4e1cac21548e1d4ac6b1c",
-  "account_settle": "05e9f6c26c2bbacb4eaf38ac7f1e682d4f460942430a3c0777ad47df33c0fa07",
-  "account_checkout_open": "ee8b8f60456914ee86539f9586072c1daac7a4b45d0a0172ca8da57c4f84b526",
+  "account_settle": "d1da8d49404258d68aac28acb2458c4d34f837674b7be4305daac0639ee380a5",
+  "account_checkout_open": "17b88769e7436f2fa7f642fce056734546d64a7d15893305a1f0a21d3c4a3f14",
   "account_checkout_settle": "8e748ffd088d19638352f6c2cf275ab41f63f01efb059c2c08a188b175f3211f",
   "settle_offline_sale": "4855028f1d53e4ed70abd623cd787f0142fd9cc9e6d3d81a67a34ac54e968839",
-  "cancel_order": "42b11271cedf51512c99bd083de5d6403dd95425038b14882d6d7eeead765167",
+  "cancel_order": "c260237a33c9421430fdc369d92e3a4eced8173b102a09a319fdb90b70c8efd4",
   "ring_pos_sale": "9331d9f21489a61fdd9292c552fc6d59d9fbb4964612b615ecccdbf4001dbbba",
   "ring_pos_account": "450a8a4198d1d208a32c77bee74defd135d046b230e6bf37d3d4249d63e4b0b9",
-  "approve_write_off_request": "ae71f0a68726787a7391c58075bcb5309fe3bb7b5181046057bff14867b90a98",
-  "approve_discount_request": "920225e0435add374c4e67902da424002380ab72a7e012a73fec59ff1376311c"
+  "approve_write_off_request": "faa5b95fbf53dd447339f8e8ca116c2ca8f1357e5c4e8a582daf56f5791abe8d",
+  "approve_discount_request": "bd3f264f167a327e212f083480f9a8e847fca980691456ee151a6093d99109e1"
 }

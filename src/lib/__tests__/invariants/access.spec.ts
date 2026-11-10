@@ -63,7 +63,7 @@ describe("every public endpoint has a ceiling", () => {
 
     const naked = routes.filter(
       f =>
-        !/acting(Staff|FrontOfHouse|Manager|Owner)|deskMutation|isRateLimited|isRoomLimited|getPlatformAdmin|stripe-signature|readStripeEvent/.test(
+        !/acting(Staff|FrontOfHouse|Manager|Owner)|deskMutation|isRateLimited|isRoomLimited|getPlatformAdmin|stripe-signature|readStripeEvent|cronAuthorized/.test(
           read(f),
         ),
     );

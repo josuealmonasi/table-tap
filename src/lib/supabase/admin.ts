@@ -6,7 +6,7 @@ import { createClient as createSupabaseClient } from "@supabase/supabase-js";
 //
 // The secret key cannot be used in a browser (Supabase rejects it on the
 // User-Agent), but we still guard against accidental client bundling.
-export function createAdminClient() {
+export function createAdminClient(requestFetch?: typeof fetch) {
   if (typeof window !== "undefined") {
     throw new Error("createAdminClient must never be called in the browser.");
   }
@@ -16,6 +16,7 @@ export function createAdminClient() {
     process.env.SUPABASE_SECRET_KEY!,
     {
       auth: { persistSession: false, autoRefreshToken: false },
+      ...(requestFetch && { global: { fetch: requestFetch } }),
     },
   );
 }

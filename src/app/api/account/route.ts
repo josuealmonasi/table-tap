@@ -1,3 +1,4 @@
+import { unresolvedAccounts } from "@/lib/account-checkout-state";
 import { NextResponse, type NextRequest } from "next/server";
 import { apiError } from "@/lib/api-error";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -37,6 +38,8 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   const statement = await statementOf(account, restaurant.timezone).catch(() => null);
   if (!statement) return await apiError("apiErr.generic", 500);
 
+  const unresolved = await unresolvedAccounts(account.restaurant_id, [account.id]).catch(() => null);
+  if (!unresolved) return await apiError("apiErr.generic", 503);
   return NextResponse.json({
     restaurant: {
       id: restaurant.id,
@@ -59,7 +62,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     returns: statement.returns,
     // A yes or a no: the Stripe columns are not the customer's to read.
     cardsEnabled: Boolean(restaurant.stripe_account_id && restaurant.stripe_charges_enabled),
-    payingOnline: Boolean(account.checkout_until && new Date(account.checkout_until) > new Date()),
+    payingOnline: unresolved.has(account.id),
     // Only offered where a message can actually be sent.
     canEmail: mailConfigured(),
     timeZone: restaurant.timezone,

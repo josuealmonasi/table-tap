@@ -31,11 +31,15 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   }
   if (!mailConfigured()) return await apiError("apiErr.mailOff", 409);
 
-  const body = await jsonBody<{ c?: unknown; email?: unknown }>(req);
+  const body = await jsonBody<{ c?: unknown; email?: unknown; ref?: unknown }>(req);
   const code = normalizeCode(typeof body?.c === "string" ? body.c : "");
   const email = cleanEmail(body?.email);
   if (!code) return await apiError("apiErr.invalidRequest", 400);
   if (!email || email === "bad") return await apiError("apiErr.email", 400);
+  const ref = body?.ref;
+  if (typeof ref !== "string" || !/^[a-z0-9-]{8,100}$/i.test(ref)) {
+    return await apiError("apiErr.invalidRequest", 400);
+  }
 
   const account = await accountByCode(code).catch(() => undefined);
   if (account === undefined) return await apiError("apiErr.generic", 500);
@@ -71,7 +75,8 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     },
     (key, vars) => translate(messages, key, vars),
   );
-  const sent = await sendMail({ to: email, subject: mail.subject, text: mail.text, html: mail.html, fromName: restaurant.name });
+  const sent = await sendMail({ to: email, subject: mail.subject, text: mail.text, html: mail.html, fromName: restaurant.name,
+    idempotencyKey: `statement/${account.id}/${ref}` });
   if (!sent.sent) return await apiError("apiErr.mailFailed", 502);
   return NextResponse.json({ ok: true });
 }
