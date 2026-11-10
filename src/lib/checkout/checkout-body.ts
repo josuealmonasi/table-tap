@@ -16,6 +16,8 @@ export interface CheckoutBody {
   couponCode?: string;
   /** Dine-in: send the food now and settle at the end. */
   payLater?: boolean;
+  /** The total the cart showed. Charged more than this, the diner reviews first (A2). */
+  reviewedTotal?: number;
   /**
    * The throwaway id this phone gave itself for the evening.
    *

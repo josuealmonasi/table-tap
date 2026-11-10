@@ -76,7 +76,7 @@ async function orderVersion(db: Database, orders: StoredOrder[], version: Receip
   return { orders: result, restaurantId: orders[0].restaurant_id, tableId: orders[0].table_id, version: receiptVersion };
 }
 
-export async function readOrderReceipt(db: Database, ids: string[], printing: boolean, orderIds: unknown, version?: ReceiptVersion): Promise<ReceiptSource> {
+export async function readOrderReceipt(db: Database, ids: string[], complete: boolean, orderIds: unknown, version?: ReceiptVersion): Promise<ReceiptSource> {
   const { data: found, error: readError } = await db
     .from("orders")
     .select(
@@ -98,9 +98,11 @@ export async function readOrderReceipt(db: Database, ids: string[], printing: bo
   // One receipt, one currency, by email as on paper (paths audit #8): MX$100
   // and US$10 from the same restaurant were added up and sent as MX$110.
   if (orders.some(o => o.currency !== order.currency)) throw new ReceiptReadError(404);
-  // Paper confirms a complete paid bill. A partial read or mixed currency
-  // cannot become a plausible-looking total on a saved receipt.
-  if (printing && (orders.length !== new Set(ids).size || (Array.isArray(orderIds) && orderIds.length > MAX_RECEIPT_ORDERS)
+  // A diner's receipt, on paper or by email, confirms a complete paid bill. A
+  // partial read or mixed currency cannot become a plausible-looking total on a
+  // saved receipt, and an unpaid order emailed as one read as money taken
+  // (journey A, finding 3). Staff printing a table's bill passes false.
+  if (complete && (orders.length !== new Set(ids).size || (Array.isArray(orderIds) && orderIds.length > MAX_RECEIPT_ORDERS)
     || orders.some(o => !o.paid || o.currency !== order.currency || o.table_id !== order.table_id))) {
     throw new ReceiptReadError(404);
   }

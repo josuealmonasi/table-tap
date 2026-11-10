@@ -8,6 +8,7 @@ import type { CartItem, useCart } from "@/hooks/useCart";
 import type { PendingOrderDetails } from "@/components/ui/PendingOrder";
 import { useT } from "@/lib/i18n/context";
 import { rememberUsual } from "@/lib/usual";
+import { rememberCardLines } from "@/lib/card-checkout-lines";
 import { rememberMyOrder } from "@/lib/my-orders";
 import { clearUpsell } from "@/lib/upsell";
 import { rememberRecentOrder } from "@/lib/recent-order";
@@ -27,6 +28,8 @@ export interface CheckoutInput {
   tipPct: number;
   tipCustom: number | null;
   coupon: AppliedCoupon | null;
+  /** What the cart showed, sent so the server never charges more without asking (A2). */
+  reviewedTotal?: number;
   cart: ReturnType<typeof useCart>;
   /** The coupon stopped being usable between applying it and paying. */
   dropCoupon: () => void;
@@ -103,6 +106,7 @@ export function useCheckout(input: CheckoutInput): {
             ...(c.comboId ? { comboId: c.comboId, components: c.components } : {}),
           })),
           note: input.orderNote || undefined,
+          reviewedTotal: input.reviewedTotal,
           customerName: input.customerName || undefined,
           tipPct: input.tipPct,
           tipAmount: input.tipCustom ?? undefined,
@@ -150,7 +154,18 @@ export function useCheckout(input: CheckoutInput): {
         // Stripe still said what this diner likes, and all it changes is
         // which dishes the menu suggests.
         rememberUsual(restaurantId, orderableItems);
+        // Leave the cart as it is: Stripe may be abandoned. The lines leave it
+        // when this order comes back paid (A4).
+        if (data.orderId) rememberCardLines(restaurantId, data.orderId, orderableItems);
         window.location.href = data.url; // Stripe Checkout
+        return;
+      }
+      // Prices rose since the cart was filled: it now shows today's, and the
+      // diner sends it again having seen them (A2).
+      if (data.code === "prices_changed" && data.prices) {
+        cart.reprice(data.prices);
+        input.notify(t("cart.pricesChanged"));
+        setLoading(false);
         return;
       }
       // The coupon stopped being usable between applying it and paying (most
