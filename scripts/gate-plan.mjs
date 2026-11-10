@@ -143,11 +143,16 @@ export function plan({ base = "origin/main", all = false, committedOnly = false 
   return { files, reached: [...reached], gates };
 }
 
-// `node scripts/gate-plan.mjs [--all] [--base ref] [--committed] [--verbose]` prints the plan.
+// `node scripts/gate-plan.mjs [--all] [--base ref] [--committed] [--verbose] [--json]` prints the plan.
 if (import.meta.url === `file://${process.argv[1]}`) {
   const args = process.argv.slice(2);
   const base = args.includes("--base") ? args[args.indexOf("--base") + 1] : "origin/main";
   const p = plan({ base, all: args.includes("--all"), committedOnly: args.includes("--committed") });
+  // For a runner outside this repo: each gate's verdict and scope, as data.
+  if (args.includes("--json")) {
+    console.log(JSON.stringify(Object.fromEntries(p.gates.map(g => [g.name, { run: g.run, why: g.why, scope: g.scope }]))));
+    process.exit(0);
+  }
   console.log(`\n${p.files.length} changed file(s) against ${base}; ${p.reached?.length ?? "all"} file(s) in reach.\n`);
   for (const g of p.gates) {
     const scope = Object.entries(g.scope).map(([k, v]) => `${k}=${v.length}`).join(" ");
