@@ -1,3 +1,4 @@
+import { invalidatePublicMenu } from "@/lib/public-menu-cache";
 import { orderRequestScope } from "@/lib/order-request";
 import { readOfflineContext, contextCoveredSale } from "@/lib/offline-authority";
 import { NextRequest, NextResponse } from "next/server";
@@ -215,6 +216,7 @@ export async function POST(req: NextRequest) {
     // the device keeps it and sends it again (`held`).
     return await apiError("apiErr.posUnsettled", 409, undefined, { held: true });
   }
+  if (parseReserveResult({ ok: true, low: ticket.low }).low.some(w => w.stock === 0)) invalidatePublicMenu(actor.restaurantId);
   if (ticket.repeat) return NextResponse.json({ ...ticket, code: orderCode(ticket.orderId) });
   const order = { id: ticket.orderId as string };
   if (restaurant.low_stock_alerts_enabled) {

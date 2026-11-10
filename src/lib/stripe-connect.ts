@@ -1,3 +1,4 @@
+import { invalidatePublicMenu } from "@/lib/public-menu-cache";
 import { stripe } from "@/lib/stripe";
 import { createAdminClient } from "@/lib/supabase/admin";
 
@@ -88,7 +89,7 @@ export async function ensureConnectAccount(
     .is("stripe_account_id", null)
     .select("stripe_account_id");
   if (error) throw new Error(`connect account write failed: ${error.message}`);
-  if (data?.length) return account.id;
+  if (data?.length) { invalidatePublicMenu(restaurantId); return account.id; }
 
   // Another onboarding call won. Its saved account owns the diner's checkouts.
   const saved = await readConnect(restaurantId);
@@ -145,6 +146,7 @@ export async function syncConnectStatus(restaurantId: string): Promise<ConnectSt
   // Said, not swallowed: the webhook below answers Stripe with it, and Stripe
   // only sends the event again if this failed out loud.
   if (error) throw new Error(`connect status write failed: ${error.message}`);
+  invalidatePublicMenu(restaurantId);
   return {
     accountId,
     chargesEnabled,

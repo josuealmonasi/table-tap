@@ -1,3 +1,5 @@
+import { publicMenuCacheEnabled } from "@/lib/public-menu-cache";
+import { loadPublicOrderingData } from "@/lib/public-ordering-data";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { Category, MenuItem, Restaurant } from "@/lib/types";
@@ -87,6 +89,8 @@ export async function loadOrderingData(
    */
   { includeSoldOut = false }: { includeSoldOut?: boolean } = {},
 ): Promise<OrderingData> {
+  if (!includeSoldOut && publicMenuCacheEnabled()) return loadPublicOrderingData(restaurantId);
+
   // See `includeSoldOut`: staff reading a hidden dish needs the secret key,
   // and every query below is scoped to the one restaurant asked for.
   const supabase = includeSoldOut ? createAdminClient() : await createClient();

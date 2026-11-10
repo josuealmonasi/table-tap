@@ -1,3 +1,4 @@
+import { invalidatePublicMenu } from "@/lib/public-menu-cache";
 import { NextResponse, type NextRequest } from "next/server";
 import { apiError } from "@/lib/api-error";
 import { jsonBody } from "@/lib/json-body";
@@ -70,6 +71,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     p_choices: productChoices ?? null,
     p_reason: reason, p_note: wasteNote(body.note), p_cost: cost, p_actor: actor.email,
   });
+  invalidatePublicMenu(actor.restaurantId);
   if (error?.code === "PT409") return await apiError("apiErr.retryConflict", 409);
   if (error) return await apiError("apiErr.generic", 500);
   if (!id) return await apiError("apiErr.notFound", 404);

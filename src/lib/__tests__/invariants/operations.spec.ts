@@ -234,12 +234,15 @@ describe("a tier without the feature takes nothing off a sale", () => {
     // on discounting at checkout, the till and the bill after a move to a tier
     // without them. Everything that shows or prices a sale now reads through
     // the two functions that ask; the dashboard's own list is the exception,
-    // because it has to show the owner what is saved.
+    // because it has to show the owner what is saved. The public raw cache also
+    // keeps saved rows; its request-time projection asks the live plan below.
     const allowed = new Set([
       "src/lib/promotions-data.ts",
       "src/lib/promotions-on-sale.ts",
       "src/hooks/usePromotions.ts",
+      "src/lib/public-menu-rows.ts",
     ]);
+    expect(read("src/lib/public-ordering-data.ts")).toMatch(/can\(plan.limits, "promotions"\) \? raw.promotions : \[\]/);
     const bare = sources.filter(f => !allowed.has(f) && /\bfetchPromotions\(/.test(read(f)));
     expect(bare, "a sale path that reads promotions without asking the plan").toEqual([]);
 

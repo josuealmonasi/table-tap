@@ -1,3 +1,4 @@
+import { invalidatePublicMenu } from "@/lib/public-menu-cache";
 import { NextResponse, type NextRequest } from "next/server";
 import { apiError } from "@/lib/api-error";
 import { jsonBody } from "@/lib/json-body";
@@ -88,6 +89,7 @@ export async function PATCH(req: NextRequest): Promise<NextResponse> {
   if (days === null) return await apiError("apiErr.settleDays", 400);
   const { error } = await createAdminClient().from("restaurants")
     .update({ terminal_settle_days: days }).eq("id", actor.restaurantId);
+  invalidatePublicMenu(actor.restaurantId);
   if (error) return await apiError("apiErr.generic", 500);
   await logEvent({
     restaurantId: actor.restaurantId, actor: actor.email, entity: "terminal", action: "updated",

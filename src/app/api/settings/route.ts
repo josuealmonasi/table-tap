@@ -1,3 +1,4 @@
+import { invalidatePublicMenu } from "@/lib/public-menu-cache";
 import { NextRequest, NextResponse } from "next/server";
 import { apiError } from "@/lib/api-error";
 import { jsonBody } from "@/lib/json-body";
@@ -154,6 +155,7 @@ export async function POST(req: NextRequest) {
     .from("restaurants")
     .update(update)
     .eq("id", actor.restaurantId);
+  invalidatePublicMenu(actor.restaurantId);
   if (error) {
     console.error("settings save failed:", error.message);
     return await apiError("apiErr.nameSave", 500);

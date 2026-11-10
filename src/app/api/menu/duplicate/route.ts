@@ -1,3 +1,4 @@
+import { invalidatePublicMenu } from "@/lib/public-menu-cache";
 import { NextRequest, NextResponse } from "next/server";
 import { actingManager } from "@/lib/api-guard";
 import { apiError } from "@/lib/api-error";
@@ -19,6 +20,7 @@ export async function POST(req: NextRequest) {
   const { data, error } = await createAdminClient().rpc("duplicate_menu_v1", {
     p_restaurant: actor.restaurantId, p_source: body.sourceId,
   });
+  invalidatePublicMenu(actor.restaurantId);
   if (error?.message.includes("tt_plan_frozen")) return apiError("plan.frozen", 402);
   if (error?.message.includes("tt_plan_feature")) {
     return (await planBlocks(actor.restaurantId, "menuSchedules")) ?? apiError("write.duplicateMenu", 409);

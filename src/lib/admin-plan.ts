@@ -1,3 +1,4 @@
+import { invalidatePublicMenu } from "@/lib/public-menu-cache";
 import type Stripe from "stripe";
 import { stripe } from "@/lib/stripe";
 import type { createAdminClient } from "@/lib/supabase/admin";
@@ -85,6 +86,7 @@ export async function moveRestaurantPlan(
   }
   if (!moved?.length) return { ok: false, error: "apiErr.planChangedMeanwhile", status: 409 };
 
+  invalidatePublicMenu(restaurantId);
   await logEvent({
     restaurantId,
     actor: adminEmail,

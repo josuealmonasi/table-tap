@@ -1,3 +1,4 @@
+import { invalidatePublicMenu } from "@/lib/public-menu-cache";
 import { NextRequest, NextResponse } from "next/server";
 import { apiError } from "@/lib/api-error";
 import { jsonBody } from "@/lib/json-body";
@@ -47,6 +48,7 @@ export async function POST(req: NextRequest) {
       { restaurant_id: actor.restaurantId, active, goal, reward, steps, updated_at: new Date().toISOString() },
       { onConflict: "restaurant_id" },
     );
+  invalidatePublicMenu(actor.restaurantId);
   if (error) {
     console.error("loyalty program save failed:", error.message);
     return await apiError("apiErr.generic", 500);

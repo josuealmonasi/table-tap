@@ -1,3 +1,4 @@
+import { invalidatePublicMenu } from "@/lib/public-menu-cache";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
 import { apiError } from "@/lib/api-error";
@@ -20,6 +21,7 @@ export async function savePromotion(db: SupabaseClient, restaurantId: string, id
     },
     p_items: body.items!.map(i => ({ item_id: i.itemId, qty: Math.max(1, Math.floor(i.qty || 1)) })),
   });
+  invalidatePublicMenu(restaurantId);
   if (error?.message.includes("tt_plan_frozen")) return apiError("plan.frozen", 402);
   if (error) return apiError(id ? "apiErr.promoUpdate" : "apiErr.promoCreate", 500);
   if (!data) return apiError("apiErr.notFound", 404);

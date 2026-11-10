@@ -1,3 +1,5 @@
+import { publicMenuCacheEnabled, publicMenuShell } from "@/lib/public-menu-cache";
+import { can } from "@/lib/plan";
 import { createClient } from "@/lib/supabase/server";
 import { getPlan } from "@/lib/plan-server";
 import { loyaltyOn, programOf } from "@/lib/loyalty/server";
@@ -14,6 +16,10 @@ import { unwrap } from "@/lib/unwrap";
 export async function loadCoverState(
   restaurantId: string,
 ): Promise<{ exists: boolean; cover: boolean }> {
+  if (publicMenuCacheEnabled()) {
+    const { restaurant } = await publicMenuShell(restaurantId);
+    return { exists: Boolean(restaurant), cover: Boolean(restaurant?.cover_enabled && restaurant?.cover_url) };
+  }
   const supabase = await createClient();
   const res = await supabase
     .from("restaurants")
@@ -46,6 +52,10 @@ export async function offeredProgram(restaurantId: string, limits: Parameters<ty
 export async function menuShowsLoyalty(restaurantId: string): Promise<boolean> {
   try {
     const plan = await getPlan(restaurantId);
+    if (publicMenuCacheEnabled()) {
+      const { program } = await publicMenuShell(restaurantId);
+      return Boolean(plan && can(plan.limits, "loyalty") && program?.active && program.reward);
+    }
     return (await offeredProgram(restaurantId, plan?.limits ?? null)) !== null;
   } catch {
     return false;
