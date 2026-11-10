@@ -8,7 +8,8 @@ vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({ from: () =>
   for (const key of ["select", "eq", "gte", "order"]) q[key] = () => q;
   q.neq = (column: string, value: string) => { call.neq = [column, value]; return q; };
   q.lte = (_column: string, value: string) => { call.lte = value; return q; };
-  q.range = async () => ({ data: [
+  // One page, then an empty one: everyRow reads until a page comes back empty.
+  q.range = async (from: number) => ({ data: from > 0 ? [] : [
     { currency: "MXN", method: "cash", amount: 100 },
     { currency: "MXN", method: "card", amount: 40.5 },
     { currency: "MXN", method: "cash", amount: 20.25 },
