@@ -32,6 +32,7 @@ function query(table: string) {
     in: (k: string, vs: unknown[]) => { filters.push(row => vs.includes(row[k])); return q; },
     gte: (k: string, v: string) => { filters.push(row => String(row[k]) >= v); return q; },
     lt: (k: string, v: string) => { filters.push(row => String(row[k]) < v); return q; },
+    lte: (k: string, v: string) => { filters.push(row => String(row[k]) <= v); return q; },
     order: () => q, or: () => q,
     range: (a: number) => { offset = a; return q; },
     single: async () => ({ ...result(), data: result().data[0] }),
