@@ -312,3 +312,17 @@ describe("a visit card is made only from inside the restaurant", () => {
     expect(read("src/components/customer/LoyaltyOffer.tsx")).toMatch(/pass: offer\.pass/);
   });
 });
+
+describe("the server code runs beside the database", () => {
+  it("pins every function to pdx1, next to the production database in us-west-2", () => {
+    // Vercel's default region is iad1 (Washington, D.C.) and the production
+    // database is in Supabase's us-west-2 (Oregon). The table menu reads the
+    // database six to eight times in a row before it can draw, and each read
+    // crossed the country twice: 1–2 s for a quiet page, and on 2026-11-10 the
+    // production stress test timed out every table menu at about 85 requests a
+    // second while every page that reads once stayed at 0.14 s. Moving the
+    // database means moving this too, in the same change.
+    const config = JSON.parse(read("vercel.json")) as { regions?: string[] };
+    expect(config.regions, "vercel.json must pin the functions beside the database").toEqual(["pdx1"]);
+  });
+});

@@ -38,6 +38,7 @@ and that a new party cannot see the previous party's waiting phones.
 | Cart quantities are refused before pricing (production attack L1, 2026-11-10) | Negative, fractional and enormous quantities silently became different orders |
 | A sitting has five pending admission places (production attack M2, 2026-11-10) | Fresh phones filled the floor's approval list without limit |
 | Shared tracker links carry no diner name (production attack L2, 2026-11-10) | Anyone with an order link could read the counter customer's name |
+| Server functions run in the database's region (attack H1) | The table menu timed out at ~85 requests a second: every read crossed the US |
 | Combo details keep choices beside each plate (E2E B6) | The board and detail hid combo components and their upgrades |
 | Tag deletion edits the current warning list (E2E D1) | Deleting one tag overwrote a manager's newer allergen edit |
 | Option-group names are unique after normalization (E2E D6) | Two groups used one answer key and lost a required choice |
@@ -6451,5 +6452,17 @@ already exclude order customer names. `/api/ratings/pending` also selects no
 name. `/api/bill`, `/api/session` and `/api/receipt/payments` require the phone's
 table credential; `/api/orders/print` requires staff. CloudPRNT still includes
 the calling name on kitchen tickets behind its separate restaurant printer
-secret; an order link cannot authorize that endpoint. Claude should inspect
-tracker and refusal copy in both languages, on phone and tablet.
+secret; an order link cannot authorize that endpoint. The tracker and the two
+refusals still need a person to read them in both languages, on phone and tablet.
+## Attack H1 — the table menu was far from its database
+
+The 2026-11-10 production stress test ramped anonymous traffic over the home,
+login, statement and table menu pages. At about 85 requests a second the table
+menu's requests began timing out at ten seconds while the other three stayed at
+0.14 s. The menu is the page every diner opens after scanning a QR code. Two
+places had to agree and nothing checked them: the database lives in Supabase's
+`us-west-2`, and Vercel ran the functions in its default `iad1`, so each of the
+menu's six to eight sequential reads crossed the country and back. `vercel.json`
+now pins the functions to `pdx1`, and an invariant in `operations.spec.ts` fails
+if the pin is removed or changed without the database moving with it.
+
