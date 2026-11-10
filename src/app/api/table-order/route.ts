@@ -1,3 +1,4 @@
+import { invalidatePublicMenu } from "@/lib/public-menu-cache";
 import { orderRequestScope } from "@/lib/order-request";
 import { NextRequest, NextResponse } from "next/server";
 import { apiError } from "@/lib/api-error";
@@ -187,6 +188,7 @@ export async function POST(req: NextRequest) {
     });
     if (result.conflict) return await apiError("apiErr.retryConflict", 409);
     if (result.short) return NextResponse.json({ short: result.short, code: "outOfStock" }, { status: 409 });
+    if ((result.low ?? []).some(w => w.stock === 0)) invalidatePublicMenu(actor.restaurantId);
     if (!result.repeat && restaurant.low_stock_alerts_enabled) await raiseStockNotifications(actor.restaurantId, result.low ?? []);
     if (!result.repeat) await logEvent({ restaurantId: actor.restaurantId, actor: actor.email, entity: "order", action: "created",
       detail: logDetail({ code: orderCode(result.orderId), table: String(result.table), amount: result.total.toFixed(2) }) });

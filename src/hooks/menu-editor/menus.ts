@@ -2,6 +2,7 @@ import type { MenuSchedule } from "@/lib/menu-schedule";
 import { duplicateMenuDeep } from "@/lib/menu-duplicate";
 import type { EditorContext } from "./types";
 import { writeError } from "@/lib/write-result";
+import { refreshDinerMenu } from "@/lib/menu-refresh-client";
 
 /** Menus and their sections: create, rename, delete, reorder, schedule, switch, copy. */
 export function menuActions(ctx: EditorContext) {
@@ -50,6 +51,7 @@ export function menuActions(ctx: EditorContext) {
     try {
       const error = writeError(await supabase.from("menus").update({ schedule }).eq("id", id).select("id"));
       saved = reportError("write.updateMenu", error);
+      if (saved) refreshDinerMenu();
     } catch {
       toast(t("write.updateMenu"), "error");
     }
@@ -69,7 +71,7 @@ export function menuActions(ctx: EditorContext) {
     setMenus(m => m.map(x => (x.id === id ? { ...x, active } : x)));
     try {
       const error = writeError(await supabase.from("menus").update({ active }).eq("id", id).select("id"));
-      reportError("write.updateMenu", error);
+      if (reportError("write.updateMenu", error)) refreshDinerMenu();
     } catch {
       toast(t("write.updateMenu"), "error");
     }

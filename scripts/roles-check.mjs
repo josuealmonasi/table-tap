@@ -155,6 +155,8 @@ const ROUTES = [
   { m: "POST", p: "/api/costs/purchases", body: {}, allow: MANAGES, passes: 400 },
   { m: "PATCH", p: "/api/products", body: {}, allow: MANAGES, passes: 400 },
   { m: "POST", p: "/api/products", body: {}, allow: MANAGES, passes: 400 },
+  // Clears only the caller's own menu cache: nothing is written, so it runs for real.
+  { m: "POST", p: "/api/menu/refresh", body: {}, allow: MANAGES, passes: 200 },
   { m: "POST", p: "/api/costs/counts", body: {}, allow: MANAGES, passes: 400 },
   // The terminal's deposits: the owner's and the managers'. Refused on shape —
   // no day, no number of days — so nothing is marked or changed anywhere.

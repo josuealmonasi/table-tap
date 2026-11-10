@@ -1,6 +1,7 @@
 import type { MenuItem } from "@/lib/types";
 import { writeError } from "@/lib/write-result";
 import type { EditorContext } from "./types";
+import { refreshDinerMenu } from "@/lib/menu-refresh-client";
 
 export interface AvailabilityRequest { done: Promise<void> }
 export interface AvailabilityContext {
@@ -40,6 +41,7 @@ export function setAvailability(ctx: EditorContext, id: string, available: boole
       if (!state.current()) return;
       const error = writeError(result);
       ctx.w.reportError("write.updateAvailability", error);
+      if (!error) refreshDinerMenu();
       const row = result.data?.[0] as MenuItem | undefined;
       // A newer click keeps its optimistic switch until its own write answers.
       if (!error && row?.id === id && state.patch(row, revision, state.pending.get(id) !== request)) return;

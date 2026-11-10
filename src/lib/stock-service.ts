@@ -1,3 +1,4 @@
+import { invalidatePublicMenu } from "@/lib/public-menu-cache";
 import { randomUUID } from "node:crypto";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { can } from "@/lib/plan";
@@ -48,6 +49,7 @@ export async function reserveStock(
   });
   if (error) throw new Error(`Stock reservation ${reservationId} failed: ${error.message}`);
   const result = parseReserveResult(data);
+  if (result.ok && result.low.some(w => w.stock === 0)) invalidatePublicMenu(restaurantId);
   return { ...result, reservationId: result.ok ? reservationId : null };
 }
 
@@ -66,6 +68,7 @@ export async function releaseStock(
     p_reservation: reservationId,
   });
   if (error) throw new Error(`Stock release ${reservationId} failed: ${error.message}`);
+  invalidatePublicMenu(restaurantId);
 }
 
 /**
@@ -89,6 +92,7 @@ export async function raiseStockNotifications(
   restaurantId: string,
   warnings: StockWarning[],
 ): Promise<void> {
+  if (warnings.some(w => w.stock === 0)) invalidatePublicMenu(restaurantId);
   if (warnings.length === 0) return;
 
   const rows = warnings.map(w => ({

@@ -1,3 +1,4 @@
+import { invalidatePublicMenu } from "@/lib/public-menu-cache";
 import { stripe } from "@/lib/stripe";
 import { subscriptionPlan } from "@/lib/subscription-price";
 import { FOUNDING_SLOTS } from "@/lib/founding";
@@ -95,7 +96,7 @@ export async function applySubscription(
     }).eq("id", restaurantId)
       .eq("subscription_sync_revision", current.subscription_sync_revision).select("id");
     if (error) throw new Error(`Subscription update failed: ${error.message}`);
-    if (updated?.length) return;
+    if (updated?.length) { invalidatePublicMenu(restaurantId); return; }
   }
   throw new Error(`Subscription ${sub.id} changed during synchronization; retry required`);
 }

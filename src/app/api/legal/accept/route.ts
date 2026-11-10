@@ -1,3 +1,4 @@
+import { invalidatePublicMenu } from "@/lib/public-menu-cache";
 import { NextResponse } from "next/server";
 import { apiError } from "@/lib/api-error";
 import { actingOwner } from "@/lib/api-guard";
@@ -26,6 +27,7 @@ export async function POST(): Promise<NextResponse> {
       terms_accepted_email: actor.email,
     })
     .eq("id", actor.restaurantId);
+  invalidatePublicMenu(actor.restaurantId);
 
   if (error) return await apiError("apiErr.generic", 500);
   return NextResponse.json({ ok: true });

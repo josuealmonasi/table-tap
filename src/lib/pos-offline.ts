@@ -1,3 +1,4 @@
+import { invalidatePublicMenu } from "@/lib/public-menu-cache";
 import { getPlan } from "@/lib/plan-server";
 import { can } from "@/lib/plan";
 import { stationsOf } from "@/lib/stations";
@@ -99,5 +100,6 @@ export async function ringOffline(actor: Actor, body: PosSaleBody & { offline?: 
   // money, so the device simply sends again.
   if (error || !ticket) return await apiError("apiErr.orderCreate", 503, undefined, { held: true });
   if (ticket.outcome !== "settled") return await apiError("apiErr.posUnsettled", 409, undefined, { held: true });
+  invalidatePublicMenu(actor.restaurantId);
   return NextResponse.json({ ...ticket, currency, method: body.method, code: orderCode(ticket.orderId), offline: true });
 }

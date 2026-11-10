@@ -39,6 +39,7 @@ and that a new party cannot see the previous party's waiting phones.
 | A sitting has five pending admission places (production attack M2, 2026-11-10) | Fresh phones filled the floor's approval list without limit |
 | Shared tracker links carry no diner name (production attack L2, 2026-11-10) | Anyone with an order link could read the counter customer's name |
 | Server functions run in the database's region (attack H1) | The table menu timed out at ~85 requests a second: every read crossed the US |
+| A diner menu is reused for at most 30 s and cleared by every diner-visible save (attack H1 step 2) | The table menu still timed out first under load after #597: ~19 reads per visit |
 | Combo details keep choices beside each plate (E2E B6) | The board and detail hid combo components and their upgrades |
 | Tag deletion edits the current warning list (E2E D1) | Deleting one tag overwrote a manager's newer allergen edit |
 | Option-group names are unique after normalization (E2E D6) | Two groups used one answer key and lost a required choice |
@@ -6470,4 +6471,20 @@ places had to agree and nothing checked them: the database lives in Supabase's
 menu's six to eight sequential reads crossed the country and back. `vercel.json`
 now pins the functions to `pdx1`, and an invariant in `operations.spec.ts` fails
 if the pin is removed or changed without the database moving with it.
+
+## Attack H1, step 2 — every diner rebuilt the same menu
+
+After the functions moved beside the database (#597), the production stress
+test's breaking point rose from about 85 to about 120 requests a second, but
+the table menu was still the first page to time out: each visit made about 19
+database calls, and every diner of a restaurant asked the same restaurant-wide
+questions. The restaurant-wide part is now built once per restaurant for at
+most 30 seconds. The two places that must agree are the cached menu and the
+saves that change it: `invariants/public-menu-cache.spec.ts` fails when a
+server route writes a diner-visible table without clearing the restaurant's
+tag, and when a menu-editor save made from the browser does not call
+`/api/menu/refresh`. Both rules are sabotage-checked in the same file. The
+first version left the editor's saves out, so a price or a sold-out switch
+reached diners up to 30 seconds late; the second rule found a copied dish's
+extras still missing a refresh.
 

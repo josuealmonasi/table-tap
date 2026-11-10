@@ -98,6 +98,10 @@ describe("a failed read is never an answer", () => {
 describe("a request whose answer nobody reads", () => {
   // Only where losing it costs nothing AND nothing on screen says it landed.
   const MAY_DISCARD: Record<string, string> = {
+    // Tells nobody anything: the editor already read and reported the save
+    // itself. This only clears the diners' cached menu early, and a lost one
+    // is caught up by the 30-second cache bound (PUBLIC_MENU_TTL).
+    "src/lib/menu-refresh-client.ts": "best-effort cache clear after a save that was already reported",
   };
 
   it("reads the answer of every request that tells somebody it worked", () => {

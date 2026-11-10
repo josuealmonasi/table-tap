@@ -1,3 +1,4 @@
+import { invalidatePublicMenu } from "@/lib/public-menu-cache";
 import { NextResponse, type NextRequest } from "next/server";
 import { apiError } from "@/lib/api-error";
 import { jsonBody } from "@/lib/json-body";
@@ -47,19 +48,22 @@ function cleanIcons(icons: Body["icons"]): { emoji: string; label: string | null
  * a failed insert left the group empty while the manager was told it saved.
  * The old list is read first and put back if the new one does not land.
  */
-async function writeIcons(groupId: string, icons: ReturnType<typeof cleanIcons>): Promise<boolean> {
+async function writeIcons(restaurantId: string, groupId: string, icons: ReturnType<typeof cleanIcons>): Promise<boolean> {
   const db = createAdminClient();
   const { data: before, error: readError } = await db
     .from("icon_group_items").select("emoji, label, sort_order").eq("group_id", groupId);
   if (readError) return false;
   const { error: clearError } = await db.from("icon_group_items").delete().eq("group_id", groupId);
+  invalidatePublicMenu(restaurantId);
   if (clearError) return false;
   if (icons.length === 0) return true;
   const { error } = await db.from("icon_group_items").insert(
     icons.map((icon, i) => ({ group_id: groupId, ...icon, sort_order: i })),
   );
+  invalidatePublicMenu(restaurantId);
   if (!error) return true;
   if (before?.length) await db.from("icon_group_items").insert(before.map(row => ({ group_id: groupId, ...row })));
+  invalidatePublicMenu(restaurantId);
   return false;
 }
 
@@ -90,8 +94,11 @@ export const POST = deskMutation(async (req: NextRequest, actor) => {
     .select("id")
     .single();
 
+  invalidatePublicMenu(actor.restaurantId);
   if (error || !data) return await apiError("apiErr.invalidRequest", 500);
-  if (!(await writeIcons(data.id, icons))) {
+  const saved = await writeIcons(actor.restaurantId, data.id, icons);
+  invalidatePublicMenu(actor.restaurantId);
+  if (!saved) {
     // Not left behind empty: a group with no icons is refused on the way in.
     await db.from("icon_groups").delete().eq("id", data.id);
     return await apiError("apiErr.iconGroupSave", 500);
@@ -120,13 +127,16 @@ export const PATCH = deskMutation(async (req: NextRequest, actor) => {
   if (body.variant && VARIANTS.includes(body.variant)) patch.variant = body.variant;
   if (Object.keys(patch).length) {
     const { error } = await db.from("icon_groups").update(patch).eq("id", mine.id);
+    invalidatePublicMenu(actor.restaurantId);
     if (error) return await apiError("apiErr.iconGroupSave", 500);
   }
 
   if (body.icons) {
     const icons = cleanIcons(body.icons);
     if (icons.length === 0) return await apiError("apiErr.iconGroupEmpty", 400);
-    if (!(await writeIcons(mine.id, icons))) return await apiError("apiErr.iconGroupSave", 500);
+    const saved = await writeIcons(actor.restaurantId, mine.id, icons);
+    invalidatePublicMenu(actor.restaurantId);
+    if (!saved) return await apiError("apiErr.iconGroupSave", 500);
   }
   return NextResponse.json({ ok: true });
 });
@@ -149,6 +159,7 @@ export const DELETE = deskMutation(async (req: NextRequest, actor) => {
     .eq("restaurant_id", actor.restaurantId)
     .select("id");
 
+  invalidatePublicMenu(actor.restaurantId);
   if (error) return await apiError("apiErr.invalidRequest", 500);
   if (!data?.length) return await apiError("apiErr.notFound", 404);
   return NextResponse.json({ ok: true });

@@ -2,6 +2,7 @@ import { saveProduct } from "./product-save";
 import type { MenuItem } from "@/lib/types";
 import type { EditorContext, ProductInput } from "./types";
 import { writeError } from "@/lib/write-result";
+import { refreshDinerMenu } from "@/lib/menu-refresh-client";
 
 /** Products: add, copy, edit, delete, reorder within their section. */
 export function productActions(ctx: EditorContext) {
@@ -95,6 +96,8 @@ export function productActions(ctx: EditorContext) {
         await reload();
         return undefined;
       }
+      // The copy itself refreshed diners before its extras were linked.
+      refreshDinerMenu();
     }
 
     // Its recipe too, server-side where recipes live: a copy that consumed no

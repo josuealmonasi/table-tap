@@ -1,3 +1,4 @@
+import { invalidatePublicMenu } from "@/lib/public-menu-cache";
 import { NextResponse } from "next/server";
 import { randomBytes } from "node:crypto";
 import { apiError } from "@/lib/api-error";
@@ -36,6 +37,7 @@ export async function POST() {
     .from("restaurants")
     .update({ print_token: token })
     .eq("id", actor.restaurantId);
+  invalidatePublicMenu(actor.restaurantId);
   if (error) return await apiError("apiErr.printerTokenFailed", 500);
 
   await logEvent({

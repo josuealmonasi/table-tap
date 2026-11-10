@@ -1,3 +1,4 @@
+import { invalidatePublicMenu } from "@/lib/public-menu-cache";
 import { auditedAdminAction } from "@/lib/admin-audit";
 import { NextRequest, NextResponse } from "next/server";
 import { apiError } from "@/lib/api-error";
@@ -50,6 +51,7 @@ async function deleteRestaurant(req: NextRequest) {
         refundFeeVerification: "apiErr.restaurantDeleteRefundFeeVerification",
       };
       if (errors[data.outcome]) return await apiError(errors[data.outcome], 409);
+      if (!checkOnly && ["deleted", "gone"].includes(data.outcome)) invalidatePublicMenu(id);
       if (!["ready", "deleted", "gone"].includes(data.outcome)) return await apiError("apiErr.restaurantDelete", 500);
       return null;
     };

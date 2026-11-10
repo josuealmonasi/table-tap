@@ -5,6 +5,7 @@ import { parsePlanLimit, planLimitText } from "@/lib/plan-error";
 import { planLabel } from "@/lib/plan";
 import { writeError, type WriteResult } from "@/lib/write-result";
 import type { MenuSnapshot } from "./types";
+import { refreshDinerMenu } from "@/lib/menu-refresh-client";
 
 interface WriterDeps {
   supabase: ReturnType<typeof createClient>;
@@ -61,6 +62,7 @@ export function makeWriter({ supabase, toast, t, reload, ready = async () => tru
     try {
       const error = writeError(await write, expected);
       if (!reportError(key, error)) return false;
+      refreshDinerMenu();
       if (done) toast(t(done));
       await reload();
       return true;
@@ -81,6 +83,7 @@ export function makeWriter({ supabase, toast, t, reload, ready = async () => tru
     try {
       const { data, error } = await supabase.from(table).insert(row).select("id").single();
       if (!reportError(key, error ?? (data?.id ? null : { message: "The insert returned no id" }))) return undefined;
+      refreshDinerMenu();
       if (done) toast(t(done));
       await reload();
       return (data as { id: string } | null)?.id;
@@ -107,6 +110,7 @@ export function makeWriter({ supabase, toast, t, reload, ready = async () => tru
     if (!(await ready())) return false;
     try {
       if (!reportError(key, await reorderRows(supabase, table, siblings(latest.current), id, direction))) return false;
+      refreshDinerMenu();
       await reload();
       return true;
     } catch {

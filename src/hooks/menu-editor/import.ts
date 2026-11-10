@@ -1,6 +1,7 @@
 import { sameSection, sectionsOf, type ImportRow } from "@/lib/menu-import";
 import type { EditorContext } from "./types";
 import { writeError } from "@/lib/write-result";
+import { refreshDinerMenu } from "@/lib/menu-refresh-client";
 
 /**
  * A menu brought in from a spreadsheet: the sections it names that the menu
@@ -58,6 +59,7 @@ export function importActions(ctx: EditorContext) {
       await reload();
       return 0;
     }
+    refreshDinerMenu();
     await reload();
     return rows.length;
   }

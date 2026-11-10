@@ -1,3 +1,4 @@
+import { invalidatePublicMenu } from "@/lib/public-menu-cache";
 import { NextResponse, type NextRequest } from "next/server";
 import { apiError } from "@/lib/api-error";
 import { jsonBody } from "@/lib/json-body";
@@ -34,6 +35,7 @@ export async function PATCH(req: NextRequest): Promise<NextResponse> {
 
   const { data, error } = await createAdminClient().from("restaurants")
     .update(change).eq("id", actor.restaurantId).select("id");
+  invalidatePublicMenu(actor.restaurantId);
   if (error) return await apiError("apiErr.generic", 500);
   if (!data?.length) return await apiError("apiErr.notFound", 404);
   await logEvent({

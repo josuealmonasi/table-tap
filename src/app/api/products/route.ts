@@ -1,3 +1,4 @@
+import { invalidatePublicMenu } from "@/lib/public-menu-cache";
 import { NextRequest, NextResponse } from "next/server";
 import { actingManager } from "@/lib/api-guard";
 import { apiError } from "@/lib/api-error";
@@ -56,6 +57,7 @@ export async function PATCH(req: NextRequest): Promise<NextResponse> {
       p_restaurant: actor.restaurantId, p_product: id, p_addons: body.addonIds, p_changes: changes,
       p_menu: id ? null : menuId, p_category: id ? null : categoryId,
     });
+    invalidatePublicMenu(actor.restaurantId);
     if (error?.code === "PT422") return await apiError("apiErr.recipeModifierEdit", 409, { name: error.details });
     if (error?.message.includes("tt_plan_frozen")) return await apiError("plan.frozen", 402);
     if (error?.message.includes("tt_plan_feature")) return (await planBlocks(actor.restaurantId, "inventory")) ?? await apiError("write.createProduct", 409);
@@ -73,6 +75,7 @@ export async function PATCH(req: NextRequest): Promise<NextResponse> {
   const db = await createClient();
   const { data, error } = await db.from("menu_items").update(changes)
     .eq("id", id).eq("restaurant_id", actor.restaurantId).eq("is_addon", false).select("id").maybeSingle();
+  invalidatePublicMenu(actor.restaurantId);
   if (error?.code === "PT422") return await apiError("apiErr.recipeModifierEdit", 409, { name: error.details });
   if (error) return await apiError("write.updateProduct", 503);
   if (!data) return await apiError("apiErr.notFound", 404);
@@ -95,6 +98,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     p_restaurant: actor.restaurantId, p_item: id, p_stock: body.stock,
     p_expected_stock: body.expectedStock, p_expected_epoch: body.expectedEpoch,
   });
+  invalidatePublicMenu(actor.restaurantId);
   if (error) return await apiError("write.updateProduct", 503);
   if (data === "missing") return await apiError("apiErr.notFound", 404);
   if (data !== "counted") return await apiError("menu.stockChanged", 409);

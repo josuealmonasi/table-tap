@@ -1,3 +1,4 @@
+import { invalidatePublicMenu } from "@/lib/public-menu-cache";
 import { NextResponse, type NextRequest } from "next/server";
 import { apiError } from "@/lib/api-error";
 import { jsonBody } from "@/lib/json-body";
@@ -60,6 +61,7 @@ export async function POST(req: NextRequest) {
     })
     .select("id")
     .single();
+  invalidatePublicMenu(actor.restaurantId);
 
   // The unique index is per restaurant: two tags with the same name on one menu
   // would be two identical filters in the diner's menu.
@@ -93,6 +95,7 @@ export async function PATCH(req: NextRequest) {
     .eq("id", body.id)
     .eq("restaurant_id", actor.restaurantId)
     .select("id");
+  invalidatePublicMenu(actor.restaurantId);
 
   if (error) return await apiError("apiErr.invalidRequest", 500);
   if (!data?.length) return await apiError("apiErr.notFound", 404);
@@ -117,6 +120,7 @@ export const DELETE = deskMutation(async (req: NextRequest, actor) => {
   const { data, error } = await db.rpc("delete_dietary_tag_v1", {
     p_restaurant: actor.restaurantId, p_tag: id,
   });
+  invalidatePublicMenu(actor.restaurantId);
   if (error) return await apiError("apiErr.invalidRequest", 500);
   if (!data) return await apiError("apiErr.notFound", 404);
   return NextResponse.json({ ok: true, unlinked: data.unlinked });
