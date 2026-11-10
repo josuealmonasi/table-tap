@@ -1937,6 +1937,30 @@ menu reads six to eight times in a row, took 1–2 s when quiet, and was the fir
 page to time out under load. Moving either one means moving the other in the
 same change; an invariant test holds the pin.
 
+## The diner menu is built once per restaurant, for at most 30 seconds
+
+Every diner of a restaurant asks the same restaurant-wide questions: its menus,
+sections, dishes, extras, promotions, dietary tags, ratings and visit-card
+program. `src/lib/public-menu-cache.ts` answers them once per restaurant for at
+most 30 seconds (`PUBLIC_MENU_TTL`) under the tag `public-menu:<restaurant id>`,
+read with no visitor session so every diner gets the same, public answer. A
+table visit went from about 19 database calls to 3 (the plan, the table and the
+sitting stay live). What depends on the clock or the visitor is never cached:
+which menus are open now, which promotions are in force now, the plan and its
+trial, the table, the sitting, membership and the visit-card pass.
+
+Staff see their edits at once. Every server route that changes something a
+diner sees clears the restaurant's tag (held by
+`invariants/public-menu-cache.spec.ts`), and the menu editor, which saves from
+the browser, calls `/api/menu/refresh` after each save (held by the same file).
+A sale that takes the last portion clears it too. Anything else catches up
+within the 30 seconds, and checkout still refuses a dish that is gone.
+
+Only Vercel production turns it on (`PUBLIC_MENU_CACHE=1` forces it on, `0`
+off): the dev gates change restaurant state with direct database writes, and a
+cached page would show the old state for 30 seconds and fail them for the wrong
+reason.
+
 ## Still open
 
 Not code — the things only the business can do: registering the two Stripe

@@ -9,6 +9,12 @@ export function menuCopyCases() {
       arrange: arrangeMenuCopy,
       body: f => ({ sourceId: f.s14MenuSource }),
       expect: [200], check: checkMenuCopy },
+    // The menu editor saves from the browser; this tells the server so diners
+    // see the save at once. Clears only a cache, so it is safe to run for real.
+    { name: "POST /api/menu/refresh (the editor saved: diners see it now)", as: "manager", method: "POST",
+      path: "/api/menu/refresh", body: {}, expect: [200] },
+    { name: "POST /api/menu/refresh (a waiter refused)", as: "waiter", method: "POST",
+      path: "/api/menu/refresh", body: {}, expect: [403] },
   ];
 }
 
