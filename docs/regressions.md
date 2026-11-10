@@ -6390,9 +6390,12 @@ Checkout's `route.spec.ts` checks both writer paths, claim cleanup, a failed
 count, and the card/table exemptions. Referenced orders count and insert under
 the existing money lock. Older phones insert from TypeScript and count just
 before that insert: a small concurrent overshoot is acceptable for this abuse
-ceiling. The 409 offers paying by card or ordering at the register. Claude must
-probe 24/25 orders, simultaneous requests and old tickets in a rolled-back dev
-transaction; these unit specs do not execute PostgreSQL.
+ceiling. The 409 offers paying by card or ordering at the register. The unit
+specs do not execute PostgreSQL, so the SQL was probed on the development
+database: 24 open orders leave room, the 25th is taken and the 26th refused;
+table, card-pending and till orders never count; a retry of an accepted order
+still gets its ticket when the counter is full; orders older than three hours
+free the ceiling; and two simultaneous orders at 24 open let exactly one in.
 
 ## Production attack L1 — refuse quantities instead of changing the order
 
@@ -6432,9 +6435,11 @@ phone receives a 429 with `status: full`, no member id and no visit pass.
 poll after a place frees. `table-join-notice.react-component.spec.tsx` checks both
 languages: the diner is told to ask the waiter, never that an unqueued phone is
 waiting for approval. Checkout refuses the same state before claiming stock or
-returns its claims if a competing opener fills the sitting. Claude must probe
-concurrent sixth phones, existing pending/approved phones and freed places in
-PostgreSQL before shipping.
+returns its claims if a competing opener fills the sitting. Probed in
+PostgreSQL on the development database: a sixth new phone is told the table is
+full and no row is made for it; waiting and approved phones keep polling as
+before; approving one frees a place; and two new phones arriving at once with
+four waiting get exactly one place between them.
 
 ## Production attack L2 — an order link carries no diner name
 
