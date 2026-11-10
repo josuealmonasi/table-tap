@@ -140,6 +140,7 @@ export async function POST(req: NextRequest) {
     if (tableId && !hash) return await apiError("apiErr.tableJoin", 403);
 
     const waiting = tableId && hash ? await requestTableMember(restaurantId, tableId, hash) : null;
+    if (waiting?.status === "full") return await apiError("apiErr.tableJoinFull", 429);
     if (waiting && (waiting.status === "pending" || waiting.status === "rejected")) {
       return await apiError("apiErr.tableJoin", 403);
     }
@@ -238,6 +239,7 @@ export async function POST(req: NextRequest) {
     const admission = tableId && hash ? await requestTableMember(restaurantId, tableId, hash, true) : null;
     if (admission && admission.status !== "approved") {
       await held.giveBack();
+      if (admission.status === "full") return await apiError("apiErr.tableJoinFull", 429);
       return await apiError("apiErr.tableJoin", 403);
     }
     const sessionId = admission?.sessionId ?? null;
@@ -270,6 +272,10 @@ export async function POST(req: NextRequest) {
         coupon: coupon ? { ...coupon, eligible_subtotal: base.subtotal } : null,
       });
       if (result.conflict) return await apiError("apiErr.retryConflict", 409);
+      if (result.counterFull) {
+        await held.giveBack();
+        return await apiError("apiErr.counterPayLaterFull", 409);
+      }
       if (result.couponReason) return NextResponse.json({ couponReason: result.couponReason }, { status: 409 });
       if (result.short) return await refuseShortStock(result.short);
       held.handOver();
@@ -293,6 +299,17 @@ export async function POST(req: NextRequest) {
       return await refuseShortStock(reservation.short);
     }
     stockReservationId = reservation.reservationId;
+
+    // Older phones have no reference and insert here. This last count bounds
+    // abuse; referenced orders count atomically under the restaurant lock.
+    if (deferred && !tableId) {
+      const { data: full, error } = await supabase.rpc("counter_pay_later_full", { p_restaurant: restaurantId });
+      if (error || typeof full !== "boolean") throw new Error("Could not check unpaid counter orders");
+      if (full) {
+        await held.giveBack();
+        return await apiError("apiErr.counterPayLaterFull", 409);
+      }
+    }
 
     // Create the pending order first so the webhook can find it.
     const { data: order, error: oErr } = await supabase

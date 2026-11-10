@@ -37,6 +37,9 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   const token = memberToken(req) ?? newMemberToken();
   try {
     const state = await requestTableMember(restaurantId, tableId, hashMemberToken(token));
+    if (state.status === "full") {
+      return keepMemberToken(await apiError("apiErr.tableJoinFull", 429, undefined, { ...state }), token);
+    }
     const pass = state.status === "approved" && state.sessionId
       ? issueVisitPass(restaurantId, { table: tableId, session: state.sessionId }) : "";
     let pending: PendingPhone[] | null = [];

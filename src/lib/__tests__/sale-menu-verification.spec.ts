@@ -129,3 +129,9 @@ it("still prices an already-collected offline sale after its linked extra sold o
   expect(result?.price.total).toBe(120);
   expect(result?.lines[0].extras).toEqual([{ ...extra, price: 20 }]);
 });
+
+it.each([1.5, "2"])("L1: keeps the old offline replay normalization for an already-collected quantity %s", async qty => {
+  const result = await currentOfflinePrice(db, "r", { items: [{ ...line, qty: qty as number }] }, { service_pct: 0, service_enabled: false });
+  expect(result?.lines[0].qty).toBe(Math.trunc(Number(qty)));
+  expect(result?.price.total).toBe(120 * Math.trunc(Number(qty)));
+});

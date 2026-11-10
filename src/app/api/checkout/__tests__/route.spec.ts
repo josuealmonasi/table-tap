@@ -13,7 +13,10 @@ import { NextRequest, NextResponse } from "next/server";
 vi.mock("@/lib/i18n/server", () => ({ getLocale: async () => "es" }));
 
 let admissionStatus = "approved";
+let admissionFullOnOpen = false;
 const step = {
+  counterFull: vi.fn(async () => ({ data: false, error: null as unknown })),
+  intent: vi.fn(async () => ({ orderId: "order-1", sessionId: null, table: null, total: 90 })),
   openSession: vi.fn(async (): Promise<string | null> => "sitting-1"),
   reserveStock: vi.fn(async () => ({ ok: true, short: [], low: [] as typeof soldOut[], reservationId: "reservation-1" })),
   insertOrder: vi.fn(async (): Promise<{ data: { id: string } | null; error: unknown }> => ({
@@ -70,8 +73,8 @@ vi.mock("@/lib/coupon-service", () => ({
 }));
 vi.mock("@/lib/table-guard", () => ({ tableOf: async () => ({ id: "00000000-0000-4000-8000-0000000000f1" }) }));
 vi.mock("@/lib/table-member-cookie", () => ({ memberHash: () => "hash" }));
-vi.mock("@/lib/table-membership", () => ({ requestTableMember: async () => ({
-  status: admissionStatus, sessionId: await step.openSession(), diner: "member-1",
+vi.mock("@/lib/table-membership", () => ({ requestTableMember: async (...args: unknown[]) => ({
+  status: args[3] && admissionFullOnOpen ? "full" : admissionStatus, sessionId: await step.openSession(), diner: "member-1",
 }) }));
 vi.mock("@/lib/stock-service", () => ({
   reserveStock: () => step.reserveStock(),
@@ -95,6 +98,7 @@ vi.mock("@/lib/checkout/cart-error", () => ({
 }));
 vi.mock("@/lib/supabase/admin", () => ({
   createAdminClient: () => ({
+    rpc: () => step.counterFull(),
     from: (table: string) => {
       if (table === "notifications") {
         const filters: Record<string, unknown> = {};
@@ -124,6 +128,7 @@ vi.mock("@/lib/supabase/admin", () => ({
     },
   }),
 }));
+vi.mock("@/lib/order-intent", () => ({ readOrderIntent: async () => null, writeOrderIntent: () => step.intent() }));
 
 const { POST } = await import("@/app/api/checkout/route");
 
@@ -146,8 +151,10 @@ const boom = () => {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  step.counterFull.mockResolvedValue({ data: false, error: null });
   notices.length = 0;
   admissionStatus = "approved";
+  admissionFullOnOpen = false;
   step.openSession.mockImplementation(async () => "sitting-1");
   step.reserveStock.mockImplementation(async () => ({ ok: true, short: [], low: [], reservationId: "reservation-1" }));
   step.insertOrder.mockImplementation(async () => ({ data: { id: "order-1" }, error: null }));
@@ -155,6 +162,39 @@ beforeEach(() => {
   step.openCard.mockImplementation(async () => ({ id: "cs_1", url: "https://stripe.test/cs_1" }));
   step.logCoupon.mockImplementation(async () => undefined);
   step.saveSession.mockImplementation(async () => ({ error: null }));
+});
+
+describe("M1: unpaid counter orders have a restaurant-wide ceiling", () => {
+  it("refuses a full counter with card and register alternatives, returning all claims", async () => {
+    step.counterFull.mockResolvedValue({ data: true, error: null });
+    const response = await checkout({ tableId: null, payLater: true });
+    expect(response.status).toBe(409);
+    expect(await response.json()).toMatchObject({ error: "apiErr.counterPayLaterFull" });
+    expect(step.insertOrder).not.toHaveBeenCalled();
+    expect(releaseStock).toHaveBeenCalledOnce();
+    expect(releaseCoupon).toHaveBeenCalledOnce();
+  });
+  it.each([{ tableId: null }, { payLater: true }])("never caps card or table orders: %j", async extra => {
+    step.counterFull.mockResolvedValue({ data: true, error: null });
+    expect((await checkout(extra)).status).toBe(200);
+    expect(step.counterFull).not.toHaveBeenCalled();
+  });
+  it("allows a counter order below the ceiling", async () => {
+    expect((await checkout({ tableId: null, payLater: true })).status).toBe(200);
+    expect(step.insertOrder).toHaveBeenCalledOnce();
+  });
+  it("creates nothing when the ceiling could not be read", async () => {
+    step.counterFull.mockResolvedValue({ data: false, error: { message: "unavailable" } });
+    expect((await checkout({ tableId: null, payLater: true })).status).toBe(500);
+    expect(step.insertOrder).not.toHaveBeenCalled();
+  });
+  it("answers the atomic writer's refusal without claiming an order exists", async () => {
+    step.intent.mockResolvedValueOnce({ counterFull: true } as never);
+    const response = await checkout({ tableId: null, payLater: true, ref: "00000000-0000-4000-8000-0000000000f2" });
+    expect(response.status).toBe(409);
+    expect(await response.json()).toMatchObject({ error: "apiErr.counterPayLaterFull" });
+    expect(step.insertOrder).not.toHaveBeenCalled();
+  });
 });
 
 describe("a checkout that dies halfway gives back what it had claimed", () => {
@@ -226,6 +266,22 @@ describe("what is somebody else's is left alone", () => {
 
 
 describe("admission before a new table order", () => {
+  it("M2: refuses an unqueued phone at a full sitting before claiming anything", async () => {
+    admissionStatus = "full";
+    const response = await checkout({ payLater: true });
+    expect(response.status).toBe(429);
+    expect(await response.json()).toMatchObject({ error: "apiErr.tableJoinFull" });
+    expect(step.reserveStock).not.toHaveBeenCalled();
+    expect(step.insertOrder).not.toHaveBeenCalled();
+    expect(releaseCoupon).not.toHaveBeenCalled();
+  });
+  it("M2: returns the coupon if admission fills while the cart is priced", async () => {
+    admissionFullOnOpen = true;
+    expect((await checkout({ payLater: true })).status).toBe(429);
+    expect(releaseCoupon).toHaveBeenCalledOnce();
+    expect(step.reserveStock).not.toHaveBeenCalled();
+    expect(step.insertOrder).not.toHaveBeenCalled();
+  });
   it.each(["pending", "rejected"])("does not reserve or insert food for a %s phone", async status => {
     admissionStatus = status;
     expect((await checkout({ payLater: true })).status).toBe(403);

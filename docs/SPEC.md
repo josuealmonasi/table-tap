@@ -120,6 +120,11 @@ is pending too. Approval needs no plan entitlement, so a downgrade cannot
 prevent the floor from helping someone pay. Table orders and split seats use
 the verified member id; a browser-supplied `diner` never proves identity.
 
+At most five new phones may wait for approval in a sitting. The table lock
+serializes admission; existing pending, approved and rejected phones keep
+their rows and polling. A sixth phone gets a 429 asking it to speak to the
+waiter, with no pending row. Approving or rejecting a phone frees a place.
+
 Membership ends with the sitting. An approved phone retains read/payment
 access to its own closed sitting's orders without an age cutoff, never the
 next party's food. Its credential cookie lasts a year to keep that payment
@@ -136,6 +141,9 @@ the member that actually ordered; counter tracker capabilities stay as before.
 1. Scan → the menu loads (public read, RLS-filtered).
 2. Add items, modifiers, extras, a note for the kitchen, a coupon.
 3. Checkout → `POST /api/checkout`, which is the only authoritative money path:
+   - refuses cart quantities other than integer numbers from 1 to 99, as do
+     the waiter's pad and online till; already-collected offline receipts keep
+     their previous quantity normalization
    - re-fetches **every price from the database**, never trusting the client
    - reserves stock before asking for money, so two tables cannot both be sold
      the last portion while each sits on a payment page
@@ -145,6 +153,8 @@ the member that actually ordered; counter tracker capabilities stay as before.
 4. Stripe → `POST /api/webhooks/stripe`, signature-verified → the order becomes
    `paid` + `received`. An expired session hands back the stock and the coupon.
 5. The diner watches `/order/<orderId>` — the id is the capability; no login.
+   Public status replies and server-rendered tracker data exclude the diner's
+   name. The device keeps no name per order, so the tracker shows none.
 6. The board advances it; each change reaches the diner's tracker.
 
 Where the plan allows it, food can leave **before** it is paid for: at a table
@@ -153,6 +163,14 @@ the till. Then the money path is one of four: `/api/bill/pay` for the diner's
 card, `/api/split/pay` for one share of a divided bill, `/api/table-payment`
 for a waiter settling the whole table, and `/api/table-payment/part` for the
 calculator taking a piece of it.
+
+A new pay-later counter checkout is refused with 409 when that restaurant has
+25 unpaid counter checkouts from the last three hours. Cancelled, written-off,
+table, account, till and card orders do not count. The refusal offers card
+payment or ordering at the register. Referenced checkouts count under the
+restaurant's money lock after checking for a saved retry; older clients with
+no reference count immediately before their insert, so that abuse ceiling
+allows a small concurrent overshoot. Table orders and card checkouts are exempt.
 
 ## Order status
 

@@ -71,11 +71,13 @@ describe("verifyCart — prices come from the database", () => {
     if (res.ok) expect(res.lines[0].extras?.[0].price).toBe(45);
   });
 
-  it("floors a fractional quantity and never goes below one", () => {
-    const res = run([line({ qty: 2.7 })], [item()]);
-    if (res.ok) expect(res.lines[0].qty).toBe(2);
-    const zero = run([line({ qty: 0 })], [item()]);
-    if (zero.ok) expect(zero.lines[0].qty).toBe(1);
+  it.each([-1, 0, 1.5, 100, 1_000_000, "2", "abc", null, true, NaN, Infinity])("L1: refuses an impossible quantity: %s", qty => {
+    expect(run([line({ qty: qty as number })], [item()]))
+      .toEqual({ ok: false, rejection: { kind: "invalidQuantity" } });
+  });
+
+  it.each([1, 2, 99])("L1: preserves a valid integer quantity: %s", qty => {
+    expect(run([line({ qty })], [item()])).toMatchObject({ ok: true, lines: [{ qty }] });
   });
 });
 
@@ -146,6 +148,11 @@ describe("verifyCart — combos are priced by the promotion, not the cart", () =
     ],
   };
   const parts = [item(), item({ id: "fries", name: "Fries", price: 50, emoji: "🍟" })];
+
+  it.each([0, 1.5, 1_000_000])("L1: refuses an impossible combo quantity: %s", qty => {
+    expect(run([line({ comboId: "meal", itemId: "meal", qty })], parts, [combo]))
+      .toEqual({ ok: false, rejection: { kind: "invalidQuantity" } });
+  });
 
   it("charges the promotion's price, not the client's", () => {
     const res = run([line({ comboId: "meal", itemId: "meal", price: 5 })], parts, [combo]);

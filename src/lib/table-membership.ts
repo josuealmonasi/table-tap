@@ -14,7 +14,7 @@ export interface TableMember {
 }
 
 export interface JoinState {
-  status: "empty" | "pending" | "approved" | "rejected";
+  status: "empty" | "pending" | "approved" | "rejected" | "full";
   sessionId: string | null;
   diner: string | null;
 }

@@ -5,6 +5,7 @@ const writes: Record<string, unknown>[] = [];
 let foundTable: { id: string; label: string } | null = { id: "00000000-0000-4000-8000-0000000000f7", label: "7" };
 vi.mock("@/lib/supabase/admin", () => ({
   createAdminClient: () => ({
+    rpc: async () => ({ data: false, error: null }),
     from: (table: string) => {
       const query = {
         select: () => query, eq: () => query,
