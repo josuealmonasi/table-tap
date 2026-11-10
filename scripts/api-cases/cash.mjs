@@ -1,4 +1,5 @@
 import { MARK } from "../api-fixtures.mjs";
+import { setAsideHeldCash } from "../api-retry-fixture.mjs";
 
 export function cashCases(fx) {
   const { restaurant } = fx;
@@ -65,13 +66,7 @@ export function cashCases(fx) {
       }, expect: [409], expectError: /revisión de un gerente|manager review/i },
     { name: "POST /api/cash-shift (closed on a blind count)", as: "cashier", method: "POST",
       // The seeded held cash is set aside for the close, then put back as it was.
-      arrange: async f => {
-        const { data: held } = await f.admin.from("offline_sale_queue").select("pos_ref")
-          .eq("restaurant_id", r).is("approved_at", null).eq("body->>method", "cash");
-        const refs = (held ?? []).map(h => h.pos_ref);
-        if (refs.length) await f.admin.from("offline_sale_queue").update({ approved_at: new Date().toISOString() }).in("pos_ref", refs);
-        return async () => { if (refs.length) await f.admin.from("offline_sale_queue").update({ approved_at: null }).in("pos_ref", refs); };
-      },
+      arrange: f => setAsideHeldCash(f, r),
       path: "/api/cash-shift", body: async f => {
         const { data } = await f.admin.from("cash_shifts").select("id").eq("restaurant_id", r).is("closed_at", null).single();
         return { action: "close", shiftId: data.id, ref: crypto.randomUUID(), counted: "1000", confirm: true };

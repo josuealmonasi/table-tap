@@ -1,4 +1,4 @@
-import { arrangeRetry, ask, checked } from "./api-retry-fixture.mjs";
+import { arrangeRetry, ask, checked, setAsideHeldCash } from "./api-retry-fixture.mjs";
 
 export function retryCases(fx) {
   const r = fx.restaurant.id;
@@ -72,7 +72,12 @@ export function retryCases(fx) {
     const body = () => kind === "close" ? { action: "close", shiftId: state.shifts[0], ref: state.ref, counted: 100, confirm: true }
       : { kind: "withdrawal", shiftId: state.shifts[0], ref: state.ref, amount: 20 };
     return { name: `S20 K${kind === "close" ? 9 : 5}: ${path} retry leaves a newer shift alone`, as: "manager", method: "POST", path, expect: [200],
-      arrange: f => arrangeRetry(f, state, kind), body,
+      arrange: async f => {
+        const undo = await arrangeRetry(f, state, kind);
+        if (kind !== "close") return undo;
+        const putBack = await setAsideHeldCash(f, r).catch(async error => { await undo(); throw error; });
+        return async () => { await putBack(); await undo(); };
+      }, body,
       check: async (first, f) => {
         if (kind === "withdrawal") await checked(f.admin.rpc("close_cash_shift", {
           p_restaurant: r, p_shift: state.shifts[0], p_counted: 80, p_actor: "apicheck",
