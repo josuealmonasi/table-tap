@@ -21,6 +21,7 @@ import { programOf } from "@/lib/loyalty/server";
 import { readLoyaltyStats } from "@/lib/loyalty/analytics-read";
 import { DEFAULT_TIME_ZONE } from "@/lib/open-menus";
 import { startOfLocalDay } from "@/lib/day-window";
+import { otherCurrencyTakings } from "@/lib/other-currency-takings";
 import { corteFrom, type CortePayment } from "@/lib/corte";
 import { corteLogs, type CorteLog } from "@/lib/corte-log";
 import { todaysShiftViews } from "@/lib/cash-shift-server";
@@ -84,7 +85,7 @@ export default async function AnalyticsPage({
   const admin = createAdminClient();
   const since = dayStart.toISOString();
 
-  const [paidRows, givenUp, owedRows, returns, chargedRows] = await Promise.all([
+  const [paidRows, givenUp, owedRows, returns, chargedRows, otherCurrencies] = await Promise.all([
     everyRow<CortePayment>((a, b) => admin
       .from("payments")
       .select("actor_email, amount, method")
@@ -121,10 +122,12 @@ export default async function AnalyticsPage({
       .not("account_id", "is", null)
       .gte("charged_at", since)
       .order("id").range(a, b), "today's account charges"),
+    otherCurrencyTakings(membership.restaurant.id, membership.restaurant.currency, since),
   ]);
   const log = corteLogs(givenUp, membership.restaurant.currency);
   const corte = {
     ...corteFrom(paidRows, [...log.verified, ...returns]),
+    otherCurrencies,
     onAccount: Math.round(chargedRows.reduce((s, o) => s + Number(o.total), 0) * 100) / 100,
     accountsOwed: Math.round(owedRows.reduce((s, o) => s + Number(o.total), 0) * 100) / 100,
     unverifiedAdjustments: log.unverified,

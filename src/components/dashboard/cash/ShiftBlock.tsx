@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useLocale, useT } from "@/lib/i18n/context";
 import { dateLocale, formatMoney } from "@/lib/format";
+import { otherCurrencyLines } from "@/lib/other-currency";
 import { useToast } from "@/components/ui/Toast";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import type { CashMovement } from "@/lib/cash-drawer";
@@ -116,6 +117,9 @@ export default function ShiftBlock({ shifts, currency, timeZone, restaurantName 
               <strong role="cell">{money(current.sum.expected)}</strong>
             </div>
           </div>
+          {otherCurrencyLines(current.otherCurrencies, t, formatMoney).map(line => (
+            <p key={line} className="tt-muted tt-costs-hint">{line}</p>
+          ))}
           {current.withdrawals.length > 0 && (
             <ul className="tt-cashbox-list">
               {current.withdrawals.map(w => (

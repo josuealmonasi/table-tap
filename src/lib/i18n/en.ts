@@ -540,6 +540,7 @@ myBill: "View my bill",
     refunded: "Handed back",
     onAccount: "Put on customer accounts",
     accountsOwed: "Still owed on customer accounts",
+    otherCurrency: "Also taken in {currency} (count it apart, it is not added here): cash {cash} · card {card}",
     signature: "Signed by the person handing over and the person receiving:",
   },
   till: {

@@ -535,6 +535,7 @@ myBill: "Ver mi cuenta",
     refunded: "Devuelto",
     onAccount: "Cargado a cuentas de clientes",
     accountsOwed: "Pendiente en cuentas de clientes",
+    otherCurrency: "También cobrado en {currency} (cuéntalo aparte, no está sumado aquí): efectivo {cash} · tarjeta {card}",
     signature: "Firma de quien entrega y de quien recibe:",
   },
   till: {
