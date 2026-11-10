@@ -5,8 +5,9 @@ import { formatMoney, dateLocale } from "@/lib/format";
 import { backwardOptions } from "@/lib/order-flow";
 import { MoveToIcon } from "@/components/ui/icons";
 import { type Order, type OrderStatus } from "@/lib/types";
-import { boardOrderCode, hasOrderMoney, type BoardOrder } from "@/lib/kitchen-ticket";
+import { boardOrderCode, hasOrderMoney, type BoardOrder, type KitchenLine } from "@/lib/kitchen-ticket";
 import OrderDetailDialog from "./OrderDetailDialog";
+import OrderLineAdditions from "./OrderLineAdditions";
 import TicketWait from "./TicketWait";
 import { DEFAULT_TICKET_LATE_MINUTES, DEFAULT_TICKET_WARN_MINUTES } from "@/lib/ticket-wait";
 import { STATUS_META, statusMeta } from "@/lib/order-status";
@@ -89,7 +90,7 @@ export default function OrderCard({
   const stations = stationsOf(order);
   const partOfMany = stations.length > 1;
   const stationTurn = station !== null && cancellable && canMove;
-  const lines = linesAt(order, station);
+  const lines = linesAt<KitchenLine>(order, station);
   const placedAt = new Date(order.created_at).toLocaleTimeString(dateLocale(locale), {
     hour: "2-digit",
     minute: "2-digit",
@@ -176,6 +177,7 @@ export default function OrderCard({
                 )
               </span>
             )}
+            <OrderLineAdditions item={item} />
             {item.notes && (
               <div className="tt-accent tt-subline" style={{ fontSize: 11, fontStyle: "italic" }}>
                 ↳ {item.notes}

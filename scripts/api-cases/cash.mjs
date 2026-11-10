@@ -1,4 +1,5 @@
 import { MARK } from "../api-fixtures.mjs";
+import { setAsideHeldCash } from "../api-retry-fixture.mjs";
 
 export function cashCases(fx) {
   const { restaurant } = fx;
@@ -56,7 +57,16 @@ export function cashCases(fx) {
     { name: "POST /api/cash-shift (a close nobody signed off)", as: "cashier", method: "POST",
       path: "/api/cash-shift", body: { action: "close", counted: 1000 }, expect: [400],
       expectError: /contaste|counted/i },
+    // C4: the demo seeds one held cash sale awaiting review, and the drawer is
+    // not signed while it waits.
+    { name: "POST /api/cash-shift (offline cash still awaits review)", as: "cashier", method: "POST",
+      path: "/api/cash-shift", body: async f => {
+        const { data } = await f.admin.from("cash_shifts").select("id").eq("restaurant_id", r).is("closed_at", null).single();
+        return { action: "close", shiftId: data.id, ref: crypto.randomUUID(), counted: "1000", confirm: true };
+      }, expect: [409], expectError: /revisión de un gerente|manager review/i },
     { name: "POST /api/cash-shift (closed on a blind count)", as: "cashier", method: "POST",
+      // The seeded held cash is set aside for the close, then put back as it was.
+      arrange: f => setAsideHeldCash(f, r),
       path: "/api/cash-shift", body: async f => {
         const { data } = await f.admin.from("cash_shifts").select("id").eq("restaurant_id", r).is("closed_at", null).single();
         return { action: "close", shiftId: data.id, ref: crypto.randomUUID(), counted: "1000", confirm: true };

@@ -6,7 +6,8 @@ import { frozenBlocks, planBlocks } from "@/lib/plan-guard";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { logEvent } from "@/lib/activity-log";
 import { logDetail } from "@/lib/log-detail";
-import { cashAmount, cashNote } from "@/lib/cash-drawer";
+import { bankAmount } from "@/lib/terminal-bank";
+import { cashNote } from "@/lib/cash-drawer";
 import { decimal } from "@/lib/costs/input";
 
 export const runtime = "nodejs";
@@ -40,7 +41,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   if (!day) return await apiError("apiErr.depositDay", 400);
   const currency = body?.currency;
   if (currency !== "MXN" && currency !== "USD") return await apiError("apiErr.invalidRequest", 400);
-  const received = cashAmount(body?.received, false);
+  const received = bankAmount(body?.received);
   if (received === null) return await apiError("apiErr.depositAmount", 400);
 
   const { data, error } = await createAdminClient().rpc("record_terminal_deposit_v1", {
@@ -66,11 +67,13 @@ export async function DELETE(req: NextRequest): Promise<NextResponse> {
   if (!day) return await apiError("apiErr.depositDay", 400);
   const currency = body?.currency;
   if (currency !== "MXN" && currency !== "USD") return await apiError("apiErr.invalidRequest", 400);
-  const { data, error } = await createAdminClient().rpc("delete_terminal_deposit_v1", {
+  const { data, error } = await createAdminClient().rpc("delete_terminal_deposit_v2", {
     p_restaurant: actor.restaurantId, p_day: day, p_currency: currency,
   });
   if (error) return await apiError("apiErr.generic", 500);
-  if (!data) return await apiError("apiErr.notFound", 404);
+  // Newest first: a later deposit may hold this one's refunds (C2).
+  if (data === "later") return await apiError("apiErr.depositLater", 409);
+  if (data !== "deleted") return await apiError("apiErr.notFound", 404);
   await logEvent({
     restaurantId: actor.restaurantId, actor: actor.email, entity: "terminal", action: "deleted",
     detail: logDetail({ note: day, currency }),

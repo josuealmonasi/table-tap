@@ -32,7 +32,6 @@ export default function BuyPanel({ stock, currency, timeZone }: BuyPanelProps) {
   const [days, setDays] = useState(String(stock.coverDays));
   const [recording, setRecording] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const money = (n: number) => formatMoney(n, currency);
   const nameOf = new Map(stock.ingredients.map(i => [i.id, i]));
   const packsOf = (s: Suggestion) => {
     const pack = packLabel(s.packSize, s.unit);
@@ -105,7 +104,7 @@ export default function BuyPanel({ stock, currency, timeZone }: BuyPanelProps) {
                     <span className="tt-costs-margin">{packsOf(s)}</span>
                     <span className="tt-costs-product-meta tt-muted">
                       {s.urgent && <span className="tt-costs-chip">{t("costs.buyUrgent")}</span>}{" "}
-                      {t("costs.buyEstimate", { amount: money(s.cost) })}
+                      {t("costs.buyEstimate", { amount: formatMoney(s.cost, s.currency) })}
                       {s.onHand === null && ` · ${t("costs.buyNotCounted")}`}
                     </span>
                   </li>
@@ -127,7 +126,7 @@ export default function BuyPanel({ stock, currency, timeZone }: BuyPanelProps) {
               return (
                 <li key={p.id} className="tt-costs-entry">
                   <span className="tt-costs-product-name">{i?.name ?? "—"}</span>
-                  <span className="tt-costs-margin">{money(p.total)}</span>
+                  <span className="tt-costs-margin">{formatMoney(p.total, p.currency)}</span>
                   <span className="tt-costs-product-meta tt-muted">
                     {t("costs.purchaseLine", { packs })} · {p.recorded_by} · {when(p.created_at)}
                   </span>

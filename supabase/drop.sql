@@ -1,5 +1,7 @@
 drop table if exists restaurant_accounting_records cascade;
 drop table if exists platform_admin_audit cascade;
+drop function if exists public.complete_owner_signup_v1(uuid);
+drop function if exists public.delete_dietary_tag_v1(uuid, uuid);
 drop function if exists public.check_item_addon_restaurant() cascade;
 drop function if exists public.keep_platform_admin_audit();
 drop function if exists public.admin_delete_restaurant(uuid, boolean);
@@ -353,4 +355,7 @@ drop function if exists public.waste_ingredient_usage_v2(uuid, uuid, uuid, numer
 drop function if exists public.record_waste_v2(uuid, uuid, uuid, numeric, text, text, numeric, text, jsonb);
 drop function if exists public.record_waste_once_v2(uuid, uuid, uuid, numeric, text, text, numeric, text, uuid, jsonb);
 drop function if exists public.retire_unsent_refund_attempt_v1(uuid, uuid, uuid, text);
+drop function if exists public.stamp_account_credit_currency() cascade;
+drop function if exists public.stamp_cost_currency() cascade;
+drop function if exists public.delete_terminal_deposit_v2(uuid, date, text);
 drop function if exists public.sale_line_costs(uuid, jsonb);

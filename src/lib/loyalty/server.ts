@@ -22,13 +22,15 @@ export interface LoyaltyProgram {
 }
 
 /** The restaurant's program, or null when it has never set one up. */
-export async function programOf(restaurantId: string): Promise<LoyaltyProgram | null> {
-  const { data } = await createAdminClient()
+export async function programOf(restaurantId: string, requireRead = false): Promise<LoyaltyProgram | null> {
+  const { data, error } = await createAdminClient()
     .from("loyalty_programs")
     .select("active, goal, reward, steps")
     .eq("restaurant_id", restaurantId)
     .maybeSingle();
-  if (!data) return null;
+  // Optional menu decoration can disappear; an editor must never save over a failed read.
+  if (error && requireRead) throw new Error(`Could not read the loyalty program: ${error.message}`);
+  if (error || !data) return null;
   return { active: data.active, goal: data.goal, reward: data.reward, steps: ladderOf(data.steps, data.goal, data.reward) };
 }
 

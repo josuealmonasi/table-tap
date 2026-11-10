@@ -80,6 +80,11 @@ export default function TableCalculator({
   // One reference per collection, kept across a retry and replaced once it
   // lands: the same tap must never be recorded twice.
   const [ref, setRef] = useState(newRef);
+  // A collection that got no answer may have been recorded. Until the server
+  // answers it, collecting resends exactly that request: reused for a new
+  // handful of cash, its reference returned the first receipt as a duplicate
+  // and the second MX$30 was never recorded (journey B, finding 1).
+  const [unanswered, setUnanswered] = useState<string | null>(null);
   /** The balance could not be read, so there is no number to collect against. */
   const [lost, setLost] = useState(false);
   const [chosenCurrency, setChosenCurrency] = useState<string | null>(null);
@@ -147,14 +152,19 @@ export default function TableCalculator({
   async function collect(method: "cash" | "card"): Promise<void> {
     if (tipTooLarge || busy) return;
     setBusy(true);
+    const request = unanswered ?? JSON.stringify({ tableId, expected: owed, currency, amount, tip, method, ref });
     try {
       const res = await fetch("/api/table-payment/part", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ tableId, expected: owed, currency, amount, tip, method, ref }),
+        body: request,
       });
+      // Answered: whatever the outcome, that request is settled, and the next
+      // collection is a new one with its own reference.
+      setUnanswered(null);
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
+        setRef(newRef());
         paymentCheck.capture(data, { kind: "table", tableId, currency });
         toast(data.error ?? t("settle.failed"), "error");
         if (data.code === "balance_changed" || data.code === "split") { setPlan([]); setDone(0); setMode("full"); await load(); }
@@ -191,7 +201,9 @@ export default function TableCalculator({
       await load();
     } catch {
       // Money, so it never queues: a collection replayed on reconnect is a
-      // table charged twice. Refuse it and say why.
+      // table charged twice. Refuse it and say why — and keep the request, so
+      // the next tap asks about this one instead of starting another.
+      setUnanswered(request);
       toast(t("offline.blocked"), "error");
     } finally {
       setBusy(false);
@@ -221,6 +233,7 @@ export default function TableCalculator({
               setChosenCurrency(b.currency); setMode("full"); setPlan([]); setDone(0); setTipCustom(null); setTipPct(0);
             }}>{formatMoney(b.owed, b.currency)}</button>)}
           </div>}
+          {unanswered && <p className="tt-muted" role="status">{t("settle.unansweredCollection")}</p>}
           <div className="tt-calc-figures">
             <div className="tt-row">
               <span className="tt-muted">{t("settle.total")}</span>

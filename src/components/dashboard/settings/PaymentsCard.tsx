@@ -45,14 +45,15 @@ export default function PaymentsCard() {
     };
   }, [t]);
 
-  async function connect(): Promise<void> {
+  // Onboarding until the account takes payments; its dashboard after (E5).
+  async function openStripe(path: "/api/connect/onboard" | "/api/connect/dashboard"): Promise<void> {
     setRedirecting(true);
     setError("");
     try {
-      const res = await fetch("/api/connect/onboard", { method: "POST" });
+      const res = await fetch(path, { method: "POST" });
       const data = await res.json();
       if (res.ok && data.url) {
-        window.location.href = data.url; // Stripe-hosted onboarding
+        window.location.href = data.url; // Stripe-hosted, single-use
         return;
       }
       setError(data.error ?? t("dash.connectError"));
@@ -80,12 +81,22 @@ export default function PaymentsCard() {
         // placeholder should be the shape of the sentence that replaces it.
         <Skeleton width="72%" height={14} />
       ) : status?.chargesEnabled ? (
-        <p style={{ fontSize: 14, margin: 0 }}>
-          <span className="tt-badge tt-badge-green">
-            <CheckIcon size={12} weight="bold" /> {t("dash.connected")}
-          </span>{" "}
-          {t("dash.connectedMsg")}
-        </p>
+        <>
+          <p style={{ fontSize: 14, marginTop: 0 }}>
+            <span className="tt-badge tt-badge-green">
+              <CheckIcon size={12} weight="bold" /> {t("dash.connected")}
+            </span>{" "}
+            {t("dash.connectedMsg")}
+          </p>
+          <button
+            className="tt-btn tt-btn-ghost tt-btn-sm"
+            onClick={() => void openStripe("/api/connect/dashboard")}
+            disabled={redirecting}
+          >
+            {redirecting ? t("dash.redirecting") : t("dash.stripeDashboardBtn")}
+          </button>
+          {error && <p className="tt-field-error">{error}</p>}
+        </>
       ) : (
         <>
           {status && (
@@ -95,7 +106,7 @@ export default function PaymentsCard() {
           )}
           <button
             className="tt-btn tt-btn-primary tt-btn-sm"
-            onClick={connect}
+            onClick={() => void openStripe("/api/connect/onboard")}
             disabled={redirecting}
           >
             {redirecting

@@ -6,6 +6,7 @@ import { NextRequest } from "next/server";
 // open_cash_shift instead of inserting, and the function stamps its own time
 // after the lock so it cannot start before a close that came first.
 const state = vi.hoisted(() => ({ calls: [] as { name: string; args: Record<string, unknown> }[], answer: "s1" as string | null }));
+vi.mock("@/lib/held-cash", () => ({ heldCashWaiting: async () => 0 }));
 vi.mock("@/lib/api-guard", () => ({ actingStaff: async () => ({ restaurantId: "r", email: "cashier", role: "cashier" }) }));
 vi.mock("@/lib/api-error", () => ({ apiError: async (error: string, status: number) => Response.json({ error }, { status }) }));
 vi.mock("@/lib/activity-log", () => ({ logEvent: async () => {} }));

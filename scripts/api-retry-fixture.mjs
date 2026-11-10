@@ -98,3 +98,18 @@ export async function arrangeRetry(f, state, kind) {
     return undo;
   } catch (error) { await undo(); throw error; }
 }
+
+/**
+ * The demo seeds one held cash sale awaiting review, and a drawer is not
+ * signed while one waits (C4). A case that closes a shift sets it aside and
+ * gets back the function that puts it back as it was.
+ */
+export async function setAsideHeldCash(f, restaurantId) {
+  const held = await checked(f.admin.from("offline_sale_queue").select("pos_ref")
+    .eq("restaurant_id", restaurantId).is("approved_at", null).eq("body->>method", "cash"));
+  const refs = held.map(h => h.pos_ref);
+  if (refs.length) await checked(f.admin.from("offline_sale_queue").update({ approved_at: new Date().toISOString() }).in("pos_ref", refs).select("pos_ref"));
+  return async () => {
+    if (refs.length) await checked(f.admin.from("offline_sale_queue").update({ approved_at: null }).in("pos_ref", refs).select("pos_ref"));
+  };
+}

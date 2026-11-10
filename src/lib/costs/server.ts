@@ -5,6 +5,7 @@ import { feesKeptSince } from "@/lib/report-fees";
 import { everyRow } from "@/lib/paged";
 import type { Modifier } from "@/lib/types";
 import { recipeBook, unitCosts, type Ingredient, type RecipeLine } from "./recipe-cost";
+import { withProcessingFees } from "./processing-fees";
 import { feeRate, type FeePayment, type FeeRate } from "./fees";
 import { periodContribution, unitMargins, type CostedItem, type PeriodContribution, type SoldOrder, type UnitMargin } from "./margins";
 import { priceRises, type PriceChange, type PriceRise } from "./price-rises";
@@ -45,7 +46,7 @@ export async function readCosts(restaurantId: string, now = new Date()): Promise
   if (restaurant.error || !restaurant.data) throw new Error(`Could not read the restaurant: ${restaurant.error?.message}`);
   const [ingredients, recipes, items, menus, changes, orders, payments] = await Promise.all([
     everyRow<Ingredient>((a, b) => db.from("ingredients")
-      .select("id, name, unit, pack_size, pack_price, unit_cost, supplier, lead_days")
+      .select("id, name, unit, pack_size, pack_price, unit_cost, supplier, lead_days, currency")
       .eq("restaurant_id", restaurantId).is("archived_at", null).order("id").range(a, b), "the ingredients"),
     everyRow<RecipeLine>((a, b) => db.from("recipe_lines")
       .select("item_id, ingredient_id, quantity, mod_label, mod_option")
@@ -56,14 +57,14 @@ export async function readCosts(restaurantId: string, now = new Date()): Promise
     everyRow<{ id: string; name: string }>((a, b) => db.from("menus")
       .select("id, name").eq("restaurant_id", restaurantId).order("id").range(a, b), "the menus"),
     everyRow<PriceChange>((a, b) => db.from("ingredient_prices")
-      .select("ingredient_id, previous_cost, unit_cost, created_at")
+      .select("ingredient_id, previous_cost, unit_cost, created_at, currency")
       .eq("restaurant_id", restaurantId).gte("created_at", since).order("id").range(a, b), "the price changes"),
     everyRow<SoldOrder & { id: string; currency: string }>((a, b) => db.from("orders")
       .select("id, currency, items, total, service_fee, tip, tax_pct")
       .eq("restaurant_id", restaurantId).eq("currency", restaurant.data.currency).eq("paid", true).neq("status", "cancelled")
       .gte("created_at", since).order("id").range(a, b), "the period's sales"),
     everyRow<FeePayment>((a, b) => db.from("payments")
-      .select("amount, method, stripe_payment_intent")
+      .select("amount, method, currency, stripe_payment_intent, stripe_account_id")
       .eq("restaurant_id", restaurantId).eq("currency", restaurant.data.currency).gte("created_at", since).order("id").range(a, b), "the period's payments"),
   ]);
 
@@ -80,11 +81,11 @@ export async function readCosts(restaurantId: string, now = new Date()): Promise
   }));
   const lines = recipes.map(l => ({ ...l, quantity: Number(l.quantity) }));
   const book = recipeBook(lines);
-  const costs = unitCosts(typed);
+  const costs = unitCosts(typed, restaurant.data.currency);
   // What we kept, from the same ledger the month's ceiling reads: net of
   // whatever a refund gave back, on payments settled in the window.
   const platformFees = await feesKeptSince(restaurantId, since, restaurant.data.currency);
-  const fees = feeRate(payments, platformFees.kept, terminalFeePct);
+  const fees = feeRate(await withProcessingFees(payments), platformFees.kept, terminalFeePct);
 
   return {
     ingredients: typed.sort((a, b) => a.name.localeCompare(b.name)),

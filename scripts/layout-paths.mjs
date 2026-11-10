@@ -85,12 +85,22 @@ export const PUBLIC = [
   "/",
   "/login",
   "/signup",
+  "/signup/verify",
   "/forgot-password",
   "/reset-password",
   "/terminos",
   "/privacidad",
   "/rewards",
 ];
+
+/**
+ * Pages that only send a person on and never draw a screen of their own, so
+ * no width can measure them. /signup/complete finishes an owner's sign-up and
+ * redirects; its one drawn state, the completion error, is held by
+ * signup-completion.spec.tsx and wears the login card /login is measured in.
+ * Listed so the invariant still sees every page.
+ */
+export const REDIRECT_ONLY = ["/signup/complete"];
 
 /** What the till's buttons say, in the Spanish the team visits run in. */
 export const TILL = {

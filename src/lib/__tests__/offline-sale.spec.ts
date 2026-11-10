@@ -104,3 +104,16 @@ describe("the receipt printed offline", () => {
     expect(html).toContain("ORD-4F6C");
   });
 });
+
+describe("the tax rate a held sale was rung under (C6, end-to-end review)", () => {
+  const base = { at: new Date().toISOString(), subtotal: 116, serviceFee: 0, tip: 0, discount: 0, total: 116 };
+  it("keeps the rate the till saved", () => {
+    expect(offlineCharge({ ...base, taxPct: 0 })?.taxPct).toBe(0);
+    expect(offlineCharge({ ...base, taxPct: 16 })?.taxPct).toBe(16);
+  });
+  it("ignores a rate that cannot be one, and leaves older receipts without it", () => {
+    expect(offlineCharge({ ...base, taxPct: 160 })).not.toHaveProperty("taxPct");
+    expect(offlineCharge({ ...base, taxPct: "16" })).not.toHaveProperty("taxPct");
+    expect(offlineCharge(base)).not.toHaveProperty("taxPct");
+  });
+});

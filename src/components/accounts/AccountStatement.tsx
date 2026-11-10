@@ -165,7 +165,9 @@ export default function AccountStatement({ code, paid }: { code: string; paid: b
             <ul>
               {data.payments.map((p, i) => (
                 <li key={i}>
-                  {new Intl.DateTimeFormat(dateLocale(locale), { dateStyle: "medium" }).format(new Date(p.at))} ·{" "}
+                  {/* The restaurant's day, as the charges above use: a 00:30 Mexico City
+                    payment read on a Los Angeles phone was dated the day before (sweep 8, finding 5). */}
+                  {new Intl.DateTimeFormat(dateLocale(locale), { dateStyle: "medium", timeZone: data.timeZone ?? undefined }).format(new Date(p.at))} ·{" "}
                   {p.currency ? formatMoney(p.amount, p.currency) : `${Number(p.amount).toFixed(2)} · ${t("attribution.currencyUnknown")}`} · {t(p.method === "cash" ? "account.byCash" : "account.byCard")}
                 </li>
               ))}

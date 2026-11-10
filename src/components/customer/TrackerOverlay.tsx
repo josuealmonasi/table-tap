@@ -24,8 +24,12 @@ const TERMINAL: OrderStatus[] = ["completed", "cancelled"];
  * the table's debt, and polling on for a change the kitchen will never make
  * leaves the diner watching a dish that is not being cooked.
  */
-const over = (order: TrackedOrder): boolean =>
-  order.written_off === true || TERMINAL.includes(order.status);
+export const over = (order: TrackedOrder): boolean =>
+  order.written_off === true || order.status === "cancelled"
+  // Delivered but not yet paid is not over: the payment, and the rating that
+  // waits on it, still have to happen. Stopped at "completed", a pay-later
+  // diner who paid in cash afterwards was never asked how it was (A8).
+  || (TERMINAL.includes(order.status) && order.paid === true);
 
 /**
  * The live order status, over the menu it came from.
@@ -92,7 +96,7 @@ export default function TrackerOverlay({
   const asked = useRef(false);
   useEffect(() => {
     if (!order || asked.current) return;
-    if (!over(order) || order.status === "cancelled" || order.written_off) return;
+    if (!over(order) || order.status === "cancelled" || order.written_off || !order.paid) return;
     asked.current = true; // once per order, not on every poll heartbeat
     void (async () => {
       try {

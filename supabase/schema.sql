@@ -4276,9 +4276,13 @@ begin
   if v_order.status not in ('received', 'preparing') then
     return jsonb_build_object('outcome', 'moved', 'status', v_order.status);
   end if;
-  select coalesce(array_agg(distinct coalesce(i->>'station', 'kitchen')), '{}') into v_needed
+  -- A combo keeps one bill line, but each plate still needs its own station.
+  select coalesce(array_agg(distinct coalesce(part->>'station', i->>'station', 'kitchen')), '{}') into v_needed
     from jsonb_array_elements(coalesce(v_order.items, '[]'::jsonb)) i
-   where not coalesce((i->>'skipsKitchen')::boolean, false);
+    cross join lateral jsonb_array_elements(case
+      when jsonb_typeof(i->'components') = 'array' and i->'components' <> '[]'::jsonb
+        then i->'components' else jsonb_build_array(i) end) part
+   where not coalesce((part->>'skipsKitchen')::boolean, (i->>'skipsKitchen')::boolean, false);
   if not (p_station = any(v_needed)) then return jsonb_build_object('outcome', 'notHere'); end if;
   v_ready := array(select distinct unnest(v_order.stations_ready || p_station) order by 1);
   update orders
@@ -4906,8 +4910,8 @@ create table if not exists terminal_deposits (
   id            uuid primary key default gen_random_uuid(),
   restaurant_id uuid not null references restaurants(id) on delete cascade,
   sales_day     date not null,
-  expected      numeric not null check (expected >= 0 and expected <= 100000000),
-  received      numeric not null check (received >= 0 and received <= 100000000),
+  expected      numeric not null check (expected between -100000000 and 100000000),
+  received      numeric not null check (received between -100000000 and 100000000),
   note          text check (note is null or char_length(note) <= 140),
   recorded_by   text not null,
   created_at    timestamptz not null default now(),
@@ -6243,7 +6247,7 @@ begin
     where operation_id = o.id and id = p_attempt;
   update refund_operations set stripe_refund_id = p_refund, provider_status = p_status,
     status = case when p_status = 'succeeded' then 'succeeded' when p_status in ('failed', 'canceled') then 'failed' else 'processing' end,
-    completed_at = case when p_status = 'succeeded' then now() end,
+    completed_at = case when p_status = 'succeeded' then clock_timestamp() end,
     fee_verification_pending = (source = 'stripe'),
     confirmed_by = p_actor,
     payout_actor = case when source = 'stripe' then null else coalesce(p_payout, original_collector) end where id = o.id;
@@ -7512,6 +7516,7 @@ declare
   v_sessions uuid[];
   v_owed     numeric;
   v_currency text;
+  v_limit_currency text;
 begin
   perform public.lock_restaurant_money(p_restaurant);
   perform set_config('tabletap.allocation_writer', 'v1', true);
@@ -7565,12 +7570,24 @@ begin
     return jsonb_build_object('outcome','mixed_currency');
   end if;
   v_owed := public.account_owed(p_account);
+  -- A ceiling is approved in one currency. After the restaurant switched, a
+  -- MX$500 ceiling silently allowed US$500 once the old debt was paid
+  -- (sweep 8, finding 2). An account from before this column takes the
+  -- currency of its last charge, or the restaurant's if it has none.
+  v_limit_currency := coalesce(v_account.credit_currency,
+    (select currency from orders where account_id = p_account and written_off = false order by created_at desc limit 1),
+    (select currency from restaurants where id = p_restaurant));
+  if v_currency is distinct from v_limit_currency then
+    return jsonb_build_object('outcome', 'limit_currency', 'limit', v_account.credit_limit,
+      'limit_currency', v_limit_currency, 'currency', v_currency);
+  end if;
   if v_owed + v_amount > v_account.credit_limit then
     return jsonb_build_object('outcome', 'limit', 'owed', v_owed, 'limit', v_account.credit_limit, 'currency', v_currency);
   end if;
 
   update orders set account_id = p_account, charged_by = p_actor, charged_at = now()
    where id = any(p_orders);
+  update customer_accounts set credit_currency = v_limit_currency where id = p_account and credit_currency is null;
   perform public.close_session_if_clear(s, 'account') from unnest(coalesce(v_sessions, '{}')) s;
 
   return jsonb_build_object('outcome', 'charged', 'amount', v_amount, 'owed', v_owed + v_amount);
@@ -7599,7 +7616,11 @@ begin
       return jsonb_build_object('outcome', 'invalid');
     end if;
     if p_limit < v_owed then return jsonb_build_object('outcome', 'limit', 'owed', v_owed); end if;
-    update customer_accounts set credit_limit = p_limit where id = p_account;
+    -- A ceiling set now is approved in the currency the account owes in, or
+    -- the restaurant's today (sweep 8, finding 2).
+    update customer_accounts set credit_limit = p_limit, credit_currency = coalesce(
+      (select min(currency) from orders where account_id = p_account and not paid and written_off = false and status <> 'cancelled'),
+      (select currency from restaurants where id = p_restaurant)) where id = p_account;
   elsif p_action = 'close' then
     if v_owed > 0 then return jsonb_build_object('outcome', 'owes', 'owed', v_owed); end if;
     update customer_accounts set status = 'closed', closed_by = p_actor, closed_at = now() where id = p_account;
@@ -7903,6 +7924,10 @@ begin
   perform public.pos_insert_order(p_restaurant, p_ref, p_order, 'pending_payment', p_at, v_reservation);
   if p_at is not null then
     perform public.settle_offline_sale_v2(p_restaurant, p_ref, p_method, p_actor, p_at);
+    -- The timestamp dates the money; it does not prove the kitchen made the food.
+    -- Keep the requested stage under this same lock and transaction.
+    update orders set status = p_status
+      where id = p_ref and restaurant_id = p_restaurant;
   else
     perform public.settle_sale_v2(p_restaurant, p_ref, p_method, p_actor, p_status);
   end if;
@@ -7912,7 +7937,7 @@ begin
   end if;
   return jsonb_build_object('outcome', 'settled', 'settled', true, 'orderId', p_ref,
     'total', (p_order->>'total')::numeric, 'low', v_stock->'low',
-    'handedOver', p_at is not null or p_status = 'completed');
+    'handedOver', p_status = 'completed');
 end;
 $$;
 revoke all on function public.ring_pos_sale_v2(uuid, uuid, jsonb, text, text, text, timestamptz, text, jsonb, boolean, int) from public, anon, authenticated;
@@ -8999,7 +9024,8 @@ begin
     left join menu_items m on m.id = (d.value->>'item_id')::uuid and m.restaurant_id = p_restaurant;
   perform set_config('tabletap.offline_queue_writer', p_ref::text, true);
   v_ticket := public.ring_pos_sale_v2(p_restaurant, p_ref, p_order, p_method, p_actor,
-    'completed', p_at, p_terminal, v_demand, false, 0);
+    case when coalesce((p_order->>'preparation_pending')::boolean, false) then 'received' else 'completed' end,
+    p_at, p_terminal, v_demand, false, 0);
   if v_ticket->>'outcome' <> 'settled' then return v_ticket; end if;
   perform set_config('tabletap.offline_audit_writer', p_ref::text, true);
   update orders set offline_collector = p_actor, offline_authority = p_authority,
@@ -10382,6 +10408,14 @@ $$;
 revoke all on function public.terminal_deposit_ledger_v1(uuid, text) from public, anon, authenticated;
 grant execute on function public.terminal_deposit_ledger_v1(uuid, text) to service_role;
 
+-- A refund-heavy day can debit the bank. Keep its sign in the same signed manifest.
+alter table terminal_deposits drop constraint if exists terminal_deposits_expected_check;
+alter table terminal_deposits add constraint terminal_deposits_expected_check
+  check (expected between -100000000 and 100000000);
+alter table terminal_deposits drop constraint if exists terminal_deposits_received_check;
+alter table terminal_deposits add constraint terminal_deposits_received_check
+  check (received between -100000000 and 100000000);
+
 create or replace function public.record_terminal_deposit_v1(
   p_restaurant uuid, p_day date, p_currency text, p_received numeric, p_note text, p_actor text)
 returns jsonb language plpgsql security definer set search_path = public as $$
@@ -10392,7 +10426,7 @@ begin
   select coalesce(timezone, 'America/Mexico_City'), terminal_fee_pct into v_zone, v_fee
     from restaurants where id = p_restaurant for share;
   if not found or p_day is null or p_currency not in ('MXN', 'USD') or p_received is null
-    or p_received < 0 or p_received <> round(p_received, 2) then raise exception 'invalid deposit'; end if;
+    or p_received < -100000000 or p_received > 100000000 or p_received <> round(p_received, 2) then raise exception 'invalid deposit'; end if;
   if exists(select 1 from terminal_deposits where restaurant_id = p_restaurant and sales_day = p_day and currency = p_currency) then
     return jsonb_build_object('error', 'marked');
   end if;
@@ -10456,6 +10490,24 @@ end;
 $$;
 revoke all on function public.delete_terminal_deposit_v1(uuid, date, text) from public, anon, authenticated;
 grant execute on function public.delete_terminal_deposit_v1(uuid, date, text) to service_role;
+
+-- A deposit is undone newest first. A later deposit may have absorbed a
+-- refund this one could not: undoing the earlier one put that refund back in
+-- its expected amount too, and the two days together expected MX$200 where
+-- MX$250 had come in (C2, end-to-end review).
+create or replace function public.delete_terminal_deposit_v2(p_restaurant uuid, p_day date, p_currency text)
+returns text language plpgsql security definer set search_path = public as $$
+begin
+  perform public.lock_restaurant_money(p_restaurant);
+  if exists (select 1 from terminal_deposits where restaurant_id = p_restaurant and currency = p_currency and sales_day > p_day) then
+    return 'later';
+  end if;
+  delete from terminal_deposits where restaurant_id = p_restaurant and sales_day = p_day and currency = p_currency;
+  return case when found then 'deleted' else 'missing' end;
+end;
+$$;
+revoke all on function public.delete_terminal_deposit_v2(uuid, date, text) from public, anon, authenticated;
+grant execute on function public.delete_terminal_deposit_v2(uuid, date, text) to service_role;
 
 -- Stock movements keep their generation; a new physical count supersedes it.
 -- Each trusted function sets tabletap.stock_movement itself (set_config, for
@@ -12272,7 +12324,9 @@ begin
       if o.source = 'stripe' then perform public.enqueue_fee_reconcile(o.restaurant_id, o.stripe_payment_intent); end if;
       -- The header names the latest refund that still counts, app or manual,
       -- so completion evidence and fee readers find it (returns audit 4).
-      update refund_operations set status = 'succeeded', completed_at = now(), fee_verification_pending = true,
+      -- After the money lock: now() is when the transaction began, and a refund
+      -- that waited for a shift close was dated inside the closed shift (C3).
+      update refund_operations set status = 'succeeded', completed_at = clock_timestamp(), fee_verification_pending = true,
         confirmed_by = p_actor,
         stripe_refund_id = coalesce((select a.stripe_refund_id from refund_attempts a where a.operation_id = o.id
           and a.provider_status = 'succeeded' and a.stripe_refund_id is not null
@@ -12367,7 +12421,7 @@ begin
     if coalesce(jsonb_array_length(p_refunds), 0) <> 0 or p_status <> 'succeeded' or nullif(btrim(p_payout), '') is null then
       raise exception 'cash or terminal returns need a confirmed payout drawer';
     end if;
-    update refund_operations set status = 'succeeded', completed_at = now(), confirmed_by = p_actor,
+    update refund_operations set status = 'succeeded', completed_at = clock_timestamp(), confirmed_by = p_actor,
       payout_actor = p_payout, fee_verification_pending = false where id = o.id returning * into o;
     return jsonb_build_object('outcome', 'completed', 'outstanding_cents', 0, 'completed_at', o.completed_at);
   end if;
@@ -12635,3 +12689,146 @@ begin
 end $$;
 revoke all on function public.retire_unsent_refund_attempt_v1(uuid, uuid, uuid, text) from public, anon, authenticated;
 grant execute on function public.retire_unsent_refund_attempt_v1(uuid, uuid, uuid, text) to service_role;
+
+-- ── A credit ceiling's currency (sweep 8, finding 2) ──
+-- Null on accounts opened before it: their first charge records it.
+alter table customer_accounts add column if not exists credit_currency text check (credit_currency ~ '^[A-Z]{3}$');
+create or replace function public.stamp_account_credit_currency()
+returns trigger language plpgsql security definer set search_path = public as $$
+begin
+  if new.credit_currency is null then
+    select currency into new.credit_currency from restaurants where id = new.restaurant_id;
+  end if;
+  return new;
+end $$;
+revoke all on function public.stamp_account_credit_currency() from public, anon, authenticated;
+drop trigger if exists stamp_account_credit_currency on customer_accounts;
+create trigger stamp_account_credit_currency before insert on customer_accounts
+  for each row execute function public.stamp_account_credit_currency();
+
+-- ── What currency an ingredient cost is in (end-to-end review, D3) ──
+-- A restaurant can switch its currency. Prices, purchases and waste typed
+-- before the switch keep the currency they were typed in, so an old MX$100
+-- purchase never reads as US$100 and a peso price never feeds dollar margins.
+-- Old rows have no evidence of anything else: they take today's currency.
+alter table ingredients add column if not exists currency text;
+alter table ingredient_prices add column if not exists currency text;
+alter table ingredient_purchases add column if not exists currency text;
+alter table waste_entries add column if not exists currency text;
+update ingredients x set currency = r.currency from restaurants r where r.id = x.restaurant_id and x.currency is null;
+update ingredient_prices x set currency = r.currency from restaurants r where r.id = x.restaurant_id and x.currency is null;
+update ingredient_purchases x set currency = r.currency from restaurants r where r.id = x.restaurant_id and x.currency is null;
+update waste_entries x set currency = r.currency from restaurants r where r.id = x.restaurant_id and x.currency is null;
+
+-- A row takes the restaurant's currency when it is written. An ingredient
+-- takes it again whenever its price is typed, because that price is new.
+-- Inserts are decided first, on their own: PL/pgSQL resolves every field an
+-- IF names, so `new.pack_price` in the same condition refused every purchase
+-- and waste entry (neither has a pack price). Only ingredients fire on update.
+create or replace function public.stamp_cost_currency()
+returns trigger language plpgsql security definer set search_path = public as $$
+begin
+  if tg_op = 'INSERT' then
+    select currency into new.currency from restaurants where id = new.restaurant_id;
+  elsif new.pack_price is distinct from old.pack_price then
+    select currency into new.currency from restaurants where id = new.restaurant_id;
+  elsif new.currency is distinct from old.currency then
+    new.currency := old.currency;
+  end if;
+  return new;
+end $$;
+revoke all on function public.stamp_cost_currency() from public, anon, authenticated;
+drop trigger if exists stamp_cost_currency on ingredients;
+create trigger stamp_cost_currency before insert or update on ingredients
+  for each row execute function public.stamp_cost_currency();
+drop trigger if exists stamp_cost_currency on ingredient_purchases;
+create trigger stamp_cost_currency before insert on ingredient_purchases
+  for each row execute function public.stamp_cost_currency();
+drop trigger if exists stamp_cost_currency on waste_entries;
+create trigger stamp_cost_currency before insert on waste_entries
+  for each row execute function public.stamp_cost_currency();
+
+-- The price history keeps the currency of each price; a change across a
+-- currency switch has no previous cost to compare with.
+create or replace function public.record_ingredient_price()
+returns trigger language plpgsql security definer set search_path = public as $$
+begin
+  if tg_op = 'INSERT' or new.unit_cost is distinct from old.unit_cost or new.currency is distinct from old.currency then
+    insert into ingredient_prices (restaurant_id, ingredient_id, previous_cost, unit_cost, changed_by, currency)
+    values (new.restaurant_id, new.id,
+      case when tg_op = 'UPDATE' and old.currency is not distinct from new.currency then old.unit_cost end,
+      new.unit_cost, new.updated_by, new.currency);
+  end if;
+  return new;
+end;
+$$;
+revoke all on function public.record_ingredient_price() from public, anon, authenticated;
+
+-- A sale's cost is known only when every ingredient is priced in the
+-- restaurant's currency today.
+create or replace function public.sale_line_costs(p_restaurant uuid, p_items jsonb)
+returns jsonb language sql stable security definer set search_path = public as $$
+  select coalesce(jsonb_agg((
+    select case when u.usage = '{}'::jsonb
+        or exists (select 1 from (
+            select c->>'itemId' id from jsonb_array_elements(coalesce(line.value->'components', '[]')) c
+            union all select line.value->>'itemId' where jsonb_array_length(coalesce(line.value->'components', '[]')) = 0
+            union all select e->>'id' from jsonb_array_elements(coalesce(line.value->'extras', '[]')) e
+          ) part where not exists (select 1 from recipe_lines r where r.restaurant_id = p_restaurant and r.item_id::text = part.id))
+        or exists (select 1 from jsonb_each_text(u.usage) e left join ingredients i
+          on i.id = e.key::uuid and i.restaurant_id = p_restaurant
+          where i.unit_cost is null or i.currency is distinct from (select currency from restaurants where id = p_restaurant)) then null
+      else to_jsonb(round((select sum(-e.value::numeric * i.unit_cost) from jsonb_each_text(u.usage) e
+        join ingredients i on i.id = e.key::uuid and i.restaurant_id = p_restaurant), 4)) end
+    from (select public.sale_ingredient_usage(p_restaurant, jsonb_build_array(line.value)) as usage) u
+  ) order by line.n), '[]'::jsonb)
+  from jsonb_array_elements(coalesce(p_items, '[]'::jsonb)) with ordinality line(value, n);
+$$;
+revoke all on function public.sale_line_costs(uuid, jsonb) from public, anon, authenticated;
+grant execute on function public.sale_line_costs(uuid, jsonb) to service_role;
+
+-- Removing one warning must not overwrite another manager's newer warnings.
+create or replace function public.delete_dietary_tag_v1(p_restaurant uuid, p_tag uuid)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  v_key text;
+  v_unlinked integer;
+begin
+  select key into v_key from public.dietary_tags
+    where id = p_tag and restaurant_id = p_restaurant for update;
+  if not found then return null; end if;
+  update public.menu_items set dietary = array_remove(dietary, v_key)
+    where restaurant_id = p_restaurant and dietary @> array[v_key];
+  get diagnostics v_unlinked = row_count;
+  delete from public.dietary_tags where id = p_tag and restaurant_id = p_restaurant;
+  return jsonb_build_object('unlinked', v_unlinked);
+end;
+$$;
+revoke all on function public.delete_dietary_tag_v1(uuid, uuid) from public, anon, authenticated;
+grant execute on function public.delete_dietary_tag_v1(uuid, uuid) to service_role;
+
+-- Only new self-serve signups wait for verification; existing restaurants keep their plans.
+alter table restaurants add column if not exists owner_signup_pending boolean not null default false;
+
+-- A confirmation retry must not restart the trial, and password knowledge is not email ownership.
+create or replace function public.complete_owner_signup_v1(p_user uuid)
+returns uuid language plpgsql security definer set search_path = public as $$
+declare v_restaurant restaurants; v_email text; v_confirmed timestamptz;
+begin
+  select * into v_restaurant from restaurants where owner_id = p_user and owner_signup_pending for update;
+  if not found then return null; end if;
+  select email, email_confirmed_at into v_email, v_confirmed from auth.users where id = p_user;
+  if v_confirmed is null or lower(v_email) is distinct from lower(v_restaurant.terms_accepted_email) then
+    raise exception using errcode = 'PT403', message = 'email verification required';
+  end if;
+  -- Servicio shows ordering at the table for 30 days, with no card required.
+  -- Mail delays must not spend those days before the owner can open the restaurant.
+  update restaurants set owner_signup_pending = false,
+    trial_ends_at = case when plan = 'servicio' and plan_status = 'trialing' and stripe_subscription_id is null
+      then clock_timestamp() + interval '30 days' else trial_ends_at end
+    where id = v_restaurant.id;
+  return v_restaurant.id;
+end;
+$$;
+revoke all on function public.complete_owner_signup_v1(uuid) from public, anon, authenticated;
+grant execute on function public.complete_owner_signup_v1(uuid) to service_role;

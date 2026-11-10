@@ -1,3 +1,4 @@
+import { otherCurrencyTakings } from "@/lib/other-currency-takings";
 import { returnedTrail } from "@/lib/refunds/trail";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { everyRow } from "@/lib/paged";
@@ -95,12 +96,13 @@ export async function todaysShiftViews(restaurantId: string, dayStart: Date): Pr
   const shifts = await todaysShifts(restaurantId, dayStart);
   return await Promise.all(
     shifts.map(async shift => {
-      const [sum, withdrawals, trail] = await Promise.all([
+      const [sum, withdrawals, trail, otherCurrencies] = await Promise.all([
         shiftSumOf(restaurantId, shift),
         shiftWithdrawals(restaurantId, shift.id),
         shiftTrail(restaurantId, shift),
+        otherCurrencyTakings(restaurantId, shift.currency, shift.opened_at, shift.closed_at ?? undefined),
       ]);
-      return { shift, sum, withdrawals, trail };
+      return { shift, sum, withdrawals, trail, otherCurrencies };
     }),
   );
 }

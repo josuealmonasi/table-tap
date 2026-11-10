@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useT } from "@/lib/i18n/context";
 import { useRouter } from "next/navigation";
+import { posSendInFlight } from "@/lib/pos-sending";
 import { queueAcknowledgement } from "@/lib/offline-review";
 import { dropHeld, keepAcknowledgement, saleAcknowledgement, holdSale, markHeldError, readHeld, replayBody, type HeldSale } from "@/lib/offline-sales";
 
@@ -34,6 +35,7 @@ export function useOfflineSales(restaurantId: string, uploadOnly = false) {
     let sent = 0;
     try {
       for (const sale of readHeld().filter(s => s.restaurantId === restaurantId).sort((a, b) => a.at.localeCompare(b.at))) {
+        if (posSendInFlight(restaurantId, sale.posRef)) continue;
         let res: Response;
         try {
           res = await fetch(uploadOnly ? "/api/pos/upload" : "/api/pos/order", {

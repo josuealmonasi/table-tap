@@ -53,3 +53,12 @@ it("keeps an initial count when creating a new dish", async () => {
   expect(submit.mock.calls[0][0].stock).toBe(5);
   expect(submit.mock.calls[0][0]).not.toHaveProperty("expectedStock");
 });
+it("D6: explains duplicate option labels and keeps the editor open without saving", async () => {
+  const form = render({ ...initial, modifiers: [
+    { label: " Side ", type: "single", options: ["Rice"] },
+    { label: "side", type: "single", options: ["Salad"] },
+  ] });
+  await save(form);
+  expect(submit).not.toHaveBeenCalled();
+  expect(JSON.stringify(form)).toContain("menu.duplicateOptionGroup");
+});

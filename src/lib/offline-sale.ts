@@ -26,6 +26,8 @@ export interface OfflineCharge {
   tip: number;
   discount: number;
   total: number;
+  /** The tax rate the till sold it under; absent on receipts from before it was kept. */
+  taxPct?: number;
 }
 
 export function offlineCharge(raw: unknown, now = Date.now(), recovery = false): OfflineCharge | null {
@@ -43,7 +45,8 @@ export function offlineCharge(raw: unknown, now = Date.now(), recovery = false):
   // The subtotal is already after the discounts; the service charge and the
   // tip go on top of it. A total that is not those three is not a charge.
   if (Math.abs(round2(subtotal + serviceFee + tip) - total) > 0.01) return null;
-  return { at: new Date(at).toISOString(), subtotal, serviceFee, tip, discount, total };
+  const taxPct = typeof r.taxPct === "number" && Number.isFinite(r.taxPct) && r.taxPct >= 0 && r.taxPct <= 100 ? r.taxPct : undefined;
+  return { at: new Date(at).toISOString(), subtotal, serviceFee, tip, discount, total, ...(taxPct !== undefined ? { taxPct } : {}) };
 }
 
 /** What was collected less what today's menu prices it at; null when it could not be priced. */
@@ -56,6 +59,12 @@ const price = (v: unknown) => {
   const n = Number(v);
   return Number.isFinite(n) && n >= 0 && n <= 1_000_000 ? round2(n) : 0;
 };
+
+/** Recovery must send each saved plate back to the same station. */
+function preparationOf(raw: Record<string, unknown>): Pick<ComboComponent, "station" | "skipsKitchen"> {
+  return { ...(raw.station === "bar" ? { station: "bar" as const } : {}),
+    ...(typeof raw.skipsKitchen === "boolean" ? { skipsKitchen: raw.skipsKitchen } : {}) };
+}
 
 function offlineMods(raw: unknown): OrderLineItem["mods"] {
   const mods: Record<string, string | string[]> = {};
@@ -94,7 +103,7 @@ export function offlineLines(items: unknown): OrderLineItem[] {
           const n = Math.trunc(Number(c?.qty));
           const itemId = text(c?.itemId, 64);
           return itemId && Number.isFinite(n) && n >= 1 && n <= 99
-            ? [{ itemId, name: text(c?.name, 80) || "—", emoji: text(c?.emoji, 8), qty: n, mods: offlineMods(c?.mods) }]
+            ? [{ itemId, name: text(c?.name, 80) || "—", emoji: text(c?.emoji, 8), qty: n, mods: offlineMods(c?.mods), ...preparationOf(c) }]
             : [];
         })
       : [];
@@ -102,7 +111,7 @@ export function offlineLines(items: unknown): OrderLineItem[] {
     const discountPct = Number(l.discountPct);
     return [{
       itemId: text(l.itemId, 64), name: text(l.name, 80) || "—", emoji: text(l.emoji, 8),
-      price: price(l.price), qty, mods, extras,
+      price: price(l.price), qty, mods, extras, ...preparationOf(l),
       ...(typeof l.note === "string" ? { note: text(l.note, 150) } : {}),
       ...(comboId && components.length > 0 ? { comboId, components } : {}),
       ...(Number.isFinite(discountPct) && discountPct > 0 && discountPct <= 100 ? { discountPct } : {}),

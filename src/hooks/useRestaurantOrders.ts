@@ -1,5 +1,7 @@
 "use client";
 
+import { orderMovePatch } from "@/lib/order-flow";
+
 import { useCallback, useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { badgesChanged } from "@/hooks/useBadges";
@@ -167,7 +169,7 @@ export function useRestaurantOrders(restaurantId: string, initialOrders: BoardOr
         } else {
           // A missed final event must not leave a sent ticket halfway along.
           // A later stage already received live must not be pulled back either.
-          setOrders(prev => prev.map(o => o.id === move.id && o.status === move.from ? { ...o, status: move.to } : o));
+          setOrders(prev => prev.map(o => o.id === move.id && o.status === move.from ? { ...o, ...orderMovePatch(move.from, move.to) } : o));
         }
       } catch {
         stuck.push(move); // still no connection: keep it for next time
@@ -191,8 +193,9 @@ export function useRestaurantOrders(restaurantId: string, initialOrders: BoardOr
 
   async function updateStatus(id: string, status: OrderStatus) {
     const finish = protect(id);
-    const was = orders.find(o => o.id === id)?.status;
-    setOrders(prev => prev.map(o => (o.id === id ? { ...o, status } : o))); // optimistic
+    const previous = orders.find(o => o.id === id);
+    const was = previous?.status;
+    setOrders(prev => prev.map(o => (o.id === id ? { ...o, ...orderMovePatch(was, status) } : o))); // optimistic
 
     let res: Response;
     try {
@@ -221,13 +224,13 @@ export function useRestaurantOrders(restaurantId: string, initialOrders: BoardOr
     // and nowhere else, the move refused again on every reconnect. It goes
     // back to where it was, with the server's reason.
     if (!res.ok) {
-      if (was) setOrders(prev => prev.map(o => (o.id === id ? { ...o, status: was } : o)));
+      if (was) setOrders(prev => prev.map(o => (o.id === id ? { ...o, status: was, stations_ready: previous?.stations_ready } : o)));
       const data = (await res.json().catch(() => ({}))) as { error?: string; inactive?: boolean };
       if (data.inactive === true) hideInactive(id);
       toast(data.error ?? t("orders.moveRefused"), "error");
     } else {
       // Realtime may have overwritten the optimistic move with its prior stage.
-      setOrders(prev => prev.map(o => o.id === id && o.status === was ? { ...o, status } : o));
+      setOrders(prev => prev.map(o => o.id === id && o.status === was ? { ...o, ...orderMovePatch(was, status) } : o));
     }
 
     finish(orderReplyTime(res));

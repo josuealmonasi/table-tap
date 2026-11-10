@@ -30,6 +30,8 @@ export interface HeldSale {
   /** Server-signed original collector and currency, saved with this sale. */
   collectorContext?: string;
   collector?: string;
+  /** An interrupted online request has not yet sent these dishes to the pass. */
+  preparationPending?: boolean;
   restaurantId: string;
   /** When it happened. */
   at: string;
@@ -46,7 +48,7 @@ export interface HeldSale {
    */
   currency?: string;
   /** What the till charged, from its own copy of the menu. */
-  charge: { subtotal: number; serviceFee: number; tip: number; discount: number; total: number };
+  charge: { subtotal: number; serviceFee: number; tip: number; discount: number; total: number; taxPct?: number };
   /** The server's last refusal, in words; absent until one comes back. */
   error?: string;
   /** Keep a contradictory ticket for the manager; retrying cannot erase the evidence. */
@@ -141,7 +143,7 @@ export function replayBody(sale: HeldSale): Record<string, unknown> {
     posRef: sale.posRef, restaurantId: sale.restaurantId, items: sale.items, method: sale.method,
     tipPct: sale.tipPct, tipAmount: sale.tipAmount, customerName: sale.customerName, note: sale.note,
     terminalRef: sale.terminalRef, currency: sale.currency, collectorContext: sale.collectorContext, noReceipt: true,
-    offline: { at: sale.at, ...sale.charge },
+    offline: { at: sale.at, ...sale.charge, ...(sale.preparationPending !== undefined ? { preparationPending: sale.preparationPending } : {}) },
   };
 }
 

@@ -2,6 +2,7 @@
 
 import { useT } from "@/lib/i18n/context";
 import { formatMoney } from "@/lib/format";
+import { otherCurrencyLines } from "@/lib/other-currency";
 import { escapeHtml } from "@/lib/html";
 import { hasCorteActivity, type Corte } from "@/lib/corte";
 import type { ShiftView } from "@/lib/cash-shift";
@@ -92,6 +93,7 @@ export default function CorteCard({
           ? ` &nbsp;·&nbsp; ${escapeHtml(t("corte.accountsOwed"))}: ${money(corte.accountsOwed)}`
           : "") +
         `</p>` +
+        otherCurrencyLines(corte.otherCurrencies, t, formatMoney).map(line => `<p>${escapeHtml(line)}</p>`).join("") +
         (corte.unverifiedAdjustments > 0
           ? `<p>${escapeHtml(t("corte.unverified", { count: corte.unverifiedAdjustments }))}</p>` : "") +
         `<p style="margin-top:44px;font-size:13px;color:#70707a">${escapeHtml(t("corte.signature"))}</p>` +
@@ -194,6 +196,10 @@ export default function CorteCard({
                 {t("corte.accountsOwed")} <strong>{money(corte.accountsOwed)}</strong>
               </span>
             )}
+            {/* An old currency's debt collected today: in a drawer, in no total. */}
+            {otherCurrencyLines(corte.otherCurrencies, t, formatMoney).map(line => (
+              <span key={line} className="tt-muted">{line}</span>
+            ))}
             {corte.refunded > 0 && (
               <span className="tt-muted">
                 {t("corte.refunded")} <strong>{money(corte.refunded)}</strong>

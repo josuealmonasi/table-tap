@@ -69,3 +69,8 @@ it("refuses a receipt over the cap instead of cutting it short", async () => {
   expect(await res.json()).toEqual({ error: "receipt.tooManyOrders" });
   expect(state.mail).not.toHaveBeenCalled();
 });
+it("never emails an unpaid order as a receipt (journey A, finding 3)", async () => {
+  state.rows = [order("1111-order", { paid: false })];
+  expect((await request({ orderIds: ["1111-order"], email: "diner@example.com" })).status).toBe(404);
+  expect(state.mail).not.toHaveBeenCalled(); expect(state.writes).not.toHaveBeenCalled();
+});

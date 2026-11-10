@@ -92,7 +92,17 @@ export function buildReceipt(
   const discount = sum(o => num(o.discount));
   const service = payment ? 0 : sum(o => num(o.forgiveness?.previous_service_fee ?? (num(o.service_fee) + num(o.return_components?.service_fee))));
   const tip = payment ? num(payment.tip) : sum(o => num(o.forgiveness?.previous_tip ?? (num(o.tip) + num(o.return_components?.tip))));
-  const gross = sum(o => num(o.subtotal)) + discount;
+  // What the food came to before any discount: the order's original total,
+  // without its service and tip, plus every discount. Read as subtotal +
+  // discount, a staff discount (which lowers the total, not the subtotal)
+  // printed "subtotal MX$120, discount MX$20, total MX$80" for a MX$100
+  // order (journey B, finding 3). For a discount taken at checkout the two
+  // agree.
+  const gross = payment ? sum(o => num(o.subtotal)) + discount : sum(o =>
+    num(o.forgiveness?.previous_total ?? (num(o.total) + num(o.return_components?.total)))
+    - num(o.forgiveness?.previous_service_fee ?? (num(o.service_fee) + num(o.return_components?.service_fee)))
+    - num(o.forgiveness?.previous_tip ?? (num(o.tip) + num(o.return_components?.tip)))
+    + num(o.discount));
   const paid = payment ? num(payment.amount) - num(payment.return_components?.total) : sum(o => num(o.total));
   const forgiven = sum(o => num(o.forgiveness?.forgiven));
   const original = sum(o => receiptCents(o.forgiveness?.previous_total ?? o.total)) / 100;

@@ -43,7 +43,7 @@ export default function CountDialog({ open, onClose, ...rest }: CountDialogProps
   );
 }
 
-function CountForm({ ingredients, currency, onClose, attempt }: Omit<CountDialogProps, "open"> & { attempt: ReturnType<typeof useRetryIntent> }) {
+function CountForm({ ingredients, onClose, attempt }: Omit<CountDialogProps, "open"> & { attempt: ReturnType<typeof useRetryIntent> }) {
   const t = useT();
   const router = useRouter();
   const inFlight = useRef(false);
@@ -119,7 +119,7 @@ function CountForm({ ingredients, currency, onClose, attempt }: Omit<CountDialog
                       ? t("costs.countMatch")
                       : t(diff < 0 ? "costs.countShort" : "costs.countOver", {
                           amount: label(Math.abs(diff), i.unit),
-                          cost: formatMoney(Math.abs(diff) * i.unit_cost, currency),
+                          cost: formatMoney(Math.abs(diff) * i.unit_cost, i.currency),
                         })}
                 </span>
               </li>

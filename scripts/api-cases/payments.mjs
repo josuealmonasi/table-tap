@@ -8,8 +8,18 @@ export function paymentCounterCases(fx) {
   const { restaurant, unpaidOrder } = fx;
   const r = restaurant.id;
   return [
+    // Journey B, finding 2: a counter order is collected only for the amount its screen showed.
+    { name: "POST /api/table-payment (counter, no reviewed amount)", as: "cashier", method: "POST",
+      path: "/api/table-payment", body: { orderId: unpaidOrder, settlement: "cash" }, expect: [409],
+      expectError: /desactualizada|out of date/i },
+    { name: "POST /api/table-payment (counter, the total changed)", as: "cashier", method: "POST",
+      path: "/api/table-payment", body: { orderId: unpaidOrder, settlement: "cash", expected: 0.5, currency: "MXN" }, expect: [409],
+      expectError: /cambió|changed/i },
     { name: "POST /api/table-payment (counter)", as: "cashier", method: "POST",
-      path: "/api/table-payment", body: { orderId: unpaidOrder, settlement: "cash" },
+      path: "/api/table-payment", body: async f => {
+        const { data } = await f.admin.from("orders").select("total").eq("id", unpaidOrder).single();
+        return { orderId: unpaidOrder, settlement: "cash", expected: Number(data?.total), currency: "MXN" };
+      },
       expect: [200],
       check: async (d, f) => {
         if (d.orders !== 1) return `settled ${d.orders} order(s)`;
@@ -40,7 +50,7 @@ export function paymentCounterCases(fx) {
           await f.admin.from("orders").delete().eq("id", f.listosOrder);
         };
       },
-      body: f => ({ orderId: f.listosOrder, settlement: "cash" }),
+      body: f => ({ orderId: f.listosOrder, settlement: "cash", expected: 9, currency: "MXN" }),
       expect: [200],
       check: async (_d, f) => {
         const { data } = await f.admin.from("orders").select("paid, status").eq("id", f.listosOrder).single();

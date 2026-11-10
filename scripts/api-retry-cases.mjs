@@ -1,4 +1,4 @@
-import { arrangeRetry, ask, checked } from "./api-retry-fixture.mjs";
+import { arrangeRetry, ask, checked, setAsideHeldCash } from "./api-retry-fixture.mjs";
 
 export function retryCases(fx) {
   const r = fx.restaurant.id;
@@ -35,7 +35,7 @@ export function retryCases(fx) {
   const ingredients = ["purchase", "waste", "count"].map(kind => {
     const state = {};
     const path = `/api/costs/${kind === "purchase" ? "purchases" : kind === "count" ? "counts" : "waste"}`;
-    const body = () => kind === "purchase" ? { ref: state.ref, ingredientId: state.ingredient, packs: 2, total: 50 }
+    const body = () => kind === "purchase" ? { ref: state.ref, ingredientId: state.ingredient, packs: 2, total: 50, packSize: 1000 }
       : kind === "waste" ? { ref: state.ref, ingredientId: state.ingredient, quantity: 20, reason: "spoiled" }
       : { ref: state.ref, counts: [{ ingredientId: state.ingredient, counted: 1000 }] };
     return { name: `S20 K6: ${path} retry keeps the first movement`, as: "manager", method: "POST", path, expect: [200],
@@ -49,7 +49,7 @@ export function retryCases(fx) {
         } catch (error) { await undo(); throw error; }
       }, body,
       check: async (first, f) => {
-        if (kind !== "waste") await ask(f, "/api/costs/purchases", { ref: crypto.randomUUID(), ingredientId: state.ingredient, packs: 1, total: 30 });
+        if (kind !== "waste") await ask(f, "/api/costs/purchases", { ref: crypto.randomUUID(), ingredientId: state.ingredient, packs: 1, total: 30, packSize: 1000 });
         const second = await ask(f, path, body());
         const table = kind === "purchase" ? "ingredient_purchases" : kind === "count" ? "ingredient_counts" : "waste_entries";
         const rows = await checked(f.admin.from(table).select("*").eq("restaurant_id", r).eq("request_ref", state.ref));
@@ -72,7 +72,12 @@ export function retryCases(fx) {
     const body = () => kind === "close" ? { action: "close", shiftId: state.shifts[0], ref: state.ref, counted: 100, confirm: true }
       : { kind: "withdrawal", shiftId: state.shifts[0], ref: state.ref, amount: 20 };
     return { name: `S20 K${kind === "close" ? 9 : 5}: ${path} retry leaves a newer shift alone`, as: "manager", method: "POST", path, expect: [200],
-      arrange: f => arrangeRetry(f, state, kind), body,
+      arrange: async f => {
+        const undo = await arrangeRetry(f, state, kind);
+        if (kind !== "close") return undo;
+        const putBack = await setAsideHeldCash(f, r).catch(async error => { await undo(); throw error; });
+        return async () => { await putBack(); await undo(); };
+      }, body,
       check: async (first, f) => {
         if (kind === "withdrawal") await checked(f.admin.rpc("close_cash_shift", {
           p_restaurant: r, p_shift: state.shifts[0], p_counted: 80, p_actor: "apicheck",

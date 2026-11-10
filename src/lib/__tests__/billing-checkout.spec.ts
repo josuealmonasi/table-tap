@@ -65,7 +65,7 @@ vi.mock("@/lib/stripe", () => ({ stripe: {
 } }));
 const { POST } = await import("@/app/api/billing/checkout/route");
 const post = (plan = "casa") => POST(new NextRequest("https://tabletap.test/api/billing/checkout", {
-  method: "POST", body: JSON.stringify({ plan }),
+  method: "POST", body: JSON.stringify({ plan, founding: true }),
 }));
 const subscription = (id = "sub_1", status = "active") => ({
   id, status, customer: "cus_1", latest_invoice: "in_1", metadata: { restaurant_id: "r1", plan: "servicio" },

@@ -84,3 +84,15 @@ it("S21 the staff's paid history keeps its currencies beside the current debt", 
   const html = renderToStaticMarkup(<SettleBillLines bill={tableBill(orders,[])} currency="USD" />);
   expect(html).toContain("MX$50.00"); expect(html).toContain("$100.00");
 });
+
+it("dates account payments on the restaurant's day, not the phone's (sweep 8, finding 5)", () => {
+  // 16:00 UTC on 1 October is already 2 October in Tokyo, and still 1 October
+  // on a phone in UTC or the Americas, wherever the test runs.
+  state.values = [{ restaurant: { id: "r", name: "Cafe", currency: "MXN" }, name: "Diner", status: "open", owed: 100,
+    currency: "MXN", balances: [{ currency: "MXN", amount: 100 }], days: [],
+    payments: [{ at: "2026-10-01T16:00:00Z", amount: 50, tip: 0, method: "cash", currency: "MXN" }],
+    cardsEnabled: true, payingOnline: false, canEmail: false, timeZone: "Asia/Tokyo" }, null, "online", 10];
+  const html = renderToStaticMarkup(<AccountStatement code="account-code" paid={false} />);
+  expect(html).toMatch(/Oct 2,|2 oct/);
+  expect(html).not.toMatch(/Oct 1,|1 oct/);
+});

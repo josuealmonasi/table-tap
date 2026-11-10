@@ -16,6 +16,8 @@ it("I4 records reconciled return identities and excludes signed days from later 
   expect(sql).toContain("not exists(select 1 from marks d where d.sales_day = s.day)");
   expect(sql).toContain("consumed is null and target = p_day");
   expect(fn("delete_terminal_deposit_v1")).toMatch(/lock_restaurant_money[\s\S]*delete from terminal_deposits/);
+  // Newest first: a later deposit may hold this one's refunds (C2).
+  expect(fn("delete_terminal_deposit_v2")).toMatch(/lock_restaurant_money[\s\S]*sales_day > p_day[\s\S]*return 'later'[\s\S]*delete from terminal_deposits/);
 });
 it("I7 joins each completed terminal return through both allocation layers to the original receipt", () => {
   const sql = fn("terminal_deposit_ledger_v1");

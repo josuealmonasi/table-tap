@@ -4,14 +4,16 @@ const id = "00000000-0000-4000-8000-000000000001";
 const ref = "00000000-0000-4000-8000-000000000002";
 const newer = "00000000-0000-4000-8000-000000000003";
 const state = vi.hoisted(() => ({ current: "", rows: new Map<string, unknown>(), calls: [] as Record<string, unknown>[], movement: 0 }));
+vi.mock("@/lib/held-cash", () => ({ heldCashWaiting: async () => 0 }));
 vi.mock("@/lib/api-guard", () => ({ actingStaff: async () => ({ restaurantId: "r", role: "owner", email: "owner" }), actingManager: async () => ({ restaurantId: "r", role: "owner", email: "owner" }) }));
 vi.mock("@/lib/costs/guard", async original => ({ ...await original<typeof import("@/lib/costs/guard")>(), costsBlocks: async () => null }));
 vi.mock("@/lib/activity-log", () => ({ logEvent: async () => {} }));
 vi.mock("@/lib/api-error", () => ({ apiError: async (error: string, status: number) => Response.json({ error }, { status }) }));
 vi.mock("@/lib/cash-shift-server", () => ({ openShift: async () => state.current ? { id: state.current } : null }));
+vi.mock("@/lib/costs/charged-currency", () => ({ chargedCurrency: async () => "MXN" }));
 vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({
   from: () => {
-    const q = { select: () => q, eq: () => q, maybeSingle: async () => ({ data: { name: "Milk", unit_cost: 1 } }) }; return q;
+    const q = { select: () => q, eq: () => q, maybeSingle: async () => ({ data: { name: "Milk", unit_cost: 1, pack_size: 1000, currency: "MXN" } }) }; return q;
   },
   rpc: async (name: string, args: Record<string, unknown>) => {
     name = name.replace(/_once$/, "");
@@ -43,7 +45,7 @@ it("K5 a withdrawal retry returns its first movement even after a new shift open
   expect(second).toEqual(first); expect(state.rows.size).toBe(1);
 });
 it.each([
-  ["purchase", purchases.POST, { ingredientId: id, packs: 1, total: 20, ref }],
+  ["purchase", purchases.POST, { ingredientId: id, packs: 1, total: 20, ref, packSize: 1000 }],
   ["waste", waste.POST, { ingredientId: id, quantity: 20, reason: "spoiled", ref }],
 ] as const)("K6 %s records the real write once and returns its id on retry", async (_name, post, body) => {
   const first = await post(req(body)); expect(first.status).toBe(200);

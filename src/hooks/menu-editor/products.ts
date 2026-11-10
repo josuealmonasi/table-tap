@@ -97,6 +97,23 @@ export function productActions(ctx: EditorContext) {
       }
     }
 
+    // Its recipe too, server-side where recipes live: a copy that consumed no
+    // ingredients was costed at nothing (D5). A tier without costs has none to copy.
+    let recipe: Response | null = null;
+    try {
+      recipe = await fetch("/api/costs/recipe", {
+        method: "PUT", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ itemId: newId, lines: [], copyFrom: id }),
+      });
+    } catch {
+      // Offline: the copy stands, and the message below says its recipe did not come.
+    }
+    if (!recipe || (!recipe.ok && recipe.status !== 403)) {
+      await reload();
+      ctx.toast(ctx.t("write.copyRecipe"), "error");
+      return newId;
+    }
+
     await reload();
     ctx.toast(ctx.t("done.productDuplicated"));
     return newId;

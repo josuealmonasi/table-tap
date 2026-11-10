@@ -4,7 +4,7 @@ import { recoverQueuedFees } from "./fee-queue";
 import type Stripe from "stripe";
 import { stripe } from "@/lib/stripe";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { everyRow } from "@/lib/paged";
+import { everyRow, everyRowIn } from "@/lib/paged";
 import { discoverReturn, legacyRefund, refundEvidence, returnCharge, verifiedRefund } from "./return-provider";
 
 export interface RefundOperation {
@@ -18,6 +18,11 @@ export interface RefundOperation {
   original_collector: string | null;
   created_at: string;
   outstanding_cents?: number;
+  /** Which order, table and kind of return it is: two MX$100 cash returns were
+   *  otherwise the same row, and the wrong guest could be paid (B5). */
+  order_id?: string | null;
+  table_label?: string | null;
+  kind?: "cancel" | "return" | null;
 }
 
 export async function orderRefunds(restaurantId: string, adjustmentId?: string): Promise<RefundOperation[]> {
@@ -34,12 +39,21 @@ export async function orderRefunds(restaurantId: string, adjustmentId?: string):
     else q = q.neq("status", "succeeded");
     return q.order("id").range(from, to);
   }, "the order refunds");
+  const adjustments = await everyRowIn<{ id: string; order_id: string; kind: "cancel" | "return" }>(
+    rows.map(r => r.adjustment_id), (ids, a, b) => db.from("order_adjustments").select("id, order_id, kind")
+      .eq("restaurant_id", restaurantId).in("id", ids).order("id").range(a, b), "the returns' orders");
+  const orders = await everyRowIn<{ id: string; table_label: string | null }>(
+    adjustments.map(a => a.order_id), (ids, a, b) => db.from("orders").select("id, table_label")
+      .eq("restaurant_id", restaurantId).in("id", ids).order("id").range(a, b), "the returns' tables");
   return await Promise.all(rows.map(async row => {
+    const adjustment = adjustments.find(a => a.id === row.adjustment_id);
+    const identity = { order_id: adjustment?.order_id ?? null, kind: adjustment?.kind ?? null,
+      table_label: orders.find(o => o.id === adjustment?.order_id)?.table_label ?? null };
     const { data, error } = await db.rpc("refund_operation_progress_v1", { p_operation: row.id });
     if (error || !data || !Number.isSafeInteger(data.outstanding_cents) || data.outstanding_cents < 0) {
       throw new Error("Could not verify the outstanding return");
     }
-    return { ...row, outstanding_cents: data.outstanding_cents };
+    return { ...row, ...identity, outstanding_cents: data.outstanding_cents };
   }));
 }
 

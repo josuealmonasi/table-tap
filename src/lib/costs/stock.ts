@@ -55,8 +55,9 @@ export interface Suggestion {
   onHand: number | null;
   packs: number;
   packSize: number;
-  /** At today's pack price. */
+  /** At today's pack price, in the currency that price was typed in. */
   cost: number;
+  currency: string;
   /** It runs out before a delivery ordered today would arrive. */
   urgent: boolean;
 }
@@ -84,7 +85,7 @@ export function purchaseList(
     const packs = Math.ceil(short / i.pack_size - 1e-9);
     list.push({
       ingredientId: i.id, name: i.name, unit: i.unit, supplier: i.supplier, dailyUse, onHand: have,
-      packs, packSize: i.pack_size, cost: packs * i.pack_price,
+      packs, packSize: i.pack_size, cost: packs * i.pack_price, currency: i.currency,
       urgent: have !== null && have < dailyUse * i.lead_days,
     });
   }

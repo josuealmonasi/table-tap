@@ -1,3 +1,4 @@
+import type { OtherCurrencyTaking } from "@/lib/other-currency";
 import { parseLogDetail } from "@/lib/log-detail";
 import { EMPTY_TILL, tillFrom, type PaymentLine, type Till } from "@/lib/till";
 import { round2 } from "@/lib/money";
@@ -45,6 +46,8 @@ export interface CorteLine extends Till {
 }
 
 export interface Corte {
+  /** Taken in another currency than the one counted here; listed, never added. */
+  otherCurrencies?: OtherCurrencyTaking[];
   /** Busiest first — the drawer most worth counting carefully. */
   people: CorteLine[];
   /** Everything collected by a person, by everyone. The drawers, summed. */

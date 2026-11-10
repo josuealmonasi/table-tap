@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useLocale, useT } from "@/lib/i18n/context";
 import { dateLocale, formatMoney } from "@/lib/format";
+import { otherCurrencyLines } from "@/lib/other-currency";
 import { escapeHtml } from "@/lib/html";
 import { useToast } from "@/components/ui/Toast";
 import { needsExplanation, type ShiftView } from "@/lib/cash-shift";
@@ -100,6 +101,7 @@ export default function ShiftRecord({ view, timeZone, restaurantName }: ShiftRec
           ? row(t("shift.lateArrived"), lateAmount) + row(nowVerdict, nowOff ? money(Math.abs(nowDifference)) : "", true)
           : "") +
         `</table>` +
+        otherCurrencyLines(view.otherCurrencies, t, formatMoney).map(line => `<p style="font-size:14px">${escapeHtml(line)}</p>`).join("") +
         (shift.difference_note ? `<p style="font-size:14px">${escapeHtml(t("shift.why"))}: ${escapeHtml(shift.difference_note)}</p>` : "") +
         `<h2 style="font-size:15px;margin-top:20px">${escapeHtml(t("shift.trail"))}</h2>` +
         (trailRows ? `<ul style="font-size:13px">${trailRows}</ul>` : `<p style="font-size:13px">${escapeHtml(t("shift.trailEmpty"))}</p>`) +
@@ -155,6 +157,9 @@ export default function ShiftRecord({ view, timeZone, restaurantName }: ShiftRec
         )}
       </div>
 
+      {otherCurrencyLines(view.otherCurrencies, t, formatMoney).map(line => (
+        <p key={line} className="tt-muted tt-shift-why">{line}</p>
+      ))}
       {shift.difference_note && (
         <p className="tt-shift-why">
           <span className="tt-muted">{t("shift.why")}:</span> {shift.difference_note}

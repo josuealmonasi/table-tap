@@ -58,7 +58,8 @@ function PurchaseForm({ ingredients, currency, onClose, send }: Omit<PurchaseDia
     e.preventDefault();
     setBusy(true);
     setError(null);
-    const failed = await send("/api/costs/purchases", "POST", { ingredientId, packs, total });
+    // The pack size shown rides with the delivery; the server refuses if it changed (D2).
+    const failed = await send("/api/costs/purchases", "POST", { ingredientId, packs, total, packSize: ingredient ? Number(ingredient.pack_size) : null });
     setBusy(false);
     if (failed) return setError(failed);
     toast(t("costs.purchaseSaved"));

@@ -49,7 +49,8 @@ describe("forgiveness on the diner's receipt", () => {
   });
 
   it("reprints the issued original version after the restaurant forgives the rest", async () => {
-    const original = { ...state.tables.orders[0], paid: false, total: 120, service_fee: 10, tip: 10 };
+    // Issued while paid: an unpaid order is never emailed as a receipt (journey A, finding 3).
+    const original = { ...state.tables.orders[0], paid: true, total: 120, service_fee: 10, tip: 10 };
     state.tables.orders = [original]; state.tables.order_adjustments = [];
     const issued = await (await request({ orderId: "order", email: "diner@example.com" })).json();
     const originalHtml = state.mail.mock.calls[0][0].html;

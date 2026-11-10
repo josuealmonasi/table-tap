@@ -1,3 +1,4 @@
+import type { OtherCurrencyTaking } from "@/lib/other-currency";
 import type { CashMovement } from "@/lib/cash-drawer";
 
 /**
@@ -46,6 +47,8 @@ export interface ShiftView {
   sum: ShiftSum;
   withdrawals: CashMovement[];
   trail: TrailLine[];
+  /** Cash taken in another currency while it was open: in the drawer, apart from its count. */
+  otherCurrencies?: OtherCurrencyTaking[];
 }
 
 /** What the drawer holds during a shift, as the sum a person counts against. */

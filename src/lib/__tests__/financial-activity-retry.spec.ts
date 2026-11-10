@@ -4,6 +4,7 @@ const state = vi.hoisted(() => ({
   logs: new Map<string, Record<string, unknown>>(), operations: new Map<string, unknown>(),
   ref: "00000000-0000-4000-8000-000000000001", restaurant: "r", actor: "owner", failLog: false,
 }));
+vi.mock("@/lib/held-cash", () => ({ heldCashWaiting: async () => 0 }));
 vi.mock("@/lib/api-guard", () => ({
   actingStaff: async () => ({ restaurantId: state.restaurant, role: "owner", email: state.actor }),
   actingManager: async () => ({ restaurantId: state.restaurant, role: "owner", email: state.actor }),
@@ -11,6 +12,7 @@ vi.mock("@/lib/api-guard", () => ({
 vi.mock("@/lib/api-error", () => ({ apiError: async (error: string, status: number) => Response.json({ error }, { status }) }));
 vi.mock("@/lib/plan-guard", () => ({ frozenBlocks: async () => null, planBlocks: async () => null }));
 vi.mock("@/lib/cash-shift-server", () => ({ openShift: async () => ({ id: "shift" }) }));
+vi.mock("@/lib/costs/charged-currency", () => ({ chargedCurrency: async () => "MXN" }));
 vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({
   rpc: async (name: string, args: Record<string, unknown>) => {
     const key = JSON.stringify([args.p_restaurant, name, args.p_ref]);
@@ -34,7 +36,7 @@ vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({
         return write(value, options.ignoreDuplicates);
       },
     };
-    const q = { select: () => q, eq: () => q, maybeSingle: async () => ({ data: { name: "Milk", unit_cost: 2 }, error: null }) };
+    const q = { select: () => q, eq: () => q, maybeSingle: async () => ({ data: { name: "Milk", unit_cost: 2, currency: "MXN" }, error: null }) };
     return q;
   },
 }) }));

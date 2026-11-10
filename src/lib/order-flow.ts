@@ -70,3 +70,10 @@ export function columnOrders<T extends { status: OrderStatus; created_at: string
     .filter(o => o.status === status)
     .sort((a, b) => a.created_at.localeCompare(b.created_at));
 }
+
+/** A returned plate needs both stations again, in the same write as its stage. */
+export function orderMovePatch<S extends string>(from: string | undefined, to: S): { status: S; stations_ready?: string[] } {
+  const before = LIVE_FLOW.findIndex(stage => stage === from);
+  const after = LIVE_FLOW.findIndex(stage => stage === to);
+  return { status: to, ...(after >= 0 && after < before ? { stations_ready: [] } : {}) };
+}

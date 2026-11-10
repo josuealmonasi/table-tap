@@ -57,15 +57,19 @@ export function accountsCases(fx) {
         const { data } = await f.admin.from("payments").select("id").eq("account_id", fx.accountId);
         return (data ?? []).length === 0 || "a sale on account recorded money that never arrived";
       } },
-    { name: "POST /api/accounts/settle (the balance changed)", as: "cashier", method: "POST", path: "/api/accounts/settle",
+    // Sweep 8, finding 1: a screen that does not say which currency it showed is refreshed, never settled.
+    { name: "POST /api/accounts/settle (no reviewed currency)", as: "cashier", method: "POST", path: "/api/accounts/settle",
       body: { accountId: fx.accountId, expected: 0.5, tip: 0, method: "cash" }, expect: [409],
+      expectError: /desactualizada|out of date/i },
+    { name: "POST /api/accounts/settle (the balance changed)", as: "cashier", method: "POST", path: "/api/accounts/settle",
+      body: { accountId: fx.accountId, expected: 0.5, tip: 0, method: "cash", currency: "MXN" }, expect: [409],
       expectError: /cambió|changed/i },
     { name: "POST /api/accounts/settle (cash, with a tip)", as: "cashier", method: "POST", path: "/api/accounts/settle",
       body: async f => {
         const { data } = await f.admin.from("orders").select("total")
           .eq("account_id", fx.accountId).eq("paid", false).neq("status", "cancelled");
         f.accountOwed = Math.round((data ?? []).reduce((s, o) => s + Number(o.total), 0) * 100) / 100;
-        return { accountId: fx.accountId, expected: f.accountOwed, tip: 10, method: "cash", ref: crypto.randomUUID() };
+        return { accountId: fx.accountId, expected: f.accountOwed, tip: 10, method: "cash", ref: crypto.randomUUID(), currency: "MXN" };
       },
       expect: [200],
       effect: async f => {

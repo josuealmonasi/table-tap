@@ -9,6 +9,7 @@ interface OwingElsewhereModalProps {
   /** The other table this phone still owes at, if any. */
   owing: OpenElsewhere | null;
   currency: string;
+  restaurantId: string;
 }
 
 /**
@@ -21,6 +22,7 @@ interface OwingElsewhereModalProps {
 export default function OwingElsewhereModal({
   owing,
   currency,
+  restaurantId,
 }: OwingElsewhereModalProps) {
   const t = useT();
   return (
@@ -42,6 +44,11 @@ export default function OwingElsewhereModal({
       <p className="tt-muted tt-subline" style={{ fontSize: 13 }}>
         {t("sitting.hint")}
       </p>
+      {owing && (
+        <a className="tt-btn tt-btn-primary" href={`/r/${restaurantId}/t/${owing.tableId}`}>
+          {t("sitting.goBack")}
+        </a>
+      )}
     </Modal>
   );
 }

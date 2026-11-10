@@ -27,7 +27,6 @@ export default function IngredientsPanel({ ingredients, recipes, currency }: Ing
   const send = useCostsSend();
   // "new", an ingredient's id, or nothing open.
   const [open, setOpen] = useState<string | null>(null);
-  const money = (n: number) => formatMoney(n, currency);
   const usedIn = useMemo(() => {
     const items = new Map<string, Set<string>>();
     for (const r of recipes) items.set(r.ingredient_id, (items.get(r.ingredient_id) ?? new Set()).add(r.item_id));
@@ -72,10 +71,11 @@ export default function IngredientsPanel({ ingredients, recipes, currency }: Ing
                 <button type="button" className="tt-costs-product" onClick={() => setOpen(i.id)}>
                   <span className="tt-costs-product-name">{i.name}</span>
                   <span className="tt-costs-margin">
-                    {t("costs.unitCostLine", { cost: money(shown.amount), unit: t(`costs.unitShort.${shown.unit}`) })}
+                    {t("costs.unitCostLine", { cost: formatMoney(shown.amount, i.currency), unit: t(`costs.unitShort.${shown.unit}`) })}
                   </span>
                   <span className="tt-costs-product-meta tt-muted">
-                    {t("costs.packLine", { size: amount(pack.size), unit: t(`costs.unitShort.${pack.unit}`), price: money(i.pack_price) })}
+                    {t("costs.packLine", { size: amount(pack.size), unit: t(`costs.unitShort.${pack.unit}`), price: formatMoney(i.pack_price, i.currency) })}
+                    {i.currency !== currency && <> · <span className="tt-costs-chip">{t("costs.otherCurrency", { currency: i.currency })}</span></>}
                     {i.supplier && ` · ${i.supplier}`}
                     {" · "}
                     {n === 0 ? t("costs.notUsed") : n === 1 ? t("costs.usedInOne") : t("costs.usedInMany", { n })}

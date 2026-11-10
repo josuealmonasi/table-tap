@@ -111,11 +111,15 @@ async function endTrial(restaurantId: string, revision: number): Promise<Restaur
  * charged come from the same number.
  */
 export const foundersTaken = cache(async (): Promise<number> => {
-  const { count } = await createAdminClient()
+  const { count, error } = await createAdminClient()
     .from("restaurants")
     .select("id", { count: "exact", head: true })
     .not("founding_number", "is", null);
-  return count ?? 0;
+  // Unknown is not zero: read as zero, a failed count priced a subscription at
+  // the founding rate after every founding place was taken (E2). Billing
+  // refuses and the Plan screen shows its error instead.
+  if (error || count === null) throw new Error(`Could not count the founding places: ${error?.message ?? "no count"}`);
+  return count;
 });
 
 export const allPlans = cache(async (): Promise<PlanLimits[]> => {

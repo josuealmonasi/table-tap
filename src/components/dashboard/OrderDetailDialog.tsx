@@ -11,6 +11,7 @@ import { boardOrderCode, hasOrderMoney, type BoardOrder } from "@/lib/kitchen-ti
 import { statusMeta } from "@/lib/order-status";
 import { itemSalePrice } from "@/lib/pricing";
 import { modifierEntries } from "@/lib/modifiers";
+import OrderLineAdditions from "./OrderLineAdditions";
 import { CloseIcon } from "@/components/ui/icons";
 
 /**
@@ -132,11 +133,7 @@ export default function OrderDetailDialog({
                 {group}: {choice}
               </div>
             ))}
-            {item.extras && item.extras.length > 0 && (
-              <div className="tt-muted tt-subline" style={{ fontSize: 12 }}>
-                + {item.extras.map(e => e.name).join(", ")}
-              </div>
-            )}
+            <OrderLineAdditions item={item} />
             {/* The line the kitchen most needs to read, so it keeps the accent. */}
             {item.notes && (
               <div className="tt-accent tt-subline" style={{ fontSize: 12, fontStyle: "italic" }}>

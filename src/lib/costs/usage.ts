@@ -17,4 +17,6 @@ export interface WasteEntry {
   cost: number | null;
   recorded_by: string;
   created_at: string;
+  /** The currency its cost was worked out in. */
+  currency: string;
 }

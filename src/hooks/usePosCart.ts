@@ -27,6 +27,13 @@ export function usePosCart(restaurantId: string, remember = true) {
   useEffect(() => {
     if (!remember) return;
     try {
+      // A sale was being charged when the page went away. The held receipt is
+      // now the record of that money and replays itself; restoring its lines
+      // too offered the same food to charge again under a new reference (C1).
+      if (localStorage.getItem(`${storageKey}:charging`)) {
+        localStorage.removeItem(`${storageKey}:charging`);
+        localStorage.removeItem(storageKey);
+      }
       const saved = localStorage.getItem(storageKey);
       if (saved) {
         const parsed: unknown = JSON.parse(saved);
@@ -86,5 +93,15 @@ export function usePosCart(restaurantId: string, remember = true) {
     });
   }
 
-  return { lines, add, addOne, replace, changeQty, clear: () => setLines([]) };
+  /** The sale is saved as held and on its way: a reload must not offer these lines again. */
+  function charging(posRef: string | null): void {
+    try {
+      if (posRef) localStorage.setItem(`${storageKey}:charging`, posRef);
+      else localStorage.removeItem(`${storageKey}:charging`);
+    } catch {
+      // Without storage nothing was kept to restore, so there is nothing to guard.
+    }
+  }
+
+  return { lines, add, addOne, replace, changeQty, clear: () => setLines([]), charging };
 }

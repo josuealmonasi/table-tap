@@ -24,7 +24,7 @@ vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({
     const q: Record<string, unknown> = {};
     for (const op of ["select", "eq", "is", "neq"]) q[op] = () => q;
     q.maybeSingle = async () => ({ data: { currency: "MXN" }, error: null });
-    q.then = (done: (v: unknown) => unknown) => Promise.resolve({ data: [{ id: "o1", total: 100, table_label: "1", session_id: "s" }], error: null }).then(done);
+    q.then = (done: (v: unknown) => unknown) => Promise.resolve({ data: [{ id: "o1", total: 100, table_label: "1", session_id: "s", currency: "MXN" }], error: null }).then(done);
     return q;
   },
 }) }));
@@ -34,7 +34,7 @@ const { POST: transfer } = await import("@/app/api/accounts/charge/route");
 const cases = [
   ["whole table", full, { tableId: "t", settlement: "cash", expected: 100, currency: "MXN", ref: "original" }],
   ["part of a table", part, { tableId: "t", amount: 100, method: "card", expected: 100, currency: "MXN", ref: "original" }],
-  ["counter order", full, { orderId: "o1", settlement: "cash" }],
+  ["counter order", full, { orderId: "o1", settlement: "cash", expected: 100, currency: "MXN" }],
   ["account transfer", transfer, { accountId: "a", orderIds: ["o1"], expected: 100 }],
 ] as const;
 beforeEach(() => {

@@ -216,6 +216,9 @@ dishes on a bill the restaurant has just cancelled.
 - **Stripe Connect, direct charges.** The restaurant's account takes the payment;
   we take an `application_fee_amount`. It used to be a destination charge on our
   platform, which had Stripe billing *us* for every order.
+  Once connected, Settings → Pagos opens the owner's own Express dashboard
+  (payouts, the bank they land in, disputes) through a single-use login link
+  from `POST /api/connect/dashboard`, owner-only.
   So a restaurant's Stripe account is created with the Accounts v2 `merchant`
   configuration only (`card_payments`, payouts included), and "can take cards"
   is `card_payments` being `active` — `src/lib/stripe-connect.ts`. It once
@@ -572,6 +575,11 @@ dishes on a bill the restaurant has just cancelled.
   payments; cancels before then were logged without an amount. Card paid
   online is reported apart from every drawer: it is real, and nobody was
   standing there to put it in one.
+  Food put on a customer's account is summed from the orders that charge
+  stamped (`charged_at`), not from its log line, which a failed insert loses.
+  The corte and each drawer count one currency; money taken in another (an old
+  peso debt collected after a switch to dollars) is listed beside them by
+  method, never added (`src/lib/other-currency-takings.ts`).
 - **Caja**, above the corte's table: the cash drawer, a shift at a time
   (`cash_shifts`, server-only; one open per restaurant — there is one
   drawer). A shift is opened with the cash it starts with and closed on a
@@ -845,6 +853,13 @@ business's profit.
   ingredient exists — 18 in a recipe means 18 g. Removing one archives it
   (`archive_ingredient`), and takes it out of every recipe in the same
   transaction: a recipe counting an ingredient nobody buys is a made-up cost.
+- **Costs keep their currency.** `ingredients`, `ingredient_prices`,
+  `ingredient_purchases` and `waste_entries` carry the currency they were typed
+  in (trigger `stamp_cost_currency`; an ingredient takes the restaurant's again
+  when its price is typed). History shows its own label. A price in another
+  currency than the restaurant's today is unknown, not a number: margins,
+  sale line costs (`sale_line_costs`), waste costs and price rises leave it
+  out, and the ingredient list asks for it to be typed again.
 - **Every change of price is kept** (`ingredient_prices`), written by a
   trigger on `ingredients` so no path that changes a price can forget to.
   "Precios que subieron" compares each ingredient's price with what it cost
@@ -2613,3 +2628,30 @@ The API gate covers both unauthorized refusal and an authorized clean-seed
 invocation, including unchanged sales, payment and stock records. Set
 `CRON_SECRET` in the dev server environment for that authorized case. Cron
 setup follows [Vercel's authorization contract](https://vercel.com/docs/cron-jobs/manage-cron-jobs#securing-cron-jobs).
+
+## Owner email verification and review fixes (9 Nov 2026)
+
+Self-serve signup creates an unconfirmed auth user and a restaurant with
+`owner_signup_pending = true`. The verification screen offers resend and sign-in;
+it does not sign the owner in with the password just chosen. The server callback
+accepts the email token hash or a PKCE code and opens `/signup/complete`.
+`complete_owner_signup_v1` checks `auth.users.email_confirmed_at` and the address
+recorded with terms acceptance under the pending restaurant lock. Only then does
+it clear pending and start the existing 30-day Servicio trial. Repeated completion
+does not extend the trial; existing owners and staff pass through unchanged.
+A mail failure keeps the pending account available for resend. Supabase must have
+email confirmation enabled, a server-side token-hash confirmation template and
+the callback URL allowed. No SQL or Auth configuration has been applied by this fix.
+
+Mixed-station combos keep one priced line and one bill. Each component stores its
+verified preparation facts; the board, detail, paper and station-ready writer use
+those parts. Backward stage moves clear completed stations atomically. An
+interrupted online counter sale retains its pending preparation through replay
+and manager recovery; a sale taken entirely offline remains completed, and Caja
+continues serving at the till without a kitchen board.
+
+Terminal reconciliation accepts signed bank movements, including debits, within
+the same amount limits and signed payment/return manifest as credits. Costs retain
+the existing MXN processing estimate; other payment currencies use original
+connected-charge provider evidence and its settlement exchange rate. Missing fee
+evidence makes the report unavailable for retry instead of mixing currencies.

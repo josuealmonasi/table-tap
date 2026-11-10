@@ -79,7 +79,7 @@ it("shows a paid order cancelled and refunded in full as returned, not as MX$100
   // An issued copy stays what it was.
   expect((await read({ adjustmentIds: [] })).orders[0].total).toBe(100);
 });
-it("leaves an unpaid cancelled order alone: nothing was given back", async () => {
+it("leaves an unpaid cancelled order alone on the staff's bill: nothing was given back", async () => {
   Object.assign(fixture.tables.orders[0], { total: 100, tip: 0, service_fee: 0, paid: false });
   fixture.tables.order_adjustments = [{ id: "cancel", kind: "cancel", order_id: ORDER, restaurant_id: "r1", currency: null,
     previous_total: 100, previous_tip: 0, resulting_total: null, resulting_tip: null }];

@@ -22,6 +22,8 @@ export interface PurchaseRecord {
   total: number;
   recorded_by: string;
   created_at: string;
+  /** The currency it was paid in. */
+  currency: string;
 }
 
 export interface StockView {
@@ -55,9 +57,9 @@ export async function readStock(restaurantId: string, now = new Date()): Promise
     }, what);
 
   const [restaurant, ingredients, counts] = await Promise.all([
-    db.from("restaurants").select("purchase_cover_days").eq("id", restaurantId).single(),
+    db.from("restaurants").select("purchase_cover_days, currency").eq("id", restaurantId).single(),
     everyRow<StockIngredient>((a, b) => db.from("ingredients")
-      .select("id, name, unit, pack_size, pack_price, unit_cost, supplier, lead_days")
+      .select("id, name, unit, pack_size, pack_price, unit_cost, supplier, lead_days, currency")
       .eq("restaurant_id", restaurantId).is("archived_at", null).order("id").range(a, b), "the ingredients"),
     everyRow<CountRecord>((a, b) => db.from("ingredient_counts")
       .select("ingredient_id, counted, expected, counted_by, created_at, movement_cutoff")
@@ -75,8 +77,8 @@ export async function readStock(restaurantId: string, now = new Date()): Promise
   const cutoffs = [...lastCounts.values()].map(c => BigInt(c.movement_cutoff ?? 0));
   const oldestCutoff = cutoffs.reduce<bigint | null>((min, c) => min === null || c < min ? c : min, null);
   const [purchases, waste, movements] = await Promise.all([
-    scoped<PurchaseRecord>("ingredient_purchases", "id, ingredient_id, quantity, total, recorded_by, created_at", "the purchases", since),
-    scoped<WasteEntry>("waste_entries", "id, ingredient_id, item_id, name, quantity, reason, note, cost, recorded_by, created_at", "the waste", since),
+    scoped<PurchaseRecord>("ingredient_purchases", "id, ingredient_id, quantity, total, recorded_by, created_at, currency", "the purchases", since),
+    scoped<WasteEntry>("waste_entries", "id, ingredient_id, item_id, name, quantity, reason, note, cost, recorded_by, created_at, currency", "the waste", since),
     everyRow<IngredientMovement>((a, b) => {
       let q = db.from("ingredient_movements").select("id, ingredient_id, quantity, kind, created_at").eq("restaurant_id", restaurantId);
       // An older transaction can commit after a count. Its serial id, rather
@@ -101,7 +103,8 @@ export async function readStock(restaurantId: string, now = new Date()): Promise
   const bookSince = daysAgo(now, BOOK_WINDOW_DAYS);
   const listed = waste.filter(w => w.created_at >= bookSince).sort((a, b) => b.created_at.localeCompare(a.created_at));
   const wasteByReason = Object.fromEntries(WASTE_REASONS.map(r => [r, 0])) as Record<WasteReason, number>;
-  for (const w of listed) wasteByReason[w.reason] += Number(w.cost ?? 0);
+  // Only what was costed in today's currency adds up; older rows keep their own label.
+  for (const w of listed) if (w.currency === restaurant.data.currency) wasteByReason[w.reason] += Number(w.cost ?? 0);
 
   return {
     ingredients: typed.sort((a, b) => a.name.localeCompare(b.name)),

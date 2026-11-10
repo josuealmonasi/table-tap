@@ -10,10 +10,12 @@ vi.mock("@/lib/terminal-server", () => ({ readTerminal: async (_r: string, _tz: 
   state.priced(currency); return { days: [{ day: "2026-10-20", count: 1, expected: currency === "MXN" ? 1000 : 100 }] };
 } }));
 vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({ rpc: async (name: string, args: Record<string, unknown>) => {
-  if (name === "delete_terminal_deposit_v1") {
+  if (name === "delete_terminal_deposit_v2") {
+    // Newest first, as the SQL does (C2).
+    if (state.rows.some(r => r.restaurant_id === args.p_restaurant && r.currency === args.p_currency && r.sales_day > String(args.p_day))) return { data: "later", error: null };
     const before = state.rows.length;
     state.rows = state.rows.filter(r => !(r.restaurant_id === args.p_restaurant && r.sales_day === args.p_day && r.currency === args.p_currency));
-    return { data: state.rows.length < before, error: null };
+    return { data: state.rows.length < before ? "deleted" : "missing", error: null };
   }
   state.priced(args.p_currency);
   if (state.rows.some(r => r.restaurant_id === args.p_restaurant && r.sales_day === args.p_day && r.currency === args.p_currency)) return { data: { error: "marked" }, error: null };
@@ -75,4 +77,26 @@ it("cannot attribute or delete another restaurant's deposit", async () => {
   expect((await verify.POST(request({ id: "other", currency: "MXN", confirmed: true, reason: "Checked bank receipt" }))).status).toBe(404);
   expect((await deposits.DELETE(request({ day: "2026-10-20", currency: "MXN" }))).status).toBe(404);
   expect(state.rows[0].currency).toBeNull(); expect(state.log).not.toHaveBeenCalled();
+});
+
+it("undoes deposits newest first: an earlier one stays while a later one is signed (C2)", async () => {
+  state.rows = [
+    { id: "a", restaurant_id: "r", sales_day: "2026-10-20", currency: "MXN", expected: 100, received: 100 },
+    { id: "b", restaurant_id: "r", sales_day: "2026-10-21", currency: "MXN", expected: 150, received: 150 },
+  ];
+  const refused = await deposits.DELETE(request({ day: "2026-10-20", currency: "MXN" }));
+  expect(refused.status).toBe(409);
+  expect(state.rows).toHaveLength(2);
+  expect((await deposits.DELETE(request({ day: "2026-10-21", currency: "MXN" }))).status).toBe(200);
+  expect((await deposits.DELETE(request({ day: "2026-10-20", currency: "MXN" }))).status).toBe(200);
+});
+
+it.each([-80, "-80.00", "-80,50"])("C7: records a signed terminal bank debit %s", async received => {
+  const res = await deposits.POST(request({ day: "2026-10-20", currency: "MXN", received }));
+  expect(res.status).toBe(200);
+  expect(state.rows[0].received).toBe(typeof received === "number" ? received : Number(received.replace(",", ".")));
+});
+it.each(["--80", "-", "-80.001", -100000001, "NaN", "Infinity"])("C7: refuses malformed or unbounded signed movements %s", async received => {
+  expect((await deposits.POST(request({ day: "2026-10-20", currency: "MXN", received }))).status).toBe(400);
+  expect(state.rows).toHaveLength(0);
 });

@@ -75,7 +75,8 @@ it("removes the online sale after its matching settled acknowledgement", async (
   state.fetch.mockImplementation(async (_url, options) => {
     const request = JSON.parse(options.body);
     expect(readHeld()[0].posRef).toBe(request.posRef);
-    expect(request.collected).toEqual({ at: readHeld()[0].at, ...sale.charge });
+    // The held copy carries the tax rate it was rung under (C6).
+    expect(request.collected).toEqual({ at: readHeld()[0].at, ...sale.charge, taxPct: expect.any(Number) });
     return Response.json({ orderId: request.posRef, code: "ORD-TEST", total: 100, settled: true, currency: "MXN", method: "cash" });
   });
   await useTill().charge("cash");

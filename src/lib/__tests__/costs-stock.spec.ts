@@ -21,9 +21,9 @@ describe("what the shelf should hold", () => {
 
 describe("what to buy", () => {
   const ingredients = [
-    { id: "milk", name: "Leche", unit: "ml" as const, pack_size: 1000, pack_price: 28, unit_cost: 0.028, supplier: "Lácteos", lead_days: 2 },
-    { id: "coffee", name: "Café", unit: "g" as const, pack_size: 1000, pack_price: 380, unit_cost: 0.38, supplier: "Tostador", lead_days: 5 },
-    { id: "cups", name: "Vasos", unit: "pza" as const, pack_size: 50, pack_price: 60, unit_cost: 1.2, supplier: null, lead_days: 1 },
+    { id: "milk", name: "Leche", unit: "ml" as const, pack_size: 1000, pack_price: 28, unit_cost: 0.028, supplier: "Lácteos", lead_days: 2, currency: "MXN" },
+    { id: "coffee", name: "Café", unit: "g" as const, pack_size: 1000, pack_price: 380, unit_cost: 0.38, supplier: "Tostador", lead_days: 5, currency: "MXN" },
+    { id: "cups", name: "Vasos", unit: "pza" as const, pack_size: 50, pack_price: 60, unit_cost: 1.2, supplier: null, lead_days: 1, currency: "MXN" },
   ];
 
   it("covers the delivery time and the days asked for, less what is there, in whole packs", () => {

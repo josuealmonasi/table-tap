@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { foundingOpen } from "@/lib/founding";
 import { apiError } from "@/lib/api-error";
 import { jsonBody } from "@/lib/json-body";
 import { foundersTaken, allPlans } from "@/lib/plan-server";
@@ -19,7 +20,7 @@ export const runtime = "nodejs";
 export async function POST(req: NextRequest): Promise<NextResponse> {
   const actor = await actingOwner();
   if (!actor) return await apiError("apiErr.forbidden", 403);
-  const body = await jsonBody<{ plan?: unknown }>(req);
+  const body = await jsonBody<{ plan?: unknown; founding?: unknown }>(req);
   if (!body) return await apiError("apiErr.invalidRequest", 400);
   const plan = readPlanName(body.plan);
   if (!plan || !isSelfServe(plan)) return await apiError("apiErr.pickPlan", 400);
@@ -30,6 +31,10 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     // count the Plan screen saw, so what is charged and what was shown cannot
     // disagree.
     const taken = await foundersTaken();
+    // The price the owner saw is part of the choice. Place 50 filling between
+    // the page and this tap changed a tier at MX$2,499 for a screen showing
+    // MX$1,899, invoiced at once with no Stripe page to confirm it (E3).
+    if (body.founding !== foundingOpen(taken)) return await apiError("apiErr.billingPriceChanged", 409);
     const origin = siteOrigin(req);
     return NextResponse.json(await startRestaurantBilling(createAdminClient(), actor, limits, taken, origin));
   } catch (err) {

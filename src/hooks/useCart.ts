@@ -11,15 +11,29 @@ export type CartItem = OrderLineItem & { cartId: number };
 
 const storageKey = (restaurantId: string) => `tt-cart:${restaurantId}`;
 
-/** The same dish ordered the same way — extras, options and note included. */
-function sameChoice(a: OrderLineItem, b: OrderLineItem): boolean {
+/** Choices in a stable shape: key order and extras' order never make two plates differ. */
+function choiceKey(mods: Record<string, string | string[]> | undefined, extras: { id: string }[] | undefined): string {
+  const sorted = Object.keys(mods ?? {}).sort().map(k => {
+    const v = (mods ?? {})[k];
+    return [k, Array.isArray(v) ? [...v].sort() : v];
+  });
+  return JSON.stringify([sorted, (extras ?? []).map(e => e.id).sort()]);
+}
+
+/**
+ * The same dish ordered the same way — extras, options and note included, and
+ * for a combo every component's own choices. Ignoring the components merged an
+ * oat-milk combo and a whole-milk one into two oat-milk combos (journey A, 1).
+ */
+export function sameChoice(a: OrderLineItem, b: OrderLineItem): boolean {
+  const parts = (l: OrderLineItem) => JSON.stringify((l.components ?? [])
+    .map(c => [c.itemId, c.qty, choiceKey(c.mods, c.extras)]));
   return (
     a.itemId === b.itemId &&
     a.comboId === b.comboId &&
     (a.notes ?? "") === (b.notes ?? "") &&
-    JSON.stringify(a.mods ?? {}) === JSON.stringify(b.mods ?? {}) &&
-    JSON.stringify((a.extras ?? []).map(e => e.id).sort()) ===
-      JSON.stringify((b.extras ?? []).map(e => e.id).sort())
+    choiceKey(a.mods, a.extras) === choiceKey(b.mods, b.extras) &&
+    parts(a) === parts(b)
   );
 }
 
@@ -138,6 +152,12 @@ export function useCart(restaurantId: string) {
     }));
   }
 
+  /** Today's prices for plain dishes, so the cart shows what will be charged (A2). */
+  function reprice(prices: Record<string, number>): void {
+    setItems(prev => prev.map(line => !line.comboId && typeof prices[line.itemId] === "number"
+      ? { ...line, price: prices[line.itemId] } : line));
+  }
+
   function clear() {
     setItems([]);
   }
@@ -154,6 +174,7 @@ export function useCart(restaurantId: string) {
     trimToStock,
     clear,
     removeOrdered,
+    reprice,
     count,
   };
 }

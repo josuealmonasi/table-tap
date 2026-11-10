@@ -7,7 +7,6 @@ import { logEvent } from "@/lib/activity-log";
 import { logDetail } from "@/lib/log-detail";
 import { applyPayment } from "@/lib/table-balance";
 import { accountById } from "@/lib/accounts-server";
-import { currencyOf } from "@/lib/account-charge";
 import { formatMoney } from "@/lib/format";
 import { isDinerCurrency } from "@/lib/diner-currency";
 
@@ -40,9 +39,14 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   // The same ceiling on a gratuity as a table's: never more than the food.
   const { tip } = applyPayment(expected, expected, Number(body.tip ?? 0));
   if (Number(body.tip ?? 0) > expected || !Number.isFinite(Number(body.tip ?? 0))) return await apiError("apiErr.invalidRequest", 400);
-  if (body.currency !== undefined && !isDinerCurrency(body.currency)) return await apiError("apiErr.invalidRequest", 400);
+  // The currency the screen showed is part of what was reviewed. A screen
+  // that sends none predates currencies: it showed MX$100 and the legacy
+  // writer settled a US$100 debt against it after the restaurant switched
+  // (sweep 8, finding 1). It refreshes instead.
+  if (body.currency === undefined) return await apiError("apiErr.refreshToCollectAccount", 409);
+  if (!isDinerCurrency(body.currency)) return await apiError("apiErr.invalidRequest", 400);
 
-  const { data, error } = await checkoutPageRpc(body.currency ? "account_settle_currency_v1" : "account_settle_v2", {
+  const { data, error } = await checkoutPageRpc("account_settle_currency_v1", {
     p_restaurant: actor.restaurantId,
     p_account: account.id,
     p_expected: expected,
@@ -50,7 +54,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     p_method: body.method,
     p_actor: actor.email,
     p_ref: typeof body.ref === "string" ? `account:${body.ref}` : null,
-    ...(body.currency ? { p_currency: body.currency } : {}),
+    p_currency: body.currency,
   });
   if (error) {
     console.error("account settle failed:", error.message);
@@ -63,7 +67,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   if (r.outcome === "paying") return await apiError("apiErr.accountPayingOnline", 409);
   if (r.outcome === "changed") {
     return await apiError("apiErr.accountBalanceChanged", 409, {
-      owed: formatMoney(Number(r.owed), typeof body.currency === "string" ? body.currency : await currencyOf(actor.restaurantId)),
+      owed: formatMoney(Number(r.owed), body.currency),
     });
   }
 
@@ -74,7 +78,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     action: "paid",
     detail: logDetail({
       name: account.name, amount: Number(r.amount).toFixed(2), tip: Number(r.tip).toFixed(2), method: body.method,
-      currency: typeof body.currency === "string" ? body.currency : null,
+      currency: body.currency,
     }),
   });
   return NextResponse.json({ ok: true, amount: r.amount, tip: r.tip, currency: body.currency });

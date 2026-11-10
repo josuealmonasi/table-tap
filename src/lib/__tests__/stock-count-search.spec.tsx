@@ -11,7 +11,7 @@ vi.mock("@/hooks/useWhen", () => ({ useWhen: () => () => "today" }));
 vi.mock("@/components/ui/Modal", () => ({ Modal: ({ open, children }: { open: boolean; children: React.ReactNode }) => open ? children : null }));
 import StockPanel from "@/components/dashboard/costs/StockPanel";
 import CountDialog from "@/components/dashboard/costs/CountDialog";
-const ingredients = ["Apple", "Milk", "Rice"].map((name, n) => ({ id: name, name, unit: "ml" as const, pack_size: 1000, pack_price: 20, unit_cost: .02, supplier: null, lead_days: n }));
+const ingredients = ["Apple", "Milk", "Rice"].map((name, n) => ({ id: name, name, unit: "ml" as const, pack_size: 1000, pack_price: 20, unit_cost: .02, supplier: null, lead_days: n, currency: "MXN" }));
 let host: HTMLDivElement, root: Root;
 beforeEach(() => { vi.stubGlobal("React", React); vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true); host = document.createElement("div"); document.body.append(host); root = createRoot(host); });
 afterEach(async () => { await act(async () => root.unmount()); host.remove(); vi.unstubAllGlobals(); });

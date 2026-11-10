@@ -4,7 +4,7 @@ import { jsonBody } from "@/lib/json-body";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { MOVES_ORDERS } from "@/lib/membership";
 import { actingStaff } from "@/lib/api-guard";
-import { canMoveOrder } from "@/lib/order-flow";
+import { canMoveOrder, orderMovePatch } from "@/lib/order-flow";
 
 export const runtime = "nodejs";
 
@@ -63,7 +63,7 @@ export async function PATCH(req: NextRequest) {
   // beating live work, which is the whole risk of holding anything offline —
   // and a cancellation or write-off that wins the race must stay final.
   const { data: moved, error } = await createAdminClient()
-    .from("orders").update({ status })
+    .from("orders").update(orderMovePatch(order.status, status))
     .eq("id", order.id).eq("restaurant_id", actor.restaurantId)
     .eq("status", order.status).eq("written_off", false)
     .select("id");
