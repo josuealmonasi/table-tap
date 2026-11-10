@@ -34,6 +34,7 @@ and that a new party cannot see the previous party's waiting phones.
 | A duplicate refund tracks customer completion and fee completion separately (S11 I5) | A failed fee return disappeared behind an already-refunded customer payment |
 | A duplicate refund keeps its original charge currency everywhere (S11 I9) | Changing the menu currency relabelled money owed back and the approval amount |
 |---|---|
+| Server functions run in the database's region (attack H1) | The table menu timed out at ~85 requests a second: every read crossed the US |
 | Combo details keep choices beside each plate (E2E B6) | The board and detail hid combo components and their upgrades |
 | Tag deletion edits the current warning list (E2E D1) | Deleting one tag overwrote a manager's newer allergen edit |
 | Option-group names are unique after normalization (E2E D6) | Two groups used one answer key and lost a required choice |
@@ -6368,3 +6369,16 @@ conditional answer for unknown, pending and verified addresses.
 `signup-verification.spec.ts` and `signup-completion.spec.tsx` cover provisioning,
 resend, retries and the SQL contract. Claude must also check a real confirmation
 email and the Supabase server-side token-hash template and redirect allowlist.
+
+## Attack H1 — the table menu was far from its database
+
+The 2026-11-10 production stress test ramped anonymous traffic over the home,
+login, statement and table menu pages. At about 85 requests a second the table
+menu's requests began timing out at ten seconds while the other three stayed at
+0.14 s. The menu is the page every diner opens after scanning a QR code. Two
+places had to agree and nothing checked them: the database lives in Supabase's
+`us-west-2`, and Vercel ran the functions in its default `iad1`, so each of the
+menu's six to eight sequential reads crossed the country and back. `vercel.json`
+now pins the functions to `pdx1`, and an invariant in `operations.spec.ts` fails
+if the pin is removed or changed without the database moving with it.
+
