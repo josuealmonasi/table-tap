@@ -92,7 +92,7 @@ it("keeps credits under unpaid, fully forgiven and subsequently collected orders
 it("fails closed when a credit races the earlier unpaid-order read", async () => {
   const o = { ...charge("race"), currency: "MXN", total: 100 };
   tables.orders = [o];
-  tables.order_adjustments = [{ id: "credit", order_id: o.id, restaurant_id: "r1", kind: "account_credit", "orders.account_id": "a1",
+  tables.order_adjustments = [{ id: "credit", order_id: "race", restaurant_id: "r1", kind: "account_credit", "orders.account_id": "a1",
     orders: o, resulting_total: 70, created_at: "2026-11-10T12:00:00Z", forgiven: 30, currency: "MXN", actor: "manager", reason: "error" }];
   await expect(statementOf(account)).rejects.toThrow("changed while reading");
 });
