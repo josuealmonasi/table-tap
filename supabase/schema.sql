@@ -12705,10 +12705,15 @@ update waste_entries x set currency = r.currency from restaurants r where r.id =
 
 -- A row takes the restaurant's currency when it is written. An ingredient
 -- takes it again whenever its price is typed, because that price is new.
+-- Inserts are decided first, on their own: PL/pgSQL resolves every field an
+-- IF names, so `new.pack_price` in the same condition refused every purchase
+-- and waste entry (neither has a pack price). Only ingredients fire on update.
 create or replace function public.stamp_cost_currency()
 returns trigger language plpgsql security definer set search_path = public as $$
 begin
-  if tg_op = 'INSERT' or tg_table_name <> 'ingredients' or new.pack_price is distinct from old.pack_price then
+  if tg_op = 'INSERT' then
+    select currency into new.currency from restaurants where id = new.restaurant_id;
+  elsif new.pack_price is distinct from old.pack_price then
     select currency into new.currency from restaurants where id = new.restaurant_id;
   elsif new.currency is distinct from old.currency then
     new.currency := old.currency;
