@@ -54,7 +54,7 @@ function DepositForm({ day, currency, onClose }: { day: DepositDay; currency: st
       <p className="tt-muted tt-costs-hint">{t("terminal.markHint", { amount: formatMoney(day.expected, currency) })}</p>
       <label className="tt-field">
         <span className="tt-mod-label">{t("terminal.receivedLabel")}</span>
-        <input className="tt-input" inputMode="decimal" value={received} onChange={e => setReceived(e.target.value)} required autoFocus />
+        <input className="tt-input" inputMode="text" value={received} onChange={e => setReceived(e.target.value)} required autoFocus />
       </label>
       <label className="tt-field">
         <span className="tt-mod-label">{t("terminal.note")} <span className="tt-muted">{t("common.optional")}</span></span>

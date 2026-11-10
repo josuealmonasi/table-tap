@@ -3,11 +3,11 @@
 import { useState } from "react";
 import { PRIVACY_PATH, TERMS_PATH } from "@/lib/legal";
 import Link from "next/link";
-import { createClient } from "@/lib/supabase/client";
+import SignupVerification from "./SignupVerification";
 import { PASSWORD_MIN } from "@/lib/password";
 import { useT } from "@/lib/i18n/context";
 
-/** Create a restaurant account: provisions the user + their restaurant, then signs in. */
+/** Create a pending restaurant account, then ask the owner to verify their email. */
 export default function SignupForm() {
   const t = useT();
   const [restaurantName, setRestaurantName] = useState("");
@@ -16,18 +16,19 @@ export default function SignupForm() {
   const [loading, setLoading] = useState(false);
   const [acceptedTerms, setAcceptedTerms] = useState(false);
   const [error, setError] = useState("");
+  const [pending, setPending] = useState<{ sent: boolean } | null>(null);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setLoading(true);
     setError("");
 
-    // Server creates the auth user (pre-confirmed) + the restaurant row.
+    // Server creates the unconfirmed auth user + the pending restaurant row.
     //
     // Wrapped because it was not: a dropped connection here threw past every
     // `setLoading(false)` below, so the button stayed spinning for good and the
     // form never said a word about why.
-    let data: { error?: string };
+    let data: { error?: string; verificationSent?: boolean };
     try {
       const res = await fetch("/api/signup", {
         method: "POST",
@@ -46,15 +47,13 @@ export default function SignupForm() {
       return;
     }
 
-    // Sign in with the credentials we just created.
-    const { error } = await createClient().auth.signInWithPassword({ email, password });
-    if (error) {
-      setError(t("auth.accountCreatedSignIn"));
-      setLoading(false);
-      return;
-    }
-    window.location.assign("/dashboard");
+    // Verification, rather than knowing the chosen password, opens the restaurant.
+    setPassword("");
+    setPending({ sent: data.verificationSent !== false });
+    setLoading(false);
   }
+
+  if (pending) return <SignupVerification initialEmail={email} initialSent={pending.sent} />;
 
   return (
     <div className="tt-login">

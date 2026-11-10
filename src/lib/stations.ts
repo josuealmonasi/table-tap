@@ -21,7 +21,11 @@ export const stationOf = (line: Pick<KitchenLine, "station">): Station => (line.
 /** The stations an order needs: those of its lines that are made at all. */
 export function stationsOf(order: { items: KitchenLine[] }): Station[] {
   const needed = new Set<Station>();
-  for (const line of order.items ?? []) if (!line.skipsKitchen) needed.add(stationOf(line));
+  for (const line of order.items ?? []) {
+    for (const part of line.components?.length ? line.components : [line]) {
+      if (!(part.skipsKitchen ?? line.skipsKitchen)) needed.add(stationOf({ station: part.station ?? line.station }));
+    }
+  }
   return STATIONS.filter(s => needed.has(s));
 }
 
@@ -30,8 +34,18 @@ export const inStation = (order: { items: KitchenLine[] }, station: Station | nu
   station === null || stationsOf(order).includes(station);
 
 /** The lines a station makes; every line when no station is chosen. */
-export const linesAt = (order: { items: KitchenLine[] }, station: Station | null): KitchenLine[] =>
-  station === null ? order.items : order.items.filter(l => !l.skipsKitchen && stationOf(l) === station);
+export function linesAt<T extends KitchenLine>(order: { items: T[] }, station: Station | null): T[] {
+  if (station === null) return order.items;
+  return order.items.flatMap(line => {
+    if (!line.components?.length) return !line.skipsKitchen && stationOf(line) === station ? [line] : [];
+    const components = line.components.filter(part => !(part.skipsKitchen ?? line.skipsKitchen) &&
+      stationOf({ station: part.station ?? line.station }) === station);
+    // Flattened extras belong to the bill; a station must only read its own plates.
+    const extras = line.components.some(part => part.extras?.length)
+      ? components.flatMap(part => part.extras ?? []) : line.extras;
+    return components.length ? [{ ...line, components, extras }] : [];
+  });
+}
 
 /** Whether this station has finished its part of the order. */
 export const stationDone = (order: Pick<Order, "stations_ready">, station: Station): boolean =>

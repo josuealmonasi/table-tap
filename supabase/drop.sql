@@ -1,5 +1,7 @@
 drop table if exists restaurant_accounting_records cascade;
 drop table if exists platform_admin_audit cascade;
+drop function if exists public.complete_owner_signup_v1(uuid);
+drop function if exists public.delete_dietary_tag_v1(uuid, uuid);
 drop function if exists public.check_item_addon_restaurant() cascade;
 drop function if exists public.keep_platform_admin_audit();
 drop function if exists public.admin_delete_restaurant(uuid, boolean);

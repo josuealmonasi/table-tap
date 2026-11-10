@@ -4,7 +4,7 @@ import { useState } from "react";
 import type { MenuItem, Modifier } from "@/lib/types";
 import type { ProductInput } from "@/hooks/useMenuEditor";
 import { useT } from "@/lib/i18n/context";
-import { cleanModifiers } from "@/lib/clean-modifiers";
+import { cleanModifiers, duplicateModifierLabels } from "@/lib/clean-modifiers";
 import { useDirtyClose } from "@/hooks/useDirtyClose";
 import { useDirty } from "@/hooks/useDirty";
 import IconPicker from "./IconPicker";
@@ -105,8 +105,11 @@ export default function ProductForm({
       ? { stock: countedStock, expectedStock: openedStock, expectedEpoch: openedEpoch }
       : {};
 
+  const duplicateGroups = duplicateModifierLabels(modifiers);
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (duplicateGroups) return;
     setSaving(true);
     try {
       await onSubmit(
@@ -213,6 +216,7 @@ export default function ProductForm({
       <IconPicker value={emoji} onChange={setEmoji} />
 
       <ModifiersEditor value={modifiers} onChange={setModifiers} />
+      {duplicateGroups && <p role="alert">{t("menu.duplicateOptionGroup")}</p>}
 
       <ProductChips
         dietary={dietary}

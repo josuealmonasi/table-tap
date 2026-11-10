@@ -34,6 +34,17 @@ and that a new party cannot see the previous party's waiting phones.
 | A duplicate refund tracks customer completion and fee completion separately (S11 I5) | A failed fee return disappeared behind an already-refunded customer payment |
 | A duplicate refund keeps its original charge currency everywhere (S11 I9) | Changing the menu currency relabelled money owed back and the approval amount |
 |---|---|
+| Combo details keep choices beside each plate (E2E B6) | The board and detail hid combo components and their upgrades |
+| Tag deletion edits the current warning list (E2E D1) | Deleting one tag overwrote a manager's newer allergen edit |
+| Option-group names are unique after normalization (E2E D6) | Two groups used one answer key and lost a required choice |
+| Moving a plate back resets its station completions (E2E B8) | Preparing food stayed ready in a station's view |
+| Combo stations follow every component (E2E B7) | A mixed meal reached only the kitchen while its drink waited nowhere |
+| Cancellation closes the tracker payment offer (E2E A7) | A cancelled order still looked received and offered a payment code |
+| Failed loyalty reads cannot open an empty editor (E2E D7) | A read failure looked like a program that had never existed |
+| Replay waits for the online send and preserves preparation (E2E C5) | Background replay raced a live request and completed food nobody had made |
+| Processing fees keep the payment currency (E2E D4) | A dollar charge used the fixed peso processing fee |
+| Terminal bank movements keep their sign (E2E C7) | A refund-heavy day's bank debit could not be recorded |
+| New owners prove email ownership before their trial starts (E2E E4) | Signup confirmed an address nobody had verified |
 | A retried financial operation writes one activity row (Sweep 1 #8) | One saved withdrawal, shift close, waste entry or count appeared two or more times after a lost reply |
 | A floor ticket without a stage button still names its actual stage (Sweep 1 #7) | A waiter saw “Listo” on new and preparing food because only the kitchen could advance it |
 | A call expires for deduplication and the board together (Sweep 1 #6) | An eight-hour-old call disappeared on reload but swallowed the diner’s next tap; an open board kept it forever |
@@ -6268,3 +6279,92 @@ restaurant had switched; ceilings now keep the currency they were approved
 in, a charge in another one is refused until a manager sets a new ceiling,
 and accounts from before take the currency of their last charge
 (`account-credit-currency.spec.ts`).
+
+## E2E B6 — the combo and its plates
+
+The bill stores one combo line; the cook needs each component's choices and
+extras. `OrderLineAdditions` keeps those together on the card and in the detail,
+without repeating the parent's flattened extras. Older parent-only extras stay
+visible. `combo-details.spec.tsx` checks both views and both snapshot shapes.
+
+## E2E D1 — deleting one warning
+
+The deletion and the latest dish warnings must agree. `delete_dietary_tag_v1`
+removes only its key from the current array and deletes the tag in one
+transaction. `dietary-delete.spec.ts` models a concurrent edit and a failed
+unlink, and pins the private SQL writer. Claude must probe the actual transaction.
+
+## E2E D6 — two groups, two answers
+
+Option groups are keyed by label. The editor and product route reject repeated
+labels after Unicode normalization, whitespace folding and case folding, before
+saving. `ProductForm.spec.tsx` and `form-feedback.spec.ts` cover the editor and
+server refusal, including full-width letters.
+
+## E2E B8 — a plate returned to preparation
+
+An order's stage and station completion marks must move together. `orderMovePatch`
+clears the marks on backward moves in the route's conditional write and in the
+board's optimistic update. Refused writes restore both. `status.spec.tsx` checks
+backward and forward moves without clearing a forward completion.
+
+## E2E B7 — one meal, several stations
+
+A combo keeps one bill line, while verified components carry their own station
+and preparation flag. The board, printed ticket and `mark_station_ready` inspect
+those same parts, with a parent fallback for old snapshots. Station slices keep
+only their own extras; manager recovery preserves saved preparation facts.
+`combo-stations.spec.ts` covers routing, paper, recovery and the SQL contract.
+
+## E2E A7 — cancellation ends the payment offer
+
+The stored cancellation and the diner's screen must agree. The tracker names the
+cancellation and hides the preparation timeline, payment code and loyalty offer.
+Its historical total does not claim money is due. `cancelled-tracker.spec.tsx`
+checks paid and unpaid cancellations.
+
+## E2E D7 — an unread program is not an absent program
+
+The loyalty editor requires a successful program read before showing either
+saved settings or empty defaults. A failure offers refresh, including on plans
+that still owe earned rewards. `loyalty-program-read.spec.tsx` checks those states
+and resolves the retry explanation from both real language dictionaries.
+
+## E2E C5 — collected money and unfinished food
+
+The online send and background replay share a reference latch in the current tab.
+An interrupted send keeps a preparation flag with the held sale; ordinary offline
+sales retain their fulfilled behavior. The recovery writer and nested money writer
+preserve that stage under the same lock, and report whether food was handed over.
+Caja still finishes at the till. `pos-online-replay.spec.tsx` and
+`offline-exceptions.spec.ts` check the race, stored request, recovery and SQL pins.
+A rolled-back database probe must verify the final order stage and payment once.
+
+## E2E D4 — a dollar fee is not a peso fee
+
+Costs and payment currency must agree. MXN keeps its existing estimate; other
+currencies use the original connected charge's processing fee, excluding the
+application fee and converting with its saved settlement exchange rate. Allocated
+payments share one charge fee. Missing evidence fails the report instead of
+inventing a conversion. `processing-fee-currency.spec.ts` and
+`processing-fee-evidence.spec.ts` cover the calculation and provider evidence.
+
+## E2E C7 — a bank can take money back
+
+The bank statement and terminal reconciliation must keep the same sign. The
+editor, amount parser and atomic deposit writer accept bounded signed amounts;
+the existing signed manifest still proves the underlying payments and returns.
+`terminal-deposit-api.spec.ts` checks negative amounts and invalid inputs;
+`terminal-bank-schema.spec.ts` pins the table constraints and writer.
+
+## E2E E4 — signup waits for the email owner
+
+Knowing the password chosen at signup does not prove ownership of the address.
+New restaurants start pending; confirmation opens a server session and the private
+completion writer checks the confirmed address against the accepted-terms email.
+The 30-day Servicio trial starts on first completion and cannot restart on retry.
+Existing staff and restaurants keep their plans. Resend is limited and gives one
+conditional answer for unknown, pending and verified addresses.
+`signup-verification.spec.ts` and `signup-completion.spec.tsx` cover provisioning,
+resend, retries and the SQL contract. Claude must also check a real confirmation
+email and the Supabase server-side token-hash template and redirect allowlist.

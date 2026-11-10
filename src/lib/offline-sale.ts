@@ -60,6 +60,12 @@ const price = (v: unknown) => {
   return Number.isFinite(n) && n >= 0 && n <= 1_000_000 ? round2(n) : 0;
 };
 
+/** Recovery must send each saved plate back to the same station. */
+function preparationOf(raw: Record<string, unknown>): Pick<ComboComponent, "station" | "skipsKitchen"> {
+  return { ...(raw.station === "bar" ? { station: "bar" as const } : {}),
+    ...(typeof raw.skipsKitchen === "boolean" ? { skipsKitchen: raw.skipsKitchen } : {}) };
+}
+
 function offlineMods(raw: unknown): OrderLineItem["mods"] {
   const mods: Record<string, string | string[]> = {};
   if (raw && typeof raw === "object") {
@@ -97,7 +103,7 @@ export function offlineLines(items: unknown): OrderLineItem[] {
           const n = Math.trunc(Number(c?.qty));
           const itemId = text(c?.itemId, 64);
           return itemId && Number.isFinite(n) && n >= 1 && n <= 99
-            ? [{ itemId, name: text(c?.name, 80) || "—", emoji: text(c?.emoji, 8), qty: n, mods: offlineMods(c?.mods) }]
+            ? [{ itemId, name: text(c?.name, 80) || "—", emoji: text(c?.emoji, 8), qty: n, mods: offlineMods(c?.mods), ...preparationOf(c) }]
             : [];
         })
       : [];
@@ -105,7 +111,7 @@ export function offlineLines(items: unknown): OrderLineItem[] {
     const discountPct = Number(l.discountPct);
     return [{
       itemId: text(l.itemId, 64), name: text(l.name, 80) || "—", emoji: text(l.emoji, 8),
-      price: price(l.price), qty, mods, extras,
+      price: price(l.price), qty, mods, extras, ...preparationOf(l),
       ...(typeof l.note === "string" ? { note: text(l.note, 150) } : {}),
       ...(comboId && components.length > 0 ? { comboId, components } : {}),
       ...(Number.isFinite(discountPct) && discountPct > 0 && discountPct <= 100 ? { discountPct } : {}),

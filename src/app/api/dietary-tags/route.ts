@@ -109,38 +109,15 @@ export const DELETE = deskMutation(async (req: NextRequest, actor) => {
   if (!id) return await apiError("apiErr.invalidRequest", 400);
 
   const db = createAdminClient();
-  const { data: tag } = await db
-    .from("dietary_tags")
-    .select("id, key")
-    .eq("id", id)
-    .eq("restaurant_id", actor.restaurantId)
-    .maybeSingle();
-  if (!tag) return await apiError("apiErr.notFound", 404);
-
   // And it comes off the dishes that carried it. Leaving the key loose inside
   // the array breaks nothing today — rendering ignores what it does not know —
   // but it would come back on its own the day somebody creates another tag with
   // the same name, and nobody would understand why.
-  const { data: tagged } = await db
-    .from("menu_items")
-    .select("id, dietary")
-    .eq("restaurant_id", actor.restaurantId)
-    .contains("dietary", [tag.key]);
-
-  for (const item of (tagged as { id: string; dietary: string[] }[]) ?? []) {
-    await db
-      .from("menu_items")
-      .update({ dietary: item.dietary.filter(k => k !== tag.key) })
-      .eq("id", item.id)
-      .eq("restaurant_id", actor.restaurantId);
-  }
-
-  const { error } = await db
-    .from("dietary_tags")
-    .delete()
-    .eq("id", tag.id)
-    .eq("restaurant_id", actor.restaurantId);
-
+  // Remove from the current row in SQL so a concurrent allergen edit survives.
+  const { data, error } = await db.rpc("delete_dietary_tag_v1", {
+    p_restaurant: actor.restaurantId, p_tag: id,
+  });
   if (error) return await apiError("apiErr.invalidRequest", 500);
-  return NextResponse.json({ ok: true, unlinked: tagged?.length ?? 0 });
+  if (!data) return await apiError("apiErr.notFound", 404);
+  return NextResponse.json({ ok: true, unlinked: data.unlinked });
 });

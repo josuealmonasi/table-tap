@@ -12,6 +12,7 @@ export const CREW = [
     email: "demo@tabletap.dev",
     pages: [
       "/dashboard",
+      "/signup/complete",
       "/dashboard/main-menu",
       "/dashboard/orders",
       "/dashboard/table-order",
@@ -85,6 +86,7 @@ export const PUBLIC = [
   "/",
   "/login",
   "/signup",
+  "/signup/verify",
   "/forgot-password",
   "/reset-password",
   "/terminos",

@@ -1,6 +1,7 @@
 "use client";
 
 import type { PendingOrderDetails } from "@/components/ui/PendingOrder";
+import { beginPosSend } from "@/lib/pos-sending";
 import { rememberLastSale } from "@/lib/pos-last-sale";
 import { refusalSettles } from "@/hooks/useRetryIntent";
 import { useRef, useState } from "react";
@@ -115,7 +116,7 @@ export function usePosCharge({ collector, collectorContext, restaurant, cart, de
         { name: restaurant.name, timeZone: restaurant.timezone ?? "America/Mexico_City", locale: dateLocale(locale) }, t,
       ), paper);
     }
-    setTicket({ code: orderCode(sale.posRef), total: sale.charge.total, handedOver: true, offline: true, answered });
+    setTicket({ code: orderCode(sale.posRef), total: sale.charge.total, handedOver: !sale.preparationPending, offline: true, answered });
     rememberLastSale(restaurant.id, sale.items);
     cart.clear();
     details.reset();
@@ -136,6 +137,7 @@ export function usePosCharge({ collector, collectorContext, restaurant, cart, de
     const retriedAccount = accountRequest.current !== null;
     accountResent.current = retriedAccount;
     const sale: HeldSale | null = method === "account" ? null : {
+      preparationPending: navigator.onLine,
       posRef, collector, collectorContext, restaurantId: restaurant.id, at: new Date().toISOString(), method, items: lines,
       // The tax rate it was sold under travels with it: replayed tomorrow, a
       // sale took today's rate (C6, end-to-end review).
@@ -143,8 +145,10 @@ export function usePosCharge({ collector, collectorContext, restaurant, cart, de
       customerName: details.customerName.trim() || undefined, note: details.note.trim() || undefined,
       terminalRef: method === "card" ? details.terminalRef.trim() || undefined : undefined,
     };
+    const finishSend = sale && navigator.onLine ? beginPosSend(restaurant.id, posRef) : () => {};
     // Save before fetch: a hung request and a tablet restart must not erase collected money.
     if (sale && !offline.hold(sale)) {
+      finishSend();
       toast(t("pos.offlineNoStorage"), "error");
       return;
     }
@@ -165,6 +169,7 @@ export function usePosCharge({ collector, collectorContext, restaurant, cart, de
       if (sale) showHeld(sale, false, paper);
       else toast(t("pos.offlineNoAccount"), "error");
       paper?.close();
+      finishSend();
       return;
     }
     setBusy(true);
@@ -275,6 +280,7 @@ export function usePosCharge({ collector, collectorContext, restaurant, cart, de
       if (sale) showHeld(sale, false, paper);
       toast(t("done.networkError"), "error");
     } finally {
+      finishSend();
       paper?.close();
       inFlight.current = false;
       setBusy(false);

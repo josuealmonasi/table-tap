@@ -56,7 +56,7 @@ it.each([["received", "preparing"], ["preparing", "ready"], ["ready", "completed
     expect(state.filters).toContainEqual(["status", from]);
     expect(state.filters).toContainEqual(["written_off", false]);
     expect(state.filters).toContainEqual(["restaurant_id", "r1"]);
-    expect(state.writes).toHaveBeenCalledWith({ status: to });
+    expect(state.writes).toHaveBeenCalledWith({ status: to, ...(to === "received" ? { stations_ready: [] } : {}) });
   });
 it("keeps ordinary stage conflicts distinct from inactive orders", async () => {
   const response = await send("preparing", "ready");

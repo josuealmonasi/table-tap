@@ -89,5 +89,14 @@ it("undoes deposits newest first: an earlier one stays while a later one is sign
   expect(state.rows).toHaveLength(2);
   expect((await deposits.DELETE(request({ day: "2026-10-21", currency: "MXN" }))).status).toBe(200);
   expect((await deposits.DELETE(request({ day: "2026-10-20", currency: "MXN" }))).status).toBe(200);
+});
+
+it.each([-80, "-80.00", "-80,50"])("C7: records a signed terminal bank debit %s", async received => {
+  const res = await deposits.POST(request({ day: "2026-10-20", currency: "MXN", received }));
+  expect(res.status).toBe(200);
+  expect(state.rows[0].received).toBe(typeof received === "number" ? received : Number(received.replace(",", ".")));
+});
+it.each(["--80", "-", "-80.001", -100000001, "NaN", "Infinity"])("C7: refuses malformed or unbounded signed movements %s", async received => {
+  expect((await deposits.POST(request({ day: "2026-10-20", currency: "MXN", received }))).status).toBe(400);
   expect(state.rows).toHaveLength(0);
 });

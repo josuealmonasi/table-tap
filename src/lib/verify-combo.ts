@@ -40,7 +40,11 @@ export function verifyCombo(
       const at = unmatchedParentExtras.findIndex(parent => parent.id === extra.id);
       if (at >= 0) unmatchedParentExtras.splice(at, 1);
     }
-    components.push({ ...component, mods: result.mods, ...(extras.length ? { extras } : {}) });
+    components.push({ itemId: component.itemId, name: component.name, emoji: component.emoji, qty: component.qty,
+      mods: result.mods, ...(extras.length ? { extras } : {}),
+      ...(product.skips_kitchen ? { skipsKitchen: true } : {}),
+      ...(product.categories?.station === "bar" ? { station: "bar" as const } : {}),
+    });
   }
   // Older carts put extras only on the parent. Give those a plate that offers
   // them, so the ticket cannot omit something the diner paid for or put it on

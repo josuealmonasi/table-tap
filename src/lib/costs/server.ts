@@ -5,6 +5,7 @@ import { feesKeptSince } from "@/lib/report-fees";
 import { everyRow } from "@/lib/paged";
 import type { Modifier } from "@/lib/types";
 import { recipeBook, unitCosts, type Ingredient, type RecipeLine } from "./recipe-cost";
+import { withProcessingFees } from "./processing-fees";
 import { feeRate, type FeePayment, type FeeRate } from "./fees";
 import { periodContribution, unitMargins, type CostedItem, type PeriodContribution, type SoldOrder, type UnitMargin } from "./margins";
 import { priceRises, type PriceChange, type PriceRise } from "./price-rises";
@@ -63,7 +64,7 @@ export async function readCosts(restaurantId: string, now = new Date()): Promise
       .eq("restaurant_id", restaurantId).eq("currency", restaurant.data.currency).eq("paid", true).neq("status", "cancelled")
       .gte("created_at", since).order("id").range(a, b), "the period's sales"),
     everyRow<FeePayment>((a, b) => db.from("payments")
-      .select("amount, method, stripe_payment_intent")
+      .select("amount, method, currency, stripe_payment_intent, stripe_account_id")
       .eq("restaurant_id", restaurantId).eq("currency", restaurant.data.currency).gte("created_at", since).order("id").range(a, b), "the period's payments"),
   ]);
 
@@ -84,7 +85,7 @@ export async function readCosts(restaurantId: string, now = new Date()): Promise
   // What we kept, from the same ledger the month's ceiling reads: net of
   // whatever a refund gave back, on payments settled in the window.
   const platformFees = await feesKeptSince(restaurantId, since, restaurant.data.currency);
-  const fees = feeRate(payments, platformFees.kept, terminalFeePct);
+  const fees = feeRate(await withProcessingFees(payments), platformFees.kept, terminalFeePct);
 
   return {
     ingredients: typed.sort((a, b) => a.name.localeCompare(b.name)),

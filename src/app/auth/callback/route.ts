@@ -29,7 +29,8 @@ export async function GET(req: NextRequest) {
   }
 
   if (failed) {
-    return NextResponse.redirect(`${origin}/forgot-password?error=expired`);
+    return NextResponse.redirect(`${origin}${next === "/signup/complete" || type === "signup"
+      ? "/signup/verify?error=expired" : "/forgot-password?error=expired"}`);
   }
   return NextResponse.redirect(`${origin}${next}`);
 }

@@ -1,4 +1,5 @@
 import { orderCode, type OrderLineItem } from "@/lib/types";
+import { linesAt } from "@/lib/stations";
 import { modifierEntries } from "@/lib/modifiers";
 
 /**
@@ -120,12 +121,17 @@ export function kitchenTicket(
   // the customer walks away without the water they paid for. So: made above
   // the line, handed over below it.
   const all = order.items ?? [];
-  const handedOver = all.filter(i => i.skipsKitchen);
+  const handedOver = all.flatMap(item => {
+    if (item.skipsKitchen) return [item];
+    // Packaged parts still leave with the combo, even though no station makes them.
+    return (item.components ?? []).filter(part => part.skipsKitchen)
+      .map(part => ({ ...part, qty: part.qty * item.qty }));
+  });
   // Made at more than one station: each station's lines under its own name,
   // the bar first (a drink is quicker, and goes out while the plate cooks),
   // so one printer serves both and each tears off its own part.
-  const atBar = all.filter(i => !i.skipsKitchen && i.station === "bar");
-  const inKitchen = all.filter(i => !i.skipsKitchen && i.station !== "bar");
+  const atBar = linesAt({ items: all }, "bar");
+  const inKitchen = linesAt({ items: all }, "kitchen");
   const groups = atBar.length > 0 && inKitchen.length > 0
     ? [{ title: t("ticket.stationBar"), lines: atBar }, { title: t("ticket.stationKitchen"), lines: inKitchen }]
     : [{ title: null, lines: [...atBar, ...inKitchen] }];

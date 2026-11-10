@@ -4,6 +4,7 @@ import { readFileSync } from "node:fs";
 
 const { state } = vi.hoisted(() => ({ state: {
   role: "kitchen", status: "cancelled", written_off: false, restaurant_id: "r1", race: "", writes: 0,
+  patch: {} as { status?: string; stations_ready?: string[] },
   filters: [] as [string, unknown][],
 } }));
 vi.mock("@/lib/api-guard", () => ({ actingStaff: async () => ({ role: state.role, restaurantId: "r1", email: "staff" }) }));
@@ -31,7 +32,7 @@ function database() {
     const q = {
       select: () => q,
       eq: (key: string, value: unknown) => { filters.push([key, value]); return q; },
-      update: (values: { status: string }) => { updating = true; target = values.status; return q; },
+      update: (values: { status: string }) => { updating = true; target = values.status; state.patch = values; return q; },
       single: async () => answer(),
       maybeSingle: async () => answer(),
       then: (resolve: (a: unknown) => unknown) => Promise.resolve(answer()).then(resolve),
@@ -104,4 +105,15 @@ it("the database also keeps cancelled and written-off status terminal", () => {
   const fn = schema.split("create or replace function public.keep_order_terminal()")[1]?.split("end; $$;")[0];
   expect(fn).toContain("old.status = 'cancelled' or old.written_off");
   expect(fn).toContain("new.status is distinct from old.status");
+});
+
+it.each([["ready", "preparing"], ["ready", "received"], ["preparing", "received"]])("B8: %s → %s clears station completions in the status write", async (from, to) => {
+  state.status = from;
+  expect((await send(to, from)).status).toBe(200);
+  expect(state.patch).toEqual({ status: to, stations_ready: [] });
+});
+it("B8: advancing a partially made order preserves the other station's completion", async () => {
+  state.status = "preparing";
+  expect((await send("ready", "preparing")).status).toBe(200);
+  expect(state.patch).toEqual({ status: "ready" });
 });
