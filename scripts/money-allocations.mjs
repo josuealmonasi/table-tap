@@ -1,3 +1,4 @@
+import { checkAccountCredits } from "./money-account-credits.mjs";
 /** Read-only reconciliation of receipts, immutable coverage and returns. */
 export async function checkAllocations(db, all, orders, payments, { ok, bad }) {
   async function rows(table, fields, filters = {}) {
@@ -13,7 +14,7 @@ export async function checkAllocations(db, all, orders, payments, { ok, bad }) {
     rows("payment_allocations", "id, restaurant_id, payment_id, order_id, amount, tip"),
     rows("refund_allocations", "allocation_id, operation_id, amount, tip"),
     rows("refund_operations", "id, restaurant_id, adjustment_id, source, amount, tip, status, completed_at, stripe_refund_id"),
-    rows("order_adjustments", "id, restaurant_id, order_id, kind, previous_total, resulting_total, previous_tip, resulting_tip, forgiven, currency, operation_ref"),
+    rows("order_adjustments", "id, restaurant_id, order_id, kind, previous_total, resulting_total, previous_tip, resulting_tip, forgiven, currency, operation_ref, request_id, request, amount_cents, reason, previous_service_fee, resulting_service_fee"),
   ]);
   const sum = (rs, key) => rs.reduce((s, r) => s + Math.round(Number(r[key]) * 100), 0);
   const byOrder = new Map(orders.map(o => [o.id, o]));
@@ -81,6 +82,7 @@ export async function checkAllocations(db, all, orders, payments, { ok, bad }) {
   // Whole losses have no adjustment row. SQL stamps them and the operation's
   // event in the same transaction, with the same actor, tenant and currency.
   const logs = await rows("user_logs", "id, restaurant_id, entity, action, detail, actor_email, created_at", { entity: "bill", action: "written_off" });
+  checkAccountCredits(adjustments, orders, logs, cents, bad);
   const rest = logs.filter(l => l.entity === "bill" && l.action === "written_off" && /(?:^| )kind=rest(?: |$)/.test(l.detail ?? ""));
   const whole = rest.length ? (await rows("orders", "id, restaurant_id, total, currency, written_off, written_off_by, written_off_at", { written_off: true }))
     .filter(o => o.written_off) : [];

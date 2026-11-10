@@ -3,6 +3,21 @@ import type { Messages } from "./en";
 // Spanish (Mexico) UI strings. Typed as Messages so a missing or extra key is a
 // compile error.
 export const es: Messages = {
+  accountCredit: {
+    action: "Crédito",
+    title: "Dar crédito a este pedido",
+    amount: "Importe del crédito",
+    remaining: "Pendiente del pedido: {amount}",
+    balance: "Saldo de la cuenta tras el crédito: {amount}",
+    confirm: "Aplicar crédito",
+    done: "Crédito aplicado",
+    line: "Crédito −{amount}",
+    by: "Otorgado por {who}",
+    walkout: "Deuda incobrable",
+    comp: "Cortesía",
+    error: "Error de cobro",
+    other: "Otro",
+  },
   paymentCheck: {
     action: "Revisar pago",
     checking: "Revisando pago…",
@@ -1409,6 +1424,15 @@ foundingLeftBody: "Quien contrata ahora conserva este precio de suscripción mie
     requestsFailed: "No pudimos revisar si hay otros teléfonos esperando entrar. Lo intentaremos de nuevo en unos segundos.",
   },
   apiErr: {
+    accountCreditInvalid: "Ingresa centavos enteros y una referencia de solicitud válida.",
+    accountCreditReason: "Elige un motivo para el crédito.",
+    accountCreditNote: "Agrega una nota para Otro, de máximo 300 caracteres.",
+    accountCreditIneligible: "Solo un pedido sin cobrar de una cuenta de cliente puede recibir un crédito. Actualiza el estado de cuenta.",
+    accountCreditChanged: "El saldo cambió. Actualiza el estado de cuenta y revisa el crédito de nuevo.",
+    accountCreditCapacity: "El crédito no puede superar el importe pendiente de este pedido.",
+    accountCreditConflict: "Esta referencia ya se usó para otro crédito. Cierra el diálogo e intenta de nuevo.",
+    accountCreditReview: "Este pedido tiene cobros o pagos sin resolver. Pide a un gerente que revise sus pagos.",
+
     splitSlotPaid: "Una de estas partes ya está pagada. Revisa las partes.",
     splitCollectSlots: "Esta cuenta está dividida. Elige las partes que vas a cobrar.",
     splitChanged: "La cuenta cambió. Revisa las partes.",

@@ -12,6 +12,7 @@ vi.mock("@/lib/supabase/admin", () => ({
     let from = 0;
     const q = {
       select: () => q,
+      returns: () => q,
       eq: (k: string, v: unknown) => { filters.push(r => r[k] === v); return q; },
       in: (k: string, values: unknown[]) => { filters.push(r => values.includes(r[k])); return q; },
       neq: (k: string, v: unknown) => { filters.push(r => r[k] !== v); return q; },
@@ -39,6 +40,7 @@ const charge = (id: string, written_off = false): Row => ({
 beforeEach(() => {
   tables.orders = [];
   tables.payments = [];
+  tables.order_adjustments = [];
   tables.customer_accounts = [account as unknown as Row];
   reads.length = 0;
   failedPage = -1;
@@ -69,4 +71,28 @@ describe("account statement and list agree about debt", () => {
     expect((await statementOf(account)).owed).toBe(100);
     expect((await listAccounts("r1"))[0].owed).toBe(100);
   });
+});
+
+it("keeps credits under unpaid, fully forgiven and subsequently collected orders without recreating debt", async () => {
+  tables.orders = [{ ...charge("partial"), total: 70, currency: "MXN" },
+    { ...charge("full", true), total: 0, currency: "MXN" }, { ...charge("collected"), total: 70, paid: true, currency: "MXN" }];
+  tables.order_adjustments = tables.orders.map(o => ({ id: `credit-${o.id}`, order_id: o.id, restaurant_id: "r1", kind: "account_credit",
+    "orders.account_id": "a1", orders: o, resulting_total: o.total, created_at: "2026-11-10T12:00:00Z", forgiven: o.id === "full" ? 100 : 30,
+    currency: "MXN", actor: "manager@example.com", reason: "error", note: "Duplicate dish" }));
+  const statement = await statementOf(account);
+  expect(statement.owed).toBe(70);
+  expect((await listAccounts("r1"))[0].owed).toBe(70);
+  const charges = statement.days.flatMap(d => d.charges);
+  expect(charges).toHaveLength(3);
+  expect(charges.find(c => c.orderId === "partial")).toMatchObject({ total: 70, creditable: true, credits: [{ amount: 30, actor: "manager@example.com", reason: "error" }] });
+  expect(charges.find(c => c.orderId === "full")).toMatchObject({ total: 0, creditable: false, credits: [{ amount: 100 }] });
+  expect(charges.find(c => c.orderId === "collected")).toMatchObject({ total: 0, creditable: false, credits: [{ amount: 30 }] });
+});
+
+it("fails closed when a credit races the earlier unpaid-order read", async () => {
+  const o = { ...charge("race"), currency: "MXN", total: 100 };
+  tables.orders = [o];
+  tables.order_adjustments = [{ id: "credit", order_id: o.id, restaurant_id: "r1", kind: "account_credit", "orders.account_id": "a1",
+    orders: o, resulting_total: 70, created_at: "2026-11-10T12:00:00Z", forgiven: 30, currency: "MXN", actor: "manager", reason: "error" }];
+  await expect(statementOf(account)).rejects.toThrow("changed while reading");
 });
