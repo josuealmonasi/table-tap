@@ -575,6 +575,11 @@ dishes on a bill the restaurant has just cancelled.
   payments; cancels before then were logged without an amount. Card paid
   online is reported apart from every drawer: it is real, and nobody was
   standing there to put it in one.
+  Food put on a customer's account is summed from the orders that charge
+  stamped (`charged_at`), not from its log line, which a failed insert loses.
+  The corte and each drawer count one currency; money taken in another (an old
+  peso debt collected after a switch to dollars) is listed beside them by
+  method, never added (`src/lib/other-currency-takings.ts`).
 - **Caja**, above the corte's table: the cash drawer, a shift at a time
   (`cash_shifts`, server-only; one open per restaurant — there is one
   drawer). A shift is opened with the cash it starts with and closed on a
@@ -848,6 +853,13 @@ business's profit.
   ingredient exists — 18 in a recipe means 18 g. Removing one archives it
   (`archive_ingredient`), and takes it out of every recipe in the same
   transaction: a recipe counting an ingredient nobody buys is a made-up cost.
+- **Costs keep their currency.** `ingredients`, `ingredient_prices`,
+  `ingredient_purchases` and `waste_entries` carry the currency they were typed
+  in (trigger `stamp_cost_currency`; an ingredient takes the restaurant's again
+  when its price is typed). History shows its own label. A price in another
+  currency than the restaurant's today is unknown, not a number: margins,
+  sale line costs (`sale_line_costs`), waste costs and price rises leave it
+  out, and the ingredient list asks for it to be typed again.
 - **Every change of price is kept** (`ingredient_prices`), written by a
   trigger on `ingredients` so no path that changes a price can forget to.
   "Precios que subieron" compares each ingredient's price with what it cost
