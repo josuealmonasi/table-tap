@@ -41,7 +41,9 @@ const WRITERS = new Set(["api", "rls", "attack", "promises"]);
 
 const COMMANDS = {
   mock: ["node", ["scripts/db.mjs", "mock"]],
-  tsc: ["npx", ["tsc", "--noEmit", "-p", "."]],
+  // Whole, because a changed type breaks callers nobody touched; on a cache,
+  // so a rerun takes seconds (10s cold, 2s warm on 2026-11-10).
+  tsc: ["npx", ["tsc", "--noEmit", "-p", ".", "--incremental", "--tsBuildInfoFile", "node_modules/.cache/gate/tsc.tsbuildinfo"]],
   lint: ["pnpm", ["lint"]],
   test: ["npx", ["vitest", "run"]],
 };
