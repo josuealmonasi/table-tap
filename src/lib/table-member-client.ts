@@ -24,6 +24,14 @@ export function requestPhoneMembership(restaurantId: string, tableId: string, si
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ restaurantId, tableId }),
       });
+      if (res.status === 429) {
+        const refusal = await res.json() as Partial<JoinState>;
+        // A full list did not queue this phone. Keep polling without claiming
+        // it is waiting for a decision that nobody can make.
+        if (refusal.status === "full" && typeof refusal.sessionId === "string" && refusal.diner === null) {
+          return { status: "full", sessionId: refusal.sessionId, diner: null, pass: "", pending: [] };
+        }
+      }
       if (!res.ok) throw new Error("Admission request refused");
       return await res.json() as PhoneMembership;
     } catch (cause) {

@@ -5,6 +5,17 @@ import { MEMBER_POLL_MS } from "@/lib/poll";
 const read = (path: string) => readFileSync(path, "utf8");
 const schema = read("supabase/schema.sql");
 
+it("M2: only new phones consume one of five pending places, under the table lock", () => {
+  const request = schema.split("create or replace function public.request_table_member(")[1].split("end; $$;")[0];
+  const cap = request.indexOf("count(*)");
+  expect(cap).toBeGreaterThan(request.indexOf("for update"));
+  expect(request).toContain("if not found and not v_created");
+  expect(request).toContain("session_id = v_session and status = 'pending'");
+  expect(request).toContain(") >= 5 then");
+  expect(request).toContain("'status', 'full', 'sessionId', v_session, 'diner', null");
+  expect(cap).toBeLessThan(request.indexOf("insert into table_session_members"));
+});
+
 it("keeps the credential table private and included in reset and public-key sweeps", () => {
   expect(schema).toContain("alter table table_session_members enable row level security");
   expect(schema).toContain("revoke all on table_session_members from anon");

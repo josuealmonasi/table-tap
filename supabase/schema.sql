@@ -9443,6 +9443,13 @@ begin
     end if;
   end if;
   if v_session is null then raise exception 'Could not open sitting'; end if;
+  -- Existing phones keep their admission and polling even when five wait.
+  -- New phones share the table lock above, so they cannot overfill the list.
+  select * into v_member from table_session_members where session_id = v_session and token_hash = p_hash;
+  if not found and not v_created and
+    (select count(*) from table_session_members where session_id = v_session and status = 'pending') >= 5 then
+    return jsonb_build_object('status', 'full', 'sessionId', v_session, 'diner', null);
+  end if;
   insert into table_session_members(session_id, token_hash, status, decided_at)
     values (v_session, p_hash, case when v_created then 'approved' else 'pending' end,
       case when v_created then now() else null end)
@@ -10576,6 +10583,22 @@ $$;
 revoke all on function public.order_intent_result(uuid, uuid, text) from public, anon, authenticated;
 grant execute on function public.order_intent_result(uuid, uuid, text) to service_role;
 
+-- A deferred phone checkout has no payment reference, till reference, account
+-- or sitting. Unpaid alone also describes table bills and account charges.
+-- Count only the last service window so forgotten tickets cannot block tomorrow.
+create or replace function public.counter_pay_later_full(p_restaurant uuid)
+returns boolean language sql stable security definer set search_path = public as $$
+  select count(*) >= 25 from orders
+    where restaurant_id = p_restaurant
+      and table_id is null and table_label is null and session_id is null
+      and account_id is null and pos_ref is null
+      and stripe_session_id is null and stripe_payment_intent is null and pay_method is null
+      and not paid and not written_off and status not in ('cancelled', 'pending_payment')
+      and created_at >= now() - interval '3 hours';
+$$;
+revoke all on function public.counter_pay_later_full(uuid) from public, anon, authenticated;
+grant execute on function public.counter_pay_later_full(uuid) to service_role;
+
 create or replace function public.create_order_intent(
   p_restaurant uuid, p_ref uuid, p_scope text, p_order jsonb, p_demand jsonb,
   p_inventory boolean, p_threshold int, p_coupon jsonb
@@ -10587,6 +10610,11 @@ begin
   v_result := public.order_intent_result(p_restaurant, p_ref, p_scope);
   if v_result is not null then return v_result; end if;
   if p_ref is null or nullif(p_scope, '') is null then raise exception 'missing order reference'; end if;
+  -- The restaurant lock keeps concurrent new counter orders below the ceiling.
+  -- A retry above already returned its ticket, even when the counter is full.
+  if p_order->>'table_id' is null and public.counter_pay_later_full(p_restaurant) then
+    return '{"counterFull":true}'::jsonb;
+  end if;
   -- Stock and coupon failures roll each other back, along with the ticket.
   begin
     if p_inventory then
