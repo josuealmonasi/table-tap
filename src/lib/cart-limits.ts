@@ -1,5 +1,7 @@
 /** Why a cart can't be charged, as data — the caller supplies the wording. */
 export type CartRejection =
+  /** Quantities are whole portions from the cart, never a coerced amount. */
+  | { kind: "invalidQuantity" }
   /** A dish (or a bundle) has gone off the menu since it was added. */
   | { kind: "unavailable"; name: string; itemId: string }
   /** More lines than any real order has. See `MAX_CART_LINES`. */

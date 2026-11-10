@@ -32,3 +32,13 @@ it.each(["en", "es"] as const)("shows only the admission error when the whole po
 it.each(["en", "es"] as const)("clears the warning after the list recovers in %s", locale => {
   expect(screen(locale, false, false)).toBe("");
 });
+
+it.each(["en", "es"] as const)("M2: tells a refused phone to ask the waiter in %s", locale => {
+  const html = renderToStaticMarkup(<LocaleProvider locale={locale}>
+    <TableJoinNotice restaurantId="restaurant" state={{ status: "full", sessionId: "sitting", diner: null, pass: "" }}
+      pending={[]} error={false} refresh={() => {}} />
+  </LocaleProvider>);
+  expect(html).toContain(translate(messagesFor(locale), "apiErr.tableJoinFull"));
+  expect(html).not.toContain(translate(messagesFor(locale), "join.checking"));
+  expect(html).not.toContain(translate(messagesFor(locale), "join.waiting"));
+});

@@ -139,3 +139,14 @@ it("does not poll without a table", async () => {
   await advance(60_000);
   expect(calls).not.toHaveBeenCalled();
 });
+
+it("M2: shows a full sitting as a refusal and keeps polling when a place frees", async () => {
+  calls.mockResolvedValueOnce(Response.json({ status: "full", sessionId: "sitting", diner: null, error: "full" }, { status: 429 }));
+  await render();
+  expect(latest.state?.status).toBe("full");
+  expect(latest.error).toBe(false);
+  expect(latest.pending).toEqual([]);
+  calls.mockImplementation(async () => reply({ status: "pending", diner: "me", pending: [] }));
+  await advance();
+  expect(latest.state?.status).toBe("pending");
+});

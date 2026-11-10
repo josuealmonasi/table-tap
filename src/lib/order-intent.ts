@@ -22,6 +22,7 @@ export interface OrderIntentResult {
   total: number;
   repeat?: boolean;
   conflict?: boolean;
+  counterFull?: boolean;
   couponReason?: string;
   short?: StockShortfall[];
   low?: StockWarning[];

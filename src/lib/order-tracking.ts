@@ -21,9 +21,8 @@ export type TrackedOrder = Pick<
   | "currency"
   // So a bill paid at the end is not called "Total paid".
   | "paid"
-  // Their own name, when they gave one at the counter. They should be able to
-  // check what the cashier is about to call out.
-  | "customer_name"
+  // A counter name helps check what the cashier will call out, but this link
+  // is shareable: the public projection must never carry that private name.
   // The floor cancelled this table's debt. For the diner that is the end of
   // it, whatever stage the kitchen last left it at — and the phone has to be
   // told, or it goes on offering to follow an order nobody is cooking.
@@ -33,7 +32,7 @@ export type TrackedOrder = Pick<
 export interface TrackedReturnSummary { paid: number; returned: number; pending: number }
 
 const TRACKER_COLUMNS =
-  "id, restaurant_id, table_id, table_label, status, items, total, tip, service_fee, currency, paid, customer_name, written_off";
+  "id, restaurant_id, table_id, table_label, status, items, total, tip, service_fee, currency, paid, written_off";
 
 // UUIDs only — avoids sending malformed ids to Postgres' uuid column.
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;

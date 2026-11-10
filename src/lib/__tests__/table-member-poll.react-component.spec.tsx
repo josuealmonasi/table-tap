@@ -12,7 +12,7 @@ vi.mock("@/lib/rate-limit", () => ({
   isRoomLimited: mocks.limited, isTableLimited: async () => false, isRateLimited: async () => false,
   forTheRoom: (n: number) => n, clientKey: () => "phone",
 }));
-vi.mock("@/lib/api-error", () => ({ apiError: async (error: string, status: number) => NextResponse.json({ error }, { status }) }));
+vi.mock("@/lib/api-error", () => ({ apiError: async (error: string, status: number, _vars?: unknown, extra?: object) => NextResponse.json({ error, ...extra }, { status }) }));
 import { POST } from "@/app/api/table-membership/route";
 
 const restaurantId = "11111111-1111-1111-1111-111111111111";
@@ -34,6 +34,14 @@ beforeEach(() => {
   mocks.pending.mockResolvedValue([phone]);
   mocks.table.mockResolvedValue(true);
   mocks.limited.mockResolvedValue(false);
+});
+
+it("M2: a full sitting refuses admission with no pending phone id or visit pass", async () => {
+  mocks.join.mockResolvedValue({ status: "full", sessionId: "current-sitting", diner: null });
+  const response = await POST(request());
+  expect(response.status).toBe(429);
+  expect(await response.json()).toEqual({ error: "apiErr.tableJoinFull", status: "full", sessionId: "current-sitting", diner: null });
+  expect(mocks.pending).not.toHaveBeenCalled();
 });
 
 it("returns the approved phone's current sitting requests with its admission", async () => {

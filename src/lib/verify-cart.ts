@@ -13,20 +13,17 @@ export { MAX_CART_LINES, MAX_CART_REFS, type CartRejection } from "@/lib/cart-li
 export { cartReferences, referencedItemIds } from "@/lib/cart-references";
 
 /**
- * How many of this dish the line really orders.
+ * Whether this line orders a whole number of portions the cart can sell.
  *
  * The stored line and the price have to agree: capping only the money left a
- * ticket reading "100000×" against a bill for ninety-nine.
+ * ticket reading "100000×" against a bill for ninety-nine. Refuse the line
+ * rather than silently ordering a different number of portions.
  */
-function clampQty(qty: number): number {
+function validQty(qty: unknown): boolean {
   // NaN survives both clamps: `Math.max(1, NaN)` is NaN, and so is the `min`.
-  // A quantity of "abc" therefore reached the insert as NaN and came back as a
-  // 500 from Postgres — an unhandled crash on the route that takes money,
-  // rather than a refusal. One line of the cart is not a number; the honest
-  // reading of that is one.
-  const n = Math.floor(Number(qty));
-  if (!Number.isFinite(n)) return 1;
-  return Math.min(MAX_LINE_QTY, Math.max(1, n));
+  // A quantity of "abc" once reached Postgres as NaN and caused a 500. The
+  // phone sends numbers, so strings and other coerced values are refused too.
+  return typeof qty === "number" && Number.isInteger(qty) && qty >= 1 && qty <= MAX_LINE_QTY;
 }
 
 /**
@@ -90,6 +87,9 @@ export function verifyCart(input: VerifyCartInput): VerifyCartResult {
   if (items.length > maxLines) {
     return { ok: false, rejection: { kind: "tooManyLines", limit: maxLines } };
   }
+  if (items.some(line => !line || !validQty(line.qty))) {
+    return { ok: false, rejection: { kind: "invalidQuantity" } };
+  }
   const priceMap = new Map(dbItems.map(d => [d.id, d]));
   const lines: OrderLineItem[] = [];
   const removedExtras = new Map<string, string>();
@@ -120,7 +120,7 @@ export function verifyCart(input: VerifyCartInput): VerifyCartResult {
       }
     }
 
-    const result = verifyCombo(combo, line, clampQty(line.qty), priceMap, removedExtras, isOnOpenMenu);
+    const result = verifyCombo(combo, line, line.qty, priceMap, removedExtras, isOnOpenMenu);
     if (!result.ok) return result;
     lines.push(result.line);
   }
@@ -159,7 +159,7 @@ export function verifyCart(input: VerifyCartInput): VerifyCartResult {
       // From the DB, never the client — a forged discount would otherwise let
       // a customer set their own price.
       discountPct: Number(db.discount_pct) || 0,
-      qty: clampQty(line.qty),
+      qty: line.qty,
       mods: choices.mods,
       extras: verifiedExtras.length ? verifiedExtras : undefined,
       notes: capNote(line.notes),

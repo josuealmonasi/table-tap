@@ -34,6 +34,10 @@ and that a new party cannot see the previous party's waiting phones.
 | A duplicate refund tracks customer completion and fee completion separately (S11 I5) | A failed fee return disappeared behind an already-refunded customer payment |
 | A duplicate refund keeps its original charge currency everywhere (S11 I9) | Changing the menu currency relabelled money owed back and the approval amount |
 |---|---|
+| Unpaid counter checkouts share a restaurant ceiling (production attack M1, 2026-11-10) | Rotating client addresses filled the kitchen with unpaid phone orders |
+| Cart quantities are refused before pricing (production attack L1, 2026-11-10) | Negative, fractional and enormous quantities silently became different orders |
+| A sitting has five pending admission places (production attack M2, 2026-11-10) | Fresh phones filled the floor's approval list without limit |
+| Shared tracker links carry no diner name (production attack L2, 2026-11-10) | Anyone with an order link could read the counter customer's name |
 | Server functions run in the database's region (attack H1) | The table menu timed out at ~85 requests a second: every read crossed the US |
 | A diner menu is reused for at most 30 s and cleared by every diner-visible save (attack H1 step 2) | The table menu still timed out first under load after #597: ~19 reads per visit |
 | Combo details keep choices beside each plate (E2E B6) | The board and detail hid combo components and their upgrades |
@@ -6371,6 +6375,91 @@ conditional answer for unknown, pending and verified addresses.
 resend, retries and the SQL contract. Claude must also check a real confirmation
 email and the Supabase server-side token-hash template and redirect allowlist.
 
+## Production attack M1 — unpaid counter orders share a ceiling
+
+An address limit and a kitchen queue had to agree about what a restaurant could
+absorb. Rotating addresses bypassed the former. A restaurant now refuses a new
+pay-later counter order when 25 unpaid ones were created in the last three hours.
+There is no separate pay-later flag on an order: this is a no-table, no-sitting
+checkout without a card payment reference, till reference or account. Cancelled,
+written-off and pending-card orders do not count; table labels also exclude a
+table whose physical row was later deleted.
+
+`counter-pay-later-cap.spec.ts` pins that scope, window and threshold, plus the
+restaurant lock and retry-before-count ordering in `create_order_intent`.
+Checkout's `route.spec.ts` checks both writer paths, claim cleanup, a failed
+count, and the card/table exemptions. Referenced orders count and insert under
+the existing money lock. Older phones insert from TypeScript and count just
+before that insert: a small concurrent overshoot is acceptable for this abuse
+ceiling. The 409 offers paying by card or ordering at the register. The unit
+specs do not execute PostgreSQL, so the SQL was probed on the development
+database: 24 open orders leave room, the 25th is taken and the 26th refused;
+table, card-pending and till orders never count; a retry of an accepted order
+still gets its ticket when the counter is full; orders older than three hours
+free the ceiling; and two simultaneous orders at 24 open let exactly one in.
+
+## Production attack L1 — refuse quantities instead of changing the order
+
+The submitted quantity and the kitchen ticket had to agree. `verifyCart` silently
+floored and clamped them, so a negative line became one portion and a million
+became 99. Plain dishes and combos now require integer numbers from 1 to 99 and
+return the existing `apiErr.orderData` 400. `useCheckout` sends numeric `c.qty`,
+and the staff cart sends numeric quantities too, so new numeric strings are
+refused rather than supported as an undocumented alternate format.
+
+`verify-cart.spec.ts` covers both kinds of line and invalid types/bounds;
+`cart-quantity-routes.spec.ts` calls `/api/checkout`, `/api/table-order` and the
+online `/api/pos/order` with the real verifier and checks the 400 and no writes.
+`/api/bill` is a read; `/api/bill/pay`, `/api/bill/discount` and
+`/api/bill/write-off` act on stored orders, not submitted cart lines.
+
+Offline `/api/pos/order` receipts already represent collected money. The till
+restores carts without validating their quantities, and its add/replace/change
+helpers did not enforce integers. Preserve the old `offlineLines` parser and
+normalize the price comparison the same way, so a receipt already accepted by
+that till stays replayable. `sale-menu-verification.spec.ts` checks fractional
+and numeric-string legacy replays; `offline-sale.spec.ts` keeps its existing
+parser coverage. `priceCart` remains defensive for previews and stored receipts;
+new orders reach it only after verification.
+
+## Production attack M2 — five phones may wait at one sitting
+
+The floor's approval list and admission had to agree about how many phones could
+wait. `request_table_member` now checks five pending rows under its existing
+physical-table lock, before inserting a new phone. Existing rows bypass the
+ceiling; approving or rejecting removes a row from the pending count. A refused
+phone receives a 429 with `status: full`, no member id and no visit pass.
+
+`table-membership-contract.spec.ts` pins the lock, new-phone test and count.
+`table-member-poll.react-component.spec.tsx` checks the route's refusal;
+`table-membership-poll.react-component.spec.tsx` checks recovery on the normal
+poll after a place frees. `table-join-notice.react-component.spec.tsx` checks both
+languages: the diner is told to ask the waiter, never that an unqueued phone is
+waiting for approval. Checkout refuses the same state before claiming stock or
+returns its claims if a competing opener fills the sitting. Probed in
+PostgreSQL on the development database: a sixth new phone is told the table is
+full and no row is made for it; waiting and approved phones keep polling as
+before; approving one frees a place; and two new phones arriving at once with
+four waiting get exactly one place between them.
+
+## Production attack L2 — an order link carries no diner name
+
+The cashier's calling name and the public tracker had to agree about who could
+read it. Knowing a shareable order link is enough to follow food, but is not
+proof that the reader supplied that name. The common public projection now
+excludes `customer_name`. No name is stored per order on the device, so the
+tracker renders none; the current cart's name is not evidence for an older order.
+
+`tracker-privacy.spec.ts` checks the selected columns and `/api/order-status`
+response; `cancelled-tracker.spec.tsx` also checks that the component never
+renders a remote name. `/api/order-qr` and `/order/[orderId]` use the same reader.
+The public `/api/receipt` print/email reader and `/api/account` statement reader
+already exclude order customer names. `/api/ratings/pending` also selects no
+name. `/api/bill`, `/api/session` and `/api/receipt/payments` require the phone's
+table credential; `/api/orders/print` requires staff. CloudPRNT still includes
+the calling name on kitchen tickets behind its separate restaurant printer
+secret; an order link cannot authorize that endpoint. The tracker and the two
+refusals still need a person to read them in both languages, on phone and tablet.
 ## Attack H1 — the table menu was far from its database
 
 The 2026-11-10 production stress test ramped anonymous traffic over the home,

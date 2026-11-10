@@ -23,6 +23,7 @@ const every: CartRejection[] = [
   { kind: "tooManyRefs", limit: 500 },
   { kind: "missingModifiers", unanswered: ["Size", "Salsa"], forName: "Burrito", itemId: "x" },
   { kind: "removedExtras", ids: ["a", "b"], names: ["Cheese", "Bacon"] },
+  { kind: "invalidQuantity" },
 ];
 
 describe("a refusal always has words", () => {
@@ -67,6 +68,6 @@ describe("what it says", () => {
 
   it("tells two different refusals apart", () => {
     const keys = new Set(every.filter(r => r.kind !== "unavailable").map(r => rejectionMessage(r).key));
-    expect(keys.size).toBe(4);
+    expect(keys.size).toBe(5);
   });
 });

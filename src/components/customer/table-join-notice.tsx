@@ -16,11 +16,11 @@ interface TableJoinNoticeProps {
 
 export default function TableJoinNotice({ restaurantId, state, pending, error, pendingError = false, refresh }: TableJoinNoticeProps) {
   const t = useT();
-  const waiting = !state || state.status === "pending" || state.status === "rejected";
+  const waiting = !state || state.status === "pending" || state.status === "rejected" || state.status === "full";
   return <>
     {waiting && (
       <div className="tt-closed-banner" role="status">
-        <strong>{t(state?.status === "rejected" ? "join.rejected" : state?.status === "pending" ? "join.waiting" : "join.checking")}</strong>
+        <strong>{t(state?.status === "full" ? "apiErr.tableJoinFull" : state?.status === "rejected" ? "join.rejected" : state?.status === "pending" ? "join.waiting" : "join.checking")}</strong>
         {state?.status === "pending" && <>
           <p>{t("join.explain")}</p>
           <p>{t("join.phone", { code: (state.diner ?? "").slice(0, 6).toUpperCase() })}</p>

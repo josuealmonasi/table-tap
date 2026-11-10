@@ -72,10 +72,9 @@ export default function TrackerBody({
         </h2>
         <div className="tt-sage" style={{ fontSize: 13, marginTop: 4 }}>
           {orderCode(order.id)}
-          {/* Their own name, if they gave one. They should be able to check
-              what the cashier is about to call out, and to see that it was
-              taken down correctly. */}
-          {order.customer_name && <> · {order.customer_name}</>}
+          {/* A name would help check what the cashier will call out, but a
+              shared link cannot prove whose phone this is. The device keeps
+              no name per order, so there is no name to show here. */}
         </div>
       </div>
 

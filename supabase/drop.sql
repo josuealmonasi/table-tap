@@ -359,3 +359,4 @@ drop function if exists public.stamp_account_credit_currency() cascade;
 drop function if exists public.stamp_cost_currency() cascade;
 drop function if exists public.delete_terminal_deposit_v2(uuid, date, text);
 drop function if exists public.sale_line_costs(uuid, jsonb);
+drop function if exists public.counter_pay_later_full(uuid) cascade;

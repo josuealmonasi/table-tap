@@ -15,6 +15,8 @@ export function rejectionMessage(r: CartRejection): {
   vars: Record<string, string | number>;
 } {
   switch (r.kind) {
+    case "invalidQuantity":
+      return { key: "apiErr.orderData", vars: {} };
     case "unavailable":
       // Without a name — an id that was never on this menu — the sentence has
       // to stand on its own rather than naming a blank.
