@@ -83,7 +83,7 @@ export default function OrderHistory({
 
       {!loading &&
         orders.map(order => (
-          <div key={order.id}>
+          <div key={order.id} className="tt-hist-entry">
           <button
             type="button"
             className="tt-log-row tt-hist-row"

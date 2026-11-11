@@ -6504,6 +6504,7 @@ The owner found these on an iPhone, on production, with every gate green. Every 
 - **The tab order.** It was asked for in full and only half done. `nav.spec.ts` pins the owner's order.
 - **An account with no charges** read "Debe  de MX$1,000.00": joining no balances gave an empty string. `owedLabel` says MX$0.00 on the list, the account dialog and the till's account picker (`owed-label.spec.ts`).
 - **"Para empezar" touching the Menús card** (second screenshot, 2026-11-11). The menus sit in a fieldset whose inline `margin: 0` beat the dashboard's 16px rhythm (`.tt-dash > .container > * + *`). It now resets only its sides, as does the menu editor's. The audit's `cards-touching` check fails on two rounded, bordered cards stacked under 6px apart, on every page and dialog.
+- **Analytics' order history** (Codex's sweep, verified at 390px on production). Each "Devolver" sat outside its order's row, 16px from the order above and 16px from the one below, with the divider between it and the next order missing on phones; nothing said which order it returned. Each order and its button are now one entry under one divider.
 - **The stock tab's last-count line** sat in the narrow left column under "Debería haber …", so its dot opened a line at 360px. A meta line with nothing beside it now takes the whole row.
 ## R8-4 part 1 — account debt and manager credits
 

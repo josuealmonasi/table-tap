@@ -6443,6 +6443,22 @@ a.tt-btn {
   text-align: left;
   cursor: pointer;
 }
+/* One order and its "Devolver" are one entry: the divider sits above the
+   entry, not between the row and its button. The button sat 16px below its
+   order and 16px above the next, so nothing said which order it returned
+   (Analytics, 390px, 2026-11-11). */
+.tt-hist-entry {
+  border-top: 1px solid var(--tt-line);
+}
+.tt-hist-entry > .tt-hist-row {
+  border-top: 0;
+}
+.tt-hist-entry > .tt-hist-row:has(+ [data-order-return]) {
+  padding-bottom: 4px;
+}
+.tt-hist-entry > [data-order-return] {
+  margin: 0 0 12px;
+}
 .tt-hist-row:hover {
   background: color-mix(in srgb, var(--tt-ink) 3%, transparent);
 }
