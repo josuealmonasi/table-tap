@@ -1,29 +1,32 @@
 import { readFileSync } from "node:fs";
 import { expect, it } from "vitest";
 
-// Source contracts only: Claude still needs to apply and probe the SQL.
-const proposal = readFileSync("supabase/PROPOSAL-tips-out.sql", "utf8");
+// Source contracts for tips paid out; probe-tips-out.mjs runs them in Postgres.
 const schema = readFileSync("supabase/schema.sql", "utf8");
+const proposal = schema;
 function body(sql: string, name: string): string {
   const start = sql.lastIndexOf(`create or replace function public.${name}(`);
   if (start < 0) throw new Error(`Missing function ${name}`);
   return sql.slice(start).split("$$;")[0];
 }
 const canonical = (sql: string) => sql.replace(/--[^\n]*/g, "").replace(/\s+/g, " ").trim();
-// Removing only the two reporting additions must recover the complete old
-// calculation, including all receipt/return scopes and ALL withdrawals.
+// The drawer still subtracts EVERY withdrawal exactly once; tips_out is only
+// a line that says which of them were tips.
 function preservesDrawerCalculation(sql: string): boolean {
-  const stripped = body(sql, "cash_shift_totals")
-    .replace(/,\s*coalesce\(sum\(m.amount\) filter \(where m.purpose = 'tips'\), 0\) tips_out/, "")
-    .replace(/'tips_out', round\(w.tips_out, 2\),\s*/, "");
-  return canonical(stripped) === canonical(body(schema, "cash_shift_totals"));
+  const totals = canonical(body(sql, "cash_shift_totals"));
+  const withdrawals = totals.split("withdrawals as (")[1]?.split("select jsonb_build_object")[0]?.trim() ?? "";
+  return withdrawals.startsWith("select coalesce(sum(m.amount), 0) amount,")
+    && withdrawals.endsWith("and m.kind = 'withdrawal' and m.currency = s.currency )")
+    && totals.includes("'expected', round(s.opening_amount + r.amount - f.amount - h.amount - w.amount, 2)");
 }
 it("adds a checked non-null purpose defaulting old movements to other", () => {
-  expect(proposal).toContain("add column if not exists purpose text\n  not null default 'other' check (purpose in ('tips', 'other'))");
+  expect(schema).toContain("add column if not exists purpose text not null default 'other'\n  check (purpose in ('tips', 'other'))");
 });
 it.each(["create_cash_withdrawal", "create_cash_withdrawal_once"])("%s writes purpose under the money lock", name => {
   const sql = body(proposal, name);
-  expect(sql).toContain("p_purpose text default 'other'");
+  // Required: a default would make the deployed five-argument call ambiguous.
+  expect(sql).toMatch(/p_purpose text\s*\)/);
+  expect(sql).not.toContain("p_purpose text default");
   expect(sql).toContain("p_purpose is null or p_purpose not in ('tips', 'other')");
   expect(sql).toContain("note, actor_email, purpose, created_at)");
   expect(sql).toContain("p_note, p_actor, p_purpose, clock_timestamp()");
@@ -36,12 +39,15 @@ it("includes purpose in retry identity and preserves replay before the closed-sh
   expect(sql).toContain("errcode = 'PT409'");
   expect(sql.indexOf("return jsonb_build_object('id', m.id")).toBeLessThan(sql.indexOf("closed_at is null"));
 });
-it("removes ambiguous old overloads and grants the replacements only to service_role", () => {
+it("keeps the deployed signatures, grants the new ones only to service_role and tears both down", () => {
+  const drop = readFileSync("supabase/drop.sql", "utf8");
   for (const [name, args] of [["create_cash_withdrawal", "uuid, uuid, numeric, text, text"],
     ["create_cash_withdrawal_once", "uuid, uuid, numeric, text, text, uuid"]]) {
-    expect(proposal).toContain(`drop function if exists public.${name}(${args});`);
-    expect(proposal).toContain(`revoke all on function public.${name}(${args}, text) from public, anon, authenticated;`);
-    expect(proposal).toContain(`grant execute on function public.${name}(${args}, text) to service_role;`);
+    expect(schema).not.toContain(`drop function if exists public.${name}(`);
+    expect(schema).toContain(`revoke all on function public.${name}(${args}, text) from public, anon, authenticated;`);
+    expect(schema).toContain(`grant execute on function public.${name}(${args}, text) to service_role;`);
+    expect(drop).toContain(`drop function if exists public.${name}(${args});`);
+    expect(drop).toContain(`drop function if exists public.${name}(${args}, text);`);
   }
 });
 it("reports only tip-purpose withdrawals as tips_out while preserving the full drawer calculation", () => {

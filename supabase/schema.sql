@@ -4216,6 +4216,12 @@ alter table cash_movements enable row level security;
 revoke all on cash_movements from anon;
 revoke all on cash_movements from authenticated;
 grant all on cash_movements to service_role;
+-- What a withdrawal was for. Tips paid out to the staff leave the drawer like
+-- any withdrawal, but the shift says them apart so "tips collected" and "tips
+-- paid out" can be read side by side (sweep 10, finding 7b). Older rows stay
+-- 'other': a purpose is never guessed from a free-text note.
+alter table cash_movements add column if not exists purpose text not null default 'other'
+  check (purpose in ('tips', 'other'));
 
 -- A shift at the cash drawer: opened with the cash it starts with, closed by
 -- somebody who counted it. The count is entered before the expected amount is
@@ -10331,12 +10337,15 @@ returns jsonb language sql stable security definer set search_path = public as $
             where o.restaurant_id = p_restaurant
               and left(o.id::text, 8) = substring(l.detail from '(?:^| )order=([^ ]+)')), s.currency) = s.currency
   ), withdrawals as (
-    select coalesce(sum(m.amount), 0) amount from cash_movements m, s
+    select coalesce(sum(m.amount), 0) amount,
+      coalesce(sum(m.amount) filter (where m.purpose = 'tips'), 0) tips_out
+      from cash_movements m, s
       where m.restaurant_id = p_restaurant and m.shift_id = s.id
         and m.kind = 'withdrawal' and m.currency = s.currency
   )
   select jsonb_build_object('opening', round(s.opening_amount, 2),
     'cashSales', round(r.amount - f.amount - h.amount, 2), 'tips', greatest(0, round(r.tip - f.tip, 2)), 'withdrawn', round(w.amount, 2),
+    'tips_out', round(w.tips_out, 2),
     'expected', round(s.opening_amount + r.amount - f.amount - h.amount - w.amount, 2))
     from s cross join receipts r cross join returns f cross join old_returns h cross join withdrawals w;
 $$;
@@ -10370,7 +10379,11 @@ $$;
 revoke all on function public.close_cash_shift(uuid, uuid, numeric, text) from public, anon, authenticated;
 grant execute on function public.close_cash_shift(uuid, uuid, numeric, text) to service_role;
 
-create or replace function public.create_cash_withdrawal(p_restaurant uuid, p_shift uuid, p_amount numeric, p_note text, p_actor text)
+-- The purpose is a required sixth argument, with no default: the deployed
+-- five-argument version stays for the route still running during a deploy
+-- (its rows take the column's 'other'), and a call naming p_purpose can only
+-- mean this one. A default would make PostgREST's five-argument call ambiguous.
+create or replace function public.create_cash_withdrawal(p_restaurant uuid, p_shift uuid, p_amount numeric, p_note text, p_actor text, p_purpose text)
 returns jsonb language plpgsql security definer set search_path = public as $$
 declare s cash_shifts; v_id uuid;
 begin
@@ -10378,14 +10391,15 @@ begin
   select * into s from cash_shifts where restaurant_id = p_restaurant and id = p_shift and closed_at is null for update;
   if not found then return null; end if;
   if p_amount is null or p_amount <= 0 or p_amount > 1000000 or p_amount <> round(p_amount, 2)
+    or p_purpose is null or p_purpose not in ('tips', 'other')
     or nullif(btrim(p_actor), '') is null then raise exception 'invalid cash withdrawal'; end if;
-  insert into cash_movements(restaurant_id, shift_id, currency, kind, amount, note, actor_email, created_at)
-    values(p_restaurant, s.id, s.currency, 'withdrawal', p_amount, p_note, p_actor, clock_timestamp()) returning id into v_id;
+  insert into cash_movements(restaurant_id, shift_id, currency, kind, amount, note, actor_email, purpose, created_at)
+    values(p_restaurant, s.id, s.currency, 'withdrawal', p_amount, p_note, p_actor, p_purpose, clock_timestamp()) returning id into v_id;
   return jsonb_build_object('id', v_id, 'currency', s.currency);
 end;
 $$;
-revoke all on function public.create_cash_withdrawal(uuid, uuid, numeric, text, text) from public, anon, authenticated;
-grant execute on function public.create_cash_withdrawal(uuid, uuid, numeric, text, text) to service_role;
+revoke all on function public.create_cash_withdrawal(uuid, uuid, numeric, text, text, text) from public, anon, authenticated;
+grant execute on function public.create_cash_withdrawal(uuid, uuid, numeric, text, text, text) to service_role;
 
 create or replace function public.delete_cash_withdrawal(p_restaurant uuid, p_shift uuid, p_movement uuid)
 returns jsonb language plpgsql security definer set search_path = public as $$
@@ -10703,15 +10717,20 @@ $$;
 revoke all on function public.create_order_intent(uuid, uuid, text, jsonb, jsonb, boolean, int, jsonb) from public, anon, authenticated;
 grant execute on function public.create_order_intent(uuid, uuid, text, jsonb, jsonb, boolean, int, jsonb) to service_role;
 
+-- Required purpose, as create_cash_withdrawal above.
 create or replace function public.create_cash_withdrawal_once(
-  p_restaurant uuid, p_shift uuid, p_amount numeric, p_note text, p_actor text, p_ref uuid
+  p_restaurant uuid, p_shift uuid, p_amount numeric, p_note text, p_actor text, p_ref uuid, p_purpose text
 ) returns jsonb language plpgsql security definer set search_path = public as $$
 declare s cash_shifts; m cash_movements;
 begin
+  if p_purpose is null or p_purpose not in ('tips', 'other') then
+    raise exception 'invalid cash withdrawal purpose';
+  end if;
   perform public.lock_restaurant_money(p_restaurant);
   select * into m from cash_movements where restaurant_id = p_restaurant and request_ref = p_ref;
   if found then
-    if (m.shift_id, m.amount, m.note) is distinct from (p_shift, p_amount, p_note) then
+    -- A retry that changes what the money was for is another withdrawal.
+    if (m.shift_id, m.amount, m.note, m.purpose) is distinct from (p_shift, p_amount, p_note, p_purpose) then
       raise exception 'reference belongs to another withdrawal' using errcode = 'PT409';
     end if;
     return jsonb_build_object('id', m.id, 'currency', m.currency);
@@ -10720,15 +10739,15 @@ begin
   if not found then return null; end if;
   if p_ref is null or p_amount is null or p_amount <= 0 or p_amount > 1000000 or p_amount <> round(p_amount, 2)
     or nullif(btrim(p_actor), '') is null then raise exception 'invalid cash withdrawal'; end if;
-  insert into cash_movements(restaurant_id, shift_id, request_ref, currency, kind, amount, note, actor_email, created_at)
-    values(p_restaurant, s.id, p_ref, s.currency, 'withdrawal', p_amount, p_note, p_actor, clock_timestamp())
+  insert into cash_movements(restaurant_id, shift_id, request_ref, currency, kind, amount, note, actor_email, purpose, created_at)
+    values(p_restaurant, s.id, p_ref, s.currency, 'withdrawal', p_amount, p_note, p_actor, p_purpose, clock_timestamp())
     on conflict (shift_id, request_ref) where request_ref is not null do nothing returning * into m;
   if m.id is null then raise exception 'withdrawal reference changed' using errcode = 'PT409'; end if;
   return jsonb_build_object('id', m.id, 'currency', m.currency);
 end;
 $$;
-revoke all on function public.create_cash_withdrawal_once(uuid, uuid, numeric, text, text, uuid) from public, anon, authenticated;
-grant execute on function public.create_cash_withdrawal_once(uuid, uuid, numeric, text, text, uuid) to service_role;
+revoke all on function public.create_cash_withdrawal_once(uuid, uuid, numeric, text, text, uuid, text) from public, anon, authenticated;
+grant execute on function public.create_cash_withdrawal_once(uuid, uuid, numeric, text, text, uuid, text) to service_role;
 
 create or replace function public.record_purchase_once(
   p_restaurant uuid, p_ingredient uuid, p_packs numeric, p_total numeric, p_actor text, p_ref uuid

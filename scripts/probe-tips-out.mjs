@@ -22,7 +22,6 @@ const restaurant = randomUUID();
 let shift;
 const value = async (sql, args) => (await db.query(sql, args)).rows[0].value;
 const totals = () => value("select cash_shift_totals($1,$2,clock_timestamp()) value", [restaurant, shift]);
-const movement = async id => (await db.query("select purpose,amount,shift_id,request_ref from cash_movements where id=$1", [id])).rows[0];
 
 async function check(name, run) {
   await db.query("savepoint tips_out_check");
@@ -72,24 +71,30 @@ try {
     assert.equal(await value("select count(*)::int value from cash_movements where restaurant_id=$1", [restaurant]), before);
   });
 
-  await check("create_cash_withdrawal accepts missing purpose", async () => {
-    const result = await value("select create_cash_withdrawal($1,$2,2,'legacy','probe') value", [restaurant, shift]);
-    assert.ok(result?.id, "legacy writer must return an id");
-    const row = await movement(result.id);
-    assert.equal(row.purpose, "other");
-    assert.equal(Number(row.amount), 2);
-    assert.equal(row.shift_id, shift);
+  // The deployed five-argument writers stay for the route mid-deploy; their
+  // rows carry no purpose and must read as "other". A fresh schema has only
+  // the six-argument writers, so the legacy rows are written as they did.
+  await check("a withdrawal written without a purpose reads as other", async () => {
+    const plain = await value(`insert into cash_movements(restaurant_id,shift_id,currency,kind,amount,note,actor_email,created_at)
+      values($1,$2,'MXN','withdrawal',2,'legacy','probe',clock_timestamp()) returning to_jsonb(cash_movements.*) value`, [restaurant, shift]);
+    assert.equal(plain.purpose, "other");
+    const ref = randomUUID();
+    const retried = await value(`insert into cash_movements(restaurant_id,shift_id,request_ref,currency,kind,amount,note,actor_email,created_at)
+      values($1,$2,$3,'MXN','withdrawal',3,'legacy retry','probe',clock_timestamp()) returning to_jsonb(cash_movements.*) value`, [restaurant, shift, ref]);
+    assert.equal(retried.purpose, "other");
+    assert.equal(retried.request_ref, ref);
   });
 
-  await check("create_cash_withdrawal_once accepts missing purpose", async () => {
-    const ref = randomUUID();
-    const result = await value("select create_cash_withdrawal_once($1,$2,3,'legacy retry','probe',$3) value", [restaurant, shift, ref]);
-    assert.ok(result?.id, "retry writer must return an id");
-    const row = await movement(result.id);
-    assert.equal(row.purpose, "other");
-    assert.equal(Number(row.amount), 3);
-    assert.equal(row.shift_id, shift);
-    assert.equal(row.request_ref, ref);
+  await check("both writers refuse a missing purpose", async () => {
+    // Each refusal aborts the statement; a savepoint keeps the transaction usable.
+    for (const [sql, args, message] of [
+      ["select create_cash_withdrawal($1,$2,1,'x','probe',null)", [restaurant, shift], /invalid cash withdrawal/],
+      ["select create_cash_withdrawal_once($1,$2,1,'x','probe',$3,null)", [restaurant, shift, randomUUID()], /invalid cash withdrawal purpose/],
+    ]) {
+      await db.query("savepoint refused_purpose");
+      await assert.rejects(db.query(sql, args), message);
+      await db.query("rollback to savepoint refused_purpose");
+    }
   });
 
   await check("cash_shift_totals reports tips_out without changing expected", async () => {
