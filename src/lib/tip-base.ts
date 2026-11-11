@@ -20,13 +20,26 @@ export function ordersTipBase(orders: TipOrder[], discount = 0): number {
     const paid = Math.min(principal, Math.max(0, Number(o.collected ?? 0) - Number(o.collected_tip ?? 0)));
     return sum + dishes * (principal - paid) / principal;
   }, 0);
-  return Math.max(0, round2(food - discount));
+  // A discount only ever lowers the base: a negative one would raise the tip.
+  return Math.max(0, round2(food - Math.max(0, Number(discount) || 0)));
 }
 
-/** Legacy fee principal includes service; its frozen value must never grow with later tips. */
+/**
+ * A split's frozen principal is what its orders still owed when the table
+ * agreed: food AND service, net of anything already collected. Only its food
+ * share is tipped, in the orders' own food-to-service proportion. Subtracting
+ * the whole service charge instead took off service that a collection had
+ * already paid: MX$100 food + MX$10 service with MX$55 collected froze MX$55,
+ * and "minus MX$10" tipped MX$45 where MX$50 of food was owed (Codex review).
+ * Its frozen value never grows with later tips.
+ */
 export function frozenTipPrincipal(principal: number | null, orders: TipOrder[]): number {
-  return principal == null ? ordersTipBase(orders) : Math.max(0, round2(Number(principal)
-    - orders.reduce((sum, o) => sum + Number(o.service_fee ?? 0), 0)));
+  if (principal == null) return ordersTipBase(orders);
+  const owed = orders.reduce((sum, o) => sum + Math.max(0, Number(o.total) - Number(o.tip ?? 0)), 0);
+  const food = orders.reduce((sum, o) => sum + Math.max(0,
+    Number(o.total) - Number(o.tip ?? 0) - Number(o.service_fee ?? 0)), 0);
+  if (owed <= 0) return 0;
+  return Math.max(0, round2(Number(principal) * food / owed));
 }
 
 /** Each frozen food cent belongs to one share; the first carries the remainder. */

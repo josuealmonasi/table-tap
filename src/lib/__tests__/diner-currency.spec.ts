@@ -159,7 +159,8 @@ it.each([0, 10, 15, 100])("F6 bill preview and charged tip agree at %s percent w
   state.orders = [{ ...state.orders[0], total: 120, service_fee: 10, tip: 10, collected: 35, collected_tip: 5 }];
   const { tableBill } = await vi.importActual<typeof import("@/lib/table-bill")>("@/lib/table-bill");
   const preview = billAmounts(tableBill(state.orders as unknown as Order[], []), "all", null, pct, null);
-  expect(preview.tipBase).toBe(70);
+  // MX$110 of food and service with MX$30 of it paid: MX$100 × 80/110 of food.
+  expect(preview.tipBase).toBe(72.73);
   expect((await bill.POST(new NextRequest("http://localhost/pay", { method: "POST", body: JSON.stringify({
     restaurantId: "r1", tableId: "t1", orderIds: ["o1"], tipPct: pct,
   }) }))).status).toBe(200);

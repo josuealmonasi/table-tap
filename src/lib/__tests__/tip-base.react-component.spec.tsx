@@ -27,3 +27,13 @@ it("leaves only the food share of a partial payment out of the base", () => {
   expect(ordersTipBase([{ total: 115, service_fee: 10, tip: 5, collected: 60, collected_tip: 5 }])).toBe(50);
   expect(ordersTipBase([{ total: 110, service_fee: 10, collected: 110 }])).toBe(0);
 });
+it("tips only the food share of a split frozen after part of the bill was collected", () => {
+  // MX$100 food + MX$10 service, MX$55 collected before the table split: the
+  // frozen principal is MX$55 of food and service, MX$50 of it food.
+  const frozen = [{ total: 110, service_fee: 10, collected: 55 }];
+  expect(frozenTipPrincipal(55, frozen)).toBe(50);
+  expect([0, 1].map(n => tipFromPercent(splitTipBase(50, 2, [n]), 10))).toEqual([2.5, 2.5]);
+});
+it("never lets a negative discount raise the base", () => {
+  expect(ordersTipBase([{ total: 100 }], -20)).toBe(100);
+});

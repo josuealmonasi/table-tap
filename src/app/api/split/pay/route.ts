@@ -55,6 +55,9 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   if (!splitId || !sessionId || !restaurantId || !tableId) {
     return await apiError("apiErr.invalidRequest", 400);
   }
+  // Refused before anything is reserved: a tip that is not a number would
+  // otherwise reach Stripe as NaN, after the share's fee slice was taken.
+  if (tipAmount != null && !Number.isFinite(Number(tipAmount))) return await apiError("apiErr.invalidRequest", 400);
 
   const member = await tableMember(req, restaurantId, tableId, sessionId, true).catch(() => null);
   if (!member) return await apiError("apiErr.tableJoin", 403);
