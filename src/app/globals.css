@@ -3927,6 +3927,9 @@ a.tt-btn {
   gap: 8px;
 }
 .tt-board-tab {
+  /* Analytics' periods and Costs' tabs are links: without this they were
+     underlined inside their pills (production, 2026-11-11). */
+  text-decoration: none;
   border: 1px solid var(--tt-cream);
   background: var(--tt-white);
   border-radius: 999px;
