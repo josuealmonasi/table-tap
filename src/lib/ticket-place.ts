@@ -43,7 +43,7 @@ export async function ticketPlace(db: Db, restaurantId: string, t: T): Promise<T
   const r = data as unknown as FiscalRow;
   return {
     name: r.name, legalName: r.legal_name, rfc: r.rfc,
-    regime: r.tax_regime ? t("saleTicket.regime", { code: r.tax_regime }) : null,
+    regime: r.tax_regime ? t("saleTicket.regime", { code: r.tax_regime, name: t(`fiscal.regimes.${r.tax_regime}`) }) : null,
     addressLines: ticketAddress(r), phone: r.ticket_phone, logo: await logoBytes(r.logo_url),
   };
 }

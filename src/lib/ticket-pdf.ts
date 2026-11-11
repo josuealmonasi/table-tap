@@ -29,7 +29,7 @@ export interface TicketPlace {
   rfc?: string | null;
   /** "601 General de Ley Personas Morales" — the code and its name. */
   regime?: string | null;
-  /** Already joined: street and number, colonia, CP, municipio, estado. */
+  /** Already joined: street and number, neighbourhood and postal code, municipality and state. */
   addressLines?: string[];
   phone?: string | null;
   /** PNG or JPEG bytes of the restaurant's logo, when it has one. */

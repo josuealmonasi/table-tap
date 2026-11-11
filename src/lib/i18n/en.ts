@@ -943,7 +943,7 @@ foundingLeftBody: "Subscribe now and keep this subscription price for as long as
     paidCash: "Paid in cash",
     paidCard: "Paid by card",
     paidOther: "Paid",
-    regime: "Tax regime {code}",
+    regime: "Tax regime: {code} {name}",
     loyaltyTitle: "VISIT CARD",
     loyaltyLine: "Card ···· {last4}: {progress} of {goal}",
     qrHint: "Show this code at the counter to find your ticket",

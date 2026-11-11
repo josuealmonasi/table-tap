@@ -941,7 +941,7 @@ foundingLeftBody: "Quien contrata ahora conserva este precio de suscripción mie
     paidCash: "Pagado en efectivo",
     paidCard: "Pagado con tarjeta",
     paidOther: "Pagado",
-    regime: "Régimen fiscal {code}",
+    regime: "Régimen fiscal: {code} {name}",
     loyaltyTitle: "TARJETA DE VISITAS",
     loyaltyLine: "Tarjeta ···· {last4}: {progress} de {goal}",
     qrHint: "Muestra este código en caja para encontrar tu ticket",
