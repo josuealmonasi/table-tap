@@ -2822,8 +2822,10 @@ collection. Unknown payment currency fails the transaction for review instead
 of guessing. It never infers charged_at from created_at or rebuilds original
 charges from current totals: unavailable original values remain JSON null.
 Newly started accounts require a cutoff within the calling transaction and no
-preexisting journal movements; a stale cutoff cannot label current debt as past
-debt. Finally it stamps the cutoff and returns per-account/currency opening debt and
+preexisting journal movements. This rejects an earlier transaction's cutoff;
+the caller must still choose it after acquiring the money lock, because a
+timestamp from before a wait in the same transaction passes this check.
+Finally it stamps the cutoff and returns per-account/currency opening debt and
 counts by imported kind. Started accounts are skipped on every later call,
 including replay with the original cutoff.
 
@@ -2831,4 +2833,6 @@ Pre-cutoff event coverage is explicitly incomplete. The opening contains only
 current outstanding-order snapshots; collected orders are represented only by
 independently evidenced credit/payment history. Dev verification is provided by
 `scripts/probe-account-journal.mjs`, which refuses production. It must not be run
-against production during PR 1.
+against production during PR 1. The probe checks the function's own money lock
+without a caller lock, verifies rollback leaves an account unstarted, and tests
+effective client/service roles alongside catalog privileges.

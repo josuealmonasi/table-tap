@@ -30,6 +30,7 @@ try {
   const expected = await opening(db, restaurant, f.owner);
   assert.deepEqual(expected, { MXN: "10700", USD: "1300" });
   await db.query("begin");
+  await db.query("set local role service_role");
   const report = await backfill(db, restaurant);
   await db.query("commit");
   assert.deepEqual(Object.fromEntries(report.map(row => [row.currency, row.opening_debt_cents])), expected);
@@ -66,8 +67,20 @@ try {
   await refused(db, () => movement(db, restaurant, f.owner, foreignOrder), /order differs/);
   await refused(db, () => movement(db, restaurant, stranger, foreignOrder), /account differs/);
   await refused(db, () => movement(db, restaurant, f.owner, f.partial, { currency: "USD" }), /order differs/);
+  await refused(db, () => movement(db, restaurant, f.owner, f.full, { kind: "credit",
+    adjustment_id: partial.adjustment_id, debt_delta_cents: -1 }), /adjustment differs/);
+  await refused(db, () => movement(db, restaurant, f.owner, null, { kind: "credit",
+    debt_delta_cents: -1 }), /account_movements_source/);
+  await refused(db, () => movement(db, restaurant, f.owner, null, { kind: "collection",
+    debt_delta_cents: -1 }), /account_movements_source/);
+  await refused(db, () => movement(db, restaurant, f.owner, null, { kind: "refund_paid",
+    debt_delta_cents: 0 }), /account_movements_source/);
+  await refused(db, () => movement(db, restaurant, f.owner, null, { kind: "collection",
+    payment_id: history.payment_id, currency: "USD", debt_delta_cents: -1 }), /payment differs/);
   await refused(db, () => movement(db, restaurant, f.owner, null, { kind: "collection", provenance: "backfill",
     debt_delta_cents: 0, payment_id: history.payment_id }), /account_movements_collection_once/);
+  await refused(db, () => movement(db, restaurant, f.owner, f.partial, { kind: "historical_observation",
+    provenance: "backfill", adjustment_id: partial.adjustment_id, debt_delta_cents: 0 }), /account_movements_adjustment_once/);
   const privileges = (await db.query(`select
     has_table_privilege('service_role','account_movements','SELECT') and has_table_privilege('service_role','account_movements','INSERT') allowed,
     has_table_privilege('service_role','account_movements','UPDATE,DELETE,TRUNCATE') mutates,
@@ -80,6 +93,44 @@ try {
     anon_execute: false, client_execute: false, service_execute: true });
   assert.equal((await db.query("select relrowsecurity from pg_class where oid='account_movements'::regclass")).rows[0].relrowsecurity, true);
   assert.equal((await db.query("select count(*)::int n from pg_policies where tablename='account_movements'")).rows[0].n, 0);
+
+  // Exercise effective roles as well as the ACL catalog. Roll back every probe.
+  for (const role of ["anon", "authenticated", "service_role"]) {
+    for (const sql of ["update account_movements set reason='changed'", "delete from account_movements", "truncate account_movements"]) {
+      await refused(db, async () => { await db.query(`set local role ${role}`); await db.query(sql); }, /permission denied/);
+    }
+    if (role === "service_role") continue;
+    for (const sql of ["select * from account_movements", "select * from account_journal_backfill_v1($1,clock_timestamp())"]) {
+      await refused(db, async () => { await db.query(`set local role ${role}`);
+        await db.query(sql, sql.includes("$1") ? [restaurant] : []); }, /permission denied/);
+    }
+    await refused(db, async () => { await db.query(`set local role ${role}`);
+      await movement(db, restaurant, f.owner, f.partial); }, /permission denied/);
+  }
+  await db.query("begin"); await db.query("set local role service_role");
+  await movement(db, restaurant, f.owner, f.partial);
+  assert.equal((await db.query("select count(*)::int n from account_movements where kind='charge' and order_id=$1", [f.partial])).rows[0].n, 1);
+  await db.query("savepoint replay");
+  await assert.rejects(() => movement(db, restaurant, f.owner, f.partial), /account_movements_charge_once/);
+  await db.query("rollback to savepoint replay");
+  await db.query("rollback");
+
+  // Test the FUNCTION's lock directly: the peer does not pre-acquire it.
+  // Roll back this deliberately pre-lock cutoff; real activation chooses it
+  // after acquiring the lock, as the serialization tests below do.
+  const untouched = await account(db, restaurant);
+  await db.query("begin"); await db.query("select lock_restaurant_money($1)", [restaurant]);
+  pending = (async () => {
+    await peer.query("begin");
+    await peer.query("select * from account_journal_backfill_v1($1,clock_timestamp())", [restaurant]);
+    await peer.query("rollback");
+  })().then(() => ({}), error => ({ error }));
+  await queued(db, peerPid);
+  await db.query("commit");
+  const direct = await pending; pending = null;
+  if (direct.error) throw direct.error;
+  assert.equal((await db.query("select journal_started_at from customer_accounts where id=$1", [untouched])).rows[0].journal_started_at, null);
+  assert.equal((await db.query("select count(*)::int n from account_movements where account_id=$1", [untouched])).rows[0].n, 0);
 
   // Both serializations: a waiting backfill sees the winning settlement;
   // a waiting settlement sees the opening snapshot taken before it.
@@ -109,7 +160,7 @@ try {
   }
   await db.query("delete from restaurants where id=$1", [restaurant]);
   assert.equal((await db.query("select count(*)::int n from account_movements where restaurant_id=$1", [restaurant])).rows[0].n, 0);
-  console.log("PASS: opening per currency, evidenced history, no invented charge date, replay, guards, constraints, grants, tenant/currency isolation, both money-lock races, restaurant cascade");
+  console.log("PASS: opening per currency, evidenced history, no invented charge date, replay, guards, constraints, effective roles, tenant/currency isolation, function money lock, both settlement races, restaurant cascade");
 } finally {
   await db.query("rollback").catch(() => {});
   if (pending) await pending;
