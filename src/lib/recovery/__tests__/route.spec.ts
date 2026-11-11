@@ -1,12 +1,13 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
 
-const { jobs, context } = vi.hoisted(() => ({ jobs: { stock: vi.fn(), refunds: vi.fn(), fees: vi.fn(), subscriptions: vi.fn() }, context: vi.fn() }));
+const { jobs, context } = vi.hoisted(() => ({ jobs: { stock: vi.fn(), refunds: vi.fn(), fees: vi.fn(), subscriptions: vi.fn(), disputes: vi.fn() }, context: vi.fn() }));
 vi.mock("../context", () => ({ recoveryContext: context }));
 vi.mock("../stock", () => ({ recoverStock: jobs.stock }));
 vi.mock("../refunds", () => ({ recoverRefunds: jobs.refunds }));
 vi.mock("../fees", () => ({ recoverFees: jobs.fees }));
 vi.mock("../subscriptions", () => ({ recoverSubscriptions: jobs.subscriptions }));
+vi.mock("../disputes", () => ({ recoverDisputes: jobs.disputes }));
 const { GET } = await import("@/app/api/cron/recover/route");
 const clean = { done: 0, pending: 0, failed: 0, oldest_pending_at: null, oldest_pending_age_seconds: null, age_basis: "created_at" };
 const request = (authorization?: string) => new NextRequest("https://test/api/cron/recover", {
@@ -36,10 +37,10 @@ it("runs every job without a user session and returns uncached per-job counts", 
   const result = await GET(request("Bearer cron-test-secret"));
   expect(result.status).toBe(200);
   expect(result.headers.get("cache-control")).toBe("no-store");
-  expect(await result.json()).toEqual({ jobs: { stock: clean, refunds: clean, fees: clean, subscriptions: clean } });
-  expect(context).toHaveBeenCalledTimes(4);
+  expect(await result.json()).toEqual({ jobs: { stock: clean, refunds: clean, fees: clean, subscriptions: clean, disputes: clean } });
+  expect(context).toHaveBeenCalledTimes(5);
 });
-it("a failed job cannot prevent the other three jobs from running", async () => {
+it("a failed job cannot prevent the other jobs from running", async () => {
   jobs.stock.mockRejectedValue(new Error("database unavailable"));
   const result = await GET(request("Bearer cron-test-secret"));
   expect((await result.json()).jobs.stock).toMatchObject({ failed: 1, pending: null, observation_failed: true });

@@ -66,6 +66,7 @@ for (const table of [
   // The ledger and everything around it, the bell, the kitchen's paper, a
   // table's division, and what the routes keep for themselves.
   "offline_sale_queue", "payment_allocations", "order_adjustments", "refund_operations", "refund_allocations", "refund_attempts", "refund_due_attempts", "refund_failures", "refund_fee_epochs", "fee_returns", "fee_reconcile_queue", "refund_due_coverage",
+  "stripe_disputes", "stripe_dispute_movements", "stripe_dispute_events",
   "payments", "refunds_due", "notifications", "print_jobs", "bill_splits", "bill_split_claims", "bill_split_slots", "bill_split_checkout_slots",
   "service_requests", "dish_ratings", "plan_limits", "stock_reservations",
   "terminal_deposits", "platform_fees", "restaurant_billing_operations", "restaurant_subscription_prices",
@@ -644,6 +645,7 @@ if (!signIn.error && theirs) {
     "staff", "table_sessions", "user_logs", "write_off_requests",
     "loyalty_programs", "loyalty_cards", "loyalty_visits", "loyalty_redemptions",
     "customer_accounts", "account_checkouts", "diner_checkouts", "table_session_members",
+    "stripe_disputes", "stripe_dispute_movements", "stripe_dispute_events",
     "cash_shifts", "cash_movements", "ingredients", "ingredient_prices", "recipe_lines",
     "waste_entries", "ingredient_purchases", "ingredient_counts", "ingredient_consumption", "ingredient_movements", "terminal_deposits", "platform_fees"];
   const TEAM = [["anon", null], ["owner", "demo@tabletap.dev"], ["manager", "demo-manager@tabletap.dev"],

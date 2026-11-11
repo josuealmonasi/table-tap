@@ -1,5 +1,7 @@
 "use client";
 
+import DisputeSummary from "../disputes/DisputeSummary.react-component";
+import type { DisputeReport } from "@/lib/disputes/types";
 import type { ReturnSummary } from "@/lib/refunds/reporting";
 import Link from "next/link";
 import { formatMoney } from "@/lib/format";
@@ -26,6 +28,7 @@ export interface RatedDish {
 }
 
 interface AnalyticsViewProps {
+  disputes?: DisputeReport;
   data: Analytics;
   returnSummary?: ReturnSummary;
   period: Period;
@@ -61,6 +64,7 @@ const PERIOD_KEY: Record<string, string> = {
 
 export default function AnalyticsView({
   data,
+  disputes,
   returnSummary,
   period,
   currency,
@@ -121,6 +125,8 @@ export default function AnalyticsView({
           <p>{t("returns.completedPeriod")}: <strong>{money(returnSummary.completed)}</strong></p>
           <p>{t("receipt.returnPending")}: <strong>{money(returnSummary.pending)}</strong></p>
         </section>}
+
+        {disputes && <DisputeSummary report={disputes} />}
 
         {/* The register close, first among the sections: it is the thing a
             manager comes here for at the end of a shift, and unlike everything

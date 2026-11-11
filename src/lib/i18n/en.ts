@@ -1,6 +1,33 @@
 // English UI strings for the customer-facing screens. This is the source of
 // truth for the message keys; es.ts must mirror its shape (enforced by types).
 export const en = {
+  disputes: {
+    loading: "Loading chargebacks…",
+    title: "Chargebacks",
+    help: "Actual Stripe balance adjustments, on their transaction dates. Sales and cash drawer totals stay separate.",
+    withdrawn: "Principal withdrawn",
+    reinstated: "Principal reinstated",
+    fees: "Stripe dispute fees (net)",
+    adjustments: "Chargeback adjustments",
+    after: "Contribution after chargebacks",
+    exposure: "Current disputed exposure",
+    outcomes: "Current outcomes: {won} won · {lost} lost",
+    pending: "{count} chargeback(s) awaiting reconciliation or review. A win does not confirm reinstatement.",
+    incomplete: "Incomplete total: pending evidence or another settlement currency is excluded. Amounts retain their own currency.",
+    empty: "No chargeback movements in this period.",
+    history: "{date} · Chargeback {amount} · {status}",
+    shared: "This charge covers several orders. These amounts are for the whole charge, not each order.",
+    unavailable: "Chargeback history could not be loaded. Refresh to try again.",
+    deleteBlocked: "This restaurant has chargebacks awaiting reconciliation or a final outcome.",
+    needs_response: "Response required",
+    under_review: "Under review",
+    won: "Won",
+    lost: "Lost",
+    warning_needs_response: "Inquiry: response required",
+    warning_under_review: "Inquiry under review",
+    warning_closed: "Inquiry closed",
+    prevented: "Prevented",
+  },
   accountCredit: {
     action: "Credit",
     title: "Credit this order",

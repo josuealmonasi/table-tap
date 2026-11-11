@@ -47,6 +47,7 @@ async function deleteRestaurant(req: NextRequest) {
       const errors: Record<string, string> = {
         refund: "apiErr.restaurantDeleteRefund", refundDue: "apiErr.restaurantDeleteRefundDue",
         provider: "apiErr.restaurantDeleteProvider",
+        dispute: "disputes.deleteBlocked",
         offlineSale: "apiErr.restaurantDeleteOfflineSale", refundFee: "apiErr.restaurantDeleteRefundFee",
         refundFeeVerification: "apiErr.restaurantDeleteRefundFeeVerification",
       };

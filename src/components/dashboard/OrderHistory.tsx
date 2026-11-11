@@ -8,6 +8,7 @@ import { useOrderHistory } from "@/hooks/useOrderHistory";
 import { useLocale, useT } from "@/lib/i18n/context";
 import { LogRowsSkeleton } from "@/components/ui/DashSkeletons";
 import { SearchIcon } from "@/components/ui/icons";
+import DisputeHistoryLines from "./disputes/DisputeHistory.react-component";
 import OrderReturn from "./OrderReturn";
 import OrderDetailDialog from "./OrderDetailDialog";
 import { SEP } from "@/lib/separator";
@@ -125,6 +126,7 @@ export default function OrderHistory({
               </span>
             </span>
           </button>
+          {canReturn && <DisputeHistoryLines orderId={order.id} restaurantId={restaurantId} orderIds={orders.map(o => o.id)} />}
           {canReturn && <OrderReturn order={order} onPrepared={retry} />}
           </div>
         ))}

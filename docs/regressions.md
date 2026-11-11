@@ -6549,3 +6549,18 @@ till, waiter pad and offline receipt now freeze each line's promotion revenue.
 understatement of unrelated revenue, bill-wide stacking, extras, combo display
 savings, free food costs, exact cents, legacy fallback and offline replay.
 Reports never fetch current promotions for old sales.
+
+## Disputes PR 1 — provider money and restaurant books
+
+A dispute notification is discovery, not a debit. The Connect inbox commits
+before acknowledgment; all five notification types refresh current provider
+state on the original account. Duplicate/reordered delivery cannot invent a
+second withdrawal or a credit for winning. Failed provider reads remain in the
+existing bounded recovery runner. `disputes/__tests__` covers ingestion,
+provenance, shared-charge history, currencies, provider dates and structural
+money checks; the dispute rendering specs use both real language dictionaries.
+The SQL contract specs inspect only `supabase/PROPOSAL-disputes.sql`; they do not
+execute PostgreSQL. Claude must fold it, probe the locks/leases, deletion archive,
+RLS and retry races, and verify Stripe's separate fee-adjustment shapes. Sales,
+original contribution and the corte stay separate from actual chargeback net.
+Historical backfill/provider completeness is PR 3, not claimed by this gate.

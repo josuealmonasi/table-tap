@@ -4,6 +4,8 @@ import { abandonCheckout, settleCheckout } from "@/lib/checkout-settle";
 import { syncConnectAccount } from "@/lib/stripe-connect";
 import { REFUND_FAILURE_EVENTS, reopenFailedRefund } from "@/lib/refunds/provider-failure";
 import { enqueueRefundFee } from "@/lib/refunds/fee-queue";
+import { DISPUTE_EVENTS } from "@/lib/disputes/types";
+import { ingestDispute } from "@/lib/disputes/ingest";
 import type Stripe from "stripe";
 
 export const runtime = "nodejs";
@@ -61,6 +63,8 @@ export async function POST(req: NextRequest) {
       && (event!.data.object as Stripe.Refund).status === "succeeded")) {
     await enqueueRefundFee(event!.data.object as Stripe.Refund | Stripe.Charge, event!.account);
   }
+
+  if (DISPUTE_EVENTS.has(event!.type)) await ingestDispute(event!);
 
   return NextResponse.json({ received: true });
 }
