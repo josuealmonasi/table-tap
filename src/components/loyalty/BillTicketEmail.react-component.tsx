@@ -15,7 +15,9 @@ interface BillTicketEmailProps {
 }
 interface BillCard { card: { suffix?: string; code?: string; email?: string | null } | null }
 async function read(url: string): Promise<BillCard> {
-  const res = await fetch(url, { signal: AbortSignal.timeout(10_000) });
+  // A dropped connection reaches SWR's error state, which the screen explains.
+  let res: Response;
+  try { res = await fetch(url, { signal: AbortSignal.timeout(10_000) }); } catch { throw new Error("Could not read bill card"); }
   if (!res.ok) throw new Error("Could not read bill card");
   return res.json();
 }

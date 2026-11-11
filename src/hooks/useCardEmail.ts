@@ -5,7 +5,9 @@ import useSWR, { useSWRConfig } from "swr";
 
 export interface CardEmailData { email: string | null }
 async function read(url: string): Promise<CardEmailData> {
-  const res = await fetch(url, { signal: AbortSignal.timeout(10_000) });
+  // A dropped connection reaches SWR's error state, which the screen explains.
+  let res: Response;
+  try { res = await fetch(url, { signal: AbortSignal.timeout(10_000) }); } catch { throw new Error("Could not read the card email"); }
   if (!res.ok) throw new Error("Could not read the card email");
   const data = await res.json();
   if (data.email !== null && typeof data.email !== "string") throw new Error("Missing card email");

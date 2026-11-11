@@ -28,6 +28,10 @@ export const en = {
     stopped: "You will no longer receive tickets from {restaurant} by email.",
     stopMissing: "This link is no longer available. You can ask the restaurant to remove your email.",
     stopFailed: "We could not remove your email. Try again.",
+    consentNeeded: "To save the email, the customer must agree to receive their tickets there.",
+    stopGone: "This link is no longer active: the email was already removed from the card.",
+    footer: "You get this ticket because you linked this email to your {restaurant} visit card. It is only used to send you your tickets.",
+    stopLink: "Stop emailing me my tickets",
   },
   loyaltyAttach: {
     title: "Visit card",
@@ -974,13 +978,6 @@ foundingLeftBody: "Subscribe now and keep this subscription price for as long as
       openAccounts: "Customer accounts come with {plan}.",
       costs: "Costs and margins come with {plan}.",
     },
-  },
-  cardEmail: {
-    invalid: "That email isn't valid. Check it and try again.",
-    consentNeeded: "To save the email, the customer must agree to receive their tickets there.",
-    stopGone: "This link is no longer active: the email was already removed from the card.",
-    footer: "You get this ticket because you linked this email to your {restaurant} visit card. It is only used to send you your tickets.",
-    stopLink: "Stop emailing me my tickets",
   },
   saleTicket: {
     folio: "Folio",

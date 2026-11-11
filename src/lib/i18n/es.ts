@@ -30,6 +30,10 @@ export const es: Messages = {
     stopped: "Ya no recibirás tickets de {restaurant} por correo.",
     stopMissing: "Este enlace ya no está disponible. Puedes pedir al restaurante que quite tu correo.",
     stopFailed: "No pudimos quitar tu correo. Intenta de nuevo.",
+    consentNeeded: "Para guardar el correo, el cliente debe aceptar recibir ahí sus tickets.",
+    stopGone: "Este enlace ya no está activo: el correo ya se había quitado de la tarjeta.",
+    footer: "Recibes este ticket porque vinculaste este correo a tu tarjeta de visitas de {restaurant}. Solo se usa para enviarte tus tickets.",
+    stopLink: "Dejar de recibir mis tickets por correo",
   },
   loyaltyAttach: {
     title: "Tarjeta de visitas",
@@ -973,13 +977,6 @@ foundingLeftBody: "Quien contrata ahora conserva este precio de suscripción mie
     },
   },
   // The printed ticket (80 mm PDF).
-  cardEmail: {
-    invalid: "Ese correo no es válido. Revísalo y vuelve a intentarlo.",
-    consentNeeded: "Para guardar el correo, el cliente debe aceptar recibir ahí sus tickets.",
-    stopGone: "Este enlace ya no está activo: el correo ya se había quitado de la tarjeta.",
-    footer: "Recibes este ticket porque vinculaste este correo a tu tarjeta de visitas de {restaurant}. Solo se usa para enviarte tus tickets.",
-    stopLink: "Dejar de recibir mis tickets por correo",
-  },
   saleTicket: {
     folio: "Folio",
     table: "Mesa {label}",

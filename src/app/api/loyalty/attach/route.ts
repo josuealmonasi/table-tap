@@ -7,6 +7,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { loyaltyOn } from "@/lib/loyalty/server";
 import { normalizeCode } from "@/lib/loyalty/code";
 import { attachmentErrors } from "@/lib/loyalty/attachment";
+import { cardEmailFor } from "@/lib/loyalty/card-email";
 import { attachmentAccess, attachmentRow, cardForSale, receiptCard, type AttachmentTarget } from "@/lib/loyalty/attachment-server";
 
 export const runtime = "nodejs";
@@ -30,7 +31,10 @@ export async function GET(req: NextRequest) {
     const row = await attachmentRow(access);
     const open = row && !row.paid && !row.closed_at && row.status !== "cancelled";
     const card = open && row.loyalty_card_id ? await receiptCard(access.restaurantId, row.loyalty_card_id) : null;
-    return NextResponse.json({ enabled: Boolean(open), card: card ? { suffix: card.suffix, progress: card.progress, goal: card.goal } : null });
+    // Where this sale's ticket will be emailed: masked for the floor, whole
+    // for owner and manager, nothing for a diner's phone at the table.
+    const email = card && access.staff ? await cardEmailFor(access.restaurantId, card.cardId ?? "", access.fullEmail) : null;
+    return NextResponse.json({ enabled: Boolean(open), card: card ? { suffix: card.suffix, progress: card.progress, goal: card.goal, email } : null });
   } catch {
     return await apiError("apiErr.generic", 503);
   }

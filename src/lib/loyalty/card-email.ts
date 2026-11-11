@@ -52,3 +52,10 @@ export function emailForRole(email: string | null, fullAccess: boolean): string 
   if (!email) return null;
   return fullAccess ? email : maskEmail(email);
 }
+
+/** A card's address as this reader may see it, or null when it has none. */
+export async function cardEmailFor(restaurantId: string, cardId: string, fullAccess: boolean): Promise<string | null> {
+  const { data } = await createAdminClient().from("loyalty_cards").select("email")
+    .eq("restaurant_id", restaurantId).eq("id", cardId).maybeSingle();
+  return emailForRole((data?.email as string | null) ?? null, fullAccess);
+}

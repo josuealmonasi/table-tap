@@ -30,7 +30,7 @@ export async function GET(req: NextRequest) {
   const db = createAdminClient();
   const { data: card, error } = await db
     .from("loyalty_cards")
-    .select(`${CARD_COLUMNS}, restaurant_id, created_at, ladder_at, saved_at`)
+    .select(`${CARD_COLUMNS}, restaurant_id, created_at, ladder_at, saved_at, email`)
     .eq("code", code)
     .maybeSingle<CardRow & { restaurant_id: string; created_at: string; ladder_at: string; saved_at: string }>();
   if (error) {
@@ -71,6 +71,9 @@ export async function GET(req: NextRequest) {
       : null;
 
   return NextResponse.json({
+    // The address this card's tickets go to: shown whole to whoever holds the
+    // code, which is the card itself.
+    email: (card as { email?: string | null }).email ?? null,
     face,
     qr: qrGrid(face.qrPayload),
     restaurant: { id: card.restaurant_id, ...restaurant.data },
