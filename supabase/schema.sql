@@ -9044,11 +9044,15 @@ begin
   -- the count: the shelf held eight when the manager counted eight. Taking
   -- the sale's two off again showed six (sweep 6, finding 2). The money and
   -- the order are recorded either way; only that dish's stock is left as counted.
-  select coalesce(jsonb_agg(d.value) filter (where m.stock_epoch_at is null or m.stock_epoch_at <= p_at), '[]'::jsonb),
+  -- A line whose dish id is not a uuid names no dish: it moves no stock (a
+  -- deleted dish with a real id still does, as before). Cast
+  -- blindly, it failed this approval forever, and the held receipt then
+  -- blocked every close of the shift with no way out (Codex review of #603).
+  select coalesce(jsonb_agg(d.value) filter (where d.value->>'item_id' ~* '^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$' and (m.stock_epoch_at is null or m.stock_epoch_at <= p_at)), '[]'::jsonb),
          coalesce(array_agg(d.value->>'item_id') filter (where m.stock_epoch_at > p_at), '{}')
     into v_demand, v_counted
     from jsonb_array_elements(coalesce(p_demand, '[]'::jsonb)) d
-    left join menu_items m on m.id = (d.value->>'item_id')::uuid and m.restaurant_id = p_restaurant;
+    left join menu_items m on m.id::text = lower(d.value->>'item_id') and m.restaurant_id = p_restaurant;
   perform set_config('tabletap.offline_queue_writer', p_ref::text, true);
   v_ticket := public.ring_pos_sale_v2(p_restaurant, p_ref, p_order, p_method, p_actor,
     case when coalesce((p_order->>'preparation_pending')::boolean, false) then 'received' else 'completed' end,
@@ -10305,7 +10309,10 @@ returns jsonb language sql stable security definer set search_path = public as $
         and p.method = 'cash' and nullif(p.actor_email, '') is not null
         and p.created_at between s.opened_at and s.until_at
   ), returns as (
-    select coalesce(sum(f.amount), 0) amount from refund_operations f, s
+    -- The tip part of a cash return comes out of the shift's tips too: MX$110
+    -- with MX$10 tip, refunded whole, read "sales MX$0, of which tips MX$10"
+    -- (Codex review of #603).
+    select coalesce(sum(f.amount), 0) amount, coalesce(sum(f.tip), 0) tip from refund_operations f, s
       where f.restaurant_id = p_restaurant and f.currency = s.currency
         and f.status = 'succeeded' and f.source = 'cash' and nullif(f.payout_actor, '') is not null
         and f.completed_at between s.opened_at and s.until_at
@@ -10329,7 +10336,7 @@ returns jsonb language sql stable security definer set search_path = public as $
         and m.kind = 'withdrawal' and m.currency = s.currency
   )
   select jsonb_build_object('opening', round(s.opening_amount, 2),
-    'cashSales', round(r.amount - f.amount - h.amount, 2), 'tips', round(r.tip, 2), 'withdrawn', round(w.amount, 2),
+    'cashSales', round(r.amount - f.amount - h.amount, 2), 'tips', greatest(0, round(r.tip - f.tip, 2)), 'withdrawn', round(w.amount, 2),
     'expected', round(s.opening_amount + r.amount - f.amount - h.amount - w.amount, 2))
     from s cross join receipts r cross join returns f cross join old_returns h cross join withdrawals w;
 $$;

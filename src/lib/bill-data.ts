@@ -22,7 +22,7 @@ import type { Order } from "@/lib/types";
 
 /** Only the columns the bill screen and the waiter's modal actually show. */
 const FIELDS =
-  "id, table_label, status, items, subtotal, discount, service_fee, tip, total, currency, paid, written_off, coupon_code, customer_name, created_at, diner";
+  "id, table_label, status, items, subtotal, discount, service_fee, tip, total, currency, tax_pct, paid, written_off, coupon_code, customer_name, created_at, diner";
 
 export async function fetchTableBill(
   restaurantId: string,
