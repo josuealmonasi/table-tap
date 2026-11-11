@@ -170,6 +170,9 @@ function buildLines(products) {
       qty: randInt(1, 3),
       mods,
       extras: extras.map(e => ({ id: e.id, name: e.name, emoji: e.emoji, price: Number(e.price) })),
+      // As the app writes it: a line carries its section's station, or the
+      // bar never saw a seeded drink (owner's question, 2026-11-11).
+      ...(p.station === "bar" ? { station: "bar" } : {}),
     };
   });
 }
@@ -331,16 +334,17 @@ export async function seedMock(pg) {
 
   // ── Orders: menu with extras + modifiers for realistic line items ──
   const { rows: products } = await pg.query(
-    `select p.id, p.name, p.emoji, p.price, p.modifiers,
+    `select p.id, p.name, p.emoji, p.price, p.modifiers, c.station,
        coalesce(
          json_agg(json_build_object('id', a.id, 'name', a.name, 'emoji', a.emoji, 'price', a.price))
            filter (where a.id is not null), '[]'
        ) as extras
      from menu_items p
+     left join categories c on c.id = p.category_id
      left join item_addons ia on ia.product_id = p.id
      left join menu_items a on a.id = ia.addon_id
      where p.restaurant_id = $1 and not p.is_addon and p.available
-     group by p.id`,
+     group by p.id, c.station`,
     [rid],
   );
 
