@@ -157,6 +157,9 @@ export async function POST(req: NextRequest) {
     .eq("id", actor.restaurantId);
   invalidatePublicMenu(actor.restaurantId);
   if (error) {
+    // Card fees this month were counted in the old currency; the ceiling has
+    // no currency, so the switch waits for the 1st (owner's decision).
+    if (error.message === "currency locked until next month") return await apiError("apiErr.currencyLockedMonth", 409);
     console.error("settings save failed:", error.message);
     return await apiError("apiErr.nameSave", 500);
   }

@@ -209,6 +209,8 @@ drop function if exists public.record_purchase(uuid, uuid, numeric, numeric, tex
 drop function if exists public.settle_offline_sale(uuid, uuid, text, text, timestamptz);
 drop function if exists public.take_stock_floor(uuid, jsonb);
 drop function if exists public.reserve_platform_fee(uuid, integer, integer, text, text);
+drop function if exists public.guard_fee_month_currency() cascade;
+drop function if exists public.currency_locked_until(uuid);
 drop function if exists public.take_platform_fee(uuid, text, integer);
 drop function if exists public.release_platform_fee(uuid);
 drop function if exists public.record_session_fee(uuid, text, integer, text, integer);

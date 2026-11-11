@@ -1457,6 +1457,7 @@ foundingLeftBody: "Subscribe now and keep this subscription price for as long as
     tableJoin: "Wait for someone at the table or a waiter to let this phone in.",
     tableJoinFull: "This table already has people waiting to join. Ask your waiter to add you.",
     badCurrency: "Choose MXN or USD for your currency.",
+    currencyLockedMonth: "This month already has card fees in your current currency. You can change it from the 1st of next month.",
     mixedCurrencies: "These orders use different currencies. Please ask your waiter to help you pay each currency separately.",
     offlineTooOld: "This sale is over 30 days old. A manager must review when the money was collected.",
     offlineQueueRequired: "Send this saved sale first, then review the copy received here.",
@@ -1886,6 +1887,7 @@ badgesHint: "Shows how many things are waiting in each section. Applies to the w
     networkError: "Network error — please try again.",
     timezone: "Time zone",
     timezoneHint: "Menu opening hours are read in this zone.",
+    currencyLockedHint: "This month already has card fees. You can change the currency from {date}.",
     // Dashboard home
     menusTitle: "Menus",
     menusHint: "Open a menu to edit it · switch it on to show it to customers",

@@ -51,6 +51,12 @@ export default async function SettingsPage() {
   );
   const printerConfigured = Boolean(printer?.print_token);
 
+  // Card fees this month were counted in this currency, and the ceiling has
+  // none: the currency changes from the 1st (the database refuses it before).
+  const locked = await createAdminClient().rpc("currency_locked_until", { p_restaurant: membership.restaurant.id });
+  if (locked.error) throw new Error(`Could not read the currency lock: ${locked.error.message}`);
+  const currencyLockedUntil = typeof locked.data === "string" ? locked.data : null;
+
   // ConfirmProvider so the coupons panel can ask before deleting a code.
   return (
     <ConfirmProvider>
@@ -62,6 +68,7 @@ export default async function SettingsPage() {
         inventoryAllowed={inventory}
         cardsEnabled={cardsEnabled}
         printerConfigured={printerConfigured}
+        currencyLockedUntil={currencyLockedUntil}
       />
     </ConfirmProvider>
   );
