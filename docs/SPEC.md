@@ -621,7 +621,11 @@ dishes on a bill the restaurant has just cancelled.
   handed back, as the corte counts it), minus its withdrawals
   (`cash_shift_totals`, also used by the later review). Closing, withdrawal
   creation and withdrawal deletion share the restaurant money lock and check
-  the exact open shift inside the transaction that writes the change. A
+  the exact open shift inside the transaction that writes the change.
+  Online receipts are dated after their money lock, so a collection waiting
+  behind a close is dated after that close. Offline receipts retain the date
+  the cash was taken. Closing rechecks unapproved offline cash under the same
+  lock as queue submission and refuses to sign until it is reviewed. A
   difference ("Sobrante" / "Faltante") is
   explained once, by the closer or a manager. Withdrawals (`cash_movements`)
   go only into the open shift, and a manager can strike one off only while it
@@ -930,6 +934,10 @@ business's profit.
   (`src/lib/costs/margins.ts`). A line with any dish or extra lacking a recipe
   is left out of the totals and named apart — counted at nothing, a mostly
   uncosted menu would show a margin of nearly everything.
+  Analytics revenue, average ticket and daily bars exclude staff tips, including
+  tip components restored after returns, and retain service and IVA. Tips are
+  reported separately. The corte and expected drawer cash still include tips
+  received, less any actual cash handed back or withdrawn.
   Analytics product rows and contribution use the same final food revenue:
   `max(0, total - service_fee - tip)`, including IVA, allocated in whole cents.
   New diner, till, waiter-pad and offline sales freeze each whole line's

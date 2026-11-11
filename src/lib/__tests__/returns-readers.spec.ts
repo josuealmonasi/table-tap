@@ -17,7 +17,7 @@ it("restores original sales, ticket averages, food contribution and sold units w
   const rows = await withReturnComponents(db(), "r1", [{ id: "sale", currency: "USD", total: 30, tip: 10, service_fee: 0,
     created_at: "2026-10-27T18:00:00Z", items: [{ itemId: "dish", name: "Dish", emoji: "", qty: 1, price: 90, mods: {} }] }]);
   const data = computeAnalytics(rows, "today", "UTC", new Date("2026-10-27T20:00:00Z"), "en");
-  expect(data).toMatchObject({ revenue: 80, avgTicket: 80, tips: 10, orderCount: 1, topProducts: [{ qty: 1, revenue: 70 }] });
+  expect(data).toMatchObject({ revenue: 70, avgTicket: 70, tips: 10, orderCount: 1, topProducts: [{ qty: 1, revenue: 70 }] });
 });
 it("counts completed returns in [start, end), and shows only outstanding pending money separately", async () => {
   fixture.tables.refund_operations = [

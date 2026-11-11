@@ -12,9 +12,13 @@ function definition(source: string, name: string): string {
 const writers = Object.keys(legacyWriters) as (keyof typeof legacyWriters)[];
 
 describe("PR1 schema review regressions", () => {
-  it("preserves deployed money writes, apart from overlap locks and unproven stock returns", () => {
+  it("preserves deployed money writes, apart from locks, insert timestamps and unproven stock returns", () => {
     for (const name of writers) {
       const normalize = (s: string) => s.replace(/  perform public\.lock_restaurant_money\([^\n]+\);\n/g, "")
+        // Sweep 10 dates online receipts after the lock. Keep every other
+        // money line pinned to the original fingerprint, including offline dates.
+        .replace(/insert into payments\s*\([^;]+;/g, insert => insert.includes(", clock_timestamp()")
+          ? insert.replace(", created_at)", ")").replace(", clock_timestamp()", "") : insert)
         // S13 changes only the unproven stock credit; pin every money line as before.
         .replace("  -- The order trigger returns proven reservations and logs unknown legacy stock.",
           "  if not v_order.stock_managed and v_order.stock_reservation_id is null then\n" +
