@@ -113,5 +113,19 @@ export function orderPrintCases() {
       path: "/api/orders/print",
       body: async f => ({ orderId: await anyOrderId(f), to: "wherever" }),
       expect: [400] },
+    // The owner chooses the ticket's typeface by looking at a sample of each.
+    { name: "GET /api/settings/ticket-preview (Archivo)", as: "owner", method: "GET",
+      path: "/api/settings/ticket-preview?font=archivo", expect: [200],
+      checkText: text => text.startsWith("%PDF-") || `answered ${text.slice(0, 40)} instead of a PDF` },
+    { name: "GET /api/settings/ticket-preview (IBM Plex Mono)", as: "owner", method: "GET",
+      path: "/api/settings/ticket-preview?font=plex", expect: [200],
+      checkText: text => text.startsWith("%PDF-") || `answered ${text.slice(0, 40)} instead of a PDF` },
+    { name: "GET /api/settings/ticket-preview (Courier)", as: "owner", method: "GET",
+      path: "/api/settings/ticket-preview?font=classic", expect: [200],
+      checkText: text => text.startsWith("%PDF-") || `answered ${text.slice(0, 40)} instead of a PDF` },
+    { name: "GET /api/settings/ticket-preview (a font that is not offered)", as: "owner", method: "GET",
+      path: "/api/settings/ticket-preview?font=comic", expect: [400] },
+    { name: "GET /api/settings/ticket-preview (manager: the owner's choice)", as: "manager", method: "GET",
+      path: "/api/settings/ticket-preview?font=archivo", expect: [403] },
   ];
 }

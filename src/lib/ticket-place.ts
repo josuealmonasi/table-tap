@@ -8,7 +8,7 @@ interface FiscalRow {
   name: string; logo_url: string | null; legal_name: string | null; rfc: string | null; tax_regime: string | null;
   address_street: string | null; address_ext_number: string | null; address_int_number: string | null;
   address_colonia: string | null; address_postal_code: string | null; address_municipality: string | null;
-  address_state: string | null; ticket_phone: string | null;
+  address_state: string | null; ticket_phone: string | null; ticket_font: string | null;
 }
 
 /** The address as a ticket prints it: street and number, colonia and CP, municipio and estado. */
@@ -58,14 +58,14 @@ async function logoBytes(url: string | null): Promise<Buffer | null> {
 export async function ticketPlace(db: Db, restaurantId: string, t: T): Promise<TicketPlace> {
   const { data, error } = await db.from("restaurants").select(
     "name, logo_url, legal_name, rfc, tax_regime, address_street, address_ext_number, address_int_number, "
-    + "address_colonia, address_postal_code, address_municipality, address_state, ticket_phone",
+    + "address_colonia, address_postal_code, address_municipality, address_state, ticket_phone, ticket_font",
   ).eq("id", restaurantId).single();
   if (error || !data) throw new Error(`Could not read the ticket's restaurant: ${error?.message ?? "missing"}`);
   const r = data as unknown as FiscalRow;
   return {
     name: r.name, legalName: r.legal_name, rfc: r.rfc,
     regime: r.tax_regime ? t("saleTicket.regime", { code: r.tax_regime, name: t(`fiscal.regimes.${r.tax_regime}`) }) : null,
-    addressLines: ticketAddress(r), phone: r.ticket_phone, logo: await logoBytes(r.logo_url),
+    addressLines: ticketAddress(r), phone: r.ticket_phone, logo: await logoBytes(r.logo_url), font: r.ticket_font,
   };
 }
 

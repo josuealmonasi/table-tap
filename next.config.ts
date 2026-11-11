@@ -1,6 +1,12 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  // The ticket's typefaces are read from disk by the routes that make the
+  // PDF; tracing does not see a readFileSync path, so it is named here.
+  outputFileTracingIncludes: {
+    "/api/orders/print": ["./src/lib/fonts/**"],
+    "/api/settings/ticket-preview": ["./src/lib/fonts/**"],
+  },
   images: {
     // Menu photography lives in Supabase Storage. Only the project host is
     // allowed, so a stored URL can't be pointed at somewhere else to make our

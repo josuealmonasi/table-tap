@@ -1,6 +1,8 @@
 import { writeFileSync } from "node:fs";
 import { expect, it } from "vitest";
-import { lineRows, ticketPdf, wrapTicket, type TicketText } from "@/lib/ticket-pdf";
+import { planColumns, ticketPdf, wrapToWidth, type TicketText } from "@/lib/ticket-pdf";
+import { printable } from "@/lib/ticket-fonts";
+import { TICKET_FONTS } from "@/lib/ticket-font-ids";
 import type { ReceiptModel } from "@/lib/receipt";
 
 const model: ReceiptModel = {
@@ -20,39 +22,43 @@ const text: TicketText = {
   notFiscal: "Este ticket no es una factura.",
 };
 
-it("lays the lines out in four columns that fit the 80 mm roll", () => {
-  const rows = lineRows(model);
-  expect(rows.every(r => r.length <= 46)).toBe(true);
-  expect(rows[0]).toMatch(/^2 {3}Tonkotsu Ramen/);
-  // The long name wraps under itself and is printed whole.
-  const cake = rows.findIndex(r => r.includes("Chocolate"));
-  expect(rows[cake + 1].startsWith("    ")).toBe(true);
-  expect(rows.slice(cake, cake + 3).join(" ").replace(/\s+/g, " ")).toContain("con helado de vainilla");
-  expect(wrapTicket("a b c", 3)).toEqual(["a b", "c"]);
+const place = {
+  name: "Demo Bistro", legalName: "Demo Bistro S.A. de C.V.", rfc: "DBI010101AB1",
+  regime: "601 General de Ley Personas Morales",
+  addressLines: ["Av. Los Pinos 245, Int. 3", "Col. Centro, C.P. 44100", "Guadalajara, Jalisco"], phone: "(33) 2456 7890",
+};
+const card = { last4: "K7P2", progress: 5, goal: 8, message: "Te faltan 3 para Postre gratis" };
+/** 4 points a character: enough to test the arithmetic without a font. */
+const measure = (s: string) => s.length * 4;
+
+it("wraps by the font's own measure and cuts a word longer than the line", () => {
+  expect(wrapToWidth("Chocolate Lava Cake con helado", 60, measure)).toEqual(["Chocolate Lava", "Cake con helado"]);
+  expect(wrapToWidth("Supercalifragilistico", 40, measure)).toEqual(["Supercalif", "ragilistic", "o"]);
 });
 
-it("renders a ticket-shaped PDF cut to its own length", async () => {
-  const pdf = await ticketPdf(model, {
-    name: "Demo Bistro", legalName: "Demo Bistro S.A. de C.V.", rfc: "DBI010101AB1",
-    regime: "601 General de Ley Personas Morales",
-    addressLines: ["Av. Los Pinos 245, Int. 3", "Col. Centro, C.P. 44100", "Guadalajara, Jalisco"], phone: "(33) 2456 7890",
-  }, text, { last4: "K7P2", progress: 5, goal: 8, message: "Te faltan 3 para Postre gratis" }, "https://table-tap-star.vercel.app/dashboard/bills?order=x");
-  expect(pdf.subarray(0, 5).toString()).toBe("%PDF-");
-  if (process.env.TICKET_SAMPLE) writeFileSync(process.env.TICKET_SAMPLE, pdf);
-});
-
-it("prints what Courier can draw: a plain minus for money, ñ and á kept, emoji left out", async () => {
-  const { printable } = await import("@/lib/ticket-pdf");
-  expect(printable("Descuento −MX$5.00")).toBe("Descuento -MX$5.00");
-  expect(printable("Piña colada 🍍 jalapeño")).toBe("Piña colada  jalapeño");
-  // The columns are runs of spaces: printable never collapses them.
-  expect(printable("Folio        ORD-5C9D")).toBe("Folio        ORD-5C9D");
-});
-
-it("keeps every row inside the 80 mm roll, even for MX$10,000 lines (Codex review)", () => {
+it("sizes the columns to what this ticket prints, and gives big amounts their own row (Codex review)", () => {
+  const normal = planColumns(model, text.header, measure);
+  expect(normal.ownLine).toBe(false);
+  expect(normal.amount).toBe(measure("MX$390.00"));
   const big: ReceiptModel = { ...model, lines: [{ label: "", qty: 2, name: "Barra libre para evento privado", unit: 10000, amount: 20000 }] };
-  const rows = lineRows(big);
-  expect(Math.max(...rows.map(r => r.length))).toBeLessThanOrEqual(43);
-  expect(rows.some(r => r.includes("MX$20,000.00"))).toBe(true);
-  expect(Math.max(...lineRows(model).map(r => r.length))).toBeLessThanOrEqual(43);
+  const wide = planColumns(big, text.header, s => s.length * 6);
+  expect(wide.ownLine).toBe(true);
+  expect(wide.qty + wide.name).toBeLessThanOrEqual(226.77 - 24);
+});
+
+it("prints what each face can draw", () => {
+  expect(printable("Piña colada 🍍 jalapeño −MX$5.00")).toBe("Piña colada jalapeño −MX$5.00");
+  expect(printable("Descuento −MX$5.00 “especial”", true)).toBe('Descuento -MX$5.00 "especial"');
+  expect(printable("Ñandú ☕", true)).toBe("Ñandú");
+});
+
+it.each(TICKET_FONTS)("renders a ticket-shaped PDF in %s, cut to its own length", async font => {
+  const pdf = await ticketPdf(model, place, text, card, "https://table-tap-star.vercel.app/dashboard/bills?order=x", font);
+  expect(pdf.subarray(0, 5).toString()).toBe("%PDF-");
+  if (process.env.TICKET_SAMPLE_DIR) writeFileSync(`${process.env.TICKET_SAMPLE_DIR}/ticket-${font}.pdf`, pdf);
+});
+
+it("renders without a visit card or fiscal data", async () => {
+  const pdf = await ticketPdf(model, { name: "Café" }, text, null, "https://x.test/");
+  expect(pdf.subarray(0, 5).toString()).toBe("%PDF-");
 });

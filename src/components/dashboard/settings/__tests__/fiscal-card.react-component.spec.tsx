@@ -48,14 +48,14 @@ async function submit() { await act(async () => host.querySelector("form")!.disp
 it.each(["owner", "manager"] as const)("renders fiscal fields only for owner: %s", async role => {
   await render(role);
   expect(host.textContent?.includes("Datos fiscales y dirección")).toBe(role === "owner");
-  expect(host.querySelectorAll("[name]").length).toBe(role === "owner" ? 11 : 0);
+  expect(host.querySelectorAll("[name]:not([name=ticket-font])").length).toBe(role === "owner" ? 11 : 0);
 });
 it.each(["es", "en"] as const)("shows all labels and the hint in %s", async locale => {
   await render("owner", locale);
   for (const field of FISCAL_KEYS) expect(host.textContent).toContain(translate(messagesFor(locale), `fiscal.fields.${field}`));
   expect(host.textContent).toContain(translate(messagesFor(locale), "fiscal.hint"));
   expect(host.textContent).not.toContain("fiscal.");
-  expect([...host.querySelectorAll("[name]")].map(input => input.getAttribute("name")))
+  expect([...host.querySelectorAll("[name]:not([name=ticket-font])")].map(input => input.getAttribute("name")))
     .toEqual(["legal_name", "rfc", "tax_regime", "address_street", "address_ext_number", "address_int_number", "address_postal_code", "address_colonia", "address_municipality", "address_state", "ticket_phone"]);
   expect([...host.querySelectorAll<HTMLInputElement>("input")].every(input => !input.required && !input.disabled)).toBe(true);
 });
@@ -115,4 +115,18 @@ it("clears saved fields to null and saves selected regime and state", async () =
   });
   await submit();
   expect(save).toHaveBeenCalledWith({ ...empty, tax_regime: "626", address_state: "Yucatán" });
+});
+
+it.each(["owner", "manager"] as const)("offers the three ticket fonts, each with a sample, to the owner only: %s", async role => {
+  await render(role);
+  const radios = [...host.querySelectorAll<HTMLInputElement>("input[name=ticket-font]")];
+  expect(radios.map(r => r.value)).toEqual(role === "owner" ? ["archivo", "plex", "classic"] : []);
+  if (role !== "owner") return;
+  // Archivo is the default when the restaurant never chose.
+  expect(radios.find(r => r.checked)?.value).toBe("archivo");
+  const samples = [...host.querySelectorAll<HTMLAnchorElement>("a[href^='/api/settings/ticket-preview']")];
+  expect(samples.map(a => a.getAttribute("href"))).toEqual(["archivo", "plex", "classic"].map(f => `/api/settings/ticket-preview?font=${f}`));
+  expect(samples.every(a => a.target === "_blank")).toBe(true);
+  await act(async () => radios[1].click());
+  expect(save).toHaveBeenCalledWith({ ticket_font: "plex" });
 });

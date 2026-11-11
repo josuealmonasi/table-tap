@@ -241,6 +241,10 @@ alter table restaurants add column if not exists address_postal_code text check 
 alter table restaurants add column if not exists address_municipality text check (address_municipality is null or char_length(address_municipality) <= 120);
 alter table restaurants add column if not exists address_state text check (address_state is null or char_length(address_state) <= 60);
 alter table restaurants add column if not exists ticket_phone text check (ticket_phone is null or ticket_phone ~ '^[0-9 +()-]{7,20}$');
+-- The ticket's typeface, the owner's choice: Archivo (the app's own, default),
+-- IBM Plex Mono or the classic Courier (owner's request, 2026-11-11).
+alter table restaurants add column if not exists ticket_font text not null default 'archivo'
+  check (ticket_font in ('archivo', 'plex', 'classic'));
 
 alter table restaurants drop constraint if exists restaurants_tax_pct_range;
 alter table restaurants add constraint restaurants_tax_pct_range
