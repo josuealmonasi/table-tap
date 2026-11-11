@@ -1,3 +1,5 @@
+import { after } from "next/server";
+import { drainTicketEmails } from "@/lib/ticket-email";
 import { NextResponse, type NextRequest } from "next/server";
 import { actingFrontOfHouse } from "@/lib/api-guard";
 import { apiError } from "@/lib/api-error";
@@ -12,6 +14,8 @@ export const runtime = "nodejs";
 
 /** Check the refused scope. Never call the collection or decision that refused it. */
 export async function POST(req: NextRequest): Promise<NextResponse> {
+  // Tickets this request's payment queued for the card's email go out once it has answered.
+  after(() => drainTicketEmails());
   const actor = await actingFrontOfHouse();
   if (!actor) return await apiError("apiErr.forbidden", 403);
   const scope = paymentCheckScope(await jsonBody(req));

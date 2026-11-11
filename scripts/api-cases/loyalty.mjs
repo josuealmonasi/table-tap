@@ -4,6 +4,40 @@ export function loyaltyCases(fx) {
   const { restaurant, paidOrder } = fx;
   const r = restaurant.id;
   return [
+    // Tickets by email to the card's address (2026-11-11). An example.invalid
+    // address: nothing these cases link can ever be delivered. The last case
+    // removes it again.
+    { name: "POST /api/loyalty/card-email (needs the consent tick)", as: "waiter", method: "POST", path: "/api/loyalty/card-email",
+      body: { code: fx.stampableCode ?? "", email: "api-gate@example.invalid", consent: false }, expect: [400] },
+    { name: "POST /api/loyalty/card-email (not an address)", as: "waiter", method: "POST", path: "/api/loyalty/card-email",
+      body: { code: fx.stampableCode ?? "", email: "nope", consent: true }, expect: [400] },
+    { name: "POST /api/loyalty/card-email (waiter links it, sees it masked)", as: "waiter", method: "POST", path: "/api/loyalty/card-email",
+      body: { code: fx.stampableCode ?? "", email: "API-Gate@Example.invalid", consent: true }, expect: [200],
+      checkText: text => text.includes('"email":"a***@example.invalid"') || `answered ${text.slice(0, 80)}` ,
+      effect: async f => {
+        const { data } = await f.admin.from("loyalty_cards").select("email, email_consent_at, email_notice_version, email_unsubscribe")
+          .eq("code", fx.stampableCode).maybeSingle();
+        return (data?.email === "api-gate@example.invalid" && data.email_consent_at && data.email_notice_version && data.email_unsubscribe)
+          || `card holds ${JSON.stringify(data)}`;
+      } },
+    { name: "GET /api/loyalty/card-email (cashier: masked)", as: "cashier", method: "GET",
+      path: `/api/loyalty/card-email?code=${fx.stampableCode ?? ""}`, expect: [200],
+      checkText: text => text.includes("a***@example.invalid") || `answered ${text.slice(0, 80)}` },
+    { name: "GET /api/loyalty/card-email (owner: full)", as: "owner", method: "GET",
+      path: `/api/loyalty/card-email?code=${fx.stampableCode ?? ""}`, expect: [200],
+      checkText: text => text.includes("api-gate@example.invalid") || `answered ${text.slice(0, 80)}` },
+    { name: "GET /api/loyalty/card-email (kitchen cannot read it)", as: "kitchen", method: "GET",
+      path: `/api/loyalty/card-email?code=${fx.stampableCode ?? ""}`, expect: [403] },
+    { name: "POST /api/tickets/stop (a token that is not one)", as: "diner", method: "POST", path: "/api/tickets/stop",
+      body: { token: "nope" }, expect: [400] },
+    { name: "POST /api/tickets/stop (no card has that link)", as: "diner", method: "POST", path: "/api/tickets/stop",
+      body: { token: "00000000-0000-4000-8000-000000000000" }, expect: [404] },
+    { name: "POST /api/loyalty/card-email (waiter removes it)", as: "waiter", method: "POST", path: "/api/loyalty/card-email",
+      body: { code: fx.stampableCode ?? "", email: null }, expect: [200],
+      effect: async f => {
+        const { data } = await f.admin.from("loyalty_cards").select("email, email_unsubscribe").eq("code", fx.stampableCode).maybeSingle();
+        return (data && data.email === null && data.email_unsubscribe === null) || `card holds ${JSON.stringify(data)}`;
+      } },
     // A diner checking their visit card by its code. What comes back is what
     // the card itself would show — never who stamped it, never its row id.
     { name: "GET  /api/rewards (a card)", as: "diner", method: "GET",

@@ -1,3 +1,5 @@
+import { after } from "next/server";
+import { drainTicketEmails } from "@/lib/ticket-email";
 import { NextRequest, NextResponse } from "next/server";
 import { readStripeEvent } from "@/lib/stripe-webhook";
 import { abandonCheckout, settleCheckout } from "@/lib/checkout-settle";
@@ -20,6 +22,8 @@ export const runtime = "nodejs";
 // platform's here fails every event with a 400 that looks like a delivery
 // problem.
 export async function POST(req: NextRequest) {
+  // Tickets this request's payment queued for the card's email go out once it has answered.
+  after(() => drainTicketEmails());
   const { event, refusal } = await readStripeEvent(
     req,
     process.env.STRIPE_WEBHOOK_SECRET_CONNECT,

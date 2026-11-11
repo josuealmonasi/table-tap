@@ -1,3 +1,5 @@
+import { after } from "next/server";
+import { drainTicketEmails } from "@/lib/ticket-email";
 import { NextRequest, NextResponse } from "next/server";
 import { actingManager } from "@/lib/api-guard";
 import { apiError } from "@/lib/api-error";
@@ -14,6 +16,8 @@ export const runtime = "nodejs";
 /** Recover money already collected. Manager-only, audited, and available
  * after a tier ends; it does not reopen the till for new sales. */
 export async function GET(req: NextRequest): Promise<NextResponse> {
+  // Tickets this request's payment queued for the card's email go out once it has answered.
+  after(() => drainTicketEmails());
   const actor = await actingManager();
   if (!actor) return await apiError("apiErr.forbidden", 403);
   const posRef = req.nextUrl.searchParams.get("posRef");

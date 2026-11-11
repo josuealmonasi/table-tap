@@ -947,6 +947,13 @@ foundingLeftBody: "Subscribe now and keep this subscription price for as long as
       costs: "Costs and margins come with {plan}.",
     },
   },
+  cardEmail: {
+    invalid: "That email isn't valid. Check it and try again.",
+    consentNeeded: "To save the email, the customer must agree to receive their tickets there.",
+    stopGone: "This link is no longer active: the email was already removed from the card.",
+    footer: "You get this ticket because you linked this email to your {restaurant} visit card. It is only used to send you your tickets.",
+    stopLink: "Stop emailing me my tickets",
+  },
   saleTicket: {
     folio: "Folio",
     table: "Table {label}",

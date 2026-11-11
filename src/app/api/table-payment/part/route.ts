@@ -1,3 +1,5 @@
+import { after } from "next/server";
+import { drainTicketEmails, skipTicketEmails } from "@/lib/ticket-email";
 import { PaymentAttributionRequired } from "@/lib/payment-coverage";
 import { NextResponse, type NextRequest } from "next/server";
 import { apiError } from "@/lib/api-error";
@@ -33,6 +35,8 @@ export const runtime = "nodejs";
  * screen sitting open on the pass.
  */
 export async function POST(req: NextRequest): Promise<NextResponse> {
+  // Tickets this request's payment queued for the card's email go out once it has answered.
+  after(() => drainTicketEmails());
   try { return await collect(req); }
   catch (error) {
     if (error instanceof PaymentAttributionRequired) return await apiError("apiErr.attributionRequired", 409);
@@ -58,6 +62,7 @@ async function collect(req: NextRequest): Promise<NextResponse> {
     ref?: string;
     expected?: number;
     currency?: string;
+    skipTicketEmail?: boolean;
   }>(req);
   if (!body) return await apiError("apiErr.invalidRequest", 400);
   const method = body.method;
@@ -78,6 +83,7 @@ async function collect(req: NextRequest): Promise<NextResponse> {
       !Number.isFinite(body.amount) || Number(body.amount) <= 0 || !Number.isFinite(body.tip ?? 0)) {
     return await apiError("apiErr.invalidRequest", 400);
   }
+  if (body.skipTicketEmail === true) await skipTicketEmails(actor.restaurantId, { tableId: body.tableId });
 
   const before = await tableOutstanding(actor.restaurantId, body.tableId, body.currency);
 

@@ -1372,6 +1372,29 @@ measure. Its amounts come from
   embed the variable Archivo — traced into the routes that print by
   `next.config.ts`.
 
+### Tickets by email to the visit card's address (2026-11-11)
+
+Paperless without typing an address at every sale. A diner may link an email
+to their visit card — making the card, at a stamp, or when paying — by
+themselves (holding the card's code) or through staff (`/api/loyalty/card-email`),
+always with an explicit consent tick; `loyalty_cards.email` keeps the address
+with when consent was given, under which notice version, by whom, and a
+"stop" secret replaced on every change. One card per address per restaurant.
+Waiters and cashiers see it masked (`a***@dominio`); owner and manager see it
+whole. The address is used for tickets only.
+
+When a sale carrying that card becomes paid, `queue_ticket_email` puts it in
+`ticket_email_outbox` (no address stored there) unless the cashier chose "No
+enviar esta vez" (`orders.ticket_email_skip`, from the till and from table
+collection). Every route that takes a payment drains the outbox with `after()`
+once it has answered (`src/lib/ticket-email.ts`), and the daily recovery cron
+catches the rest; a ticket two hours old expires unsent. Orders of one card
+and one sitting claimed together are one email: the receipt, the 80 mm PDF
+attached, and the "Dejar de recibir mis tickets por correo" link
+(`/tickets/stop`, a button that POSTs — mail scanners open links — plus the
+List-Unsubscribe header). Nothing is sent without a mail provider configured
+(`RESEND_API_KEY`, `RECEIPT_FROM_EMAIL`): those rows finish as `unconfigured`.
+
 ## The customer can decline the ticket
 
 Very common on a sale handed over as it is rung up. The cashier ticks one box

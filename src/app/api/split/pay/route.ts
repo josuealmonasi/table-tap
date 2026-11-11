@@ -1,3 +1,5 @@
+import { after } from "next/server";
+import { drainTicketEmails } from "@/lib/ticket-email";
 import { paySplitSlots } from "@/lib/split-slots-pay";
 import { tableMember } from "@/lib/table-membership";
 import { dinerCheckoutOrders } from "@/lib/diner-checkout-orders";
@@ -37,6 +39,8 @@ export const dynamic = "force-dynamic";
  * service charge, not to decide each other's generosity.
  */
 export async function POST(req: NextRequest): Promise<NextResponse> {
+  // Tickets this request's payment queued for the card's email go out once it has answered.
+  after(() => drainTicketEmails());
   if (await isRoomLimited(req, "splitpay", 10)) {
     return await apiError("apiErr.tooManyAttempts", 429);
   }

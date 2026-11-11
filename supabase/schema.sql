@@ -3742,7 +3742,7 @@ alter table loyalty_cards add constraint loyalty_cards_email_consented check (em
 create unique index if not exists loyalty_cards_email_once on loyalty_cards(restaurant_id, email) where email is not null;
 create unique index if not exists loyalty_cards_email_unsubscribe on loyalty_cards(email_unsubscribe) where email_unsubscribe is not null;
 
--- "No enviar esta vez": the cashier's choice for one sale, written with it.
+-- The cashier's choice not to email one sale's ticket, written with it.
 alter table orders add column if not exists ticket_email_skip boolean not null default false;
 
 -- One row per paid sale whose card has an address; drained right after the
@@ -5591,7 +5591,7 @@ begin
     -- a forged id cannot stamp another restaurant's customer.
     (select c.id from loyalty_cards c
       where c.restaurant_id = p_restaurant and c.id = nullif(p_order->>'loyalty_card_id', '')::uuid),
-    -- "No enviar esta vez" at the till.
+    -- The cashier chose not to email this sale's ticket.
     coalesce((p_order->>'ticket_email_skip')::boolean, false));
 end;
 $$;

@@ -1,3 +1,5 @@
+import { after } from "next/server";
+import { drainTicketEmails } from "@/lib/ticket-email";
 import { saleCard } from "@/lib/loyalty/sale-card";
 import { orderItemsWithRevenue } from "@/lib/order-line-revenue";
 import { invalidatePublicMenu } from "@/lib/public-menu-cache";
@@ -59,6 +61,8 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
  * than charging twice and putting a second ticket on the pass.
  */
 export async function POST(req: NextRequest) {
+  // Tickets this request's payment queued for the card's email go out once it has answered.
+  after(() => drainTicketEmails());
   const actor = await actingStaff();
   if (!actor) return await apiError("apiErr.forbidden", 403);
   if (!TAKES_COUNTER_ORDERS(actor.role)) return await apiError("apiErr.forbidden", 403);
@@ -186,6 +190,8 @@ export async function POST(req: NextRequest) {
     p_demand: toDemandPayload(stockDemand(verified)),
     p_order: {
       loyalty_card_id: loyalty.cardId,
+      // The cashier chose not to email this sale's ticket to the card's address.
+      ticket_email_skip: body.skipTicketEmail === true,
       ...(onAccount ? { request_scope: orderRequestScope("pos-account", body) } : {}),
       subtotal: pricing.subtotal, service_fee: pricing.serviceFee, tip: pricing.tip,
       tax_pct: Number(restaurant.tax_pct) || 0, discount: pricing.discount, total: pricing.total,

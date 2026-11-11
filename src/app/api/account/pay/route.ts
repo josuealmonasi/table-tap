@@ -1,3 +1,5 @@
+import { after } from "next/server";
+import { drainTicketEmails } from "@/lib/ticket-email";
 import { checkoutPageRpc } from "@/lib/checkout-page-rpc";
 import { dinerCheckoutOrders } from "@/lib/diner-checkout-orders";
 import { dinerCurrency, isDinerCurrency } from "@/lib/diner-currency";
@@ -27,6 +29,8 @@ export const runtime = "nodejs";
 // on exactly the orders owed now and holds the account against being
 // collected at the till until Stripe answers; the webhook is what records it.
 export async function POST(req: NextRequest): Promise<NextResponse> {
+  // Tickets this request's payment queued for the card's email go out once it has answered.
+  after(() => drainTicketEmails());
   if (await isRateLimited(`account-pay:${clientKey(req)}`, 10, 60)) {
     return await apiError("apiErr.tooManyWait", 429);
   }

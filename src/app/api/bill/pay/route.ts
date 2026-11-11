@@ -1,3 +1,5 @@
+import { after } from "next/server";
+import { drainTicketEmails } from "@/lib/ticket-email";
 import { ownBillAccess } from "@/lib/legacy-bill-access";
 import { dinerCurrency } from "@/lib/diner-currency";
 import { openDinerAttempt, resumeDinerAttempt } from "@/lib/diner-attempt";
@@ -38,6 +40,8 @@ export const runtime = "nodejs";
 // caller can choose WHICH of the table's orders to settle — that is the "pay
 // mine / pay everything" choice — but not what they cost.
 export async function POST(req: NextRequest): Promise<NextResponse> {
+  // Tickets this request's payment queued for the card's email go out once it has answered.
+  after(() => drainTicketEmails());
   if (await isRoomLimited(req, "billpay", 10)) {
     return await apiError("apiErr.tooManyAttempts", 429);
   }

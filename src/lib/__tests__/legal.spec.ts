@@ -42,6 +42,9 @@ describe("the text and the version cannot drift apart", () => {
       .digest("hex")
       .slice(0, 16);
 
+  // 2026-11-12, bumped from 2026-11-11: a diner may link an email to their
+  // visit card to receive every ticket there — the notice stopped promising
+  // that no diner email is ever kept, so every restaurant is asked again.
   // 2026-11-11, bumped from 2026-10-21: the privacy notice gained the fiscal
   // data a restaurant may print on its tickets (legal name, tax id, tax
   // regime, address, phone) and a visit card presented before paying, linked to
@@ -65,15 +68,15 @@ describe("the text and the version cannot drift apart", () => {
   // kept the version as a clarification.)
   it("has terms that match the version in force", () => {
     expect({ version: TERMS_VERSION, text: fingerprint("terms-es") }).toEqual({
-      version: "2026-11-11",
-      text: "1589820b704538f3",
+      version: "2026-11-12",
+      text: "21015364f21d4e53",
     });
   });
 
   it("has a privacy notice that matches the version in force", () => {
     expect({ version: TERMS_VERSION, text: fingerprint("privacy-es") }).toEqual({
-      version: "2026-11-11",
-      text: "aa3989b2ece22a5e",
+      version: "2026-11-12",
+      text: "d089c21b18ac11e7",
     });
   });
 });

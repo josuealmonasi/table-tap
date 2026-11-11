@@ -1,3 +1,5 @@
+import { after } from "next/server";
+import { drainTicketEmails, skipTicketEmails } from "@/lib/ticket-email";
 import { checkoutPageRpc } from "@/lib/checkout-page-rpc";
 import { formatMoney } from "@/lib/format";
 import { PaymentAttributionRequired } from "@/lib/payment-coverage";
@@ -32,6 +34,8 @@ type Settlement = "cash" | "card";
 // through us, so it must not be reachable from a customer's phone, nor from a
 // kitchen screen that everyone in the back has their hands on.
 export async function POST(req: NextRequest): Promise<NextResponse> {
+  // Tickets this request's payment queued for the card's email go out once it has answered.
+  after(() => drainTicketEmails());
   try { return await collect(req); }
   catch (error) {
     if (error instanceof PaymentAttributionRequired) return await apiError("apiErr.attributionRequired", 409);
@@ -50,6 +54,7 @@ async function collect(req: NextRequest): Promise<NextResponse> {
     expected?: number;
     currency?: string;
     ref?: string;
+    skipTicketEmail?: boolean;
   }>(req);
   if (!body) return await apiError("apiErr.invalidRequest", 400);
   const { tableId, orderId, settlement } = body;
@@ -67,6 +72,7 @@ async function collect(req: NextRequest): Promise<NextResponse> {
   // of recorded cash never arrived (audit L, finding 1). Refusing records
   // nothing and says how to collect; the refreshed screen sends the figure.
   if (tableId && body.expected === undefined) return await apiError("apiErr.refreshToCollect", 409);
+  if (body.skipTicketEmail === true) await skipTicketEmails(actor.restaurantId, tableId ? { tableId } : { orderId });
   if (tableId) return settleReviewedTable(actor, tableId, body, settlement!);
 
   // From here on it is a counter order, collected whole. Nothing can be added
