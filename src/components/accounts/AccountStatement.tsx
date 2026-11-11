@@ -1,5 +1,7 @@
 "use client";
 
+import { tipFromPercent } from "@/lib/tip-base";
+
 import { useStatementMail } from "@/hooks/useStatementMail";
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
@@ -21,6 +23,7 @@ interface Statement {
   owed: number;
   currency?: string | null;
   balances?: CurrencyBalance[];
+  tipBalances?: CurrencyBalance[];
   days: StatementDay[];
   payments: { at: string; amount: number; tip: number; currency?: string; method: "cash" | "card" }[];
   returns?: { id: string; amount: number; currency: string; status: string; created_at: string }[];
@@ -100,7 +103,8 @@ export default function AccountStatement({ code, paid }: { code: string; paid: b
   if (!data) return <StatementSkeleton />;
 
   const money = (n: number) => formatMoney(n, currency);
-  const tip = Math.min(Math.max(0, tipCustom ?? Math.round(owed * tipPct) / 100), owed);
+  const tipBase = data.tipBalances?.find(b => b.currency === currency)?.amount ?? 0;
+  const tip = Math.min(Math.max(0, tipCustom ?? tipFromPercent(tipBase, tipPct)), owed);
 
   async function payOnline(): Promise<void> {
     setBusy(true);
@@ -109,7 +113,7 @@ export default function AccountStatement({ code, paid }: { code: string; paid: b
       const res = await fetch("/api/account/pay", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ c: code, expected: owed, currency, tipAmount: tip }),
+        body: JSON.stringify({ c: code, expected: owed, currency, ...(tipCustom === null ? { tipPct } : { tipAmount: tipCustom }) }),
       });
       const d = await res.json().catch(() => ({}));
       if (!res.ok || !d.url) {
@@ -201,6 +205,7 @@ export default function AccountStatement({ code, paid }: { code: string; paid: b
                     tipPct={tipCustom !== null ? 0 : tipPct}
                     tipCustom={tipCustom}
                     maxTip={owed}
+                    tipBase={tipBase}
                     onPresetTip={pct => {
                       setTipCustom(null);
                       setTipPct(pct);

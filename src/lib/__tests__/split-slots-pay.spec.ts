@@ -4,6 +4,7 @@ import { beforeEach, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
 const s = vi.hoisted(() => ({ revision: 1, paid: false, held: false, amount: 5500, currency: "MXN", prior: false,
   params: null as Record<string, unknown> | null, quote: null as Record<string, unknown> | null, fee: vi.fn(), waiter: vi.fn() }));
+vi.mock("@/lib/diner-checkout-orders", () => ({ dinerCheckoutOrders: async () => [{ id: "o", total: 120, service_fee: 10, tip: 10 }] }));
 vi.mock("stripe", () => ({ default: class {} }));
 vi.mock("@/lib/rate-limit", () => ({ isRoomLimited: async () => false, isTableLimited: async () => false }));
 vi.mock("@/lib/table-membership", () => ({ tableMember: async () => ({ id: "m", sessionId: "session" }) }));
@@ -21,7 +22,7 @@ vi.mock("@/lib/diner-attempt", () => ({
 }));
 vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({ from: (table: string) => {
   const data = table === "bill_splits" ? { id: "split", restaurant_id: "r", session_id: "session", model_version: 2, status: "locked",
-    revision: s.revision, currency: s.currency, order_ids: ["o"], food_principal: 100 } : table === "restaurants"
+    revision: s.revision, currency: s.currency, order_ids: ["o"], food_principal: 110, shares: 2 } : table === "restaurants"
     ? { name: "Restaurant", stripe_account_id: "acct", stripe_charges_enabled: true } : table === "bill_split_slots"
       ? [0, 1].map(share_no => ({ share_no, amount_cents: s.amount, fee_slice_cents: 150, payment_id: s.paid ? "p" : null, reserved_checkout_id: s.held ? "other" : null })) : { id: "session" };
   const q: Record<string, unknown> = {};
@@ -42,7 +43,7 @@ it("staff-opened model 2 bill charges the selected parts plus new tip and reserv
   expect(s.fee).toHaveBeenCalledWith("r", { fee_cap: 10 }, 300, "split");
   expect(s.params).toMatchObject({ line_items: [{ price_data: { unit_amount: 12000, currency: "mxn" } }],
     payment_intent_data: { application_fee_amount: 125 }, metadata: { split_model: "2", split_slots: "[0,1]", split_amount: "110", settle_tip: "10" } });
-  expect(s.quote).toMatchObject({ amountCents: 12000, payableIds: [], foodPrincipal: 100, scopeKey: "split2:split:1:m:0,1" });
+  expect(s.quote).toMatchObject({ amountCents: 12000, payableIds: [], foodPrincipal: 110, scopeKey: "split2:split:1:m:0,1" });
 });
 it("a retry returns its own persisted page before checking held slots", async () => {
   s.prior = true; s.held = true;
@@ -83,4 +84,13 @@ it("an expired selected reservation recovers before quoting the same parts and t
   expect(recover).toHaveBeenCalledWith("r", "split", [0, 1]);
   expect(s.fee).toHaveBeenCalledTimes(1);
   expect(s.params).toMatchObject({ metadata: { split_slots: "[0,1]", settle_tip: "10" } });
+});
+
+it("F6 percentage slots charge the shared food-only preview and reject an ambiguous exact tip", async () => {
+  const { splitTipBase, tipFromPercent } = await import("@/lib/tip-base");
+  const preview = tipFromPercent(splitTipBase(100, 2, [0, 1]), 15);
+  expect((await POST(req({ ...body, tipCents: undefined, tipPct: 15 }))).status).toBe(200);
+  expect(s.params).toMatchObject({ metadata: { settle_tip: String(preview) },
+    line_items: [{ price_data: { unit_amount: 11000 + Math.round(preview * 100) } }] });
+  expect((await POST(req({ ...body, tipPct: 15 }))).status).toBe(400);
 });

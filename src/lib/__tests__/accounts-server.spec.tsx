@@ -96,3 +96,10 @@ it("fails closed when a credit races the earlier unpaid-order read", async () =>
     orders: o, resulting_total: 70, created_at: "2026-11-10T12:00:00Z", forgiven: 30, currency: "MXN", actor: "manager", reason: "error" }];
   await expect(statementOf(account)).rejects.toThrow("changed while reading");
 });
+
+it("F6 public tip bases contain only each currency's discounted dishes", async () => {
+  tables.orders = [{ ...charge("mxn"), currency: "MXN", total: 120, service_fee: 10, tip: 10 },
+    { ...charge("usd"), currency: "USD", total: 55, service_fee: 5, tip: 10 },
+    { ...charge("paid"), currency: "MXN", paid: true }];
+  expect((await statementOf(account)).tipBalances).toEqual([{ currency: "MXN", amount: 100 }, { currency: "USD", amount: 40 }]);
+});

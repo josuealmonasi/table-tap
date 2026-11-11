@@ -1,3 +1,4 @@
+import { frozenTipPrincipal, ordersTipBase, splitTipBase, tipFromPercent } from "@/lib/tip-base";
 import { paySplitSlots } from "@/lib/split-slots-pay";
 import { tableMember } from "@/lib/table-membership";
 import { dinerCheckoutOrders } from "@/lib/diner-checkout-orders";
@@ -135,10 +136,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   // food nobody owes for any more.
   if (tableBill(orders, []).total <= 0) return await apiError("apiErr.billSettled", 409);
 
-  const pct = Math.min(100, Math.max(0, Number(tipPct) || 0));
-  const asked = tipAmount != null ? Number(tipAmount) : (payable * pct) / 100;
-  const tip = Math.min(Math.max(0, round2(asked)), payable);
-  const cents = Math.round(round2(payable + tip) * 100);
+
 
   // Our cut is the table's, not one per person: a bill divided four ways is
   // still one bill, and charging the restaurant four times for the courtesy of
@@ -185,6 +183,11 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     await giveBackFee();
     return await apiError("apiErr.mixedCurrencies", 409);
   }
+
+  const tipBase = splitTipBase(frozenTipPrincipal(split.food_principal, frozenOrders), shares, [claim.share_no], ordersTipBase(own));
+  const asked = tipAmount != null ? Number(tipAmount) : tipFromPercent(tipBase, Number(tipPct));
+  const tip = Math.min(Math.max(0, round2(asked)), payable);
+  const cents = Math.round(round2(payable + tip) * 100);
 
   try {
     const session = await openDinerAttempt(stripe,

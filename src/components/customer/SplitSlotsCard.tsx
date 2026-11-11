@@ -2,7 +2,7 @@
 
 import type { JSX } from "react";
 import TipPicker from "./TipPicker";
-import { tipFor } from "@/lib/pricing";
+import { splitTipBase, tipFromPercent } from "@/lib/tip-base";
 import { useState } from "react";
 import { useT } from "@/lib/i18n/context";
 import { formatMoney } from "@/lib/format";
@@ -12,7 +12,7 @@ import { SEP } from "@/lib/separator";
 
 interface Props {
   split: SplitState; outstanding: number; diner: string; busy: boolean; cardsEnabled: boolean;
-  onPay: (slots?: number[], tipCents?: number) => void; cancel: () => Promise<void>;
+  onPay: (slots?: number[], tipCents?: number, tipPct?: number) => void; cancel: () => Promise<void>;
   resize?: (people: number) => Promise<void>;
 }
 export default function SplitSlotsCard({ split, outstanding, diner, busy, cardsEnabled, onPay, cancel, resize }: Props): JSX.Element {
@@ -24,7 +24,8 @@ export default function SplitSlotsCard({ split, outstanding, diner, busy, cardsE
   const chosen = freeSelection(slots, selected);
   const cents = chosen.reduce((sum, s) => sum + s.amountCents, 0);
   const currency = split.currency ?? "MXN";
-  const tip = tipCustom ?? tipFor(cents / 100, tipPct);
+  const tipBase = splitTipBase(split.tipPrincipal ?? 0, split.shares, chosen.map(s => s.shareNo));
+  const tip = tipCustom ?? tipFromPercent(tipBase, tipPct);
   const tooMuch = !Number.isFinite(tip) || tip < 0 || tip > cents / 100;
   const below = cents > 0 && cents < (currency === "USD" ? 50 : 1000);
   return <div className="tt-split" data-split-model="2">
@@ -38,12 +39,12 @@ export default function SplitSlotsCard({ split, outstanding, diner, busy, cardsE
     </div>)}
     <SplitSlotSelector slots={slots} selected={selected} currency={currency} busy={busy} onChange={setSelected} />
     {cardsEnabled ? <>
-      <TipPicker currency={currency} tipPct={tipPct} tipCustom={tipCustom} maxTip={cents / 100}
+      <TipPicker currency={currency} tipPct={tipPct} tipCustom={tipCustom} maxTip={cents / 100} tipBase={tipBase}
         onPresetTip={pct => { setTipPct(pct); setTipCustom(null); }} onCustomTip={setTipCustom} />
       {tooMuch && <p role="alert">{t("tip.tooLarge", { max: formatMoney(cents / 100, currency) })}</p>}
       {below && <p role="status">{t("slots.minimum")}</p>}
       <button type="button" className="tt-btn tt-btn-primary" disabled={busy || cents <= 0 || below || tooMuch}
-        onClick={() => onPay(chosen.map(s => s.shareNo), Math.round(tip * 100))}>
+        onClick={() => onPay(chosen.map(s => s.shareNo), tipCustom === null ? undefined : Math.round(tip * 100), tipCustom === null ? tipPct : undefined)}>
         {t("slots.pay", { amount: formatMoney(cents / 100 + (tooMuch ? 0 : tip), currency) })}
       </button>
     </> : <p className="tt-muted">{t("slots.askWaiter")}</p>}

@@ -237,9 +237,9 @@ export default function BillSheet({
               join={join}
               resize={resize}
               cancel={cancelSplit}
-              onPay={(slots, tipCents) =>
+              onPay={(slots, tipCents, slotTipPct) =>
                 split?.modelVersion === 2 && slots && split.revision
-                  ? paySlots({ splitId: split.id, revision: split.revision, slots, tipCents,
+                  ? paySlots({ splitId: split.id, revision: split.revision, slots, tipCents, tipPct: slotTipPct,
                     expectedCents: (split.slots ?? []).filter(s => slots.includes(s.shareNo)).reduce((sum, s) => sum + s.amountCents, 0) }).then(() => refreshSplit())
                   : split?.mine
                   ? payShare({ splitId: split.id, diner, ownOrderIds: myUnpaid, tipPct })
@@ -268,6 +268,7 @@ export default function BillSheet({
               tipPct={tipPct}
               tipCustom={tipCustom}
               maxTip={amounts.base}
+              tipBase={amounts.tipBase}
               onTipPct={pct => {
                 setTipPct(pct);
                 setTipCustom(null);

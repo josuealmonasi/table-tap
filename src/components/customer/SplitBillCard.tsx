@@ -7,7 +7,7 @@ import SplitStart from "./SplitStart";
 import SplitSlotsCard from "./SplitSlotsCard";
 
 interface Props extends Omit<ComponentProps<typeof LegacySplitBillCard>, "onPay"> {
-  onPay: (slots?: number[], tipCents?: number) => void;
+  onPay: (slots?: number[], tipCents?: number, tipPct?: number) => void;
   resize?: (people: number) => Promise<void>;
 }
 
