@@ -2844,7 +2844,15 @@ backfill. Both activation markers and new-tip source metadata are immutable.
 No additional historical movements can be imported into a started account.
 
 Deferred constraint triggers on orders, payments, adjustments, accounts and
-movements inspect the final transaction state. Every live source must have one
+movements inspect the final transaction state. Each account is reconciled once
+per transaction, tracked in the transaction-local `tabletap.journal_checked`
+set; later row events skip that account-wide assert. Missing charge, added-tip
+and collection append checks still run per row before consulting the set.
+Order updates queue no journal work when neither version belongs to an account
+or when account/restaurant identity, currency, charge date, paid/write-off state,
+total, tip, service fee and cancellation state are unchanged. Ordinary kitchen
+status moves (such as preparing to ready) therefore queue nothing; entering or
+leaving cancellation still checks the account. Every live source must have one
 matching movement, every live movement must have a source, components and
 currency must agree, and journal debt must equal outstanding order debt per
 currency. Original charge/opening components are reconciled against subsequent
@@ -2860,7 +2868,13 @@ seeds also work after activation. The dev-only `scripts/probe-account-journal.mj
 refuses production and covers activation, writers, replays, rollback on missing
 and orphan appends, and both credit-versus-settle serializations. Staff settlement
 still collects a whole currency balance; its partial-account probe collects MXN
-while USD remains owed. Database execution remains a required release gate.
+while USD remains owed. A rolled-back planted second-call failure verifies the
+account cache, including a control with its guard removed.
+It also plants a trigger-entry failure to prove kitchen and note updates queue
+no journal work, with cancellation as the positive control. The probe prints
+COMMIT time for settling 50 outstanding orders among 500 charges and total time
+for 200 non-account kitchen status updates. Database execution remains a
+required release gate.
 
 Statements, analytics and corte continue reading orders/payments until PR 3.
 

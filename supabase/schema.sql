@@ -13296,7 +13296,7 @@ revoke all on function public.assert_account_journal_v1(uuid) from public, anon,
 -- after the source write. No append trigger silently repairs a missing writer.
 create or replace function public.check_account_journal_v1()
 returns trigger language plpgsql security definer set search_path = public as $$
-declare v_old uuid; v_new uuid; v_order uuid;
+declare v_old uuid; v_new uuid; v_order uuid; v_account uuid; v_checked uuid[];
 begin
   if tg_table_name = 'customer_accounts' then
     v_new := new.id;
@@ -13307,6 +13307,7 @@ begin
     if tg_op <> 'INSERT' then v_old := old.account_id; end if;
     if tg_op <> 'DELETE' then v_new := new.account_id; end if;
   end if;
+  if v_old is null and v_new is null then return null; end if;
   -- An existing charged order cannot be detached, moved or redated to evade
   -- the cutoff. Account birth and paid-state changes must have real sources.
   if tg_table_name = 'orders' then
@@ -13334,22 +13335,88 @@ begin
     (select 1 from account_movements where payment_id = new.id and kind = 'collection' and provenance = 'live') then
     raise exception 'account journal collection append missing';
   end if;
-  perform public.assert_account_journal_v1(v_old);
-  if v_new is distinct from v_old then perform public.assert_account_journal_v1(v_new); end if;
+  -- Keep the per-row source checks above outside the account-wide cache.
+  -- All deferred events see the same final state, so reconcile each account once.
+  v_checked := coalesce(nullif(current_setting('tabletap.journal_checked', true), ''), '{}')::uuid[];
+  foreach v_account in array array[v_old, v_new] loop
+    if v_account is not null and not (v_account = any(v_checked)) then
+      perform public.assert_account_journal_v1(v_account);
+      v_checked := array_append(v_checked, v_account);
+      perform set_config('tabletap.journal_checked', v_checked::text, true);
+    end if;
+  end loop;
   return null;
 end $$;
 revoke all on function public.check_account_journal_v1() from public, anon, authenticated, service_role;
 
 do $$ declare t text; begin
-  foreach t in array array['orders', 'payments', 'order_adjustments', 'account_movements'] loop
+  foreach t in array array['payments', 'order_adjustments', 'account_movements'] loop
     execute format('drop trigger if exists check_account_journal on %I', t);
     execute format('create constraint trigger check_account_journal after insert or update or delete on %I
       deferrable initially deferred for each row execute function public.check_account_journal_v1()', t);
   end loop;
 end $$;
+drop trigger if exists check_account_journal on orders;
+create constraint trigger check_account_journal after insert or delete on orders
+  deferrable initially deferred for each row execute function public.check_account_journal_v1();
+-- Constraint triggers cannot use UPDATE OF. A separate UPDATE trigger can
+-- compare OLD/NEW in WHEN, before PostgreSQL queues any deferred work.
+-- Only cancellation changes journal debt; kitchen stages need no journal work.
+drop trigger if exists check_account_journal_order_update on orders;
+create constraint trigger check_account_journal_order_update after update on orders
+  deferrable initially deferred for each row
+  when ((old.account_id is not null or new.account_id is not null) and
+    (old.account_id, old.restaurant_id, old.currency, old.charged_at, old.paid,
+     old.written_off, old.total, old.tip, old.service_fee, old.status = 'cancelled') is distinct from
+    (new.account_id, new.restaurant_id, new.currency, new.charged_at, new.paid,
+     new.written_off, new.total, new.tip, new.service_fee, new.status = 'cancelled'))
+  execute function public.check_account_journal_v1();
 drop trigger if exists check_account_journal on customer_accounts;
 create constraint trigger check_account_journal after insert or update on customer_accounts
   deferrable initially deferred for each row execute function public.check_account_journal_v1();
+
+-- The once-per-account cache above holds only while nothing writes after an
+-- account was reconciled. Deferred writers do: finish_payment_allocation
+-- updates payments at commit. So every journal-relevant write, as it happens,
+-- drops its accounts from the cache, and their own queued check runs again.
+create or replace function public.forget_account_journal_check_v1()
+returns trigger language plpgsql security definer set search_path = public as $$
+declare v_checked text := current_setting('tabletap.journal_checked', true); v_old uuid; v_new uuid;
+begin
+  if coalesce(v_checked, '') in ('', '{}') then return null; end if;
+  if tg_table_name = 'customer_accounts' then
+    v_new := new.id;
+  elsif tg_table_name = 'order_adjustments' then
+    if tg_op <> 'INSERT' then select account_id into v_old from orders where id = old.order_id; end if;
+    if tg_op <> 'DELETE' then select account_id into v_new from orders where id = new.order_id; end if;
+  else
+    if tg_op <> 'INSERT' then v_old := old.account_id; end if;
+    if tg_op <> 'DELETE' then v_new := new.account_id; end if;
+  end if;
+  perform set_config('tabletap.journal_checked',
+    array_remove(array_remove(v_checked::uuid[], v_old), v_new)::text, true);
+  return null;
+end $$;
+revoke all on function public.forget_account_journal_check_v1() from public, anon, authenticated, service_role;
+do $$ declare t text; begin
+  foreach t in array array['payments', 'order_adjustments', 'account_movements', 'customer_accounts'] loop
+    execute format('drop trigger if exists forget_account_journal_check on %I', t);
+    execute format('create trigger forget_account_journal_check after insert or update or delete on %I
+      for each row execute function public.forget_account_journal_check_v1()', t);
+  end loop;
+end $$;
+drop trigger if exists forget_account_journal_check on orders;
+create trigger forget_account_journal_check after insert or delete on orders
+  for each row execute function public.forget_account_journal_check_v1();
+drop trigger if exists forget_account_journal_check_update on orders;
+create trigger forget_account_journal_check_update after update on orders
+  for each row
+  when ((old.account_id is not null or new.account_id is not null) and
+    (old.account_id, old.restaurant_id, old.currency, old.charged_at, old.paid,
+     old.written_off, old.total, old.tip, old.service_fee, old.status = 'cancelled') is distinct from
+    (new.account_id, new.restaurant_id, new.currency, new.charged_at, new.paid,
+     new.written_off, new.total, new.tip, new.service_fee, new.status = 'cancelled'))
+  execute function public.forget_account_journal_check_v1();
 
 -- A zero-priced order in a positive bill still has one charge event.
 alter table account_movements drop constraint if exists account_movements_debt;

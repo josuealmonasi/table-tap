@@ -9,6 +9,7 @@ drop function if exists public.append_account_credit_movement_v1(uuid);
 drop function if exists public.account_journal_expected_v1(uuid);
 drop function if exists public.assert_account_journal_v1(uuid);
 drop function if exists public.check_account_journal_v1() cascade;
+drop function if exists public.forget_account_journal_check_v1() cascade;
 drop table if exists restaurant_accounting_records cascade;
 drop table if exists platform_admin_audit cascade;
 drop function if exists public.account_credit_v1(uuid, uuid, numeric, numeric, text, text, text, uuid);
