@@ -6567,3 +6567,80 @@ both, historical and zero rates, local dates, rounding, voids and failed reads.
 MX$96.50 carried return beside MX$200 takings, MX$10 fees and MX$93.50 expected.
 Each original bug was planted back and made its scenario fail. Provider delivery
 and database execution still require Claude's live checks.
+
+
+## Sweep 11 finding 6 — a return-only bank debit can be reconciled
+
+A signed MXN sale from yesterday gets a MX$40 return today, with no terminal
+sales today. The bank debits MX$40, but the writer returned `no_sales`, the
+screen hid the mark control, and the checker had no return-only target. A
+currency switch could leave that MXN debit waiting forever.
+
+The first unsigned day with net sales still owns the return. If none exists,
+the return owns its own day; an already signed day advances to the next
+unsigned calendar day, matching the existing screen fallback. A later sales
+day appearing before marking wins. A signed return-only manifest consumes
+its return IDs so later sales never carry them again. A fully reversed,
+unsigned same-day sale alone still owns no carried debit and returns
+`no_sales`. The bank amount may be negative within the existing bounds.
+
+The schema change is `record_terminal_deposit_v1` in `supabase/schema.sql`.
+The writer preserves the settlement money lock, tenant/currency scope, saved
+rate, receipt/return membership and legacy-manifest interpretation. The screen
+now offers the existing bank-movement form and explains the return-only debit
+in both languages; its own settlement date can become due or overdue. The
+checker independently reconstructs ownership at each snapshot, detects omitted
+returns even when expected is forged to zero, and rejects a return named by
+the wrong day.
+
+Offline coverage:
+
+- `terminal-returnonly-schema.react-component.spec.tsx`: SQL source contracts
+  for signed amounts, no-sales eligibility, negative expected, own-day fallback,
+  sales-day precedence and consumed manifest IDs. This does not execute SQL.
+- `terminal-returnonly.react-component.spec.tsx`: actual `depositDays` through
+  the rendered screen and bank form, submitting `-40.00`, Spanish/English copy,
+  next-day sales before marking, marked ownership and overdue status.
+- `money-terminal-returnonly.react-component.spec.tsx`: raw allocation/receipt
+  fixtures through `checkDrawer`, including current currency USD with a signed
+  MXN debit, correct and incorrect manifests, next-day sales before marking,
+  later sales after marking and duplicate consumption.
+
+Each plant was applied individually, its focused spec executed, then the fixed
+source restored. Every run below exited 1 with assertion failures (not startup
+errors). SQL rows are source-contract failures; screen/checker rows execute
+behavior against local fixtures.
+
+| Plant | Result |
+| --- | --- |
+| SQL restores sales-only `no_sales` guard | 1 of 4 failed |
+| SQL drops own-day fallback | 2 of 4 failed |
+| SQL stops seeking later sales before fallback | 1 of 4 failed |
+| SQL ignores consumed return IDs | 1 of 4 failed |
+| SQL adds instead of subtracting the debit | 1 of 4 failed |
+| SQL saves an empty return manifest | 1 of 4 failed |
+| Screen hides mark when sales count is zero | 2 of 5 failed |
+| Screen loses return-only debit copy | 2 of 5 failed |
+| Screen keeps a negative unmarked day pending forever | 3 of 5 failed |
+| Screen keeps own-day ownership when a later sale exists | 1 of 5 failed |
+| Screen ignores signed return IDs | 1 of 5 failed |
+| Checker drops own-day fallback | 3 of 6 failed |
+| Checker prefers own day over an available sales day | 1 of 6 failed |
+| Checker ignores prior signed return IDs | 1 of 6 failed |
+| Checker accepts a return assigned to a different day | 1 of 6 failed |
+| Checker accepts a day owning neither net sales nor returns | 1 of 6 failed |
+
+Fixed-source verification: 14 focused Vitest files, 101 checks passed (exit 0)
+using `node node_modules/vitest/vitest.mjs run --configLoader runner --cache=false`
+with the three new specs plus terminal, terminal-snapshot, terminal-window,
+terminal-deposit-api, terminal-deposit-currency, terminal-bank-schema,
+terminal-snapshot-schema, money-terminal-returns, money-drawer,
+money-drawer-history and costs-terminal-returns. TypeScript passed with
+`node node_modules/typescript/bin/tsc --noEmit --incremental false` (exit 0).
+ESLint passed on every touched code file with the repository config and
+`--max-warnings=0` (exit 0). The shared dependency symlink required resolving
+peer plugins from the installed Next config through a temporary local loader;
+no dependency or repository configuration was changed.
+
+No database, network, package-manager commands, commits or live gates were used.
+PostgreSQL execution and browser layout verification remain integration work.

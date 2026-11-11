@@ -91,14 +91,12 @@ export function addBusinessDays(day: string, n: number): string {
   return d.toISOString().slice(0, 10);
 }
 
-function statusOf(expected: number, expectedOn: string, deposit: DepositRecord | null, today: string, count: number): DepositStatus {
+function statusOf(expected: number, expectedOn: string, deposit: DepositRecord | null, today: string): DepositStatus {
   if (deposit) {
     const difference = Number(deposit.received) - expected;
     if (Math.abs(difference) < DEPOSIT_TOLERANCE) return "received";
     return difference < 0 ? "short" : "over";
   }
-  // Nothing of its own to deposit: what it gave back waits on the next sale.
-  if (count === 0) return "pending";
   if (today > expectedOn) return "overdue";
   return today === expectedOn ? "due" : "pending";
 }
@@ -114,7 +112,9 @@ function statusOf(expected: number, expectedOn: string, deposit: DepositRecord |
  * counts nowhere. Voided on a later day, the bank paid it and takes it back
  * out of a deposit to come: the first unsigned day's from the void on that has sales
  * of its own — the same day the corte takes it out of the drawer, when that
- * day had sales. Sales before `firstDay` are not listed; their voids still are.
+ * day had sales. Without an unsigned sales day, the return owns its first
+ * unsigned calendar day and can be marked as a debit. Sales before `firstDay`
+ * are not listed; their voids still are.
  */
 export function depositDays(
   payments: TerminalPayment[],
@@ -181,7 +181,7 @@ export function depositDays(
       const expectedOn = addBusinessDays(day, settleDays);
       return {
         day, count: row.count, takings: round2(row.takings), tips: round2(row.tips), fee, givenBack, expected, late, expectedOn,
-        deposit, status: statusOf(round2(expected + late), expectedOn, deposit, today, row.count),
+        deposit, status: statusOf(round2(expected + late), expectedOn, deposit, today),
       };
     })
     .filter(d => d.day >= firstDay || d.late !== 0)

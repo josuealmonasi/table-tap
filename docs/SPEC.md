@@ -1264,8 +1264,15 @@ to know what should reach the bank and when.
   was reconciled is kept. Calculation and insertion share the restaurant
   money lock with settlement. New marks save exact payment and return IDs,
   the cutoff time and fee rate; old marks retain their timestamp rule.
-  Returns after sign-off carry to the next unsigned day with sales, or stay
-  visible waiting for it. Taking back a mark uses the same money lock.
+  Returns after sign-off carry to the next unsigned day with net sales. If
+  none exists yet, each return owns its own day (the next unsigned calendar
+  day if its day is already signed) as a return-only bank movement. The bank
+  can debit that amount: managers can mark a negative received amount even
+  without new sales, including in a former currency. Before marking, a newly
+  available sales day takes precedence; after marking, the manifest consumes
+  those return IDs permanently until the mark is taken back. A day owning
+  neither net sales nor carried returns still refuses reconciliation. Taking
+  back a mark uses the same money lock.
 - **Whole days and recovered sales:** the recent window starts at local
   midnight fourteen calendar days back. Older unsigned sales days and signed
   days with late receipts remain visible, with each day's complete contents.
