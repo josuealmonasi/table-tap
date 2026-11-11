@@ -20,14 +20,18 @@ export function foodRevenue(order: RevenueOrder): number {
     - Number(order.return_components?.service_fee ?? 0) - Number(order.tip) - Number(order.return_components?.tip ?? 0)) * 100)) / 100;
 }
 
-/** What one line came to before the order's own discounts: its dish's sale price and extras. */
+/** Saved product promotion revenue, or a legacy line's sale price and extras. */
 function lineValue(line: OrderLineItem): number {
+  if (typeof line.promotionRevenue === "number" && Number.isFinite(line.promotionRevenue) && line.promotionRevenue >= 0) {
+    return line.promotionRevenue;
+  }
   const base = line.comboId ? Number(line.price) : itemSalePrice(Number(line.price), line.discountPct);
   const extras = (line.extras ?? []).reduce((s, e) => s + Number(e.price), 0);
   return (base + extras) * line.qty;
 }
 
-/** Share discounts by value, with whole cents that add back to the food.
+/** Share bill-wide discounts by saved promotion value (legacy: sale value),
+ * with whole cents that add back to the food.
  * Largest remainders get the spare cents, so splitting a line cannot invent
  * revenue and analytics and contribution use exactly the same allocation. */
 export function lineRevenues(order: RevenueOrder, food = foodRevenue(order)): number[] {

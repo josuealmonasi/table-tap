@@ -18,7 +18,7 @@ function Harness() {
   till = usePosCharge({ collector: "cashier", collectorContext: "signed", restaurant: { id: "r", name: "Cafe", currency: "MXN" },
     cart: { lines: [{ itemId: "dish", name: "Soup", emoji: "", mods: {}, price: 100, qty: 1 }], clear: vi.fn() },
     details: { tipPct: 0, tipCustom: null, noTicket: true, customerName: "", note: "", email: "", terminalRef: "", reset: vi.fn() },
-    offline, canEmailReceipt: false, pricing: { subtotal: 100, serviceFee: 0, tip: 0, discount: 0, total: 100 },
+    offline, canEmailReceipt: false, pricing: { subtotal: 100, serviceFee: 0, tip: 0, discount: 0, total: 100, lines: [{ itemId: "dish", qty: 1, gross: 100, unit: 100 }], promoSavings: {} },
   } as unknown as Parameters<typeof usePosCharge>[0]);
   return null;
 }

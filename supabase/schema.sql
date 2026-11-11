@@ -12883,3 +12883,29 @@ end;
 $$;
 revoke all on function public.complete_owner_signup_v1(uuid) from public, anon, authenticated;
 grant execute on function public.complete_owner_signup_v1(uuid) to service_role;
+
+-- Checkout discounts are real when the order reaches the pass, not while a
+-- card page is pending. Keep that date with the order even if coupon logging
+-- fails. Old accepted orders have no recoverable acceptance time; readers use
+-- their creation day. Offline inserts keep the original sale's created_at.
+alter table orders add column if not exists checkout_discount_at timestamptz default null;
+create or replace function public.stamp_checkout_discount_v1()
+returns trigger language plpgsql set search_path = public as $$
+begin
+  if TG_OP = 'INSERT' then
+    new.checkout_discount_at := case when new.status not in ('pending_payment', 'cancelled')
+      then new.created_at else null end;
+  elsif old.checkout_discount_at is not null then
+    new.checkout_discount_at := old.checkout_discount_at;
+  elsif old.status = 'pending_payment' and new.status not in ('pending_payment', 'cancelled') then
+    new.checkout_discount_at := clock_timestamp();
+  else
+    new.checkout_discount_at := old.checkout_discount_at;
+  end if;
+  return new;
+end; $$;
+create or replace trigger stamp_checkout_discount
+  before insert or update on orders
+  for each row execute function public.stamp_checkout_discount_v1();
+revoke all on function public.stamp_checkout_discount_v1() from public, anon, authenticated;
+grant execute on function public.stamp_checkout_discount_v1() to service_role;

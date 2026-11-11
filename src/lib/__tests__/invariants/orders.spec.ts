@@ -37,7 +37,7 @@ describe("an order stores only verified choices and a validated destination", ()
         expect(code).toMatch(/checkoutOrderRow\(\{\s*restaurantId,\s*table,/);
         expect(code).not.toMatch(/\btableLabel\b/);
       } else {
-        expect(code).toMatch(/items: verified/);
+        expect(code).toMatch(/items: orderItemsWithRevenue\(verified, pricing\)/);
         if (file.includes("/table-order/")) expect(code).toMatch(/table_label: table\.label/);
         else expect(code).not.toMatch(/table_label:|tableLabel/);
       }
@@ -46,10 +46,10 @@ describe("an order stores only verified choices and a validated destination", ()
     // bounded historical snapshot after manager approval, may record it.
     const offline = read("src/lib/pos-offline.ts");
     expect(offline).toContain("const savedLines = offlineLines(body.items)");
-    expect(offline).toContain("const lines = approval ? savedLines : current!.lines");
+    expect(offline).toContain("const lines = approval ? savedLines : offlineRevenueLines(savedLines, current!.lines)");
     expect(offline).toMatch(/items: lines/);
     const row = read("src/lib/checkout/order-row.ts");
-    expect(row).toContain("items: o.verified");
+    expect(row).toContain("items: orderItemsWithRevenue(o.verified, pricing)");
     expect(row).toContain("table_label: o.table?.label ?? null");
     for (const file of ["src/lib/verify-cart.ts", "src/lib/verify-combo.ts"]) {
       const code = read(file);

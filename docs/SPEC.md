@@ -584,8 +584,16 @@ dishes on a bill the restaurant has just cancelled.
   activity log's `amount=120 method=cash` sentence, which made the money a
   cashier signs for a substring — and the ledger and the log, two records of one
   night, had nothing comparing them. `pnpm money` now reconciles them per person
-  and method. Money given up (write-offs, discounts) still comes from the log,
-  because money that never arrived cannot be in a payments table. Money handed
+  and method. Write-offs still come from the log. Discounts use durable
+  evidence: the order's initial `promo_detail` (item, quantity and coupon
+  savings) on its acceptance day, and confirmed `coupon_redemptions` for later
+  bill grants on their confirmation day. Checkout redemptions and activity
+  logs never add a second copy. Pending and cancelled checkout orders are
+  excluded until accepted. `orders.checkout_discount_at` is stamped in the
+  order transaction: immediately for ordinary/offline sales (their original
+  creation time), when leaving pending payment for card orders, then immutable.
+  Legacy accepted orders lacking the stamp use creation day; older offline
+  rows without a breakdown use their saved discount. Money handed
   back (a cancelled sale) comes from the log too: it DID arrive, so it stays in
   `payments`, and the `refunded` line subtracts it from the drawer of the
   person it names — on the day it was handed back, which is when it left the
@@ -902,8 +910,13 @@ business's profit.
   is left out of the totals and named apart — counted at nothing, a mostly
   uncosted menu would show a margin of nearly everything.
   Analytics product rows and contribution use the same final food revenue:
-  `max(0, total - service_fee - tip)`, including IVA, allocated by line value
-  in whole cents. This includes later table discounts without taking checkout
+  `max(0, total - service_fee - tip)`, including IVA, allocated in whole cents.
+  New diner, till, waiter-pad and offline sales freeze each whole line's
+  `promotionRevenue` after item and quantity offers, before bill-wide coupons.
+  Product offers reduce only their product's revenue; bill-wide discounts share
+  the saved values. Legacy lines without this field retain the proportional
+  sale-price fallback. Replay preserves the saved attribution; reports never
+  consult today's promotions to price a past sale. This includes later table discounts without taking checkout
   discounts twice. Contribution then removes the order's inclusive IVA and
   deducts food returns completed in the window, including returns of older
   sales. Sales, units and consumed ingredient costs keep their original date.

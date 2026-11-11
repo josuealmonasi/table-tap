@@ -30,7 +30,7 @@ function query(table: string) {
     is: (k: string, v: unknown) => { filters.push(row => (row[k] ?? null) === v); return q; },
     not: (k: string) => { filters.push(row => row[k] != null); return q; },
     in: (k: string, vs: unknown[]) => { filters.push(row => vs.includes(row[k])); return q; },
-    gte: (k: string, v: string) => { filters.push(row => String(row[k]) >= v); return q; },
+    gte: (k: string, v: string) => { filters.push(row => row[k] != null && String(row[k]) >= v); return q; },
     lt: (k: string, v: string) => { filters.push(row => String(row[k]) < v); return q; },
     lte: (k: string, v: string) => { filters.push(row => String(row[k]) <= v); return q; },
     order: () => q, or: () => q,
@@ -67,6 +67,9 @@ it("I8: foreign and unverified log amounts cannot enter current-currency adjustm
     { restaurant_id: "r", action: "discounted", detail: "amount=10 currency=USD" },
     { restaurant_id: "r", action: "written_off", detail: "amount=80" },
   ].map(row => ({ ...row, entity: row.action === "written_off" ? "bill" : "discount", created_at: new Date().toISOString() }));
+  state.rows.orders = ["MXN", "USD"].map(currency => ({ id: currency, restaurant_id: "r", currency,
+    discount: currency === "MXN" ? 100 : 10, coupon_code: null, promo_detail: null,
+    status: "completed", created_at: new Date().toISOString() }));
   const page = await AnalyticsPage({ searchParams: Promise.resolve({}) });
   expect(page.props.children.props.corte).toMatchObject({ discounted: 10, writtenOff: 0 });
   expect(page.props.children.props.corte.unverifiedAdjustments).toBe(1);
@@ -149,6 +152,31 @@ it("counts an approved discount once while leaving ingredient waste and duplicat
     { entity: "costs", action: "written_off", detail: "amount=40 currency=USD" },
     { entity: "bill", action: "refunded", detail: "amount=100 why=paid_twice" },
   ].map(row => ({ ...row, restaurant_id: "r", created_at: new Date().toISOString() }));
+  state.rows.orders = [{ id: "staff-sale", restaurant_id: "r", currency: "USD", promo_detail: null }];
+  state.rows.coupon_redemptions = [{ order_id: "staff-sale", restaurant_id: "r", amount: 20,
+    confirmed_at: new Date().toISOString() }];
   const page = await AnalyticsPage({ searchParams: Promise.resolve({}) });
   expect(page.props.children.props.corte).toMatchObject({ discounted: 20, writtenOff: 0, refunded: 0, unverifiedAdjustments: 0 });
+});
+
+
+it("S9 F3: checkout coupon survives without any discount activity log", async () => {
+  state.rows.orders = [{ id: "coupon-sale", restaurant_id: "r", currency: "USD", paid: true, status: "completed",
+    items: [], total: 80, service_fee: 0, tip: 0, discount: 20, coupon_code: "SAVE",
+    promo_detail: { item: 0, promos: 0, coupon: 20 }, created_at: new Date().toISOString() }];
+  state.rows.payments = [{ restaurant_id: "r", currency: "USD", actor_email: null,
+    amount: 80, method: "card", created_at: new Date().toISOString() }];
+  const page = await AnalyticsPage({ searchParams: Promise.resolve({}) });
+  expect(page.props.children.props.corte.discounted).toBe(20);
+  expect(page.props.children.props.corte).toMatchObject({ online: 80, refunded: 0, writtenOff: 0 });
+  expect(page.props.children.props.data.revenue).toBe(80);
+});
+
+it("S9 F3: staff discount survives a failed later activity insert", async () => {
+  state.rows.orders = [{ id: "old-sale", restaurant_id: "r", currency: "USD", paid: false, status: "received",
+    discount: 20, coupon_code: "STAFF", promo_detail: null, created_at: "2020-01-01T00:00:00Z" }];
+  state.rows.coupon_redemptions = [{ id: "redemption", restaurant_id: "r", order_id: "old-sale", amount: 20,
+    confirmed_at: new Date().toISOString() }];
+  const page = await AnalyticsPage({ searchParams: Promise.resolve({}) });
+  expect(page.props.children.props.corte.discounted).toBe(20);
 });

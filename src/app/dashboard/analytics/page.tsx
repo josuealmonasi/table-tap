@@ -1,3 +1,4 @@
+import { reportDiscounts } from "@/lib/report-discounts";
 import { withReturnComponents } from "@/lib/return-components";
 import { createClient } from "@/lib/supabase/server";
 import { getLocale } from "@/lib/i18n/server";
@@ -20,7 +21,7 @@ import { can } from "@/lib/plan";
 import { programOf } from "@/lib/loyalty/server";
 import { readLoyaltyStats } from "@/lib/loyalty/analytics-read";
 import { DEFAULT_TIME_ZONE } from "@/lib/open-menus";
-import { startOfLocalDay } from "@/lib/day-window";
+import { startOfLocalDay, startOfNextLocalDay } from "@/lib/day-window";
 import { otherCurrencyTakings } from "@/lib/other-currency-takings";
 import { corteFrom, type CortePayment } from "@/lib/corte";
 import { corteLogs, type CorteLog } from "@/lib/corte-log";
@@ -76,8 +77,8 @@ export default async function AnalyticsPage({
   //
   // Money that arrived comes from the ledger, where an amount is a number the
   // database checked rather than a word in a sentence. Money that never
-  // arrived cannot be in a payments table at all, so write-offs and discounts
-  // still come from the log, which is where giving them up was recorded.
+  // arrived is separate: write-offs come from the log; discounts from the
+  // order snapshot and transactional staff redemptions.
   //
   // Both read with the secret key: neither is readable from a browser and both
   // stay that way, and this page is already manager-gated.
@@ -85,7 +86,7 @@ export default async function AnalyticsPage({
   const admin = createAdminClient();
   const since = dayStart.toISOString();
 
-  const [paidRows, givenUp, owedRows, returns, chargedRows, otherCurrencies] = await Promise.all([
+  const [paidRows, givenUp, owedRows, returns, chargedRows, otherCurrencies, discounted] = await Promise.all([
     everyRow<CortePayment>((a, b) => admin
       .from("payments")
       .select("actor_email, amount, method")
@@ -98,9 +99,9 @@ export default async function AnalyticsPage({
       .eq("restaurant_id", membership.restaurant.id)
       // "refunded" is money handed back after it arrived. It comes out of the
       // drawer of whoever took it, which is why the corte needs to see it.
-      .in("action", ["written_off", "discounted", "approved", "refunded"])
+      .in("action", ["written_off", "refunded"])
       .gte("created_at", since)
-      .order("id").range(a, b), "today's write-offs and discounts"),
+      .order("id").range(a, b), "today's write-offs and refunds"),
     // What customers owe on their accounts right now, however old, in this
     // currency only. An old MX$100 debt cannot become US$100 after settings change.
     everyRow<{ total: number }>((a, b) => admin
@@ -123,11 +124,13 @@ export default async function AnalyticsPage({
       .gte("charged_at", since)
       .order("id").range(a, b), "today's account charges"),
     otherCurrencyTakings(membership.restaurant.id, membership.restaurant.currency, since),
+    reportDiscounts(admin, membership.restaurant.id, membership.restaurant.currency, since, startOfNextLocalDay(dayStart, timeZone).toISOString()),
   ]);
   const log = corteLogs(givenUp, membership.restaurant.currency);
   const corte = {
     ...corteFrom(paidRows, [...log.verified, ...returns]),
     otherCurrencies,
+    discounted,
     onAccount: Math.round(chargedRows.reduce((s, o) => s + Number(o.total), 0) * 100) / 100,
     accountsOwed: Math.round(owedRows.reduce((s, o) => s + Number(o.total), 0) * 100) / 100,
     unverifiedAdjustments: log.unverified,

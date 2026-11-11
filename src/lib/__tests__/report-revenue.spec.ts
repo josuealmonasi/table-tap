@@ -4,6 +4,7 @@ import { periodContribution } from "@/lib/costs/margins";
 import { foodRevenue, lineRevenues, returnedFoodCents } from "@/lib/report-revenue";
 import type { ReturnAdjustment } from "@/lib/return-components";
 import type { ReturnEvent } from "@/lib/refunds/events";
+import { checkoutOrderRow } from "@/lib/checkout/order-row";
 import { priceCart } from "@/lib/pricing";
 
 const dish = { itemId: "dish", name: "Dish", emoji: "🍜", price: 100, qty: 1, mods: {} };
@@ -89,4 +90,20 @@ it("F2 deducts a return once without undoing incurred fees or historical revenue
   const period = periodContribution([sale], 0.1, [{ order: sale, food: 30 }]);
   expect(period).toMatchObject({ revenue: 80, cost: 40, fees: 8, returned: 30, contribution: 2 });
   expect(period.rows[0]).toMatchObject({ units: 1, revenue: 80, cost: 40, returned: 30, contribution: 2 });
+});
+
+
+it("S9 F5: checkout keeps a product promotion off unrelated revenue and margin", () => {
+  const items = [{ ...dish, qty: 2 }, { ...dish, itemId: "other", name: "Other" }];
+  const pricing = priceCart({ items, servicePct: 0, serviceEnabled: false,
+    promos: [{ id: "deal", name: "2x1", kind: "bogo", buyQty: 2, payQty: 1, itemIds: ["dish"] }] });
+  const row = checkoutOrderRow({ restaurantId: "r", table: null, sessionId: null, diner: "d", deferred: true,
+    pricing, taxPct: 0, couponCode: null, currency: "MXN", verified: items, note: undefined, customerName: undefined });
+  const order = { ...row, ingredient_costs: [80, 40], created_at: "2026-11-10T12:00:00Z" };
+  const analytics = computeAnalytics([order], "today", "UTC");
+  expect(analytics.topProducts.find(p => p.name === "Other")?.revenue).toBe(100);
+  expect(lineRevenues(order)).toEqual([100, 100]);
+  const period = periodContribution([order], 0);
+  expect(period.rows.find(r => r.name === "Other")).toMatchObject({ revenue: 100, contribution: 60 });
+  expect(period.rows.find(r => r.name === "Dish")).toMatchObject({ revenue: 100, contribution: 20 });
 });

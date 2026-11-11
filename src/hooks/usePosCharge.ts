@@ -1,5 +1,8 @@
 "use client";
 
+import { orderItemsWithRevenue } from "@/lib/order-line-revenue";
+import type { PricedCart } from "@/lib/pricing";
+
 import type { PendingOrderDetails } from "@/components/ui/PendingOrder";
 import { beginPosSend } from "@/lib/pos-sending";
 import { rememberLastSale } from "@/lib/pos-last-sale";
@@ -37,7 +40,7 @@ interface PosChargeInput {
   /** False when no mail provider is configured — then emailing is not offered. */
   canEmailReceipt: boolean;
   /** What the till prices the sale at: offline, it is also what is charged. */
-  pricing: { subtotal: number; serviceFee: number; tip: number; discount: number; total: number };
+  pricing: PricedCart;
   /** The device's own store, for a sale rung with no connection. */
   offline: {
     hold: (sale: HeldSale) => boolean;
@@ -138,10 +141,10 @@ export function usePosCharge({ collector, collectorContext, restaurant, cart, de
     accountResent.current = retriedAccount;
     const sale: HeldSale | null = method === "account" ? null : {
       preparationPending: navigator.onLine,
-      posRef, collector, collectorContext, restaurantId: restaurant.id, at: new Date().toISOString(), method, items: lines,
+      posRef, collector, collectorContext, restaurantId: restaurant.id, at: new Date().toISOString(), method, items: orderItemsWithRevenue(lines, pricing),
       // The tax rate it was sold under travels with it: replayed tomorrow, a
       // sale took today's rate (C6, end-to-end review).
-      charge: { ...pricing, taxPct: Number(restaurant.tax_pct) || 0 }, currency: restaurant.currency, tipPct: tipCustom === null ? tipPct : undefined, tipAmount: tipCustom ?? undefined,
+      charge: { subtotal: pricing.subtotal, serviceFee: pricing.serviceFee, tip: pricing.tip, discount: pricing.discount, total: pricing.total, taxPct: Number(restaurant.tax_pct) || 0 }, currency: restaurant.currency, tipPct: tipCustom === null ? tipPct : undefined, tipAmount: tipCustom ?? undefined,
       customerName: details.customerName.trim() || undefined, note: details.note.trim() || undefined,
       terminalRef: method === "card" ? details.terminalRef.trim() || undefined : undefined,
     };

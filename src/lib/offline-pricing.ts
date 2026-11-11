@@ -1,3 +1,4 @@
+import { orderItemsWithRevenue } from "@/lib/order-line-revenue";
 import type { createAdminClient } from "@/lib/supabase/admin";
 import { priceCart } from "@/lib/pricing";
 import { promotionsOnSale } from "@/lib/promotions-on-sale";
@@ -42,7 +43,25 @@ function linePrice(l: OrderLineItem): unknown {
 // Sort each normalized line, keeping duplicates: verification puts combos first.
 /** Equal totals alone cannot authorize forged prices or a changed combo. */
 export function sameOfflinePrice(charge: OfflineCharge, lines: OrderLineItem[], current: Awaited<ReturnType<typeof currentOfflinePrice>>): boolean {
-  return current !== null && (["subtotal", "serviceFee", "tip", "discount", "total"] as const)
+  if (!current) return false;
+  const hasSnapshot = lines.some(l => l.promotionRevenue !== undefined);
+  const priced = hasSnapshot ? orderItemsWithRevenue(current.lines, current.price) : [];
+  const saved = lines.map(l => JSON.stringify([linePrice(l), l.promotionRevenue])).sort();
+  const expected = priced.map(l => JSON.stringify([linePrice(l), l.promotionRevenue])).sort();
+  // A new receipt cannot redistribute its unchanged total between products.
+  // Legacy receipts have no snapshot and keep the legacy reporting fallback.
+  return (!hasSnapshot || JSON.stringify(saved) === JSON.stringify(expected)) && (["subtotal", "serviceFee", "tip", "discount", "total"] as const)
     .every(key => Math.round(charge[key] * 100) === Math.round(current.price[key] * 100))
     && JSON.stringify(lines.map(l => JSON.stringify(linePrice(l))).sort()) === JSON.stringify(current.lines.map(l => JSON.stringify(linePrice(l))).sort());
+}
+
+/** Keep verified preparation facts, but never invent a historical promotion.
+ * Verification may reorder combos, so attach the saved revenue by line identity. */
+export function offlineRevenueLines(saved: OrderLineItem[], verified: OrderLineItem[]): OrderLineItem[] {
+  const remaining = [...saved];
+  return verified.map(line => {
+    const index = remaining.findIndex(l => JSON.stringify(linePrice(l)) === JSON.stringify(linePrice(line)));
+    const original = index >= 0 ? remaining.splice(index, 1)[0] : undefined;
+    return { ...line, ...(original?.promotionRevenue !== undefined ? { promotionRevenue: original.promotionRevenue } : {}) };
+  });
 }

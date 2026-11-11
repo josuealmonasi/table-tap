@@ -1,3 +1,4 @@
+import { orderItemsWithRevenue } from "@/lib/order-line-revenue";
 import { capName, capNote } from "@/lib/notes";
 import type { PricedCart } from "@/lib/pricing";
 import type { OrderLineItem } from "@/lib/types";
@@ -57,7 +58,7 @@ export function checkoutOrderRow(o: CheckoutOrderInput) {
         : null,
     total: pricing.total,
     currency: o.currency,
-    items: o.verified,
+    items: orderItemsWithRevenue(o.verified, pricing),
     note: capNote(o.note) ?? null,
     // Ignored outright when there is a table. A name is how the counter
     // finds a person; a table already has one, and storing a name nobody

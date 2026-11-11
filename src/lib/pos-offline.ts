@@ -13,7 +13,7 @@ import { orderCode } from "@/lib/types";
 import { existingTicket, terminalRef, type PosSaleBody } from "@/lib/pos-sale";
 import { offlineCharge, offlineDrift, offlineLines } from "@/lib/offline-sale";
 import { readOfflineContext, contextCoveredSale } from "@/lib/offline-authority";
-import { currentOfflinePrice, sameOfflinePrice } from "@/lib/offline-pricing";
+import { currentOfflinePrice, sameOfflinePrice, offlineRevenueLines } from "@/lib/offline-pricing";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 export interface OfflineApproval { reason: string; collector?: string; at?: string; currency?: string }
@@ -76,7 +76,7 @@ export async function ringOffline(actor: Actor, body: PosSaleBody & { offline?: 
   if (!approval && !sameOfflinePrice(charge, savedLines, current ?? null)) {
     return await apiError("apiErr.offlineApproval", 409, undefined, { held: true, reviewReason: "apiErr.offlineApproval" });
   }
-  const lines = approval ? savedLines : current!.lines;
+  const lines = approval ? savedLines : offlineRevenueLines(savedLines, current!.lines);
   const interrupted = (body.offline as { preparationPending?: unknown })?.preparationPending === true;
   const plan = interrupted ? await getPlan(actor.restaurantId) : null;
   // Caja serves at the till; a reconnect must not leave food on a board it cannot open.

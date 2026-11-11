@@ -6488,3 +6488,23 @@ first version left the editor's saves out, so a price or a sold-out switch
 reached diners up to 30 seconds late; the second rule found a copied dish's
 extras still missing a refresh.
 
+
+
+## Sweep 9 — discounts and product revenue
+
+The corte read a best-effort activity insert, so checkout coupons and a staff
+coupon whose later log failed vanished. `report-currency.spec.ts` reproduces
+both on the analytics page. `report-discounts.spec.ts` checks durable order
+breakdowns and transactional staff redemptions, currency, dates, paging and
+counting once. `checkout_discount_at` records acceptance under the order write,
+including a card accepted after midnight; legacy rows use creation day.
+The trigger contract is tested locally; executing it in PostgreSQL remains
+pending because this sweep authorizes no database access.
+
+A product's 2x1 also reduced unrelated product revenue and margin. The checkout,
+till, waiter pad and offline receipt now freeze each line's promotion revenue.
+`report-revenue.spec.ts` reproduces the attribution error;
+`order-line-revenue.spec.ts` checks both overstatement of promoted revenue and
+understatement of unrelated revenue, bill-wide stacking, extras, combo display
+savings, free food costs, exact cents, legacy fallback and offline replay.
+Reports never fetch current promotions for old sales.

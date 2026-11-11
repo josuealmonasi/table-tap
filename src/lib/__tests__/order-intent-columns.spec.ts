@@ -15,7 +15,7 @@ it("every field the checkout writes is in create_order_intent's insert", () => {
   expect(columns.size).toBeGreaterThan(10);
   const row = checkoutOrderRow({
     restaurantId: "r", table: { id: "t", label: "1" }, sessionId: "s", diner: "d", deferred: true,
-    pricing: { subtotal: 10, serviceFee: 0, tip: 0, discount: 0, total: 10, itemDiscount: 0, promoDiscount: 0, couponDiscount: 0 } as never,
+    pricing: { subtotal: 10, serviceFee: 0, tip: 0, discount: 0, total: 10, itemDiscount: 0, promoDiscount: 0, couponDiscount: 0, lines: [], promoSavings: {} } as never,
     taxPct: 0, couponCode: null, currency: "MXN", verified: [], note: undefined, customerName: undefined,
   });
   const missing = Object.keys(row).filter(key => !columns.has(key));
