@@ -6558,3 +6558,26 @@ do inline), so a discount, a forgiven bill, a return or a paid split part
 reads the same on paper as on the screen. `ticket-pdf.spec.ts` checks that
 the columns fit the roll and that the PDF is cut to its own length; the
 existing receipt specs (130) prove the refactor changed no amount.
+
+
+## A card presented before payment is stamped by payment (2026-11-11)
+
+Scanning a visit card separately from taking payment left the two acts unrelated,
+and the customer ticket gave no reward progress. Attachment now names an unpaid
+sale or open sitting; payment stamps it and receipts read the confirmed ladder
+standing. The diner path requires both a live table credential and the card's
+bearer code. A printed code is masked to four characters, including offline paper.
+
+Local specs cover route outcomes, front-of-house roles, foreign/closed sittings,
+conditional removal, Spanish selector states, saved-device selection, receipt
+progress/earned rewards/privacy/width, and the trigger's insert/update/cancelled/
+sitting fallback/day uniqueness contracts. Schema bug plants operate on an
+in-memory copy, keeping `supabase/` untouched. Live API cases create private
+cards, orders, sittings and member credentials and clean them up even after
+partial setup; two payments must create one `payment` visit.
+
+The application hands Caja's transaction a server-resolved `loyalty_card_id`,
+and `pos_insert_order` keeps it only when the card is this restaurant's.
+PostgreSQL execution, payment races, the API gate, promises, layout/screenshots
+and dialogs require the lead's integration pass; local mock and text-contract
+specs are not evidence those live gates passed.

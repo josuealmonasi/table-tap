@@ -137,7 +137,7 @@ export async function POST(req: NextRequest) {
       const site = process.env.VERCEL_PROJECT_PRODUCTION_URL ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}` : req.nextUrl.origin;
       const qrUrl = new URL(firstOrder ? `/dashboard/bills?order=${firstOrder}` : "/dashboard/bills", site).toString();
       // The visit card presented before paying, as this payment left it.
-      const loyalty = await ticketLoyalty(db, actor.restaurantId, source.orders.map(o => o.id), t);
+      const loyalty = ticketLoyalty(source, t);
       const pdf = await ticketPdf(model, await ticketPlace(db, actor.restaurantId, t), ticketText(t), loyalty, qrUrl);
       return new NextResponse(new Uint8Array(pdf), { headers: {
         "content-type": "application/pdf",

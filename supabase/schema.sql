@@ -5464,13 +5464,17 @@ begin
   end if;
   insert into orders (id, restaurant_id, pos_ref, status, paid, stock_managed, stock_reservation_id,
     subtotal, service_fee, tip, discount, total, tax_pct, platform_fee, promo_detail,
-    currency, items, note, customer_name, created_at, offline_at, offline_drift)
+    currency, items, note, customer_name, created_at, offline_at, offline_drift, loyalty_card_id)
   values (p_ref, p_restaurant, p_ref, p_status, false, p_at is null, p_reservation,
     (p_order->>'subtotal')::numeric, (p_order->>'service_fee')::numeric,
     (p_order->>'tip')::numeric, (p_order->>'discount')::numeric, (p_order->>'total')::numeric,
     (p_order->>'tax_pct')::numeric, 0, p_order->'promo_detail',
     p_order->>'currency', p_order->'items', p_order->>'note', p_order->>'customer_name',
-    coalesce(p_at, now()), p_at, (p_order->>'offline_drift')::numeric);
+    coalesce(p_at, now()), p_at, (p_order->>'offline_drift')::numeric,
+    -- The card presented at the till; only this restaurant's card is kept, so
+    -- a forged id cannot stamp another restaurant's customer.
+    (select c.id from loyalty_cards c
+      where c.restaurant_id = p_restaurant and c.id = nullif(p_order->>'loyalty_card_id', '')::uuid));
 end;
 $$;
 revoke all on function public.pos_insert_order(uuid, uuid, jsonb, text, timestamptz, uuid) from public, anon, authenticated;

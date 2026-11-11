@@ -115,7 +115,7 @@ export function usePosCharge({ collector, collectorContext, restaurant, cart, de
   function showHeld(sale: HeldSale, answered = false, paper?: ReceiptPopup): void {
     if (!details.noTicket) {
       printReceipt(offlineReceipt(
-        { posRef: sale.posRef, at: sale.at, lines: sale.items, charge: sale.charge, method: sale.method, currency: restaurant.currency },
+        { loyaltyCode: sale.loyaltyCode, posRef: sale.posRef, at: sale.at, lines: sale.items, charge: sale.charge, method: sale.method, currency: restaurant.currency },
         { name: restaurant.name, timeZone: restaurant.timezone ?? "America/Mexico_City", locale: dateLocale(locale) }, t,
       ), paper);
     }
@@ -140,6 +140,7 @@ export function usePosCharge({ collector, collectorContext, restaurant, cart, de
     const retriedAccount = accountRequest.current !== null;
     accountResent.current = retriedAccount;
     const sale: HeldSale | null = method === "account" ? null : {
+      loyaltyCode: details.loyaltyCard?.code,
       preparationPending: navigator.onLine,
       posRef, collector, collectorContext, restaurantId: restaurant.id, at: new Date().toISOString(), method, items: orderItemsWithRevenue(lines, pricing),
       // The tax rate it was sold under travels with it: replayed tomorrow, a
@@ -182,6 +183,7 @@ export function usePosCharge({ collector, collectorContext, restaurant, cart, de
       try {
         const request = JSON.stringify({
           posRef,
+          loyaltyCode: details.loyaltyCard?.code,
           collectorContext,
           currency: restaurant.currency,
           restaurantId: restaurant.id,

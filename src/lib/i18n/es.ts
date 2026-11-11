@@ -3,6 +3,21 @@ import type { Messages } from "./en";
 // Spanish (Mexico) UI strings. Typed as Messages so a missing or extra key is a
 // compile error.
 export const es: Messages = {
+  loyaltyAttach: {
+    title: "Tarjeta de visitas",
+    use: "Usar mi tarjeta de visitas",
+    attach: "Usar tarjeta",
+    remove: "Quitar tarjeta",
+    attached: "Tarjeta ···· {code} · {progress} de {goal}",
+    hint: "Presenta la tarjeta antes de pagar. El pago registra una visita al día.",
+    unknown: "No encontramos esa tarjeta en este restaurante.",
+    off: "La tarjeta de visitas está apagada o no está disponible en este plan.",
+    paid: "Esta venta ya está pagada. Presenta la tarjeta antes de pagar.",
+    gone: "Esta venta o mesa ya no está abierta.",
+    progress: "Tarjeta de visitas ···· {code}: {progress} de {goal} · te faltan {n} para {reward}",
+    earned: "Tarjeta de visitas ···· {code}: ¡Ganaste {reward}! Pídelo en tu próxima visita.",
+    pending: "Tarjeta de visitas ···· {code}: tu visita se confirmará cuando se reconecte la venta.",
+  },
   accountCredit: {
     action: "Bonificar",
     title: "Bonificar este pedido",

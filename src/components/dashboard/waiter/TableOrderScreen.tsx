@@ -20,6 +20,7 @@ import PosMenu from "@/components/dashboard/pos/PosMenu";
 import type { Combo } from "@/lib/promotions";
 import type { StoredDietaryTag } from "@/lib/dietary";
 import type { Category, MenuItem, Restaurant } from "@/lib/types";
+import SettleTableDialog from "@/components/dashboard/SettleTableDialog";
 import PadOrderPanel from "./PadOrderPanel";
 import PadSentModal from "./PadSentModal";
 
@@ -51,7 +52,9 @@ export default function TableOrderScreen({
   closedNow,
   dietaryTags,
   tables,
+  loyalty = false,
 }: {
+  loyalty?: boolean;
   restaurant: Restaurant;
   categories: Category[];
   items: MenuItem[];
@@ -73,6 +76,7 @@ export default function TableOrderScreen({
   // The counter sells the same dishes; the counts here follow the kitchen.
   useLiveStock(restaurant.id);
 
+  const [showBill, setShowBill] = useState(false);
   const [tableId, setTableId] = useState("");
   // Not kept across a reload, as it never was: the pad is not the till.
   const cart = usePosCart(restaurant.id, false);
@@ -185,6 +189,7 @@ export default function TableOrderScreen({
               onOpenCombo={setOpenCombo}
             />
             <PadOrderPanel
+              onBill={() => setShowBill(true)}
               restaurantId={restaurant.id}
               currency={restaurant.currency}
               tables={tables}
@@ -260,6 +265,10 @@ export default function TableOrderScreen({
             </DietaryTagsProvider>
           </DetailOverlay>
         )}
+
+        {showBill && tableId && <SettleTableDialog open restaurantId={restaurant.id} tableId={tableId}
+          tableLabel={tables.find(table => table.id === tableId)?.label ?? ""} currency={restaurant.currency}
+          loyalty={loyalty} canApprove={false} canDiscount={false} onClose={() => setShowBill(false)} onSettled={() => router.refresh()} />}
 
         <PadSentModal sent={sent} onClose={() => setSent(null)} />
       </div>

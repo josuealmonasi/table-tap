@@ -1,6 +1,21 @@
 // English UI strings for the customer-facing screens. This is the source of
 // truth for the message keys; es.ts must mirror its shape (enforced by types).
 export const en = {
+  loyaltyAttach: {
+    title: "Visit card",
+    use: "Use my visit card",
+    attach: "Use card",
+    remove: "Remove card",
+    attached: "Card ···· {code} · {progress} of {goal}",
+    hint: "Present the card before paying. Payment records one visit per day.",
+    unknown: "We could not find that card at this restaurant.",
+    off: "The visit card is switched off or unavailable on this plan.",
+    paid: "This sale is already paid. Present the card before paying.",
+    gone: "This sale or sitting is no longer open.",
+    progress: "Visit card ···· {code}: {progress} of {goal} · {n} more for {reward}",
+    earned: "Visit card ···· {code}: You earned {reward}! Ask for it on your next visit.",
+    pending: "Visit card ···· {code}: your visit will be confirmed when the sale reconnects.",
+  },
   accountCredit: {
     action: "Credit",
     title: "Credit this order",
