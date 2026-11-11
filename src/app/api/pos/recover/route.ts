@@ -41,7 +41,8 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ restaurantId: actor.restaurantId, sales: (data ?? []).slice(0, size), hasMore: (data?.length ?? 0) > size });
   }
   try {
-    const rows = await everyRow<QueuedOfflineSale>((a, b) => query().is("approved_at", null)
+    // Resolved without a sale is decided too: it no longer waits.
+    const rows = await everyRow<QueuedOfflineSale>((a, b) => query().is("approved_at", null).is("resolved_at", null)
       .order("received_at", { ascending: false }).order("pos_ref").range(a, b), "held sales");
     return NextResponse.json({ restaurantId: actor.restaurantId, sales: rows });
   } catch { return await apiError("apiErr.generic", 503); }

@@ -6570,3 +6570,17 @@ paths. Every new assertion was checked by planting the corresponding bug;
 `loop/codex/held-intake-mutations.md` records the results. Audited resolution
 is only a SQL proposal: existing unapprovable money rows still need Claude's
 schema integration and PostgreSQL verification before shifts can be unblocked.
+
+## Held receipts resolved without a sale (2026-11-11)
+
+A held cash receipt that could never be approved blocked every shift close in
+its restaurant, with no way out (Codex sweep). `resolve_held_sale` lets an
+owner or manager resolve it with a reason: the cash kept in the drawer becomes
+an unclassified receipt in the open shift (in `expected`, not in sales), cash
+handed back needs its recorded withdrawal, a duplicate links the payment or
+receipt that already counted it (each backs one duplicate), and "nothing
+collected" takes no amount. The raw receipt and the resolution are frozen; a
+late approval of a resolved receipt fails. The shift close, the restaurant
+delete check, the held-cash preflight, the held-sales list and `pnpm money`'s
+rebuilt close all read the resolution. `scripts/probe-held-resolve.mjs` proves
+each rule in Postgres; the manager's screen for it is the next step.

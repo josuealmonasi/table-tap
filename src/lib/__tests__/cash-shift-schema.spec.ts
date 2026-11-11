@@ -45,7 +45,7 @@ it("I2 uses the same stored-currency sum for the close and review, without doubl
   for (const part of ["p.currency = s.currency", "f.currency = s.currency", "m.currency = s.currency",
     "p.method = 'cash'", "f.status = 'succeeded' and f.source = 'cash'", "nullif(f.payout_actor, '') is not null",
     "f.historical_log_id = l.id", "p.created_at between s.opened_at and s.until_at",
-    "f.completed_at between s.opened_at and s.until_at", "'expected', round(s.opening_amount + r.amount - f.amount - h.amount - w.amount, 2)"]) expect(sql).toContain(part);
+    "f.completed_at between s.opened_at and s.until_at", "'expected', round(s.opening_amount + r.amount + u.amount - f.amount - h.amount - w.amount, 2)"]) expect(sql).toContain(part);
   expect(sql).not.toContain("from restaurants");
   expect(readFileSync("src/lib/cash-shift-server.ts", "utf8")).toContain('rpc("cash_shift_totals"');
 });

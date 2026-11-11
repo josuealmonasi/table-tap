@@ -29,7 +29,7 @@ it("F7 reads the cash tips without changing expected cash", () => {
   // Refunded tips come out of the shift's tips, never below zero.
   expect(sql).toContain("coalesce(sum(f.tip), 0) tip from refund_operations f");
   expect(sql).toContain("'tips', greatest(0, round(r.tip - f.tip, 2))");
-  expect(sql).toContain("'expected', round(s.opening_amount + r.amount - f.amount - h.amount - w.amount, 2)");
+  expect(sql).toContain("'expected', round(s.opening_amount + r.amount + u.amount - f.amount - h.amount - w.amount, 2)");
 });
 
 it("F7 carries the tips from the database to the shift screens", async () => {
