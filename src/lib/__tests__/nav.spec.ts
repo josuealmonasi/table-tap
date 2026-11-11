@@ -115,3 +115,12 @@ it("lists the areas in the order they are used: menus first, the books last", ()
     "/dashboard/costs", "/dashboard/analytics",
   ]);
 });
+
+it("gives every section its own icon", () => {
+  // On a phone the icon is half of what tells two tabs apart. Caja, Cuentas
+  // and Guardadas once shared the receipt, and Tomar pedido and Mesas the
+  // chair (owner's screenshot, 2026-11-10).
+  const icons = NAV_ITEMS.map(i => i.icon);
+  const shared = icons.filter((icon, n) => icons.indexOf(icon) !== n);
+  expect(shared, `shared icons: ${shared.join(", ")}`).toEqual([]);
+});
