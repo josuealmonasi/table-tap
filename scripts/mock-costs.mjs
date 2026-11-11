@@ -10,6 +10,9 @@
 // "sales with no recipe" warning is for. Prices are in the demo menu's scale.
 // ============================================================================
 
+import { FEED_DEMO, supplyPrice } from "./demo-prices.mjs";
+import { MORE_INGREDIENTS, MORE_RECIPES } from "./mock-recipes.mjs";
+
 const SUPPLIER = { coffee: "South Roasters", dairy: "Valley Dairy", pack: "Pack Supply", market: "Central Market" };
 
 // name, unit, pack size (in g/ml/pza), pack price, supplier
@@ -44,22 +47,27 @@ const RECIPES = {
 
 export async function seedCosts(pg, rid) {
   const ids = new Map();
-  for (const [name, unit, size, price, supplier] of INGREDIENTS) {
+  // feed-demo prices the whole menu: every dish but two gets a recipe, and the
+  // ingredients date from the restaurant's first week, two months back.
+  const ingredients = FEED_DEMO ? [...INGREDIENTS, ...MORE_INGREDIENTS] : INGREDIENTS;
+  const recipes = FEED_DEMO ? { ...MORE_RECIPES, ...RECIPES } : RECIPES;
+  const since = FEED_DEMO ? 65 : 20;
+  for (const [name, unit, size, price, supplier] of ingredients) {
     const { rows: [row] } = await pg.query(
       `insert into ingredients (restaurant_id, name, unit, pack_size, pack_price, supplier, updated_by, created_at)
-       values ($1, $2, $3, $4, $5, $6, 'demo@tabletap.dev', now() - interval '20 days') returning id`,
-      [rid, name, unit, size, price, supplier],
+       values ($1, $2, $3, $4, $5, $6, 'demo@tabletap.dev', now() - make_interval(days => $7)) returning id`,
+      [rid, name, unit, size, supplyPrice(price), supplier, since],
     );
     ids.set(name, row.id);
   }
   // The price each was created with is history from twenty days ago; then the
   // dairy raised the milk last week.
   await pg.query(
-    `update ingredient_prices set created_at = now() - interval '20 days' where restaurant_id = $1`, [rid],
+    `update ingredient_prices set created_at = now() - make_interval(days => $2) where restaurant_id = $1`, [rid, since],
   );
   await pg.query(
-    `update ingredients set pack_price = 1.3, updated_by = 'demo-manager@tabletap.dev' where id = $1`,
-    [ids.get("Whole milk")],
+    `update ingredients set pack_price = $2, updated_by = 'demo-manager@tabletap.dev' where id = $1`,
+    [ids.get("Whole milk"), supplyPrice(1.3)],
   );
   await pg.query(
     `update ingredient_prices set created_at = now() - interval '6 days'
@@ -69,9 +77,9 @@ export async function seedCosts(pg, rid) {
 
   const { rows: products } = await pg.query(
     `select id, name from menu_items where restaurant_id = $1 and name = any($2)`,
-    [rid, Object.keys(RECIPES)],
+    [rid, Object.keys(recipes)],
   );
-  const lines = products.flatMap(p => RECIPES[p.name].map(([ingredient, quantity]) => [p.id, ids.get(ingredient), quantity]));
+  const lines = products.flatMap(p => recipes[p.name].map(([ingredient, quantity]) => [p.id, ids.get(ingredient), quantity]));
   for (const [itemId, ingredientId, quantity] of lines) {
     await pg.query(
       `insert into recipe_lines (restaurant_id, item_id, ingredient_id, quantity) values ($1, $2, $3, $4)`,
@@ -116,18 +124,18 @@ async function seedStock(pg, rid, ids, products) {
      values ($1, $2, $3, $4, 'demo-manager@tabletap.dev', ${at(days)})`,
     [rid, ids.get(name), quantity, total],
   );
-  await buy("Whole milk", 12000, 15.6, 2);
-  await buy("Takeaway cup", 100, 12, 4);
+  await buy("Whole milk", 12000, supplyPrice(15.6), 2);
+  await buy("Takeaway cup", 100, supplyPrice(12), 4);
 
   const dish = name => products.find(p => p.name === name)?.id ?? null;
   const { rows: [pie] } = await pg.query(
     `select id from menu_items where restaurant_id = $1 and name = 'Apple Pie' limit 1`, [rid],
   );
   const waste = [
-    [ids.get("Whole milk"), null, "Whole milk", 500, "spoiled", 0.65, "demo-kitchen@tabletap.dev", 8],
-    [null, dish("Iced Latte"), "Iced Latte", 1, "mistake", 0.77, "demo-cashier@tabletap.dev", 2],
-    [null, dish("French Fries"), "French Fries", 2, "unsold", 0.62, "demo-kitchen@tabletap.dev", 1],
-    [ids.get("Lemon"), null, "Lemon", 3, "staff", 0.24, "demo-cashier@tabletap.dev", 4],
+    [ids.get("Whole milk"), null, "Whole milk", 500, "spoiled", supplyPrice(0.65), "demo-kitchen@tabletap.dev", 8],
+    [null, dish("Iced Latte"), "Iced Latte", 1, "mistake", supplyPrice(0.77), "demo-cashier@tabletap.dev", 2],
+    [null, dish("French Fries"), "French Fries", 2, "unsold", supplyPrice(0.62), "demo-kitchen@tabletap.dev", 1],
+    [ids.get("Lemon"), null, "Lemon", 3, "staff", supplyPrice(0.24), "demo-cashier@tabletap.dev", 4],
     [null, pie?.id ?? null, "Apple Pie", 1, "unsold", null, "demo-kitchen@tabletap.dev", 1],
   ];
   for (const [ingredientId, itemId, name, quantity, reason, cost, who, days] of waste) {

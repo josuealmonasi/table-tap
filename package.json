@@ -19,6 +19,8 @@
     "db:purge": "node scripts/db.mjs purge",
     "db:mock": "node scripts/db.mjs mock",
     "db:dropmock": "node scripts/db.mjs dropmock",
+    "feed-demo": "node scripts/feed-demo.mjs",
+    "feed-demo:prod": "node scripts/feed-demo.mjs --prod",
     "db:promos": "node scripts/seed-promos.mjs",
     "db:ratings": "node scripts/seed-ratings.mjs",
     "db:create:prod": "node scripts/db.mjs create --prod",

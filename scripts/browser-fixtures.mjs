@@ -14,7 +14,9 @@ export function skippedOnPurpose(role) {
 export async function crewCookies(crew, base, phase) {
   const cookies = new Map();
   for (const who of crew) {
-    const password = who.passwordEnv ? process.env[who.passwordEnv] : "demo123";
+    // The demo logins share one password: DEMO_PASSWORD from the env file when
+    // set (feed-demo uses it on production), else the dev seed's.
+    const password = who.passwordEnv ? process.env[who.passwordEnv] : process.env.DEMO_PASSWORD || "demo123";
     if (!password) {
       // A login that cannot be made is a screen nobody checked. It used to be
       // "skipped", and a skipped visit counts as passed, so every admin screen
