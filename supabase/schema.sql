@@ -3148,6 +3148,11 @@ grant execute on function public.settle_sale(uuid, uuid, text, text, text)
 -- installed on their machines, and no port forwarding — the shape that does
 -- not require us to reach into somebody else's LAN.
 alter table restaurants add column if not exists auto_print_kitchen boolean not null default false;
+-- Paperless by default (owner's decision, 2026-11-11): the till prints the
+-- customer's ticket only when the restaurant turns this on. Off, the ticket
+-- is still one tap away on the sale's confirmation, by email, as the PDF and
+-- as a reprint from Orders.
+alter table restaurants add column if not exists print_ticket_at_till boolean not null default false;
 
 -- Products that need no preparation: a bottled drink, a bag of coffee, a
 -- packaged snack. The cashier takes them off the shelf and puts them in the

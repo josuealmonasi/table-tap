@@ -1139,10 +1139,18 @@ count, and still trims the cart to what is left rather than only saying so.
 Charging opens one modal: the tip, a name to call them by, a special request,
 and an address for the receipt. Filled in or left blank, one button sends it;
 clicking outside closes and changes nothing, because a stray click must never
-take money. No address means the ticket prints — through the browser for now,
-with `printReceipt()` as the single seam a Bluetooth thermal driver replaces.
-An address that the mail never reached falls back to printing rather than
-leaving the cashier with nothing.
+take money.
+
+**Paperless by default** (owner's decision, 2026-11-11). The till prints only
+when Settings → Printing → "Print the ticket at the till"
+(`restaurants.print_ticket_at_till`, default off, owner or manager) is on.
+Off, the "Charged" confirmation offers "Print the ticket" for the customer who
+asks — opened inside that click, so the browser lets the window through — and
+the ticket stays available by email, as the PDF and as a reprint from Orders.
+On, no address means the ticket prints — through the browser for now, with
+`printReceipt()` as the single seam a Bluetooth thermal driver replaces — and
+an address the mail never reached falls back to printing rather than leaving
+the cashier with nothing.
 
 The tip is priced by the same `priceCart` the diner's cart runs, so an exact
 tip is capped at the subtotal by the engine rather than trusted from the till.

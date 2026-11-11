@@ -31,6 +31,7 @@ export type SettingsInput = Pick<
   | "ticket_warn_minutes"
   | "ticket_late_minutes"
   | "auto_print_kitchen"
+  | "print_ticket_at_till"
 >;
 
 /**
