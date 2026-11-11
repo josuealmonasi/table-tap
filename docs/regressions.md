@@ -6549,3 +6549,12 @@ till, waiter pad and offline receipt now freeze each line's promotion revenue.
 understatement of unrelated revenue, bill-wide stacking, extras, combo display
 savings, free food costs, exact cents, legacy fallback and offline replay.
 Reports never fetch current promotions for old sales.
+
+## The ticket PDF says what the receipt says (2026-11-11)
+
+The 80 mm ticket and the HTML/email receipt are two forms of one sale. Both
+are now written from `receiptModel` (the calculation `buildReceipt` used to
+do inline), so a discount, a forgiven bill, a return or a paid split part
+reads the same on paper as on the screen. `ticket-pdf.spec.ts` checks that
+the columns fit the roll and that the PDF is cut to its own length; the
+existing receipt specs (130) prove the refactor changed no amount.

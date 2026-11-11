@@ -1319,6 +1319,26 @@ Only at the counter. The flag means "needs no preparation", and the counter is
 the one place where that also means already delivered — a bottled water ordered
 from table 6 still has to be carried to table 6, so a QR order is unchanged.
 
+### The customer's ticket as an 80 mm PDF (2026-11-11)
+
+The order dialog's "Ticket (PDF)" asks `/api/orders/print` for `format: "pdf"`
+(front of house only, the caller's restaurant, like the HTML receipt) and opens
+a PDF shaped like thermal paper: 80 mm wide, Courier, the page cut to the
+ticket's length (`src/lib/ticket-pdf.ts`). Its amounts come from
+`receiptModel`, the same calculation as the email and the reprint.
+
+- Header: the logo when it is a PNG or JPEG at an https address, the name,
+  then whatever the owner filled in of the SAT simplified-receipt data (RMF
+  2.7.1.24): razón social, address (street and number, colonia and CP,
+  municipio and estado), phone, RFC and régimen fiscal. These columns are
+  optional, owner-only and never granted to anon (`ticket-place.ts`).
+- Body: date, folio (the order code), table, four columns (quantity, item,
+  unit price, amount), the number of items, the receipt's rows, the total and
+  how it was paid.
+- The visit card's progress when a card was presented before paying (from the
+  loyalty branch), the order's QR (it opens the sale on Cuentas for the
+  staff), thanks, and "this is not an invoice".
+
 ## The customer can decline the ticket
 
 Very common on a sale handed over as it is rung up. The cashier ticks one box
