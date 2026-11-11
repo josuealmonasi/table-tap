@@ -6753,18 +6753,18 @@ a.tt-user-plan:hover {
 .tt-section-nav-inner::-webkit-scrollbar {
   display: none;
 }
-/* The scrollbar is hidden, so the edge that has more sections past it fades
-   out instead (useScrollMore sets data-more). A mask only reads opacity, so
-   the colour token here is just "opaque". */
-.tt-section-nav-inner[data-more="right"] {
+/* Any sideways scroller with a hidden scrollbar — the section bar, the diner's
+   category chips — fades the edge that has more past it (useScrollMore sets
+   data-more). A mask only reads opacity, so the colour token is just "opaque". */
+[data-more="right"] {
   -webkit-mask-image: linear-gradient(to right, var(--tt-ink) calc(100% - 36px), transparent);
   mask-image: linear-gradient(to right, var(--tt-ink) calc(100% - 36px), transparent);
 }
-.tt-section-nav-inner[data-more="left"] {
+[data-more="left"] {
   -webkit-mask-image: linear-gradient(to left, var(--tt-ink) calc(100% - 36px), transparent);
   mask-image: linear-gradient(to left, var(--tt-ink) calc(100% - 36px), transparent);
 }
-.tt-section-nav-inner[data-more="both"] {
+[data-more="both"] {
   -webkit-mask-image: linear-gradient(to right, transparent, var(--tt-ink) 36px, var(--tt-ink) calc(100% - 36px), transparent);
   mask-image: linear-gradient(to right, transparent, var(--tt-ink) 36px, var(--tt-ink) calc(100% - 36px), transparent);
 }

@@ -33,7 +33,7 @@ export async function layoutAuditSelftest(browser) {
     await check('trailing separator', 'separator-starts-line', '<div style="width:max-content"><span>Checklist ·</span><br><span>optional</span></div>');
     await check('ordinary list bullets', 'separator-starts-line', '<ul><li>• First</li><li>• Second</li></ul>', false);
     const ellipsis = text => `<div style="width:120px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${text}</div>`;
-    await check('ellipsized hours', 'truncated-number', ellipsis('Dom, Sáb 09:00–14:00'));
+    await check('ellipsized hours', 'truncated-number', ellipsis('Sun, Sat 09:00–14:00'));
     await check('ellipsized name', 'truncated-number', ellipsis('A very long delicious dish name'), false);
     await check('nowrap price', 'truncated-number', '<div style="width:60px;white-space:nowrap;overflow:hidden">Total $12345.00</div>');
     await check('cut-off fixed bar', 'bar-cut-off', scroller(''));
