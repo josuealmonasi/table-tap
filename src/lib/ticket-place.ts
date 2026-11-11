@@ -21,15 +21,36 @@ export function ticketAddress(r: Partial<FiscalRow>): string[] {
   return [street, colony, city].filter(line => line.trim().length > 0);
 }
 
-/** Only PNG and JPEG reach pdfkit; anything else (an emoji, a WebP, a dead link) prints no logo. */
-async function logoBytes(url: string | null): Promise<Buffer | null> {
-  if (!url || !/^https:\/\//.test(url)) return null;
+const LOGO_MAX = 2_000_000;
+
+/** Only our own public storage: a stored URL never makes the server fetch somewhere else. */
+export function ownStorageUrl(url: string | null): boolean {
+  if (!url) return false;
   try {
-    const res = await fetch(url, { signal: AbortSignal.timeout(4000) });
+    const u = new URL(url);
+    const own = new URL(process.env.NEXT_PUBLIC_SUPABASE_URL ?? "https://invalid.local");
+    return u.protocol === "https:" && u.host === own.host && u.pathname.startsWith("/storage/v1/object/public/");
+  } catch { return false; }
+}
+
+/**
+ * Only PNG and JPEG reach pdfkit; anything else (an emoji, a WebP, a dead link)
+ * prints no logo. No redirects, a deadline, and the size counted while reading.
+ */
+async function logoBytes(url: string | null): Promise<Buffer | null> {
+  if (!ownStorageUrl(url)) return null;
+  try {
+    const res = await fetch(url!, { signal: AbortSignal.timeout(4000), redirect: "error" });
     const type = res.headers.get("content-type") ?? "";
-    if (!res.ok || !/image\/(png|jpe?g)/.test(type)) return null;
-    const bytes = Buffer.from(await res.arrayBuffer());
-    return bytes.length <= 2_000_000 ? bytes : null;
+    if (!res.ok || !res.body || !/image\/(png|jpe?g)/.test(type)) return null;
+    const chunks: Uint8Array[] = [];
+    let size = 0;
+    for await (const chunk of res.body as unknown as AsyncIterable<Uint8Array>) {
+      size += chunk.length;
+      if (size > LOGO_MAX) return null;
+      chunks.push(chunk);
+    }
+    return Buffer.concat(chunks);
   } catch { return null; }
 }
 

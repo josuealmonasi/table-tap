@@ -132,7 +132,10 @@ export async function POST(req: NextRequest) {
     try {
       const model = receiptModel(source.orders, where, t, source.payment);
       const firstOrder = source.payment ? null : source.orders[0]?.id;
-      const qrUrl = new URL(firstOrder ? `/dashboard/bills?order=${firstOrder}` : "/dashboard/bills", req.nextUrl.origin).toString();
+      // The production domain Vercel configured, never a Host header a client
+      // could choose; the request's own origin only off Vercel (development).
+      const site = process.env.VERCEL_PROJECT_PRODUCTION_URL ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}` : req.nextUrl.origin;
+      const qrUrl = new URL(firstOrder ? `/dashboard/bills?order=${firstOrder}` : "/dashboard/bills", site).toString();
       // The visit card presented before paying, as this payment left it.
       const loyalty = await ticketLoyalty(db, actor.restaurantId, source.orders.map(o => o.id), t);
       const pdf = await ticketPdf(model, await ticketPlace(db, actor.restaurantId, t), ticketText(t), loyalty, qrUrl);
@@ -140,6 +143,8 @@ export async function POST(req: NextRequest) {
         "content-type": "application/pdf",
         "content-disposition": `inline; filename="ticket-${model.code}.pdf"`,
         "cache-control": "no-store",
+        // The copy this PDF printed, so a second one in the same dialog stays it.
+        ...(source.version ? { "x-receipt-version": encodeURIComponent(JSON.stringify(source.version)) } : {}),
       } });
     } catch { return await apiError("apiErr.generic", 503); }
   }

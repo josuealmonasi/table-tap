@@ -58,6 +58,16 @@ export interface TicketText {
   notFiscal: string;
 }
 
+/**
+ * Courier is a standard PDF font with a Latin-1 (WinAnsi) table: ñ and á print,
+ * but the minus sign the receipt uses (U+2212) and any emoji came out as
+ * garbage. Money gets a plain hyphen; what the font cannot draw is left out.
+ */
+export function printable(text: string): string {
+  return text.replace(/\u2212/g, "-").replace(/[\u2018\u2019]/g, "'").replace(/[\u201C\u201D]/g, '"')
+    .replace(/[\u2013\u2014]/g, "-").replace(/\u00B7|\u2022/g, "·").replace(/[^\u0000-\u00FF]/g, "");
+}
+
 const pad = (left: string, right: string, width = CHARS) => {
   const room = width - right.length;
   return (left.length > room - 1 ? left.slice(0, Math.max(0, room - 1)) : left).padEnd(room) + right;
@@ -79,28 +89,37 @@ export function wrapTicket(text: string, width = CHARS): string[] {
 export function lineRows(model: ReceiptModel): string[] {
   const money = (n: number) => formatMoney(n, model.cur);
   const rows: string[] = [];
-  const numbers = 22; // room for "  MX$1,234.00  MX$12,345.00"
-  for (const l of model.lines) {
+  const priced = model.lines.map(l => `${l.unit === null ? "" : money(l.unit)} ${money(l.amount)}`.trim());
+  // As wide as the widest amounts on this ticket, so a MX$10,000 line never
+  // runs into the next row; past half the roll the amounts take their own line.
+  const numbers = Math.max(0, ...priced.map(p => p.length)) + 1;
+  const ownLine = numbers > Math.floor(CHARS / 2);
+  model.lines.forEach((l, i) => {
     const qty = l.qty === null ? "" : String(l.qty);
-    const right = `${l.unit === null ? "" : money(l.unit)} ${money(l.amount)}`.padStart(numbers);
-    const nameWidth = CHARS - numbers - 4;
-    const [first, ...more] = wrapTicket(l.name, nameWidth);
-    rows.push(`${qty.padEnd(3)} ${(first ?? "").padEnd(nameWidth)}${right}`);
-    for (const m of more) rows.push(`    ${m}`);
-  }
+    const nameWidth = ownLine ? CHARS - 4 : CHARS - numbers - 4;
+    const [first, ...more] = wrapTicket(printable(l.name), nameWidth);
+    if (ownLine) {
+      rows.push(`${qty.padEnd(3)} ${first ?? ""}`);
+      for (const m of more) rows.push(`    ${m}`);
+      rows.push(priced[i].padStart(CHARS));
+    } else {
+      rows.push(`${qty.padEnd(3)} ${(first ?? "").padEnd(nameWidth)}${priced[i].padStart(numbers)}`);
+      for (const m of more) rows.push(`    ${m}`);
+    }
+  });
   return rows;
 }
 
 async function draw(doc: PDFKit.PDFDocument, model: ReceiptModel, place: TicketPlace, text: TicketText,
   loyalty: TicketLoyalty | null, qrUrl: string): Promise<void> {
   const center = (s: string, size = FONT, bold = false) => {
-    doc.font(bold ? "Courier-Bold" : "Courier").fontSize(size).text(s, MARGIN, doc.y, { width: WIDTH, align: "center" });
+    doc.font(bold ? "Courier-Bold" : "Courier").fontSize(size).text(printable(s), MARGIN, doc.y, { width: WIDTH, align: "center" });
   };
   // One line exactly: pdfkit moves the cursor by its own measure, so the
   // next line's place is set here, not left to it (the rows printed double-spaced).
   const left = (s: string, bold = false, size = FONT) => {
     const y = doc.y;
-    doc.font(bold ? "Courier-Bold" : "Courier").fontSize(size).text(s, MARGIN, y, { width: WIDTH, lineBreak: false });
+    doc.font(bold ? "Courier-Bold" : "Courier").fontSize(size).text(printable(s), MARGIN, y, { width: WIDTH, lineBreak: false });
     doc.y = y + size * 1.35;
   };
   const rule = (ch = "-") => left(ch.repeat(CHARS));

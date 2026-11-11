@@ -109,6 +109,9 @@ export default function OrderDetailDialog({
         body: JSON.stringify({ orderId: order.id, to: "receipt", format: "pdf", version: issued.current.version }),
       });
       if (!res.ok || res.headers.get("content-type") !== "application/pdf") throw new Error("No ticket");
+      // Keep the copy this PDF issued, as the HTML print does.
+      const version = res.headers.get("x-receipt-version");
+      if (version && issued.current.version === undefined) issued.current.version = JSON.parse(decodeURIComponent(version));
       const url = URL.createObjectURL(await res.blob());
       if (tab) tab.location.href = url; else window.location.href = url;
     } catch {

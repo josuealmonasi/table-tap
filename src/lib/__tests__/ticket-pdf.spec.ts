@@ -24,7 +24,10 @@ it("lays the lines out in four columns that fit the 80 mm roll", () => {
   const rows = lineRows(model);
   expect(rows.every(r => r.length <= 46)).toBe(true);
   expect(rows[0]).toMatch(/^2 {3}Tonkotsu Ramen/);
-  expect(rows.some(r => r.startsWith("    Cake con helado"))).toBe(true);
+  // The long name wraps under itself and is printed whole.
+  const cake = rows.findIndex(r => r.includes("Chocolate"));
+  expect(rows[cake + 1].startsWith("    ")).toBe(true);
+  expect(rows.slice(cake, cake + 3).join(" ").replace(/\s+/g, " ")).toContain("con helado de vainilla");
   expect(wrapTicket("a b c", 3)).toEqual(["a b", "c"]);
 });
 
@@ -36,4 +39,20 @@ it("renders a ticket-shaped PDF cut to its own length", async () => {
   }, text, { last4: "K7P2", progress: 5, goal: 8, message: "Te faltan 3 para Postre gratis" }, "https://table-tap-star.vercel.app/dashboard/bills?order=x");
   expect(pdf.subarray(0, 5).toString()).toBe("%PDF-");
   if (process.env.TICKET_SAMPLE) writeFileSync(process.env.TICKET_SAMPLE, pdf);
+});
+
+it("prints what Courier can draw: a plain minus for money, ñ and á kept, emoji left out", async () => {
+  const { printable } = await import("@/lib/ticket-pdf");
+  expect(printable("Descuento −MX$5.00")).toBe("Descuento -MX$5.00");
+  expect(printable("Piña colada 🍍 jalapeño")).toBe("Piña colada  jalapeño");
+  // The columns are runs of spaces: printable never collapses them.
+  expect(printable("Folio        ORD-5C9D")).toBe("Folio        ORD-5C9D");
+});
+
+it("keeps every row inside the 80 mm roll, even for MX$10,000 lines (Codex review)", () => {
+  const big: ReceiptModel = { ...model, lines: [{ label: "", qty: 2, name: "Barra libre para evento privado", unit: 10000, amount: 20000 }] };
+  const rows = lineRows(big);
+  expect(Math.max(...rows.map(r => r.length))).toBeLessThanOrEqual(43);
+  expect(rows.some(r => r.includes("MX$20,000.00"))).toBe(true);
+  expect(Math.max(...lineRows(model).map(r => r.length))).toBeLessThanOrEqual(43);
 });
