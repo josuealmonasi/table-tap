@@ -8,6 +8,7 @@ import { useT } from "@/lib/i18n/context";
 import { useToast } from "@/components/ui/Toast";
 import { currentPrice, foundingOpen, slotsLeft } from "@/lib/founding";
 import { CheckIcon } from "@/components/ui/icons";
+import { planDescription } from "@/lib/plan-description";
 
 /** The line under a tier's price: what it holds, in the order an owner asks. */
 function includes(limits: PlanLimits, t: (k: string, v?: Record<string, string | number>) => string): string[] {
@@ -134,6 +135,7 @@ export default function PlanTiers({
                   <span className="tt-tier-badge tt-tier-soon">{t("plan.soon")}</span>
                 )}
               </div>
+              <p className="tt-tier-desc">{planDescription(t, tier)}</p>
 
               <div className="tt-tier-price">
                 {/* "desde", because a multi-site price depends on how many

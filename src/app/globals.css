@@ -6365,6 +6365,13 @@ a.tt-btn {
 .tt-tier-name {
   font-size: 17px;
 }
+/* What the tier is for, in one line, before the numbers. */
+.tt-tier-desc {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--tt-muted);
+}
 .tt-tier-badge {
   font-size: 11px;
   font-weight: 700;

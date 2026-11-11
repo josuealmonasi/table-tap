@@ -12,6 +12,7 @@ import Breadcrumb from "@/components/layout/Breadcrumb";
 import PlanUsage, { type PlanUsageCounts } from "./PlanUsage";
 import PlanTiers from "./PlanTiers";
 import PlanDocuments from "./PlanDocuments";
+import { planDescription } from "@/lib/plan-description";
 
 /** The tone of the status line: neutral while healthy, loud when money stopped. */
 const TONE: Record<PlanStatus, string> = {
@@ -147,6 +148,7 @@ export default function PlanPanel({
               {paidPrice > 0 && <span>{t("plan.perMonth")}</span>}
             </div>
           </div>
+          <p className="tt-tier-desc">{planDescription(t, plan.limits)}</p>
           <p className={TONE[plan.status]}>
             {plan.status === "trialing"
               ? t("plan.state.trialing", { days })

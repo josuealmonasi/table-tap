@@ -882,6 +882,15 @@ foundingLeftBody: "Quien contrata ahora conserva este precio de suscripción mie
       of: "{used} de {max}",
       unlimited: "{used} · ilimitado",
     },
+    // One line each, on the plan cards. Counts come from the plan row, so a
+    // changed limit can never leave a description promising the old one.
+    desc: {
+      carta: "Tu menú con QR para mostrador y para llevar: tus clientes ordenan y pagan con tarjeta desde su celular.",
+      caja: "La caja de tu mostrador: cobra en efectivo o con tu terminal, con inventario, promociones y tarjeta de visitas. El menú se consulta en el celular y se ordena en caja.",
+      servicio: "Servicio en mesa: hasta {tables} mesas, meseros que toman pedidos, cuentas que se pagan al final y la caja incluida.",
+      casa: "Para el restaurante completo: hasta {tables} mesas, equipo ilimitado, cupones, descuentos del equipo, menús por horario y el margen de cada producto.",
+      grupo: "Para varias sucursales: todo lo de Casa en cada una. Hablemos.",
+    },
     tier: {
       deferredPayment: "Pagar al final o en la caja",
       schedules: "Menús por horario",
