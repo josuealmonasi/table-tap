@@ -8,7 +8,8 @@ vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => { const from =
   let earlier = false;
   let withoutHistoricalReturns = false;
   const q: Record<string, unknown> = {};
-  q.eq = (key: string, value: unknown) => { if (key === "currency") currency = value; if (key === "method") method = value; return q; };
+  let kind: unknown;
+  q.eq = (key: string, value: unknown) => { if (key === "currency") currency = value; if (key === "method") method = value; if (key === "kind") kind = value; return q; };
   for (const key of ["select", "in", "is", "gte", "lte", "lt", "neq", "order", "overrideTypes"]) q[key] = () => q;
   q.is = (key: string, value: unknown) => { if (key === "historical_log_id" && value === null) withoutHistoricalReturns = true; return q; };
   q.lt = () => { earlier = true; return q; };
@@ -29,6 +30,9 @@ vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => { const from =
       data.push({ source: "cash", amount: 70, tip: 0, payout_actor: "cashier@example.com", historical_log_id: "old-return",
         completed_at: "2026-10-20T13:00:00Z" });
     }
+    // A kind filter keeps only rows of that kind, as the real return events do;
+    // these fixtures are payouts and an imported handback, none a typed return.
+    if (kind) data = data.filter(row => (row as { kind?: unknown }).kind === kind);
     return { data: data.slice(offset), error: null };
   };
   q.single = async () => result();

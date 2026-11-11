@@ -6489,6 +6489,19 @@ reached diners up to 30 seconds late; the second rule found a copied dish's
 extras still missing a refresh.
 
 
+## R8-4 part 1 — account debt and manager credits
+
+The manager's adjustment, the customer's statement and every collection path
+must agree on what remains owed. `account_credit_v1` locks restaurant, account
+and order, verifies the reviewed cents, records immutable component snapshots,
+and lowers the order without inventing collected money. Repeated credits keep
+one record per request; cancellation keeps its one-per-order uniqueness. A full
+credit leaves written_off=true and paid=false, and its history remains visible.
+The last forgiven charge cannot change a legacy credit ceiling's currency.
+
+| Regression | Automatic check | Live verification still required |
+| --- | --- | --- |
+| R8-4 part 1: uncollected account debt could not be reduced; stale or repeated requests could reduce it twice | account-credit route, maths, schema, money, public-projection and dialog specs; accounts-server history test; sabotage-tested invariants/account-debt; API manager/waiter cases; role entry; attack-account-credit | Run probe-account-credit.mjs on dev after schema application (including both two-connection settle races), then API, roles, attack, money, layout and dialogs; visually inspect phone/tablet in both languages |
 
 ## Sweep 9 — discounts and product revenue
 

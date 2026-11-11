@@ -57,6 +57,22 @@ export function accountsCases(fx) {
         const { data } = await f.admin.from("payments").select("id").eq("account_id", fx.accountId);
         return (data ?? []).length === 0 || "a sale on account recorded money that never arrived";
       } },
+    { name: "POST /api/accounts/credit (waiter refused)", as: "waiter", method: "POST", path: "/api/accounts/credit",
+      body: { orderId: fx.acctOrder, amountCents: 1, expectedCents: Math.round(fx.lineTotal * 100), reason: "error", note: MARK, requestId: randomUUID() },
+      expect: [403], expectError: /permiso|forbidden|permission|allowed|autorizad/i },
+    { name: "POST /api/accounts/credit (manager reduces debt)", as: "manager", method: "POST", path: "/api/accounts/credit",
+      body: { orderId: fx.acctOrder, amountCents: 1, expectedCents: Math.round(fx.lineTotal * 100), reason: "error", note: MARK, requestId: randomUUID() },
+      expect: [200], check: d => d.ok && d.amountCents === 1 && d.remainingCents === Math.round(fx.lineTotal * 100) - 1 || "wrong credit result",
+      arrange: async f => {
+        const { data, error } = await f.admin.rpc("account_owed", { p_account: fx.accountId });
+        if (error) throw error;
+        f.beforeCreditOwed = Number(data);
+      },
+      effect: async f => {
+        const { data, error } = await f.admin.rpc("account_owed", { p_account: fx.accountId });
+        if (error) return error.message;
+        return Math.round(Number(data) * 100) === Math.round(f.beforeCreditOwed * 100) - 1 || "account debt did not drop by one cent";
+      } },
     // Sweep 8, finding 1: a screen that does not say which currency it showed is refreshed, never settled.
     { name: "POST /api/accounts/settle (no reviewed currency)", as: "cashier", method: "POST", path: "/api/accounts/settle",
       body: { accountId: fx.accountId, expected: 0.5, tip: 0, method: "cash" }, expect: [409],
@@ -67,7 +83,7 @@ export function accountsCases(fx) {
     { name: "POST /api/accounts/settle (cash, with a tip)", as: "cashier", method: "POST", path: "/api/accounts/settle",
       body: async f => {
         const { data } = await f.admin.from("orders").select("total")
-          .eq("account_id", fx.accountId).eq("paid", false).neq("status", "cancelled");
+          .eq("account_id", fx.accountId).eq("paid", false).eq("written_off", false).neq("status", "cancelled");
         f.accountOwed = Math.round((data ?? []).reduce((s, o) => s + Number(o.total), 0) * 100) / 100;
         return { accountId: fx.accountId, expected: f.accountOwed, tip: 10, method: "cash", ref: crypto.randomUUID(), currency: "MXN" };
       },
@@ -75,7 +91,7 @@ export function accountsCases(fx) {
       effect: async f => {
         const [{ data: pays }, { data: owed }] = await Promise.all([
           f.admin.from("payments").select("amount, tip, method, actor_email").eq("account_id", fx.accountId),
-          f.admin.from("orders").select("id").eq("account_id", fx.accountId).eq("paid", false).neq("status", "cancelled"),
+          f.admin.from("orders").select("id").eq("account_id", fx.accountId).eq("paid", false).eq("written_off", false).neq("status", "cancelled"),
         ]);
         if ((pays ?? []).length !== 1) return `${(pays ?? []).length} payments for one collection`;
         const [p] = pays;

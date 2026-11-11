@@ -1,6 +1,21 @@
 // English UI strings for the customer-facing screens. This is the source of
 // truth for the message keys; es.ts must mirror its shape (enforced by types).
 export const en = {
+  accountCredit: {
+    action: "Credit",
+    title: "Credit this order",
+    amount: "Credit amount",
+    remaining: "Order remaining: {amount}",
+    balance: "Account balance after: {amount}",
+    confirm: "Apply credit",
+    done: "Credit applied",
+    line: "Credit −{amount}",
+    by: "Granted by {who}",
+    walkout: "Uncollectible debt",
+    comp: "Complimentary",
+    error: "Billing error",
+    other: "Other",
+  },
   paymentCheck: {
     action: "Check payment",
     checking: "Checking payment…",
@@ -1415,6 +1430,15 @@ foundingLeftBody: "Subscribe now and keep this subscription price for as long as
     requestsFailed: "Could not check for other phones waiting to join. We’ll check again in a few seconds.",
   },
   apiErr: {
+    accountCreditInvalid: "That amount is not valid. Enter an amount up to what the order still owes.",
+    accountCreditReason: "Choose a reason for the credit.",
+    accountCreditNote: "Add a note for Other, using at most 300 characters.",
+    accountCreditIneligible: "Only an unpaid customer-account order can receive a credit. Refresh the statement.",
+    accountCreditChanged: "The balance changed. Refresh the statement and review the credit again.",
+    accountCreditCapacity: "The credit cannot exceed the remaining amount on this order.",
+    accountCreditConflict: "This credit was already sent with different details. Close the dialog and try again.",
+    accountCreditReview: "This order already has a payment, or one still processing, so it cannot be credited here. Check its payments first.",
+
     splitSlotPaid: "One of these parts is already paid. Check the parts again.",
     splitCollectSlots: "This bill is divided. Choose the parts you are collecting.",
     splitChanged: "The bill changed. Check the parts again.",

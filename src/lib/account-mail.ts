@@ -38,6 +38,10 @@ export function statementMail(
         lines.push(`  ${row}`);
         html += `<li>${esc(row)}</li>`;
       }
+      for (const credit of c.credits ?? []) {
+        const row = `${t("accountCredit.line", { amount: formatMoney(credit.amount, credit.currency) })} · ${date(credit.at)}`;
+        lines.push(`  ${row}`); html += `<li>${esc(row)}</li>`;
+      }
     }
     html += "</ul>";
   }
