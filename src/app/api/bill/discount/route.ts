@@ -108,6 +108,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   if (applied === "paying") return await apiError("apiErr.accountBillPaying", 409);
   if (applied === "part_paid") return await apiError("apiErr.discountPartPaid", 409);
   if (applied === "split") return await apiError("apiErr.billSplitLive", 409);
+  if (applied === "changed") return await apiError("apiErr.discountChanged", 409);
   if (applied === "failed") return await apiError("apiErr.generic", 503);
   if (applied !== "applied") return await apiError("apiErr.couponNotValid", 409);
 

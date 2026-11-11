@@ -16,7 +16,7 @@ const { holdSale, readHeld, replayBody } = await import("@/lib/offline-sales");
 const sale: HeldSale = { posRef: "6b1f0c2e-0000-4000-8000-000000000001", restaurantId: "r", at: new Date().toISOString(), method: "cash", items: [], charge: { subtotal: 100, total: 100, discount: 0, tip: 0, serviceFee: 0 } };
 function useTill() {
   const offline = useOfflineSales("r");
-  return usePosCharge({ collectorContext: "signed-context", collector: "cashier@x.dev", restaurant: { id: "r", currency: "MXN" }, cart: { lines: [{ itemId: "x", price: 100, qty: 1 }], clear: state.clear }, details: { tipPct: 0, tipCustom: null, noTicket: true, customerName: "", note: "", terminalRef: "", reset: vi.fn() }, canEmailReceipt: false, pricing: sale.charge, offline } as unknown as Parameters<typeof usePosCharge>[0]);
+  return usePosCharge({ collectorContext: "signed-context", collector: "cashier@x.dev", restaurant: { id: "r", currency: "MXN" }, cart: { lines: [{ itemId: "x", price: 100, qty: 1 }], clear: state.clear }, details: { tipPct: 0, tipCustom: null, noTicket: true, customerName: "", note: "", terminalRef: "", reset: vi.fn() }, canEmailReceipt: false, pricing: { ...sale.charge, lines: [{ itemId: "x", qty: 1, gross: 100, unit: 100 }], promoSavings: {} }, offline } as unknown as Parameters<typeof usePosCharge>[0]);
 }
 beforeEach(() => {
   state.storage.clear(); state.fetch.mockReset(); state.toast.mockReset(); state.clear.mockReset();
@@ -32,7 +32,8 @@ it("W1.4 holds the complete sale before the first request starts", async () => {
   state.fetch.mockImplementation(async () => { heldAtSend = readHeld(); throw new Error("lost"); });
   await useTill().charge("cash");
   expect(heldAtSend).toHaveLength(1);
-  expect(heldAtSend[0]).toMatchObject({ restaurantId: "r", method: "cash", charge: sale.charge });
+  expect(heldAtSend[0]).toMatchObject({ restaurantId: "r", method: "cash", charge: sale.charge,
+    items: [{ itemId: "x", promotionRevenue: 100 }] });
 });
 it("W1.2 keeps a repeat that has no settled acknowledgement", async () => {
   holdSale(sale);

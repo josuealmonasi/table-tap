@@ -59,10 +59,11 @@ describe("our fee on a diner's order", () => {
 });
 
 describe("the row a checkout writes", () => {
-  const pricing = {
+  const pricing: PricedCart = {
+    grossSubtotal: 100, hints: [],
     subtotal: 100, serviceFee: 10, tip: 15, discount: 0, total: 125,
-    itemDiscount: 0, promoDiscount: 0, couponDiscount: 0,
-  } as PricedCart;
+    itemDiscount: 0, promoDiscount: 0, couponDiscount: 0, lines: [], promoSavings: {},
+  };
   const base = {
     restaurantId: "r", table: { id: "t", label: "Mesa 1" }, sessionId: "s", diner: "phone-1",
     deferred: false, pricing, taxPct: 16, couponCode: null, currency: "MXN",

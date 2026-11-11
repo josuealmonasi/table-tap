@@ -6502,3 +6502,22 @@ The last forgiven charge cannot change a legacy credit ceiling's currency.
 | Regression | Automatic check | Live verification still required |
 | --- | --- | --- |
 | R8-4 part 1: uncollected account debt could not be reduced; stale or repeated requests could reduce it twice | account-credit route, maths, schema, money, public-projection and dialog specs; accounts-server history test; sabotage-tested invariants/account-debt; API manager/waiter cases; role entry; attack-account-credit | Run probe-account-credit.mjs on dev after schema application (including both two-connection settle races), then API, roles, attack, money, layout and dialogs; visually inspect phone/tablet in both languages |
+
+## Sweep 9 — discounts and product revenue
+
+The corte read a best-effort activity insert, so checkout coupons and a staff
+coupon whose later log failed vanished. `report-currency.spec.ts` reproduces
+both on the analytics page. `report-discounts.spec.ts` checks durable order
+breakdowns and transactional staff redemptions, currency, dates, paging and
+counting once. `checkout_discount_at` records acceptance under the order write,
+including a card accepted after midnight; legacy rows use creation day.
+The trigger contract is tested locally; executing it in PostgreSQL remains
+pending because this sweep authorizes no database access.
+
+A product's 2x1 also reduced unrelated product revenue and margin. The checkout,
+till, waiter pad and offline receipt now freeze each line's promotion revenue.
+`report-revenue.spec.ts` reproduces the attribution error;
+`order-line-revenue.spec.ts` checks both overstatement of promoted revenue and
+understatement of unrelated revenue, bill-wide stacking, extras, combo display
+savings, free food costs, exact cents, legacy fallback and offline replay.
+Reports never fetch current promotions for old sales.

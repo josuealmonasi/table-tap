@@ -19,8 +19,8 @@ import { round2 } from "@/lib/money";
  * It reads from two places, because they are two different facts. Money that
  * ARRIVED is `payments`, where the amount is a number and the method is one of
  * two words the database constrains. Money that never arrived cannot be in a
- * payments table at all, so write-offs and discounts still come from the
- * activity log, which is where the decision to forgo them was recorded.
+ * payments table at all. Write-offs come from activity; the page supplies
+ * discounts from durable order snapshots and transactional redemptions.
  *
  * It will not always match the revenue tiles beside it, and that is correct.
  * The tiles count orders CREATED in the period; a corte counts money RECORDED

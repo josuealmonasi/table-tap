@@ -8115,6 +8115,7 @@ declare
   v_count int;
   v_total numeric;
   v_amount numeric;
+  v_allocated numeric;
 begin
   perform public.lock_restaurant_money(p_restaurant);
   perform set_config('tabletap.allocation_writer', 'v1', true);
@@ -8153,19 +8154,25 @@ begin
   if v_amount <> p_amount then return 'changed'; end if;
   if redeem_coupon(v_coupon.id) is null then return 'changed'; end if;
 
-  -- Keep the rounding remainder on the largest order, as spreadDiscount does.
+  -- Whole cents first; award spare cents by largest remainder, with stable ties.
   with shares as (
-    select id, total, round(p_amount * total / v_total, 2) amount,
-      row_number() over (order by total desc, id) position
+    select id, floor(p_amount * 100 * total / v_total) cents,
+      mod(p_amount * 100 * total, v_total) remainder
     from orders where id = any(v_request.order_ids) and restaurant_id = p_restaurant
      and account_id is null
+  ), ranked as (
+    select *, row_number() over (order by remainder desc, id) position from shares
   ), amounts as (
-    select id, greatest(0, least(total, amount + case when position = 1
-      then p_amount - sum(amount) over () else 0 end)) amount from shares
+    select id, (cents + case when position <= round(p_amount * 100) - sum(cents) over ()
+      then 1 else 0 end) / 100.0 amount from ranked
+  ), updated as (
+    update orders o set coupon_code = v_coupon.code,
+      discount = round(coalesce(o.discount, 0) + a.amount, 2), total = round(o.total - a.amount, 2)
+      from amounts a where o.id = a.id and o.restaurant_id = p_restaurant
+      returning a.amount
   )
-  update orders o set coupon_code = v_coupon.code,
-    discount = round(coalesce(o.discount, 0) + a.amount, 2), total = round(o.total - a.amount, 2)
-    from amounts a where o.id = a.id and o.restaurant_id = p_restaurant;
+  select coalesce(sum(amount), 0) into v_allocated from updated;
+  if v_allocated <> p_amount then raise exception 'discount shares do not match approved amount'; end if;
   insert into coupon_redemptions (restaurant_id, coupon_id, order_id, code, amount, confirmed_at)
   values (p_restaurant, v_coupon.id, v_request.order_ids[1], v_coupon.code, p_amount, now());
   update discount_requests set status = 'approved', decided_by = p_actor, decided_at = now()
@@ -8184,7 +8191,8 @@ grant execute on function public.approve_discount_request_v2(uuid, uuid, text, n
 -- which only checks writers that opt in. Now it is one transaction: eligibility,
 -- the coupon use, the totals and the redemption, or none of them. A part-paid
 -- bill is refused like a write-off (the guard would refuse the lower total
--- anyway). The amount is the route's coupon arithmetic; this checks it fits.
+-- anyway). Recompute from the locked bill and coupon, like approval, and refuse
+-- a stale quote rather than silently changing the amount the manager granted.
 create or replace function public.apply_bill_discount(
   p_restaurant uuid, p_orders uuid[], p_coupon uuid, p_amount numeric
 ) returns text language plpgsql security definer set search_path = public as $$
@@ -8192,6 +8200,8 @@ declare
   v_coupon coupons%rowtype;
   v_count int;
   v_total numeric;
+  v_amount numeric;
+  v_allocated numeric;
 begin
   perform public.lock_restaurant_money(p_restaurant);
   perform set_config('tabletap.allocation_writer', 'v1', true);
@@ -8214,20 +8224,33 @@ begin
   if exists (select 1 from unnest(p_orders) o(id)
     where public.retained_order_coverage(p_restaurant, o.id) > 0) then return 'part_paid'; end if;
   select * into v_coupon from coupons where id = p_coupon and restaurant_id = p_restaurant for update;
-  if not found or redeem_coupon(v_coupon.id) is null then return 'changed'; end if;
+  if not found or not v_coupon.active
+     or v_coupon.starts_at > now() or v_coupon.ends_at <= now()
+     or v_total < v_coupon.min_subtotal
+     or v_coupon.uses_count >= v_coupon.max_uses then return 'changed'; end if;
+  v_amount := greatest(0, least(v_total, round(case when v_coupon.kind = 'percent'
+    then v_total * v_coupon.value / 100 else v_coupon.value end, 2)));
+  if v_amount <> p_amount then return 'changed'; end if;
+  if redeem_coupon(v_coupon.id) is null then return 'changed'; end if;
 
-  -- Keep the rounding remainder on the largest order, as spreadDiscount does.
+  -- Whole cents first; award spare cents by largest remainder, with stable ties.
   with shares as (
-    select id, total, round(p_amount * total / v_total, 2) amount,
-      row_number() over (order by total desc, id) position
+    select id, floor(p_amount * 100 * total / v_total) cents,
+      mod(p_amount * 100 * total, v_total) remainder
     from orders where id = any(p_orders) and restaurant_id = p_restaurant
+  ), ranked as (
+    select *, row_number() over (order by remainder desc, id) position from shares
   ), amounts as (
-    select id, greatest(0, least(total, amount + case when position = 1
-      then p_amount - sum(amount) over () else 0 end)) amount from shares
+    select id, (cents + case when position <= round(p_amount * 100) - sum(cents) over ()
+      then 1 else 0 end) / 100.0 amount from ranked
+  ), updated as (
+    update orders o set coupon_code = v_coupon.code,
+      discount = round(coalesce(o.discount, 0) + a.amount, 2), total = round(o.total - a.amount, 2)
+      from amounts a where o.id = a.id and o.restaurant_id = p_restaurant
+      returning a.amount
   )
-  update orders o set coupon_code = v_coupon.code,
-    discount = round(coalesce(o.discount, 0) + a.amount, 2), total = round(o.total - a.amount, 2)
-    from amounts a where o.id = a.id and o.restaurant_id = p_restaurant;
+  select coalesce(sum(amount), 0) into v_allocated from updated;
+  if v_allocated <> p_amount then raise exception 'discount shares do not match approved amount'; end if;
   insert into coupon_redemptions (restaurant_id, coupon_id, order_id, code, amount, confirmed_at)
   values (p_restaurant, v_coupon.id, p_orders[1], v_coupon.code, p_amount, now());
   return 'applied';
@@ -12985,3 +13008,28 @@ end;
 $$;
 revoke all on function public.account_credit_v1(uuid, uuid, numeric, numeric, text, text, text, uuid) from public, anon, authenticated;
 grant execute on function public.account_credit_v1(uuid, uuid, numeric, numeric, text, text, text, uuid) to service_role;
+-- Checkout discounts are real when the order reaches the pass, not while a
+-- card page is pending. Keep that date with the order even if coupon logging
+-- fails. Old accepted orders have no recoverable acceptance time; readers use
+-- their creation day. Offline inserts keep the original sale's created_at.
+alter table orders add column if not exists checkout_discount_at timestamptz default null;
+create or replace function public.stamp_checkout_discount_v1()
+returns trigger language plpgsql set search_path = public as $$
+begin
+  if TG_OP = 'INSERT' then
+    new.checkout_discount_at := case when new.status not in ('pending_payment', 'cancelled')
+      then new.created_at else null end;
+  elsif old.checkout_discount_at is not null then
+    new.checkout_discount_at := old.checkout_discount_at;
+  elsif old.status = 'pending_payment' and new.status not in ('pending_payment', 'cancelled') then
+    new.checkout_discount_at := clock_timestamp();
+  else
+    new.checkout_discount_at := old.checkout_discount_at;
+  end if;
+  return new;
+end; $$;
+create or replace trigger stamp_checkout_discount
+  before insert or update on orders
+  for each row execute function public.stamp_checkout_discount_v1();
+revoke all on function public.stamp_checkout_discount_v1() from public, anon, authenticated;
+grant execute on function public.stamp_checkout_discount_v1() to service_role;

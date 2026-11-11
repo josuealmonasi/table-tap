@@ -112,6 +112,9 @@ export function offlineLines(items: unknown): OrderLineItem[] {
     return [{
       itemId: text(l.itemId, 64), name: text(l.name, 80) || "—", emoji: text(l.emoji, 8),
       price: price(l.price), qty, mods, extras, ...preparationOf(l),
+      ...(typeof l.promotionRevenue === "number" && Number.isFinite(l.promotionRevenue)
+        && l.promotionRevenue >= 0 && l.promotionRevenue <= 1_000_000 * qty
+        ? { promotionRevenue: round2(l.promotionRevenue) } : {}),
       ...(typeof l.note === "string" ? { note: text(l.note, 150) } : {}),
       ...(comboId && components.length > 0 ? { comboId, components } : {}),
       ...(Number.isFinite(discountPct) && discountPct > 0 && discountPct <= 100 ? { discountPct } : {}),

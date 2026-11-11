@@ -1,3 +1,4 @@
+import { orderItemsWithRevenue } from "@/lib/order-line-revenue";
 import { invalidatePublicMenu } from "@/lib/public-menu-cache";
 import { orderRequestScope } from "@/lib/order-request";
 import { readOfflineContext, contextCoveredSale } from "@/lib/offline-authority";
@@ -185,7 +186,7 @@ export async function POST(req: NextRequest) {
       subtotal: pricing.subtotal, service_fee: pricing.serviceFee, tip: pricing.tip,
       tax_pct: Number(restaurant.tax_pct) || 0, discount: pricing.discount, total: pricing.total,
       promo_detail: pricing.discount > 0 ? { item: pricing.itemDiscount, promos: pricing.promoDiscount, coupon: 0 } : null,
-      currency: restaurant.currency, items: verified, note: capNote(body.note) ?? null,
+      currency: restaurant.currency, items: orderItemsWithRevenue(verified, pricing), note: capNote(body.note) ?? null,
       customer_name: capName(body.customerName) ?? null,
     },
   };

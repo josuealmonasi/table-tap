@@ -22,7 +22,7 @@ const details = { tipPct: 0, tipCustom: null, noTicket: false, customerName: "",
 const offline = { hold: vi.fn(() => true), acknowledge: vi.fn(() => true), discard: vi.fn(), setOnline: vi.fn() };
 function Till() {
   till = usePosCharge({ collector: "cashier", collectorContext: "signed", restaurant: { id: "r", name: "Place", currency: "MXN" },
-    cart, details, offline, canEmailReceipt: true, pricing: { subtotal: 100, serviceFee: 0, tip: 0, discount: 0, total: 100 },
+    cart, details, offline, canEmailReceipt: true, pricing: { subtotal: 100, serviceFee: 0, tip: 0, discount: 0, total: 100, lines: [{ itemId: "dish", qty: 1, gross: 100, unit: 100 }], promoSavings: {} },
   } as unknown as Parameters<typeof usePosCharge>[0]);
   return null;
 }

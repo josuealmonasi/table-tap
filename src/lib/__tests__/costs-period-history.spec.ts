@@ -14,6 +14,7 @@ vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({
   },
 }) }));
 vi.mock("@/lib/report-fees", () => ({ feesKeptSince: async () => ({ kept: 0, unverified: 0 }) }));
+vi.mock("@/lib/refunds/events", () => ({ readReturnEvents: async () => [] }));
 const { readCosts } = await import("@/lib/costs/server");
 
 beforeEach(() => {

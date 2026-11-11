@@ -1,4 +1,5 @@
 import { withSavedCosts } from "./saved-costs";
+import { readContributionReturns } from "./returns";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { withReturnComponents } from "@/lib/return-components";
 import { feesKeptSince } from "@/lib/report-fees";
@@ -86,13 +87,14 @@ export async function readCosts(restaurantId: string, now = new Date()): Promise
   // whatever a refund gave back, on payments settled in the window.
   const platformFees = await feesKeptSince(restaurantId, since, restaurant.data.currency);
   const fees = feeRate(await withProcessingFees(payments), platformFees.kept, terminalFeePct);
+  const returns = await readContributionReturns(db, restaurantId, restaurant.data.currency, since, now.toISOString());
 
   return {
     ingredients: typed.sort((a, b) => a.name.localeCompare(b.name)),
     recipes: lines,
     products,
     margins: unitMargins(products, book, costs, fees.rate, taxPct),
-    period: periodContribution(await withSavedCosts(db, restaurantId, await withReturnComponents(db, restaurantId, orders)), fees.rate),
+    period: periodContribution(await withSavedCosts(db, restaurantId, await withReturnComponents(db, restaurantId, orders)), fees.rate, returns),
     fees,
     unverifiedFees: platformFees.unverified,
     rises: priceRises(changes, typed, products, book, costs, fees.rate, taxPct),

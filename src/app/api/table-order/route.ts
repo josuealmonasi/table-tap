@@ -1,3 +1,4 @@
+import { orderItemsWithRevenue } from "@/lib/order-line-revenue";
 import { invalidatePublicMenu } from "@/lib/public-menu-cache";
 import { orderRequestScope } from "@/lib/order-request";
 import { NextRequest, NextResponse } from "next/server";
@@ -177,7 +178,7 @@ export async function POST(req: NextRequest) {
         : null,
     total: pricing.total,
     currency: restaurant.currency,
-    items: verified,
+    items: orderItemsWithRevenue(verified, pricing),
     note: capNote(body.note) ?? null,
   };
   if (intent) {

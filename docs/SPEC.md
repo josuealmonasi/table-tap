@@ -318,6 +318,10 @@ dishes on a bill the restaurant has just cancelled.
   have scoped reads only; request and decision writes use guarded APIs. Approval
   requires the amount shown on screen, the stored request and the current amount
   to agree, checked again under request and order locks before anything changes.
+  Direct discounts use the same locked coupon eligibility and amount check:
+  a changed bill or coupon is refused for review. Both writers spread the
+  approved amount in integer cents by largest remainders (order ID breaks ties)
+  and abort unless the shares sum to that amount.
   The person who gives
   money away is never the person who asks. A write-off also FINISHES the orders
   it cancels: `completed`, not `cancelled`, because the food went out and the
@@ -580,8 +584,16 @@ dishes on a bill the restaurant has just cancelled.
   activity log's `amount=120 method=cash` sentence, which made the money a
   cashier signs for a substring — and the ledger and the log, two records of one
   night, had nothing comparing them. `pnpm money` now reconciles them per person
-  and method. Money given up (write-offs, discounts) still comes from the log,
-  because money that never arrived cannot be in a payments table. Money handed
+  and method. Write-offs still come from the log. Discounts use durable
+  evidence: the order's initial `promo_detail` (item, quantity and coupon
+  savings) on its acceptance day, and confirmed `coupon_redemptions` for later
+  bill grants on their confirmation day. Checkout redemptions and activity
+  logs never add a second copy. Pending and cancelled checkout orders are
+  excluded until accepted. `orders.checkout_discount_at` is stamped in the
+  order transaction: immediately for ordinary/offline sales (their original
+  creation time), when leaving pending payment for card orders, then immutable.
+  Legacy accepted orders lacking the stamp use creation day; older offline
+  rows without a breakdown use their saved discount. Money handed
   back (a cancelled sale) comes from the log too: it DID arrive, so it stays in
   `payments`, and the `refunded` line subtracts it from the drawer of the
   person it names — on the day it was handed back, which is when it left the
@@ -898,9 +910,16 @@ business's profit.
   is left out of the totals and named apart — counted at nothing, a mostly
   uncosted menu would show a margin of nearly everything.
   Analytics product rows and contribution use the same final food revenue:
-  `max(0, total - service_fee - tip)`, including IVA, allocated by line value
-  in whole cents. This includes later table discounts without taking checkout
-  discounts twice. Contribution then removes the order's inclusive IVA.
+  `max(0, total - service_fee - tip)`, including IVA, allocated in whole cents.
+  New diner, till, waiter-pad and offline sales freeze each whole line's
+  `promotionRevenue` after item and quantity offers, before bill-wide coupons.
+  Product offers reduce only their product's revenue; bill-wide discounts share
+  the saved values. Legacy lines without this field retain the proportional
+  sale-price fallback. Replay preserves the saved attribution; reports never
+  consult today's promotions to price a past sale. This includes later table discounts without taking checkout
+  discounts twice. Contribution then removes the order's inclusive IVA and
+  deducts food returns completed in the window, including returns of older
+  sales. Sales, units and consumed ingredient costs keep their original date.
 - **The fee** is the restaurant's own mix over the last 30 days, from the
   ledger: cash costs nothing; a card through TableTap pays Stripe's Mexican
   rate (3.6% + MX$3, IVA on the fee) and TableTap's per-order fee
@@ -2568,8 +2587,15 @@ requests keep their exact body; an expired unknown key cannot authorize another
 POST. Fee completion remains separate through charge-wide recovery.
 
 Sales analytics and product contribution restore every immutable return delta
-before computing the original sale on its original day. Forgiveness is not
-restored as earnings. A separate return total dates each successful refund piece,
+before computing the original sale on its original day. Product contribution
+then deducts completed food returns without IVA on each success date, including
+returns of sales before the 30-day window; sold units and ingredient costs are
+not repeated. Service and tips are excluded using the immutable return plan.
+Food is shared across payment operations by principal, in whole cents, and
+cumulative success amounts fix the cents attributed to each dated piece.
+Pending promises do not reduce contribution. Forgiveness is not
+restored as earnings. Analytics keeps its separate return total and does not
+deduct returns from historical product sales. That total dates each successful refund piece,
 including manual partial coverage, with half-open local-day bounds. Pending
 promises show only their outstanding amount separately. Analytics, corte,
 collected-today and shift trails share `order_return_events_v1`; imported log

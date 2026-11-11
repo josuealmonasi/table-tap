@@ -1,7 +1,10 @@
 import { expect, it } from "vitest";
 import { computeAnalytics } from "@/lib/analytics";
 import { periodContribution } from "@/lib/costs/margins";
-import { foodRevenue, lineRevenues } from "@/lib/report-revenue";
+import { foodRevenue, lineRevenues, returnedFoodCents } from "@/lib/report-revenue";
+import type { ReturnAdjustment } from "@/lib/return-components";
+import type { ReturnEvent } from "@/lib/refunds/events";
+import { checkoutOrderRow } from "@/lib/checkout/order-row";
 import { priceCart } from "@/lib/pricing";
 
 const dish = { itemId: "dish", name: "Dish", emoji: "🍜", price: 100, qty: 1, mods: {} };
@@ -58,4 +61,49 @@ it("keeps a fully discounted sale's ingredient cost without negative food revenu
   const period = periodContribution([order], 0);
   expect(foodRevenue(order)).toBe(0);
   expect(period).toMatchObject({ revenue: 0, cost: 40, contribution: -40 });
+});
+
+it("F2 fixes each partial success's food cents before a later success arrives", () => {
+  const adjustment: ReturnAdjustment = { id: "a", order_id: "o", currency: "MXN", previous_total: 0.03,
+    resulting_total: 0, previous_tip: 0, resulting_tip: 0, previous_service_fee: 0.02, resulting_service_fee: 0 };
+  const operation = { id: "op", adjustment_id: "a", currency: "MXN", amount: 0.03, tip: 0 };
+  const event = (id: string, day: number) => ({ id, operation_id: "op", amount_cents: 1,
+    succeeded_at: `2026-11-0${day}T12:00:00Z` }) as ReturnEvent;
+  const pieces = [event("one", 1), event("two", 2), event("three", 3)];
+  const before = returnedFoodCents(adjustment, [operation], pieces.slice(0, 2));
+  const after = returnedFoodCents(adjustment, [operation], pieces);
+  expect([...before]).toEqual([["one", 0], ["two", 0]]);
+  expect([...after]).toEqual([["one", 0], ["two", 0], ["three", 1]]);
+});
+
+it("F2 shares service only across principal, excluding a separate tip operation", () => {
+  const adjustment: ReturnAdjustment = { id: "a", order_id: "o", currency: "MXN", previous_total: 100,
+    resulting_total: 0, previous_tip: 20, resulting_tip: 0, previous_service_fee: 10, resulting_service_fee: 0 };
+  const operations = [{ id: "principal", adjustment_id: "a", currency: "MXN", amount: 80, tip: 0 },
+    { id: "tip", adjustment_id: "a", currency: "MXN", amount: 20, tip: 20 }];
+  const events = operations.map(o => ({ id: o.id, operation_id: o.id, amount_cents: o.amount * 100,
+    succeeded_at: "2026-11-01T12:00:00Z" }) as ReturnEvent);
+  expect([...returnedFoodCents(adjustment, operations, events)]).toEqual([["principal", 7000], ["tip", 0]]);
+});
+
+it("F2 deducts a return once without undoing incurred fees or historical revenue", () => {
+  const period = periodContribution([sale], 0.1, [{ order: sale, food: 30 }]);
+  expect(period).toMatchObject({ revenue: 80, cost: 40, fees: 8, returned: 30, contribution: 2 });
+  expect(period.rows[0]).toMatchObject({ units: 1, revenue: 80, cost: 40, returned: 30, contribution: 2 });
+});
+
+
+it("S9 F5: checkout keeps a product promotion off unrelated revenue and margin", () => {
+  const items = [{ ...dish, qty: 2 }, { ...dish, itemId: "other", name: "Other" }];
+  const pricing = priceCart({ items, servicePct: 0, serviceEnabled: false,
+    promos: [{ id: "deal", name: "2x1", kind: "bogo", buyQty: 2, payQty: 1, itemIds: ["dish"] }] });
+  const row = checkoutOrderRow({ restaurantId: "r", table: null, sessionId: null, diner: "d", deferred: true,
+    pricing, taxPct: 0, couponCode: null, currency: "MXN", verified: items, note: undefined, customerName: undefined });
+  const order = { ...row, ingredient_costs: [80, 40], created_at: "2026-11-10T12:00:00Z" };
+  const analytics = computeAnalytics([order], "today", "UTC");
+  expect(analytics.topProducts.find(p => p.name === "Other")?.revenue).toBe(100);
+  expect(lineRevenues(order)).toEqual([100, 100]);
+  const period = periodContribution([order], 0);
+  expect(period.rows.find(r => r.name === "Other")).toMatchObject({ revenue: 100, contribution: 60 });
+  expect(period.rows.find(r => r.name === "Dish")).toMatchObject({ revenue: 100, contribution: 20 });
 });

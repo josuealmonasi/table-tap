@@ -211,6 +211,8 @@ export type OrderLineItem = {
   notes?: string;
   /** % off the base price at the time of ordering (0/absent = full price). */
   discountPct?: number;
+  /** Whole line after item/quantity promotions, before bill-wide discounts; frozen at sale. */
+  promotionRevenue?: number;
   /**
    * This line needs no preparation — a bottled drink, a packaged snack. Copied
    * from the menu row when the order is written rather than looked up later,

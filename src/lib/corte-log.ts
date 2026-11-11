@@ -5,15 +5,14 @@ export interface CorteLog extends CorteAdjustment {
   entity: string;
 }
 
-/** A waste entry is not a bill write-off, and an approved discount is the
- * same money as a directly granted one. Unknown currencies are review work,
- * never permission to treat yesterday's pesos as today's dollars. */
+/** A waste entry is not a bill write-off. Discounts have their own durable
+ * reader; their activity logs must never add a second copy. Unknown currencies
+ * are review work, never permission to treat yesterday's pesos as today's dollars. */
 export function corteLogs(rows: CorteLog[], currency: string): { verified: CorteAdjustment[]; unverified: number } {
   const verified: CorteAdjustment[] = [];
   let unverified = 0;
   for (const row of rows) {
     const eligible = (row.entity === "bill" && row.action === "written_off")
-      || (row.entity === "discount" && ["discounted", "approved"].includes(row.action))
       || (["order", "bill"].includes(row.entity) && row.action === "refunded");
     const fields = parseLogDetail(row.detail);
     if (!eligible || !fields?.amount || !Number.isFinite(Number(fields.amount))) continue;
