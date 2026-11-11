@@ -9,6 +9,7 @@ import { BillIcon, CallWaiterIcon, StatusReadyIcon } from "@/components/ui/icons
 import type { ReadyTable } from "@/lib/ready-tables";
 import { useEffect, useState, useTransition } from "react";
 import SettleTableDialog from "./SettleTableDialog";
+import { SEP } from "@/lib/separator";
 
 interface ServiceRequestsBarProps {
   restaurantId: string;
@@ -90,10 +91,10 @@ export default function ServiceRequestsBar({
             <strong>
               {trip.label
                 ? t("dash.tableN", { label: trip.label })
-                : [trip.code, trip.customerName].filter(Boolean).join(" · ")}
+                : [trip.code, trip.customerName].filter(Boolean).join(SEP)}
             </strong>{" "}
             {t("orders.readyToCarry", { n: trip.dishes })}
-            <span className="tt-muted"> · {age(trip.since)}</span>
+            <span className="tt-muted">{SEP}{age(trip.since)}</span>
           </span>
           <button
             className="tt-btn tt-btn-primary tt-btn-sm"
@@ -122,7 +123,7 @@ export default function ServiceRequestsBar({
                   ? "settle.wantsToPay"
                   : "orders.wantsBill",
             )}
-            <span className="tt-muted"> · {age(r.created_at)}</span>
+            <span className="tt-muted">{SEP}{age(r.created_at)}</span>
           </span>
           {/* A table waiting to pay needs the bill, not a "done" button —
               pressing done would clear the request and leave the money

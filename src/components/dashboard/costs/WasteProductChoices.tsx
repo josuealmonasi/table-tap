@@ -3,6 +3,7 @@
 import { useT } from "@/lib/i18n/context";
 import type { Modifier } from "@/lib/types";
 import type { Choices } from "@/lib/costs/recipe-cost";
+import { SEP } from "@/lib/separator";
 
 interface WasteProductChoicesProps {
   modifiers: Modifier[];
@@ -24,7 +25,7 @@ export default function WasteProductChoices({ modifiers, extras, mods, extraIds,
       <legend className="tt-mod-label">{t("waste.choices")}</legend>
       {modifiers.map(group => group.type === "single" ? (
         <label className="tt-field" key={group.label}>
-          <span className="tt-mod-label">{group.label}{group.required && ` · ${t("item.required")}`}</span>
+          <span className="tt-mod-label">{group.label}{group.required && `${SEP}${t("item.required")}`}</span>
           <select className="tt-input" name={group.label} required={group.required} value={typeof mods[group.label] === "string" ? mods[group.label] : ""}
             onChange={e => onMods(Object.fromEntries([...Object.entries(mods).filter(([key]) => key !== group.label), ...(e.target.value ? [[group.label, e.target.value]] : [])]))}>
             <option value="">{t("waste.choose")}</option>
@@ -33,7 +34,7 @@ export default function WasteProductChoices({ modifiers, extras, mods, extraIds,
         </label>
       ) : (
         <fieldset className="tt-field" key={group.label}>
-          <legend className="tt-mod-label">{group.label}{group.required && ` · ${t("item.required")}`}</legend>
+          <legend className="tt-mod-label">{group.label}{group.required && `${SEP}${t("item.required")}`}</legend>
           {group.options.map(option => (
             <label key={option} className="tt-check">
               <input type="checkbox" checked={pickedMany(group.label).includes(option)}

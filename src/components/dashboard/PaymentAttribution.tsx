@@ -5,6 +5,7 @@ import { Modal } from "@/components/ui/Modal";
 import { useLocale, useT } from "@/lib/i18n/context";
 import { useToast } from "@/components/ui/Toast";
 import { dateLocale, formatMoney } from "@/lib/format";
+import { SEP } from "@/lib/separator";
 
 interface Receipt { id: string; amount: number; tip: number; currency: string | null; created_at: string }
 interface Dish { id: string; total: number; currency: string; status: string; table_label: string | null }
@@ -48,7 +49,7 @@ export default function PaymentAttribution({ receipts, timeZone }: Props) {
   return <section className="tt-section">
     <h3>{t("attribution.title")}</h3><p className="tt-muted">{t("attribution.help")}</p>
     {receipts.map(p => <div key={p.id} className="tt-bill-row">
-      <div className="tt-bill-main"><strong>{p.currency ? formatMoney(Number(p.amount), p.currency) : `${Number(p.amount).toFixed(2)} · ${t("attribution.currencyUnknown")}`}</strong>
+      <div className="tt-bill-main"><strong>{p.currency ? formatMoney(Number(p.amount), p.currency) : `${Number(p.amount).toFixed(2)}${SEP}${t("attribution.currencyUnknown")}`}</strong>
         <span className="tt-muted tt-bill-sub">{new Date(p.created_at).toLocaleString(dateLocale(locale), { timeZone, dateStyle: "medium", timeStyle: "short" })} · {p.id.slice(0, 8)}</span></div>
       <button className="tt-btn tt-btn-ghost tt-btn-sm" disabled={busy} onClick={() => void open(p)}>{t("attribution.assign")}</button>
     </div>)}

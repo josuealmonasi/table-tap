@@ -5,6 +5,7 @@ import { formatMoney } from "@/lib/format";
 import { change, perShownUnit } from "@/lib/costs/display";
 import type { PriceRise } from "@/lib/costs/price-rises";
 import { WarningIcon } from "@/components/ui/icons";
+import { SEP } from "@/lib/separator";
 
 interface PriceRisesProps {
   rises: PriceRise[];
@@ -39,7 +40,7 @@ export default function PriceRises({ rises, currency }: PriceRisesProps) {
                 <span className="tt-muted">
                   {r.products
                     .map(p => t("costs.riseProduct", { name: p.name, amount: money(p.marginBefore - p.marginAfter) }))
-                    .join(" · ")}
+                    .join(SEP)}
                 </span>
               ) : (
                 <span className="tt-muted">{t("costs.riseNoProduct")}</span>

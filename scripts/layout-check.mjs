@@ -27,8 +27,12 @@ import { dinerVisit, teamVisit } from "./layout-visits.mjs";
 import { splitScreenFixture, openSplitScreen } from "./split-slot-screens.mjs";
 import { deadline, runWatchdog } from "./browser-deadline.mjs";
 import { monitorBrowserServer } from "./browser-server.mjs";
+import { layoutAuditSelftest } from "./layout-audit-selftest.mjs";
 
 runWatchdog("layout");
+// Prove the measuring instrument works before contacting the app or seeding.
+const controlBrowser = await chromium.launch();
+try { await layoutAuditSelftest(controlBrowser); } finally { await controlBrowser.close(); }
 const prod = process.argv.includes("--prod");
 process.loadEnvFile(join(process.cwd(), prod ? ".env.production.local" : ".env.development.local"));
 const BASE = prod ? (process.env.PROD_SITE_URL ?? "https://table-tap-star.vercel.app") : DEV_URL;

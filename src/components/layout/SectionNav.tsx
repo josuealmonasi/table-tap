@@ -1,5 +1,6 @@
 "use client";
 
+import { useRef } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { PlanFeature } from "@/lib/plan";
@@ -7,6 +8,7 @@ import { navItemsFor, type DashboardRole } from "@/lib/nav";
 import { useT } from "@/lib/i18n/context";
 import { NAV_ICONS } from "@/components/ui/icons";
 import { useBadges } from "@/hooks/useBadges";
+import { useScrollMore } from "@/hooks/useScrollMore";
 import { badgeLabel } from "@/lib/badges";
 
 /** Configuration, not daily work — these stay in the account menu. */
@@ -38,6 +40,8 @@ export default function SectionNav({
   const t = useT();
   const pathname = usePathname();
   const badges = useBadges();
+  const strip = useRef<HTMLDivElement>(null);
+  useScrollMore(strip, pathname);
   // The navbar lives in the root layout, which also wraps the diner's menu —
   // the same trap TermsGate fell into. Dashboard only.
   if (!pathname.startsWith("/dashboard")) return null;
@@ -59,7 +63,7 @@ export default function SectionNav({
 
   return (
     <nav className="tt-section-nav" aria-label={t("nav.sections")}>
-      <div className="container tt-section-nav-inner">
+      <div ref={strip} className="container tt-section-nav-inner">
         {items.map(item => {
           const Icon = NAV_ICONS[item.icon];
           const active = item.href === current;

@@ -10,6 +10,7 @@ import AdminEditUser from "./AdminEditUser";
 import AdminRestaurants from "./AdminRestaurants";
 import { planLabel } from "@/lib/plan";
 import { DeleteIcon, EditIcon } from "@/components/ui/icons";
+import { SEP } from "@/lib/separator";
 
 export interface AdminRestaurantRow {
   id: string;
@@ -113,7 +114,7 @@ export default function AdminPanel({
                 <span className="tt-admin-role">{roleLabel(u.role)}</span>
                 <span className="tt-staff-cell tt-muted" title={u.restaurant_name ?? ""}>
                   {u.restaurant_name ?? "—"}
-                  {u.plan && <> · {planLabel(u.plan)}</>}
+                  {u.plan && <>{SEP}{planLabel(u.plan)}</>}
                 </span>
                 {u.user_id === adminUserId ? (
                   <span className="tt-muted" style={{ fontSize: 11 }}>

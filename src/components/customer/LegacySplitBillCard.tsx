@@ -7,6 +7,7 @@ import type { SplitState } from "@/hooks/useSplit";
 import { shareChoices } from "@/lib/split-shares";
 import { applyPayment } from "@/lib/table-balance";
 import { tipFor } from "@/lib/pricing";
+import { SEP } from "@/lib/separator";
 
 interface SplitBillCardProps {
   split: SplitState | null;
@@ -174,7 +175,7 @@ export default function LegacySplitBillCard({
           // orders a beer and then sees a bigger figure deserves to know why.
           <span className="tt-muted tt-split-since">
             {t("split.plusYours", { amount: formatMoney(split.ownSince, currency) })}
-            {" · "}
+            {SEP}
             <strong>{formatMoney(total, currency)}</strong>
           </span>
         )}

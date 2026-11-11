@@ -11,6 +11,7 @@ import CardDownload from "@/components/loyalty/CardDownload";
 import type { LoyaltyOfferInfo } from "@/lib/loyalty/offer";
 import { ladderLines } from "@/lib/loyalty/ladder";
 import { rewardsPath } from "@/lib/loyalty/code";
+import { SEP } from "@/lib/separator";
 
 interface LoyaltyOfferProps {
   offer: LoyaltyOfferInfo;
@@ -90,7 +91,7 @@ export default function LoyaltyOffer({ offer, asked = false }: LoyaltyOfferProps
     <section className={frame}>
       <strong>{t("loyaltyOffer.title", { name: offer.restaurantName })}</strong>
       <p className="tt-muted" style={{ margin: 0 }}>
-        {t("loyaltyOffer.body", { rewards: ladderLines(offer.steps, t).join(" · ") })}
+        {t("loyaltyOffer.body", { rewards: ladderLines(offer.steps, t).join(SEP) })}
       </p>
       {error && <p className="tt-field-error" role="alert">{error}</p>}
       <button type="button" className="tt-btn tt-btn-primary" disabled={busy} onClick={() => void create()}>

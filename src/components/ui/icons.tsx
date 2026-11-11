@@ -64,6 +64,8 @@ import { Warning } from "@phosphor-icons/react/dist/ssr/Warning";
 import { Clock } from "@phosphor-icons/react/dist/ssr/Clock";
 import { Coins } from "@phosphor-icons/react/dist/ssr/Coins";
 import { Recycle } from "@phosphor-icons/react/dist/ssr/Recycle";
+import { NotePencil } from "@phosphor-icons/react/dist/ssr/NotePencil";
+import { CloudArrowUp } from "@phosphor-icons/react/dist/ssr/CloudArrowUp";
 
 /**
  * Named for the job, not the picture — swapping which glyph plays a role is a
@@ -99,6 +101,12 @@ export const CallWaiterIcon = Bell;
 export const NotificationsIcon = Bell;
 export const BillIcon = Receipt;
 export const TableIcon = Chair;
+// Three tabs once shared the receipt and two shared the chair, so on a phone
+// Caja, Cuentas and Guardadas — and Tomar pedido and Mesas — looked alike.
+// Each section has its own glyph now.
+export const TillIcon = CashRegister;
+export const TakeOrderIcon = NotePencil;
+export const HeldSalesIcon = CloudArrowUp;
 export const SecureIcon = LockSimple;
 export const RatingIcon = Star;
 export const OrdersIcon = ClipboardText;
@@ -139,7 +147,7 @@ export const EmptyIcon = Tray;
 /**
  * The dashboard nav resolves its glyph from a key held in plain data
  * (src/lib/nav.ts), so it needs a lookup rather than a direct import. Kept to
- * the seven nav glyphs so importing it doesn't drag the whole set in — only
+ * the nav glyphs so importing it doesn't drag the whole set in — only
  * dashboard routes touch this.
  */
 export const NAV_ICONS = {
@@ -151,6 +159,9 @@ export const NAV_ICONS = {
   Promotions: PromotionsIcon,
   Loyalty: LoyaltyIcon,
   Table: TableIcon,
+  TakeOrder: TakeOrderIcon,
+  Till: TillIcon,
+  HeldSales: HeldSalesIcon,
   Bills: BillIcon,
   Accounts: CustomerAccountIcon,
   Staff: StaffIcon,

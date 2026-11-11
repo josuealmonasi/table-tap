@@ -3,6 +3,7 @@
 import { useLocale, useT } from "@/lib/i18n/context";
 import { formatMoney, dateLocale } from "@/lib/format";
 import type { StatementDay } from "@/lib/accounts";
+import { SEP } from "@/lib/separator";
 
 interface StatementDaysProps {
   days: (Omit<StatementDay, "charges"> & {
@@ -42,8 +43,8 @@ export default function StatementDays({ days, currency, timeZone, onCredit }: St
               <div className="tt-statement-charge-head">
                 <span className="tt-muted">
                   {time(c.at)}
-                  {c.tableLabel ? ` · ${c.tableLabel}` : ""}
-                  {c.chargedBy ? ` · ${t("account.chargedBy", { who: c.chargedBy })}` : ""}
+                  {c.tableLabel ? `${SEP}${c.tableLabel}` : ""}
+                  {c.chargedBy ? `${SEP}${t("account.chargedBy", { who: c.chargedBy })}` : ""}
                 </span>
                 <span>{formatMoney(c.total, c.currency ?? d.currency ?? currency)}</span>
               </div>
@@ -60,10 +61,10 @@ export default function StatementDays({ days, currency, timeZone, onCredit }: St
               </ul>
               {c.credits?.map((credit, index) => <p className="tt-muted" key={`${credit.at}-${index}`}>
                 {t("accountCredit.line", { amount: formatMoney(credit.amount, credit.currency) })}
-                {" · "}{new Intl.DateTimeFormat(dateLocale(locale), { dateStyle: "medium", timeStyle: "short", timeZone }).format(new Date(credit.at))}
-                {credit.actor && <> · {t("accountCredit.by", { who: credit.actor })}</>}
-                {credit.reason && <> · {t(`accountCredit.${credit.reason}`)}</>}
-                {credit.note && <> · {credit.note}</>}
+                {SEP}{new Intl.DateTimeFormat(dateLocale(locale), { dateStyle: "medium", timeStyle: "short", timeZone }).format(new Date(credit.at))}
+                {credit.actor && <>{SEP}{t("accountCredit.by", { who: credit.actor })}</>}
+                {credit.reason && <>{SEP}{t(`accountCredit.${credit.reason}`)}</>}
+                {credit.note && <>{SEP}{credit.note}</>}
               </p>)}
               {onCredit && c.creditable && <button type="button" className="tt-btn tt-btn-ghost tt-btn-sm"
                 onClick={() => onCredit(c)}>{t("accountCredit.action")}</button>}

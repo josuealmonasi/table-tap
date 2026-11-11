@@ -13,6 +13,7 @@ import { itemSalePrice } from "@/lib/pricing";
 import { modifierEntries } from "@/lib/modifiers";
 import OrderLineAdditions from "./OrderLineAdditions";
 import { CloseIcon } from "@/components/ui/icons";
+import { SEP } from "@/lib/separator";
 
 /**
  * The whole order, for whoever is cooking it.
@@ -118,7 +119,7 @@ export default function OrderDetailDialog({
       </div>
       <p className="tt-muted" style={{ fontSize: 13, margin: "4px 0 14px" }}>
         {placed.toLocaleTimeString(dateLocale(locale), { hour: "2-digit", minute: "2-digit" })}
-        {" · "}
+        {SEP}
         {t(statusMeta(order.status).labelKey)}
       </p>
 

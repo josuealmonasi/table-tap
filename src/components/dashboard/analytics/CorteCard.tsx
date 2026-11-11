@@ -8,6 +8,7 @@ import { hasCorteActivity, type Corte } from "@/lib/corte";
 import type { ShiftView } from "@/lib/cash-shift";
 import ShiftBlock from "@/components/dashboard/cash/ShiftBlock";
 import { corteShiftRows } from "@/lib/corte-print";
+import { SEP } from "@/lib/separator";
 
 /**
  * The register close, as a manager reads it and as they print it.
@@ -55,7 +56,7 @@ export default function CorteCard({
       `<!doctype html><title>${escapeHtml(t("corte.title"))}</title>` +
         `<body style="font-family:system-ui,sans-serif;padding:28px;color:#111113">` +
         `<h1 style="margin:0;font-size:20px">${escapeHtml(t("corte.title"))}</h1>` +
-        `<p style="margin:4px 0 18px;color:#70707a">${escapeHtml(restaurantName)} · ${escapeHtml(day)}</p>` +
+        `<p style="margin:4px 0 18px;color:#70707a">${escapeHtml(restaurantName)}${SEP}${escapeHtml(day)}</p>` +
         // The drawer first, a shift per line: what each was expected to hold,
         // what was counted, and the difference. Each shift prints its own
         // handover sheet with the detail.

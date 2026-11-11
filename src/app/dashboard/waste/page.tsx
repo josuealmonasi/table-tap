@@ -10,6 +10,7 @@ import { startOfLocalDay } from "@/lib/day-window";
 import Breadcrumb from "@/components/layout/Breadcrumb";
 import PlanLock from "@/components/dashboard/plan/PlanLock";
 import WasteRecorder, { type WasteChoice, type TodayEntry } from "@/components/dashboard/costs/WasteRecorder";
+import { SEP } from "@/lib/separator";
 
 export const dynamic = "force-dynamic";
 
@@ -65,7 +66,7 @@ export default async function WastePage() {
       kind: "product" as const, id: p.id, unit: "pza" as const, modifiers: p.modifiers ?? [],
       extras: products.filter(a => a.is_addon && links.some(link => link.product_id === p.id && link.addon_id === a.id))
         .map(a => ({ id: a.id, label: [a.emoji, a.name].filter(Boolean).join(" ") })),
-      label: [p.emoji, p.name].filter(Boolean).join(" ") + (menus.length > 1 && p.menu_id ? ` · ${menuName.get(p.menu_id) ?? ""}` : ""),
+      label: [p.emoji, p.name].filter(Boolean).join(" ") + (menus.length > 1 && p.menu_id ? `${SEP}${menuName.get(p.menu_id) ?? ""}` : ""),
     })),
   ].sort((a, b) => a.label.localeCompare(b.label));
 

@@ -12,6 +12,7 @@ import type { StockView } from "@/lib/costs/stock-server";
 import { useCostsSend } from "@/hooks/useCostsSend";
 import { useWhen } from "@/hooks/useWhen";
 import PurchaseDialog from "./PurchaseDialog";
+import { SEP } from "@/lib/separator";
 
 interface BuyPanelProps {
   stock: StockView;
@@ -105,7 +106,7 @@ export default function BuyPanel({ stock, currency, timeZone }: BuyPanelProps) {
                     <span className="tt-costs-product-meta tt-muted">
                       {s.urgent && <span className="tt-costs-chip">{t("costs.buyUrgent")}</span>}{" "}
                       {t("costs.buyEstimate", { amount: formatMoney(s.cost, s.currency) })}
-                      {s.onHand === null && ` · ${t("costs.buyNotCounted")}`}
+                      {s.onHand === null && `${SEP}${t("costs.buyNotCounted")}`}
                     </span>
                   </li>
                 ))}

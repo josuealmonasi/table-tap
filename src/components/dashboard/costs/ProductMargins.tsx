@@ -6,6 +6,7 @@ import { formatMoney } from "@/lib/format";
 import { percent } from "@/lib/costs/display";
 import type { PeriodContribution, UnitMargin } from "@/lib/costs/margins";
 import type { CostedProduct } from "@/lib/costs/server";
+import { SEP } from "@/lib/separator";
 
 interface ProductMarginsProps {
   margins: UnitMargin[];
@@ -66,7 +67,7 @@ export default function ProductMargins({ margins, products, period, currency, on
                   <button type="button" className="tt-costs-product" onClick={() => onOpen(m.itemId)}>
                     <span className="tt-costs-product-name">
                       <span aria-hidden="true">{m.emoji}</span> {m.name}
-                      {menus.length > 1 && menuOf.get(m.itemId) && <small className="tt-muted"> · {menuOf.get(m.itemId)}</small>}
+                      {menus.length > 1 && menuOf.get(m.itemId) && <small className="tt-muted">{SEP}{menuOf.get(m.itemId)}</small>}
                     </span>
                     {m.margin === null ? (
                       <span className="tt-costs-chip">{t("costs.noRecipe")}</span>
@@ -77,8 +78,8 @@ export default function ProductMargins({ margins, products, period, currency, on
                     )}
                     <span className="tt-costs-product-meta tt-muted">
                       {money(m.price)}
-                      {m.cost !== null && ` · ${t("costs.costs", { cost: money(m.cost) })}`}
-                      {s && ` · ${s.complete ? t("costs.sold", { n: s.units, amount: money(s.contribution) }) : t("costs.soldOnly", { n: s.units })}`}
+                      {m.cost !== null && `${SEP}${t("costs.costs", { cost: money(m.cost) })}`}
+                      {s && `${SEP}${s.complete ? t("costs.sold", { n: s.units, amount: money(s.contribution) }) : t("costs.soldOnly", { n: s.units })}`}
                     </span>
                   </button>
                 </li>

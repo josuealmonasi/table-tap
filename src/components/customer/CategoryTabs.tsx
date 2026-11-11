@@ -1,8 +1,10 @@
 "use client";
 
+import { useRef } from "react";
 import type { Category } from "@/lib/types";
 import { CouponIcon, UsualIcon } from "@/components/ui/icons";
 import { useT } from "@/lib/i18n/context";
+import { useScrollMore } from "@/hooks/useScrollMore";
 
 /** The horizontal scrollable category filter at the top of the menu. */
 export default function CategoryTabs({
@@ -21,8 +23,13 @@ export default function CategoryTabs({
   hasDeals?: boolean;
 }) {
   const t = useT();
+  // A chip cut at the edge was the only hint there were more categories; the
+  // edge now fades, and the chosen one scrolls into view (layout audit,
+  // bar-cut-off, 2026-11-10).
+  const strip = useRef<HTMLDivElement>(null);
+  useScrollMore(strip, activeCat, ".tt-cat-on");
   return (
-    <div className="tt-cats">
+    <div ref={strip} className="tt-cats">
       <button
         className={`tt-cat ${activeCat === "all" ? "tt-cat-on" : ""}`}
         onClick={() => onSelect("all")}

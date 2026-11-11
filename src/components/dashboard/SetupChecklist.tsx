@@ -54,8 +54,13 @@ export default function SetupChecklist({ steps }: SetupChecklistProps) {
           <li key={step.key} className={`tt-setup-step${step.done ? " tt-setup-done" : ""}`}>
             <span className="tt-setup-mark" aria-hidden="true">{step.done && <CheckIcon size={14} weight="bold" />}</span>
             <span className="tt-setup-text">
-              <strong>{t(`setup.${step.key}`)}</strong>
-              {step.optional && <span className="tt-muted"> · {t("setup.optional")}</span>}
+              {/* One line of its own: the text column stacks its children, and
+                  "· opcional" on its own was a row that began with the dot.
+                  No-break spaces keep "title · opcional" in one piece. */}
+              <span>
+                <strong>{t(`setup.${step.key}`)}</strong>
+                {step.optional && <span className="tt-muted">{"\u00a0·\u00a0"}{t("setup.optional")}</span>}
+              </span>
               <span className="tt-muted tt-setup-hint">{t(`setup.${step.key}Hint`)}</span>
             </span>
             {step.done ? (

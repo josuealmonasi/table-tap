@@ -14,12 +14,12 @@ describe("the original currency of money owed back", () => {
   const row = { id: "d1", amount: 125.5, table_label: "4", account_name: null, created_at: "2026-10-01", refunded_at: null };
   it("shows a USD charge even when the menu is now in pesos", () => {
     const html = renderToStaticMarkup(<RefundsDue canRefund refunds={[{ ...row, currency: "USD" }]} />);
-    expect(html).toContain("$125.50 · USD");
+    expect(html).toContain("$125.50\u00a0· USD");
     expect(html).not.toContain("MX$");
   });
   it("shows an older amount as unverified without guessing the menu currency", () => {
     const html = renderToStaticMarkup(<RefundsDue canRefund refunds={[{ ...row, currency: null }]} />);
-    expect(html).toContain("125.50 · refunds.currencyUnknown");
+    expect(html).toContain("125.50\u00a0· refunds.currencyUnknown");
     expect(html).not.toContain("MX$");
   });
 });
@@ -48,5 +48,5 @@ it("approves the same original currency displayed on the refund row", async () =
     return findButton(node.props.children);
   }
   await findButton(tree)!.props.onClick();
-  expect(confirm).toHaveBeenCalledWith(expect.objectContaining({ title: "refunds.confirmTitle $125.50 · USD" }));
+  expect(confirm).toHaveBeenCalledWith(expect.objectContaining({ title: "refunds.confirmTitle $125.50\u00a0· USD" }));
 });

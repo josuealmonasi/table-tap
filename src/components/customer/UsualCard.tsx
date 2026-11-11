@@ -2,6 +2,7 @@
 
 import { useT } from "@/lib/i18n/context";
 import type { OrderLineItem } from "@/lib/types";
+import { SEP } from "@/lib/separator";
 
 interface UsualCardProps {
   /** What this phone usually orders here, as today's menu can still make it. */
@@ -17,7 +18,7 @@ function describe(line: OrderLineItem): string {
     ...Object.entries(line.mods ?? {}).map(([label, v]) => `${label}: ${Array.isArray(v) ? v.join(", ") : v}`),
     ...(line.notes ? [`“${line.notes}”`] : []),
   ];
-  return [`${line.qty}× ${line.emoji} ${line.name}`, ...parts].join(" · ");
+  return [`${line.qty}× ${line.emoji} ${line.name}`, ...parts].join(SEP);
 }
 
 /**

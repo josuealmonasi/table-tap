@@ -475,6 +475,12 @@ a.tt-btn {
   cursor: pointer;
   text-decoration: underline;
 }
+/* An icon in a text link ("¿Tienes un cupón?") got only a space, about 3px:
+   the coupon glyph read as part of the word (icon-touches-label, cart). */
+.tt-linkbtn > svg {
+  margin-right: 4px;
+  vertical-align: -2px;
+}
 
 /* The "already paid" heading is a button because it opens the list, but it
    must not look like one: it is a label, not the screen's action. Without this
@@ -5041,7 +5047,9 @@ a.tt-btn {
 .tt-reorder {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  /* Up and down are opposite moves: at 2px apart a near miss sent a menu
+     the wrong way (controls-touching, dashboard and menu editor). */
+  gap: 6px;
   flex-shrink: 0;
 }
 .tt-reorder-btn {
@@ -5071,7 +5079,7 @@ a.tt-btn {
 /* on touch screens, grow to a comfortable tap target */
 @media (max-width: 640px) {
   .tt-reorder {
-    gap: 4px;
+    gap: 6px;
     justify-content: space-between;
   }
   .tt-reorder-btn {
@@ -5175,6 +5183,19 @@ a.tt-btn {
   bottom: -24px;
   margin: 6px -24px -24px;
   padding: 14px 24px;
+}
+/* On a phone the dashboard's tab bar is fixed to the bottom of the screen, so
+   a bar sticking to bottom: 0 sat UNDER it: editing the restaurant in
+   Settings, only the top edge of "Guardar cambios" showed above the tabs
+   (390px, production, 2026-11-11). Stick above the tab bar instead, the way
+   the menu's bulk bar does. A dialog's bar keeps its own pin. */
+@media (max-width: 720px) {
+  body:has(.tt-section-nav) .tt-prodform-actions {
+    bottom: calc(64px + env(safe-area-inset-bottom, 0px));
+  }
+  body:has(.tt-section-nav) .tt-modal .tt-prodform-actions {
+    bottom: -24px;
+  }
 }
 .tt-check {
   display: flex;
@@ -5785,7 +5806,7 @@ a.tt-btn {
 .tt-rating-inline {
   display: inline-flex;
   align-items: center;
-  gap: 3px;
+  gap: 4px;
   font-size: 12px;
   font-weight: 700;
   color: var(--tt-ink-2);
@@ -5900,19 +5921,21 @@ a.tt-btn {
 
 /* The summary sits under the menu name, between what it is and what you can do
    to it. Muted and small: it's a status, not a control. */
+/* It wraps rather than cutting: an ellipsis here hid the hours themselves
+   ("Dom, Sáb 09:00–1…"), which are the whole point of the line. */
 .tt-menu-sched {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 5px;
+  gap: 4px 5px;
   margin-top: 3px;
   font-size: 12px;
   color: var(--tt-muted);
   min-width: 0;
 }
 .tt-menu-sched > span {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 .tt-menu-sched svg {
   flex: none;
@@ -5996,6 +6019,7 @@ a.tt-btn {
    accent, which already means "interactive" elsewhere. */
 .tt-sched-state {
   flex: none;
+  white-space: nowrap;
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.02em;
@@ -6440,6 +6464,22 @@ a.tt-btn {
   text-align: left;
   cursor: pointer;
 }
+/* One order and its "Devolver" are one entry: the divider sits above the
+   entry, not between the row and its button. The button sat 16px below its
+   order and 16px above the next, so nothing said which order it returned
+   (Analytics, 390px, 2026-11-11). */
+.tt-hist-entry {
+  border-top: 1px solid var(--tt-line);
+}
+.tt-hist-entry > .tt-hist-row {
+  border-top: 0;
+}
+.tt-hist-entry > .tt-hist-row:has(+ [data-order-return]) {
+  padding-bottom: 4px;
+}
+.tt-hist-entry > [data-order-return] {
+  margin: 0 0 12px;
+}
 .tt-hist-row:hover {
   background: color-mix(in srgb, var(--tt-ink) 3%, transparent);
 }
@@ -6762,6 +6802,21 @@ a.tt-user-plan:hover {
 .tt-section-nav-inner::-webkit-scrollbar {
   display: none;
 }
+/* Any sideways scroller with a hidden scrollbar — the section bar, the diner's
+   category chips — fades the edge that has more past it (useScrollMore sets
+   data-more). A mask only reads opacity, so the colour token is just "opaque". */
+[data-more="right"] {
+  -webkit-mask-image: linear-gradient(to right, var(--tt-ink) calc(100% - 36px), transparent);
+  mask-image: linear-gradient(to right, var(--tt-ink) calc(100% - 36px), transparent);
+}
+[data-more="left"] {
+  -webkit-mask-image: linear-gradient(to left, var(--tt-ink) calc(100% - 36px), transparent);
+  mask-image: linear-gradient(to left, var(--tt-ink) calc(100% - 36px), transparent);
+}
+[data-more="both"] {
+  -webkit-mask-image: linear-gradient(to right, transparent, var(--tt-ink) 36px, var(--tt-ink) calc(100% - 36px), transparent);
+  mask-image: linear-gradient(to right, transparent, var(--tt-ink) 36px, var(--tt-ink) calc(100% - 36px), transparent);
+}
 .tt-section-link {
   display: flex;
   align-items: center;
@@ -6806,17 +6861,23 @@ a.tt-user-plan:hover {
     /* Clear of the home indicator on a phone with no bezel. */
     padding-bottom: env(safe-area-inset-bottom, 0);
   }
+  /* Every section stays in the bar and the bar scrolls (owner's call,
+     2026-11-10). It used to share the width out equally with 2px a side, so
+     with sixteen sections "Tomar pedido" and "Cuentas" ran into each other.
+     Each tab now keeps its own width and 10px a side; when few tabs fit with
+     room to spare, they still grow to fill the bar. */
   .tt-section-nav-inner {
-    gap: 0;
-    justify-content: space-around;
+    gap: 2px;
+    justify-content: flex-start;
     padding-left: 4px;
     padding-right: 4px;
   }
   .tt-section-link {
-    flex: 1 1 0;
+    flex: 1 0 auto;
+    min-width: 64px;
     flex-direction: column;
     gap: 3px;
-    padding: 8px 2px;
+    padding: 8px 10px;
     font-size: 11px;
     letter-spacing: -0.01em;
     border-bottom: none;
@@ -7262,7 +7323,9 @@ a.tt-user-plan:hover {
   max-width: 360px;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  /* 8px, not 4: each step is its own bordered box, and at 4px the steps
+     read as one box with stray lines (cards-touching, /rewards, 360px). */
+  gap: 8px;
   font-size: 13px;
   text-align: left;
 }
@@ -7718,6 +7781,17 @@ a.tt-user-plan:hover {
   font-size: 13px;
   font-variant-numeric: tabular-nums;
 }
+/* On a phone every row is the same shape: the name, and what is owed under
+   it. Side by side, a short balance sat beside its name and a longer one
+   wrapped beneath, so two rows of one list looked like two layouts. */
+@media (max-width: 560px) {
+  .tt-account-row,
+  .tt-account-pick {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 2px;
+  }
+}
 .tt-account-owed,
 .tt-account-settle-owed {
   font-weight: 700;
@@ -8113,6 +8187,12 @@ a.tt-user-plan:hover {
 .tt-costs-entry > .tt-costs-product-name,
 .tt-costs-entry > .tt-costs-product-meta {
   grid-column: 1;
+}
+/* With nothing beside it, the meta line takes the whole row. Kept in the
+   left column under a margin like "Debería haber 12.5 kg", "Contado el … por
+   …" was squeezed until "·" opened a line (stock tab, 360px, layout audit). */
+.tt-costs-entry > .tt-costs-product-meta:last-child {
+  grid-column: 1 / -1;
 }
 .tt-costs-entry > .tt-costs-margin {
   grid-column: 2;

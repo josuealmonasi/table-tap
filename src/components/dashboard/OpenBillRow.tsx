@@ -4,6 +4,7 @@ import { useT } from "@/lib/i18n/context";
 import { formatMoney } from "@/lib/format";
 import { remainingBill, type OpenBill } from "@/lib/open-bills";
 import { BillIcon, TableIcon } from "@/components/ui/icons";
+import { SEP } from "@/lib/separator";
 
 interface OpenBillRowProps {
   bill: OpenBill;
@@ -48,7 +49,7 @@ export default function OpenBillRow({
                 it: the code is what the screen and the diner's phone agree on,
                 the name is what gets called across the room. */}
             {bill.customerName && (
-              <span className="tt-bill-who"> · {bill.customerName}</span>
+              <span className="tt-bill-who">{SEP}{bill.customerName}</span>
             )}
           </strong>
           {/* Said on the row itself, not behind a tap: the number beside it is
@@ -80,13 +81,13 @@ export default function OpenBillRow({
             )}
             {now !== null && (
               <>
-                {" · "}
+                {SEP}
                 {t("dash.billsWaiting", { time: waited(bill.since, now) })}
               </>
             )}
             {/* Said here, where the line can wrap: as the button's label it
                 grew the rigid button and crushed the badge at 360px (#576). */}
-            {updating && <> · <span role="status">{t("settle.updatingBalance")}</span></>}
+            {updating && <>{SEP}<span role="status">{t("settle.updatingBalance")}</span></>}
           </span>
         </span>
         {bill.discounted && (

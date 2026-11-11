@@ -4,6 +4,7 @@ import type { JSX } from "react";
 import { useT } from "@/lib/i18n/context";
 import { formatMoney } from "@/lib/format";
 import type { SplitSlot } from "@/lib/split-slots";
+import { SEP } from "@/lib/separator";
 
 interface Props {
   slots: SplitSlot[]; selected: number[]; currency: string; busy?: boolean;
@@ -20,7 +21,7 @@ export default function SplitSlotSelector({ slots, selected, currency, busy = fa
         checked={!slot.paid && !slot.paying && selected.includes(slot.shareNo)}
         onChange={e => onChange(e.target.checked ? [...selected, slot.shareNo].sort((a, b) => a - b) : selected.filter(n => n !== slot.shareNo))} />
       <span>{t("slots.part", { n: slot.shareNo + 1 })} · {formatMoney(slot.amountCents / 100, currency)}
-        {" · "}<strong>{t(slot.paid ? "slots.paid" : slot.paying ? "slots.held" : "slots.free")}</strong></span>
+        {SEP}<strong>{t(slot.paid ? "slots.paid" : slot.paying ? "slots.held" : "slots.free")}</strong></span>
     </label>)}
   </fieldset>;
 }

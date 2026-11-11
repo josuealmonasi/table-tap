@@ -10,6 +10,7 @@ import { rewardsPath } from "@/lib/loyalty/code";
 import type { LoyaltyOfferInfo } from "@/lib/loyalty/offer";
 import { ladderLines } from "@/lib/loyalty/ladder";
 import LoyaltyOffer from "./LoyaltyOffer";
+import { SEP } from "@/lib/separator";
 
 interface LoyaltyMenuEntryProps {
   offer: LoyaltyOfferInfo;
@@ -46,7 +47,7 @@ export default function LoyaltyMenuEntry({ offer }: LoyaltyMenuEntryProps) {
       <button
         type="button"
         className="tt-loyalty-chip"
-        aria-label={`${t(mine ? "loyaltyMenu.mine" : "loyaltyMenu.entry")} · ${ladderLines(offer.steps, t).join(" · ")}`}
+        aria-label={`${t(mine ? "loyaltyMenu.mine" : "loyaltyMenu.entry")}${SEP}${ladderLines(offer.steps, t).join(SEP)}`}
         onClick={() => (mine ? router.push(rewardsPath(mine, pathname)) : setOpen(true))}
       >
         <LoyaltyIcon size={14} weight="bold" />

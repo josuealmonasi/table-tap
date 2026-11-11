@@ -34,6 +34,7 @@ and that a new party cannot see the previous party's waiting phones.
 | A duplicate refund tracks customer completion and fee completion separately (S11 I5) | A failed fee return disappeared behind an already-refunded customer payment |
 | A duplicate refund keeps its original charge currency everywhere (S11 I9) | Changing the menu currency relabelled money owed back and the approval amount |
 |---|---|
+| Layout audits measure cramped text, stranded separators, clipped numbers and undisclosed bar overflow (owner report, 2026-11-10) | iPhone tabs nearly touched and hid the last tab, setup stranded its separator, and menu hours ended in an ellipsis. Shared `AUDIT` checks painted geometry; `layout-audit-selftest.mjs` plants broken/fixed twins and every older fault before the layout gate visits pages |
 | Unpaid counter checkouts share a restaurant ceiling (production attack M1, 2026-11-10) | Rotating client addresses filled the kitchen with unpaid phone orders |
 | Cart quantities are refused before pricing (production attack L1, 2026-11-10) | Negative, fractional and enormous quantities silently became different orders |
 | A sitting has five pending admission places (production attack M2, 2026-11-10) | Fresh phones filled the floor's approval list without limit |
@@ -6489,6 +6490,33 @@ reached diners up to 30 seconds late; the second rule found a copied dish's
 extras still missing a refresh.
 
 
+## Owner's phone screenshot — spacing nobody had checked (2026-11-10)
+
+The owner found these on an iPhone, on production, with every gate green. Every one was two places that had to agree:
+- **The bottom bar.** It shared its width out equally among up to 16 sections, 2px a side. "Tomar pedido" and "Cuentas" touched, and the last tab was cut at the edge with no sign the bar scrolled.
+  - Now each tab keeps its own width and 10px a side, and the edge with more tabs fades (`useScrollMore` sets `data-more`).
+  - The audit's `cramped` and `bar-cut-off` checks catch it.
+- **"· opcional".** It was its own row in a flex column, so the row began with the dot.
+  - It now sits in its title's line, joined by no-break spaces.
+  - The audit's `separator-starts-line` check catches it.
+- **The menu schedule.** Its ellipsis cut the hours themselves ("09:00–1…"). It wraps now; the audit's `truncated-number` check catches it.
+- **Tab icons.** Caja, Cuentas and Guardadas shared one icon, and Tomar pedido and Mesas another. `nav.spec.ts` now refuses two sections with one icon.
+- **The tab order.** It was asked for in full and only half done. `nav.spec.ts` pins the owner's order.
+- **An account with no charges** read "Debe  de MX$1,000.00": joining no balances gave an empty string. `owedLabel` says MX$0.00 on the list, the account dialog and the till's account picker (`owed-label.spec.ts`).
+- **"Para empezar" touching the Menús card** (second screenshot, 2026-11-11). The menus sit in a fieldset whose inline `margin: 0` beat the dashboard's 16px rhythm (`.tt-dash > .container > * + *`). It now resets only its sides, as does the menu editor's. The audit's `cards-touching` check fails on two rounded, bordered cards stacked under 6px apart, on every page and dialog.
+- **Analytics' order history** (Codex's sweep, verified at 390px on production). Each "Devolver" sat outside its order's row, 16px from the order above and 16px from the one below, with the divider between it and the next order missing on phones; nothing said which order it returned. Each order and its button are now one entry under one divider.
+- **The rewards ladder** (found by the new `cards-touching` check on its first run): the visit card's steps, each a bordered box, sat 4px apart on the diner's `/rewards` and in the loyalty screens. They are 8px apart now.
+- **"Guardar cambios" under the tab bar.** Settings' restaurant form keeps its save bar stuck to the bottom of the screen, and on a phone the fixed tab bar covers exactly that strip: only the bar's top edge showed while editing. It now sticks 64px up, like the menu's bulk bar, whenever the tab bar is there; a dialog's bar keeps its own pin. Found by eye while judging the new checks' hits; Profile's "Guardar datos" and "Actualizar contraseña" had the same fault. The audit's `covered-by-bar` check (Codex) now fails a control pinned under a fixed bar, or a sticky inset smaller than the bar it shares the bottom edge with. On production it flagged exactly those four buttons, and none once the fix was injected.
+- **Four more audit kinds** (Codex): `icon-touches-label`, `content-touches-edge`, `controls-touching` and `entries-run-together`. Each measures paint, not boxes, after three false positives on production (a borderless search input in its bordered wrapper, ghost buttons, a grid item's box). Overlap is not "touching": a sticky bar sliding over fields overlaps by design. 90 self-test fixtures, and each check is proven load-bearing by switching it off.
+- **First full run of the new checks** (2026-11-11). Real faults:
+  - **Signup's "Verifica tu correo".** The address field sat flush on a button wider than itself, and the links were browser-default blue. It is now laid out like the sign-in card.
+  - **The reorder arrows.** Up and down were 2px apart, so a near miss moved a menu the wrong way. They are 6px apart now.
+  - **The rating star.** It sat 3px from its score; now 4px.
+
+  - **The cart's "¿Tienes un cupón?".** Its icon sat a space (about 3px) from the words; it gets 4px more now.
+
+  False positives fixed in the check: content cut by a card's own scroll (a dialog's chips at the fold) is not "touching" its edge, and a full-screen sheet (the diner's dish sheet and cart) is not a "bar". Bars are strips, at most 35% of the screen tall.
+- **The stock tab's last-count line** sat in the narrow left column under "Debería haber …", so its dot opened a line at 360px. A meta line with nothing beside it now takes the whole row.
 ## R8-4 part 1 — account debt and manager credits
 
 The manager's adjustment, the customer's statement and every collection path

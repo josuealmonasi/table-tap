@@ -845,6 +845,27 @@ Platform: sign-up, five plans (Carta, Caja, Servicio, Casa, Grupo), founding
 prices, the admin console, legal documents generated as PDFs from the same
 source the app renders.
 
+### Getting around the dashboard
+
+Every section a role and its plan allow is listed in one order, by how often
+it is used (the owner's call): Menús, Pedidos, Caja, Tomar pedido, Cuentas,
+Guardadas, Clientes, Promos, Lealtad, Mesas, Merma, Equipo, Ajustes, Plan,
+Costos, Analíticas. `src/lib/nav.ts` holds that order. Three places read it:
+- the home tiles;
+- the ☰ drawer;
+- the section bar.
+
+The section bar leaves out Equipo, Ajustes and Plan, which are set once and
+live in the account menu. On a desktop it is a row under the navbar; on a
+phone it is a bar along the bottom. On a phone the bar keeps every section
+and scrolls:
+- each tab has its own width with room on both sides;
+- the edge that hides more tabs fades out;
+- the open section is scrolled into view.
+
+Each section has its own icon (`nav.spec.ts` pins both the order and that no
+two sections share an icon).
+
 ## Switching over
 
 A café that already keeps its menu in a spreadsheet brings it in at once.
