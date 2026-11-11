@@ -4,7 +4,9 @@ import { apiError } from "@/lib/api-error";
 import { jsonBody } from "@/lib/json-body";
 import { actingStaff, actingFrontOfHouse } from "@/lib/api-guard";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { buildReceipt, type ReceiptVersion } from "@/lib/receipt";
+import { buildReceipt, receiptModel, type ReceiptVersion } from "@/lib/receipt";
+import { ticketPdf } from "@/lib/ticket-pdf";
+import { ticketPlace, ticketText } from "@/lib/ticket-place";
 import { readOrderReceipt, readSlotReceipt, ReceiptReadError, type ReceiptSource } from "@/lib/receipt-source";
 import { DEFAULT_TIME_ZONE } from "@/lib/open-menus";
 import { DEFAULT_LOCALE, messagesFor, translate } from "@/lib/i18n";
@@ -38,6 +40,8 @@ export async function POST(req: NextRequest) {
     paymentId?: string;
     version?: ReceiptVersion;
     to?: "kitchen" | "receipt";
+    /** "pdf": the 80 mm ticket instead of the HTML receipt. */
+    format?: "html" | "pdf";
   }>(req);
   if (!body) return await apiError("apiErr.invalidRequest", 400);
   const { orderId, paymentId, version, to } = body;
@@ -115,6 +119,27 @@ export async function POST(req: NextRequest) {
 
   const locale = await getLocale();
   const messages = messagesFor(locale ?? DEFAULT_LOCALE);
+  const t = (key: string, vars?: Record<string, string | number>) => translate(messages, key, vars);
+  const where = {
+    name: place?.name ?? "TableTap",
+    timeZone: (place?.timezone as string | null) ?? DEFAULT_TIME_ZONE,
+    locale: locale === "en" ? "en-US" : "es-MX",
+  };
+  if (body.format === "pdf") {
+    // The same calculation as the HTML receipt, laid out as the 80 mm ticket.
+    // Its QR opens this sale for the staff (owner's choice, 2026-11-11).
+    try {
+      const model = receiptModel(source.orders, where, t, source.payment);
+      const firstOrder = source.payment ? null : source.orders[0]?.id;
+      const qrUrl = new URL(firstOrder ? `/dashboard/bills?order=${firstOrder}` : "/dashboard/bills", req.nextUrl.origin).toString();
+      const pdf = await ticketPdf(model, await ticketPlace(db, actor.restaurantId, t), ticketText(t), null, qrUrl);
+      return new NextResponse(new Uint8Array(pdf), { headers: {
+        "content-type": "application/pdf",
+        "content-disposition": `inline; filename="ticket-${model.code}.pdf"`,
+        "cache-control": "no-store",
+      } });
+    } catch { return await apiError("apiErr.generic", 503); }
+  }
   const receipt = buildReceipt(
     source.orders,
     {

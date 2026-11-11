@@ -68,7 +68,23 @@ const esc = (s: string) =>
  * Nothing in it identifies the diner: they gave us an address to send it to,
  * not permission to write to them.
  */
-export function buildReceipt(
+/** One sold line, as every form of the receipt prints it. */
+export interface ReceiptLine { label: string; qty: number | null; name: string; unit: number | null; amount: number }
+
+/** What a receipt says, before it is written as text, HTML or a ticket. */
+export interface ReceiptModel {
+  code: string;
+  when: string;
+  tableLabel: string | null;
+  cur: string;
+  lines: ReceiptLine[];
+  rows: [string, string][];
+  totalLabel: string;
+  paid: number;
+  payMethod: string | null;
+}
+
+export function receiptModel(
   orders: ReceiptOrder[],
   place: {
     name: string;
@@ -79,7 +95,7 @@ export function buildReceipt(
   },
   t: (key: string, vars?: Record<string, string | number>) => string,
   payment?: SlotReceiptPayment,
-): Receipt {
+): ReceiptModel {
   // Settling a table pays for several orders at once, so a receipt covers
   // whatever was paid for — one ticket or the whole table. The code names the
   // first of them, which is the one the tip and the discount were recorded on.
@@ -111,10 +127,14 @@ export function buildReceipt(
 
   // Parts already include old gratuities. Show their principal once and the
   // receipt's full tip once; adding that tip to the frozen parts counts it twice.
-  const lines = payment ? [{ label: t("receipt.parts", { parts: payment.slots.map(n => n + 1).join(", ") }),
+  const lines: ReceiptLine[] = payment ? [{ label: t("receipt.parts", { parts: payment.slots.map(n => n + 1).join(", ") }),
+    qty: null, name: t("receipt.parts", { parts: payment.slots.map(n => n + 1).join(", ") }), unit: null,
     amount: num(payment.amount) - tip }] : orders.flatMap(o =>
     (o.items ?? []).map(item => ({
       label: `${item.qty}× ${item.name}`,
+      qty: item.qty as number | null,
+      name: item.name as string,
+      unit: lineUnitPrice(item) as number | null,
       amount: lineUnitPrice(item) * item.qty,
     })),
   );
@@ -150,6 +170,23 @@ export function buildReceipt(
     timeZone: place.timeZone,
   });
 
+  return { code, when, tableLabel: order.table_label ?? null, cur, lines, rows, totalLabel, paid, payMethod: payment ? null : orders[0]?.pay_method ?? null };
+}
+
+export function buildReceipt(
+  orders: ReceiptOrder[],
+  place: {
+    name: string;
+    /** IANA zone the restaurant keeps its clock in. */
+    timeZone: string;
+    /** The language the diner was reading the app in when they asked. */
+    locale: string;
+  },
+  t: (key: string, vars?: Record<string, string | number>) => string,
+  payment?: SlotReceiptPayment,
+): Receipt {
+  const { code, when, cur, lines, rows, totalLabel, paid } = receiptModel(orders, place, t, payment);
+  const order = { table_label: payment ? payment.table_label ?? null : orders[0]?.table_label ?? null };
   const text = [
     place.name,
     t("receipt.heading", { code }),
