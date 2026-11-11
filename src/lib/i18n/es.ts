@@ -3,6 +3,21 @@ import type { Messages } from "./en";
 // Spanish (Mexico) UI strings. Typed as Messages so a missing or extra key is a
 // compile error.
 export const es: Messages = {
+  accountCredit: {
+    action: "Bonificar",
+    title: "Bonificar este pedido",
+    amount: "Importe a bonificar",
+    remaining: "Pendiente del pedido: {amount}",
+    balance: "Saldo de la cuenta después: {amount}",
+    confirm: "Aplicar bonificación",
+    done: "Bonificación aplicada",
+    line: "Bonificación −{amount}",
+    by: "Otorgado por {who}",
+    walkout: "Deuda incobrable",
+    comp: "Cortesía",
+    error: "Error de cobro",
+    other: "Otro",
+  },
   paymentCheck: {
     action: "Revisar pago",
     checking: "Revisando pago…",
@@ -1409,6 +1424,15 @@ foundingLeftBody: "Quien contrata ahora conserva este precio de suscripción mie
     requestsFailed: "No pudimos revisar si hay otros teléfonos esperando entrar. Lo intentaremos de nuevo en unos segundos.",
   },
   apiErr: {
+    accountCreditInvalid: "El importe no es válido. Ingresa un importe de hasta lo pendiente del pedido.",
+    accountCreditReason: "Elige un motivo para la bonificación.",
+    accountCreditNote: "Agrega una nota para Otro, de máximo 300 caracteres.",
+    accountCreditIneligible: "Solo se puede bonificar un pedido de cuenta que aún no se cobra. Actualiza el estado de cuenta.",
+    accountCreditChanged: "El saldo cambió. Actualiza el estado de cuenta y revisa la bonificación de nuevo.",
+    accountCreditCapacity: "La bonificación no puede superar lo pendiente de este pedido.",
+    accountCreditConflict: "Esta bonificación ya se envió con otros datos. Cierra la ventana e intenta de nuevo.",
+    accountCreditReview: "Este pedido ya tiene un pago, o uno en proceso, y no se puede bonificar aquí. Revisa primero sus pagos.",
+
     splitSlotPaid: "Una de estas partes ya está pagada. Revisa las partes.",
     splitCollectSlots: "Esta cuenta está dividida. Elige las partes que vas a cobrar.",
     splitChanged: "La cuenta cambió. Revisa las partes.",

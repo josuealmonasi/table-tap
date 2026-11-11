@@ -64,3 +64,14 @@ describe.each<Locale>(["en", "es"])("statement mail in %s", locale => {
     expect(html).toContain('href="https://tabletap.test/cuenta/code?x=1&amp;y=&quot;two&quot;"');
   });
 });
+
+it.each<Locale>(["en", "es"])("emails dated credit amounts without staff-only context (%s)", locale => {
+  const { text, html, t } = mail({ ...empty, days: [{ day: "2026-11-10", total: 0, charges: [{
+    orderId: "order", at, total: 0, tableLabel: null, lines: [],
+    credits: [{ at, amount: 30, currency: "MXN", actor: "private@test", reason: "error", note: "private dispute" }],
+  }] }] }, locale);
+  for (const output of [text, html]) {
+    expect(output).toContain(t("accountCredit.line", { amount: formatMoney(30, "MXN") }));
+    expect(output).not.toContain("private");
+  }
+});

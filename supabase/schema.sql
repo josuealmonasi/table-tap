@@ -5341,7 +5341,7 @@ begin
     -- device must still be told the amount it took, or the sale never leaves
     -- it (returns audit 6).
     'total', v_order.total + coalesce((select sum(a.previous_total - a.resulting_total) from order_adjustments a
-      where a.order_id = v_order.id and a.restaurant_id = p_restaurant and a.kind = 'return'), 0), 'currency', v_order.currency, 'method', v_order.pay_method, 'handedOver', v_order.status = 'completed')
+      where a.order_id = v_order.id and a.restaurant_id = p_restaurant and a.kind in ('return', 'account_credit')), 0), 'currency', v_order.currency, 'method', v_order.pay_method, 'handedOver', v_order.status = 'completed')
     || case when v_order.account_id is null then '{}'::jsonb
        else jsonb_build_object('onAccount', jsonb_build_object('name', v_name)) end;
 end;
@@ -11815,7 +11815,7 @@ grant execute on function public.retire_split_attempt_v1(uuid, uuid) to service_
 -- `written_off` keeps meaning "the whole order was forgiven".
 alter table order_adjustments drop constraint if exists order_adjustments_kind_check;
 -- 'return' too: rerunning this file must accept the return rows added below.
-alter table order_adjustments add constraint order_adjustments_kind_check check (kind in ('cancel', 'forgive', 'return'));
+alter table order_adjustments add constraint order_adjustments_kind_check check (kind in ('cancel', 'forgive', 'return', 'account_credit'));
 alter table order_adjustments add column if not exists resulting_total numeric;
 alter table order_adjustments add column if not exists resulting_tip numeric;
 alter table order_adjustments add column if not exists forgiven numeric;
@@ -12079,7 +12079,7 @@ grant execute on function public.release_unreached_account_page_v1(uuid, uuid) t
 -- original receipts, and the order comes down to match: still paid, still
 -- completed, stock untouched. The sale stays the sale; the return is dated.
 alter table order_adjustments drop constraint if exists order_adjustments_kind_check;
-alter table order_adjustments add constraint order_adjustments_kind_check check (kind in ('cancel', 'forgive', 'return'));
+alter table order_adjustments add constraint order_adjustments_kind_check check (kind in ('cancel', 'forgive', 'return', 'account_credit'));
 alter table order_adjustments add column if not exists amount_cents int;
 alter table order_adjustments add column if not exists request jsonb;
 -- Several returns per order; still one cancellation.
@@ -12883,3 +12883,128 @@ end;
 $$;
 revoke all on function public.complete_owner_signup_v1(uuid) from public, anon, authenticated;
 grant execute on function public.complete_owner_signup_v1(uuid) to service_role;
+
+-- R8-4: account debt relief, with immutable snapshots for journal backfill.
+create unique index if not exists order_adjustments_account_credit_once
+  on order_adjustments (restaurant_id, request_id) where kind = 'account_credit';
+alter table order_adjustments drop constraint if exists order_adjustments_account_credit_check;
+alter table order_adjustments add constraint order_adjustments_account_credit_check check (kind <> 'account_credit' or (
+  request_id is not null and request is not null and amount_cents is not null and amount_cents > 0
+  and forgiven is not null and forgiven * 100 = amount_cents
+  and currency is not null and currency in ('MXN', 'USD')
+  and reason is not null and reason in ('walkout', 'comp', 'error', 'other')
+  and resulting_total is not null and resulting_tip is not null
+  and previous_service_fee is not null and resulting_service_fee is not null
+  and resulting_total >= 0 and resulting_tip >= 0 and resulting_service_fee >= 0
+  and resulting_service_fee <= resulting_total - resulting_tip
+  and round(previous_total * 100) - round(resulting_total * 100) = amount_cents
+  and resulting_tip <= previous_tip and resulting_service_fee <= previous_service_fee));
+drop trigger if exists guard_order_adjustment on order_adjustments;
+create trigger guard_order_adjustment before update or delete on order_adjustments
+  for each row when (old.kind in ('forgive', 'return', 'account_credit')) execute function public.guard_order_adjustment();
+
+create or replace function public.account_credit_v1(
+  p_restaurant uuid, p_order uuid, p_amount_cents numeric, p_expected_cents numeric,
+  p_reason text, p_note text, p_actor text, p_request uuid
+) returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  o orders; a customer_accounts; d order_adjustments;
+  v_account uuid; v_request jsonb; v_coverage jsonb;
+  v_total int; v_tip int; v_service int; v_p int; v_pr int; v_tr int;
+  v_f int; v_sr int; v_fr int; v_rem int;
+begin
+  if p_request is null or p_order is null or p_restaurant is null
+    or nullif(btrim(p_actor), '') is null
+    or p_amount_cents is null or p_amount_cents <> trunc(p_amount_cents)
+    or p_amount_cents not between 1 and 2147483647
+    or p_expected_cents is null or p_expected_cents <> trunc(p_expected_cents)
+    or p_expected_cents not between 1 and 2147483647 then
+    return jsonb_build_object('outcome', 'invalid');
+  end if;
+  if p_reason is null or p_reason not in ('walkout', 'comp', 'error', 'other') then
+    return jsonb_build_object('outcome', 'reason');
+  end if;
+  if length(btrim(coalesce(p_note, ''))) > 300
+    or (p_reason = 'other' and nullif(btrim(p_note), '') is null) then
+    return jsonb_build_object('outcome', 'note');
+  end if;
+  perform public.lock_restaurant_money(p_restaurant);
+  v_request := jsonb_build_object('restaurant', p_restaurant, 'order', p_order,
+    'amount_cents', p_amount_cents, 'expected_cents', p_expected_cents,
+    'reason', p_reason, 'note', btrim(coalesce(p_note, '')), 'actor', p_actor);
+  select * into d from order_adjustments
+    where restaurant_id = p_restaurant and kind = 'account_credit' and request_id = p_request;
+  if found then
+    if (d.request - 'account') is distinct from v_request then return jsonb_build_object('outcome', 'conflict'); end if;
+    return jsonb_build_object('outcome', 'credited', 'adjustmentId', d.id,
+      'amountCents', d.amount_cents, 'remainingCents', round(d.resulting_total * 100), 'currency', d.currency);
+  end if;
+  -- Discover the account without taking an order lock ahead of its account.
+  select account_id into v_account from orders where restaurant_id = p_restaurant and id = p_order;
+  if not found then return jsonb_build_object('outcome', 'missing'); end if;
+  if v_account is null then return jsonb_build_object('outcome', 'ineligible'); end if;
+  select * into a from customer_accounts where restaurant_id = p_restaurant and id = v_account for update;
+  if not found then return jsonb_build_object('outcome', 'missing'); end if;
+  select * into o from orders where restaurant_id = p_restaurant and id = p_order for update;
+  if not found then return jsonb_build_object('outcome', 'missing'); end if;
+  if o.account_id is distinct from a.id or o.paid or o.written_off or o.status in ('cancelled', 'pending_payment') then
+    return jsonb_build_object('outcome', 'ineligible');
+  end if;
+  if public.unresolved_account_page_v1(p_restaurant, a.id) then
+    return jsonb_build_object('outcome', 'paying');
+  end if;
+  v_coverage := public.order_coverage(p_restaurant, array[o.id])->0;
+  if (v_coverage->>'unresolved')::boolean or (v_coverage->>'amount')::numeric > 0 then
+    return jsonb_build_object('outcome', 'review');
+  end if;
+  v_total := round(o.total * 100)::int; v_tip := round(o.tip * 100)::int;
+  v_service := round(coalesce(o.service_fee, 0) * 100)::int;
+  if v_total <> p_expected_cents then return jsonb_build_object('outcome', 'changed'); end if;
+  if p_amount_cents > v_total then return jsonb_build_object('outcome', 'capacity'); end if;
+  -- Same rule as return_on_order_v1: principal before tip; food and
+  -- service by largest remainders, food first on a tie. No second money rule.
+  v_p := v_total - v_tip; v_pr := least(p_amount_cents, v_p); v_tr := p_amount_cents - v_pr;
+  v_f := v_p - v_service;
+  if v_p > 0 then
+    v_sr := ((v_pr::bigint * v_service) / v_p)::int;
+    v_fr := ((v_pr::bigint * v_f) / v_p)::int;
+    v_rem := v_pr - v_sr - v_fr;
+    if v_rem > 0 then
+      if ((v_pr::bigint * v_f) % v_p) >= ((v_pr::bigint * v_service) % v_p) then v_fr := v_fr + v_rem; else v_sr := v_sr + v_rem; end if;
+    end if;
+  else
+    v_sr := 0; v_fr := 0;
+  end if;
+  insert into order_adjustments (restaurant_id, order_id, kind, previous_total, previous_tip, previous_service_fee,
+    resulting_total, resulting_tip, resulting_service_fee, forgiven, amount_cents, currency,
+    reason, note, actor, request_id, request)
+  values (p_restaurant, o.id, 'account_credit', o.total, o.tip, coalesce(o.service_fee, 0),
+    (v_total - p_amount_cents) / 100.0, (v_tip - v_tr) / 100.0, (v_service - v_sr) / 100.0,
+    p_amount_cents / 100.0, p_amount_cents, o.currency, p_reason, nullif(btrim(p_note), ''), p_actor, p_request, v_request || jsonb_build_object('account', a.id))
+  returning * into d;
+  -- Freezing a legacy ceiling's currency before its last charge becomes
+  -- written off prevents forgiveness from silently re-denominating credit.
+  update customer_accounts set credit_currency = coalesce(
+    (select currency from orders where restaurant_id = p_restaurant and account_id = a.id
+      and written_off = false order by created_at desc limit 1),
+    (select currency from restaurants where id = p_restaurant))
+    where id = a.id and restaurant_id = p_restaurant and credit_currency is null;
+  update orders set total = d.resulting_total, tip = d.resulting_tip, service_fee = d.resulting_service_fee,
+    written_off = (d.resulting_total = 0),
+    write_off_reason = case when d.resulting_total = 0 then p_reason else write_off_reason end,
+    write_off_note = case when d.resulting_total = 0 then d.note else write_off_note end,
+    written_off_by = case when d.resulting_total = 0 then p_actor else written_off_by end,
+    written_off_at = case when d.resulting_total = 0 then now() else written_off_at end
+    where id = o.id and restaurant_id = p_restaurant;
+  -- Same dated loss event the table forgiveness readers consume. This is
+  -- debt relief, never a receipt, refund, stock movement or wallet balance.
+  insert into user_logs (id, restaurant_id, actor_email, entity, action, detail)
+  values (d.id, p_restaurant, p_actor, 'bill', 'written_off', concat_ws(' ',
+    'amount=' || (p_amount_cents / 100.0)::text, 'currency=' || o.currency,
+    'kind=account_credit', 'reason=' || p_reason, 'order=' || o.id::text));
+  return jsonb_build_object('outcome', 'credited', 'adjustmentId', d.id,
+    'amountCents', d.amount_cents, 'remainingCents', round(d.resulting_total * 100), 'currency', d.currency);
+end;
+$$;
+revoke all on function public.account_credit_v1(uuid, uuid, numeric, numeric, text, text, text, uuid) from public, anon, authenticated;
+grant execute on function public.account_credit_v1(uuid, uuid, numeric, numeric, text, text, text, uuid) to service_role;
