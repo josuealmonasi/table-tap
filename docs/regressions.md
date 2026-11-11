@@ -6561,3 +6561,10 @@ charge dates and original components remain unknown.
 | Regression | Automatic check | Live verification still required |
 | --- | --- | --- |
 | R8-7: premature journal activation loses intervening events; replay or imported history could double debt; mutable or cross-tenant records could corrupt the journal | account-journal-schema.spec.ts; invariants/account-journal-dormant.spec.ts (including activation-marker sabotage) | After applying schema on dev, run probe-account-journal.mjs for per-currency debt, partial/full credit and collection history, replay, privileged update/delete guards, bad signs/missing sources, tenant/currency isolation, effective roles and grants, restaurant cascade, the function's own money lock and rollback, and both two-connection settlement races; run the existing money gate. No production backfill in PR 1. |
+
+
+## R8-7 — atomic account journal writers and activation
+
+| Regression | Automated check | Database evidence before release |
+| --- | --- | --- |
+| A money writer can omit or duplicate an append, a tip can be counted twice, an orphan can balance missing debt, or a credit/collection race can lose money | account-journal-writers.spec.ts; account-journal-money.spec.ts (missing/duplicate/orphan/component/currency sabotage); invariants/account-journal-dormant.spec.ts writer allow-list; paginated money-account-journal.mjs source and per-currency debt checks | Apply writers and journal-activate.sql in one transaction; run probe-account-journal.mjs on dev for activation, birth, charge, staff/online new tips, credit, both cancellation paths, replay, both credit/settle races and commit-time forgotten/orphan refusal; first adapt the older API/attack account fixtures to real charge writers and disposable restaurants (their direct attach/detach/delete paths are now refused), then Claude runs the full gates. Staff partial collection means a whole currency while another remains owed. No reader migration in this PR. |

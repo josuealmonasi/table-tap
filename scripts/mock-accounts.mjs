@@ -52,14 +52,20 @@ export async function seedAccounts(pg, rid) {
     const subtotal = round2(items.reduce((s, l) => s + l.price, 0));
     return [
       rid, "completed", subtotal, 0, 0, subtotal, "MXN", JSON.stringify(items),
-      false, null, c.at.toISOString(), carmen.id, "demo-cashier@tabletap.dev", c.at.toISOString(),
+      false, null, c.at.toISOString(),
     ];
   });
-  await bulkInsert(
+  const inserted = await bulkInsert(
     pg,
     "orders",
     ["restaurant_id", "status", "subtotal", "service_fee", "tip", "total", "currency", "items",
-     "paid", "pay_method", "created_at", "account_id", "charged_by", "charged_at"],
+     "paid", "pay_method", "created_at"],
     rows,
+    "id",
   );
+  const { rows: [result] } = await pg.query(
+    "select account_charge_v2($1,$2,$3,$4,'demo-cashier@tabletap.dev') value",
+    [rid, carmen.id, inserted.map(o => o.id), rows.reduce((sum, row) => sum + row[5], 0)],
+  );
+  if (result.value.outcome !== "charged") throw new Error(`Demo account charge: ${result.value.outcome}`);
 }

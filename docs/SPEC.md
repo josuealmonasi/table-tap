@@ -2787,52 +2787,89 @@ codes when reducing sales for table forgiveness: every reason lowers the live
 paid total and appears as a write-off. Account credits follow that existing
 behavior; reason-specific sales/loss reporting is not changed by this feature.
 
-## Account journal foundation (R8-7, PR 1 of 5)
+## Account journal (R8-7, PR 2 of 5)
 
 `account_movements` is an immutable, private journal of integer cents per account
-and saved MXN/USD currency. Its kinds are opening, charge, added_tip, collection,
-credit, return_approved, refund_paid and historical_observation. Charge and added
-tip raise debt; live collections and credits reduce it. Return approval, actual
-refund payout and historical observations have zero debt effect. Backfilled
-collections also have zero debt effect: the opening already includes them.
-Component bounds, required source keys, source-event uniqueness and a trigger
-check restaurant/account/currency agreement. RLS has no client policies; only
-service_role can select and insert. Updates and deletes are rejected even for
-privileged writers. Only deleting the restaurant cascades; other source foreign
-keys are deferred, without cascading deletion.
+and saved MXN/USD currency. Charge and added_tip increase debt; live collection
+and credit decrease it. Opening debt is a snapshot, while historical collections
+and observations have zero debt effect. Return/refund kinds remain reserved for
+later PRs. RLS still denies all client access; service_role has select/insert
+only. Immutable guards, deferred source foreign keys, source identities and
+restaurant/account/currency checks remain enforced. A zero-priced order still
+has a zero-cent charge when included in a charged bill.
 
-**The journal is not started yet.** `customer_accounts.journal_started_at` is
-nullable with no default. Schema application never calls the service-only
-`account_journal_backfill_v1(restaurant, cutoff)` function. No application writer
-or reader uses the journal. Starting it before all writers exist would lose
-charges and collections between deployments. Existing order/payment readers and
-money reconciliation continue unchanged.
+The journal is **started on activation**, and written by these transactions:
 
-PR 2 must install every writer and run the backfill in the same production
-delta/transaction, under the restaurant money lock. The caller acquires that
-lock before choosing its cutoff; the function reacquires it, locks every account
-in id order, then all their orders in id order. It snapshots current debt under
-these locks, not an arbitrary historical balance. For each unstarted account it
-opens each observed currency (plus its ceiling currency, or the restaurant
-currency if unknown), including zero balances. The opening sums current reduced
-totals of unpaid, not written-off, not cancelled orders. It imports every
-account_credit adjustment with its immutable before/after snapshot as a zero-debt
-historical observation, and every account payment as a zero-debt historical
-collection. Unknown payment currency fails the transaction for review instead
-of guessing. It never infers charged_at from created_at or rebuilds original
-charges from current totals: unavailable original values remain JSON null.
-Newly started accounts require a cutoff within the calling transaction and no
-preexisting journal movements. This rejects an earlier transaction's cutoff;
-the caller must still choose it after acquiring the money lock, because a
-timestamp from before a wait in the same transaction passes this check.
-Finally it stamps the cutoff and returns per-account/currency opening debt and
-counts by imported kind. Started accounts are skipped on every later call,
-including replay with the original cutoff.
+- `account_charge_v2`: one charge per order, with its immutable original snapshot.
+  Both POS account writers delegate to it.
+- `account_settle_v2`, `account_settle_currency_v1` and
+  `account_checkout_settle_v2`: one collection per payment and an added_tip for
+  the new tip only. The payment freezes `account_added_tip_cents` and
+  `account_tip_order_id`; its existing tip field also includes earlier tips.
+- `account_credit_v1`: one credit keyed by its immutable account_credit adjustment.
+- `prepare_order_refund` and direct `cancel_order_v2`: an unpaid, not written-off
+  account cancellation reverses the remaining debt with a credit keyed by its
+  unique cancel adjustment. The current cancellation plan already creates that
+  adjustment. The legacy direct cancel path did not; it now creates one, using
+  charged_by (or system) because that signature has no actor argument.
 
-Pre-cutoff event coverage is explicitly incomplete. The opening contains only
-current outstanding-order snapshots; collected orders are represented only by
-independently evidenced credit/payment history. Dev verification is provided by
-`scripts/probe-account-journal.mjs`, which refuses production. It must not be run
-against production during PR 1. The probe checks the function's own money lock
-without a caller lock, verifies rollback leaves an account unstarted, and tests
-effective client/service roles alongside catalog privileges.
+All legacy signatures remain and delegate to their v2 writer. Private append
+helpers have no public, anon, authenticated or service_role execute grant. Every
+writer takes the restaurant money lock, then the account, then orders in id
+order. Lazy allocation repair prelocks account parents and orders in id order
+before touching historical receipts; credit/cancel/POS enter that repair before
+locking their own order. Replays return before writes; unique source indexes
+reject duplicate appends rather than suppressing them. Appends are conditional
+on `customer_accounts.journal_started_at` being nonnull.
+
+`supabase/journal-activate.sql` is a transaction fragment: install the writers,
+include it, then commit the same production delta. For each restaurant in id
+order it takes `lock_restaurant_money` and calls `account_journal_backfill_v1`.
+The cutoff uses `clock_timestamp()` after the lock: SQL `now()` is the earlier
+transaction start and can predate a lock wait. Account charges, payments and
+adjustments likewise stamp the actual write time after acquiring the lock.
+The backfill locks accounts and orders in id order, opens current reduced unpaid,
+not written-off, not cancelled debt per currency (including zero), imports
+independently evidenced credits/collections without counting debt twice, then
+stamps the cutoff. Unknown historical receipt currency aborts for review.
+Unknown original amounts/components/charge dates remain JSON null; charged_at
+is never inferred from created_at. Started accounts are skipped on replay.
+Pre-cutoff coverage is explicitly incomplete.
+
+Activation stamps `restaurants.account_journal_started_at`, including empty
+restaurants, and sets its default for future restaurants. Opening an account
+holds the same money lock and stamps `journal_started_at = now()` when its
+restaurant is activated. Such accounts start from birth without an opening
+backfill. Both activation markers and new-tip source metadata are immutable.
+No additional historical movements can be imported into a started account.
+
+Deferred constraint triggers on orders, payments, adjustments, accounts and
+movements inspect the final transaction state. Every live source must have one
+matching movement, every live movement must have a source, components and
+currency must agree, and journal debt must equal outstanding order debt per
+currency. Original charge/opening components are reconciled against subsequent
+reductions and added tips, including orders charged before activation. Detaching
+or redating a started charge, a forgotten append, or an orphan append fails at
+commit. These checks never repair a missing append themselves.
+
+The money gate paginates all sources and movements, performs independent
+bidirectional source checks and exact per-account/currency debt reconciliation,
+and retains existing receipt/allocation/drawer checks. Dev `db:mock` runs
+activation after seeding; mock account charges use the real writer so repeated
+seeds also work after activation. The dev-only `scripts/probe-account-journal.mjs`
+refuses production and covers activation, writers, replays, rollback on missing
+and orphan appends, and both credit-versus-settle serializations. Staff settlement
+still collects a whole currency balance; its partial-account probe collects MXN
+while USD remains owed. Database execution remains a required release gate.
+
+Statements, analytics and corte continue reading orders/payments until PR 3.
+
+Release verification still needs fixture isolation in the older API/attack gates:
+`api-cases/refunds.mjs` attaches and detaches an order directly;
+`attack-accounts.mjs` and `attack-account-credit.mjs` seed direct account orders;
+`api-fixtures.mjs` and `attack-accounts.mjs` delete account source rows individually.
+Started journals intentionally reject those operations. These cases must use real
+charge writers and disposable parent restaurants for cleanup before the full
+gates can be reported green. `allocations-check.mjs` and the older
+`probe-account-credit.mjs` likewise contain direct account-order seed paths.
+The new journal probe already uses disposable restaurants and cascade cleanup.
