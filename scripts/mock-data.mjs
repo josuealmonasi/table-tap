@@ -543,7 +543,7 @@ export async function seedMock(pg) {
   // ── Open bills: three tables seated right now ──────────────────────────
   const openTables = sample(tables, 3);
   const openBills = [];
-  for (const t of openTables) {
+  for (const [i, t] of openTables.entries()) {
     const {
       rows: [session],
     } = await pg.query(
@@ -569,7 +569,10 @@ export async function seedMock(pg) {
         [
           rid, t.id, t.label, session.id, subtotal, serviceFee,
           round2(subtotal + serviceFee), JSON.stringify(lines),
-          new Date(Date.now() - randInt(15, 120) * 60000).toISOString(),
+          // The first table is the oldest bill, so it heads the list. It is
+          // never the one divided below, and a gate that opens the first bill
+          // must not land on a split at random (promises, 2026-11-10).
+          new Date(Date.now() - (i === 0 ? randInt(100, 120) : randInt(15, 90)) * 60000).toISOString(),
           `demo-phone-${k + 1}`,
         ],
       );
