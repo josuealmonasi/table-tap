@@ -13086,7 +13086,8 @@ create unique index if not exists account_movements_adjustment_once on account_m
 create unique index if not exists account_movements_refund_once on account_movements(refund_operation_id, operation_ref) where kind = 'refund_paid';
 create index if not exists account_movements_statement_idx on account_movements(restaurant_id, account_id, currency, occurred_at, id);
 alter table account_movements enable row level security;
-revoke all on account_movements from public, anon, authenticated, service_role;
+revoke all on account_movements from anon;
+revoke all on account_movements from public, authenticated, service_role;
 grant select, insert on account_movements to service_role;
 
 create or replace function public.guard_account_movement()
@@ -13215,3 +13216,7 @@ begin
 end $$;
 revoke all on function public.account_journal_backfill_v1(uuid, timestamptz) from public, anon, authenticated, service_role;
 grant execute on function public.account_journal_backfill_v1(uuid, timestamptz) to service_role;
+
+-- RLS does not guard TRUNCATE: the blanket revoke must run after the last
+-- table is created, and account_movements is now the last one.
+revoke truncate, references, trigger on all tables in schema public from authenticated;

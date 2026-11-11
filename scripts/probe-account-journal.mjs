@@ -23,7 +23,7 @@ let pending;
 try {
   await db.connect(); await peer.connect();
   const peerPid = (await peer.query("select pg_backend_pid() pid")).rows[0].pid;
-  await db.query("insert into restaurants(id,name,currency) values($1,'Journal probe','MXN'),($2,'Foreign journal probe','MXN')", [restaurant, foreign]);
+  await db.query("insert into restaurants(id,name,plan,plan_status,currency) values($1,'Journal probe','servicio','active','MXN'),($2,'Foreign journal probe','servicio','active','MXN')", [restaurant, foreign]);
   const f = await fixture(db, restaurant), stranger = await account(db, foreign);
   const foreignOrder = await order(db, foreign, stranger, 10);
   assert.equal((await db.query("select journal_started_at from customer_accounts where id=$1", [f.owner])).rows[0].journal_started_at, null);

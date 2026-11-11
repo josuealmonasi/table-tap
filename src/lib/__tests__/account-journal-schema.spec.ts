@@ -59,7 +59,8 @@ it("checks tenant, account, currency and related sources for every supplied refe
 
 it("denies all client access and gives service_role only select/insert", () => {
   expect(journal).toContain("alter table account_movements enable row level security");
-  expect(journal).toContain("revoke all on account_movements from public, anon, authenticated, service_role");
+  expect(journal).toContain("revoke all on account_movements from anon;");
+  expect(journal).toContain("revoke all on account_movements from public, authenticated, service_role;");
   expect(journal.match(/grant [^;]+ on account_movements to [^;]+/g)).toEqual([
     "grant select, insert on account_movements to service_role",
   ]);
