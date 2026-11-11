@@ -22,7 +22,7 @@ import MarginsPanel from "@/components/dashboard/costs/MarginsPanel";
 import AnalyticsView from "@/components/dashboard/analytics/AnalyticsView";
 const report = disputeReport([dispute], [movement], "2026-11-01", "2026-12-01", 0);
 const view: CostsView = { disputes: report, ingredients: [], recipes: [], products: [], margins: [], rises: [], unverifiedFees: 0,
-  fees: { rate: 0, fees: 0, takings: 0 }, terminalFeePct: 0, taxPct: 0,
+  fees: { rate: 0, fees: 0, takings: 0, cash: 0, online: 0, terminal: 0 }, terminalFeePct: 0, taxPct: 0,
   period: { rows: [], revenue: 0, cost: 0, fees: 0, returned: 0, contribution: 0, uncosted: 0 } };
 beforeEach(() => { vi.stubGlobal("React", React); state.locale = "es"; state.rows = []; state.error = false; });
 it("Costs shows a current-period chargeback below contribution, even with no sales/recipes", () => {

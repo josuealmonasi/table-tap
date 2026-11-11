@@ -2802,9 +2802,9 @@ transaction identity and monetary evidence cannot be overwritten by a retry.
 
 `stripe_disputes`, `stripe_dispute_movements` and `stripe_dispute_events` have
 RLS, service-only access, composite tenant references and Stripe identities
-unique within account and livemode. The proposed DDL and deletion-writer
-replacement live only in `supabase/PROPOSAL-disputes.sql`, including commented
-`drop.sql` additions; Claude must review/fold/apply it before deployment.
+unique within account and livemode. The tables and their four functions are in
+`supabase/schema.sql`; `admin_delete_restaurant` refuses deletion while a
+dispute is open or unreconciled and archives all three tables with the books.
 Historical diner checkout and payment provenance establishes ownership by
 PaymentIntent and original Stripe account. Account checkouts link through their
 saved diner checkout session. Current Connect settings provide only the tenant

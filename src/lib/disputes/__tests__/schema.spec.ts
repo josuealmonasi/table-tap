@@ -1,12 +1,12 @@
 import { readFileSync } from "node:fs";
 import { expect, it } from "vitest";
-const sql = () => readFileSync("supabase/PROPOSAL-disputes.sql", "utf8");
+const sql = () => readFileSync("supabase/schema.sql", "utf8");
 it.each(["stripe_disputes", "stripe_dispute_movements", "stripe_dispute_events"])("%s is RLS-enabled and service-only, and archived before deletion", table => {
   expect(sql()).toContain(`alter table ${table} enable row level security;`);
   expect(sql()).toMatch(/revoke all on stripe_disputes, stripe_dispute_movements, stripe_dispute_events from public, anon, authenticated/);
   const archive = sql().slice(sql().indexOf("foreach v_table in array array["));
   expect(archive.split("] loop")[0]).toContain(`'${table}'`);
-  expect(sql()).toContain(`drop table if exists public.${table} cascade;`);
+  expect(readFileSync("supabase/drop.sql", "utf8")).toContain(`drop table if exists ${table} cascade;`);
 });
 it("tenant and provider scope must agree on every linked financial row", () => {
   for (const columns of ["restaurant_id, order_id", "restaurant_id, diner_checkout_id", "restaurant_id, account_checkout_id",
@@ -23,7 +23,9 @@ it("money is inserted idempotently, checked against immutable evidence and never
   expect(sql()).toContain("raise exception 'Provider omitted recorded dispute evidence'");
 });
 it("serializes case workers and fences an expired or superseded claim before writing", () => {
-  expect(sql().match(/pg_advisory_xact_lock/g)).toHaveLength(2);
+  const disputes = sql().slice(sql().indexOf("create or replace function public.claim_stripe_dispute_event"),
+    sql().indexOf("create or replace function public.fail_stripe_dispute_event"));
+  expect(disputes.match(/pg_advisory_xact_lock/g)).toHaveLength(2);
   expect(sql()).toContain("claim_token = gen_random_uuid(), lease_until = now() + interval '2 minutes'");
   expect(sql()).toContain("e.claim_token is distinct from p_claim or e.state <> 'processing' or e.lease_until <= now()");
   const finish = sql().slice(sql().indexOf("create or replace function public.finish_stripe_dispute_event"));

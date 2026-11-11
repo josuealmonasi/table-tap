@@ -363,3 +363,11 @@ drop function if exists public.sale_line_costs(uuid, jsonb);
 drop function if exists public.counter_pay_later_full(uuid) cascade;
 
 drop function if exists public.stamp_checkout_discount_v1();
+-- Disputes (chargebacks).
+drop function if exists public.fail_stripe_dispute_event(uuid, uuid, text);
+drop function if exists public.finish_stripe_dispute_event(uuid, uuid, jsonb, jsonb);
+drop function if exists public.claim_stripe_dispute_event(uuid);
+drop function if exists public.enqueue_stripe_dispute_event(text, boolean, text, text, text, text, timestamptz);
+drop table if exists stripe_dispute_movements cascade;
+drop table if exists stripe_dispute_events cascade;
+drop table if exists stripe_disputes cascade;

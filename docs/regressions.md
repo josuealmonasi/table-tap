@@ -6559,8 +6559,10 @@ second withdrawal or a credit for winning. Failed provider reads remain in the
 existing bounded recovery runner. `disputes/__tests__` covers ingestion,
 provenance, shared-charge history, currencies, provider dates and structural
 money checks; the dispute rendering specs use both real language dictionaries.
-The SQL contract specs inspect only `supabase/PROPOSAL-disputes.sql`; they do not
-execute PostgreSQL. Claude must fold it, probe the locks/leases, deletion archive,
-RLS and retry races, and verify Stripe's separate fee-adjustment shapes. Sales,
+The SQL contract specs read `supabase/schema.sql` (folded by Claude, who added
+the deletion check and archive to the live `admin_delete_restaurant` rather than
+replacing it); they do not execute PostgreSQL. Still to prove on dev: the
+locks/leases, the deletion archive, RLS and retry races, and Stripe's separate
+fee-adjustment shapes. Sales,
 original contribution and the corte stay separate from actual chargeback net.
 Historical backfill/provider completeness is PR 3, not claimed by this gate.
