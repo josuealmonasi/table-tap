@@ -8311,6 +8311,21 @@ end; $$;
 revoke all on function public.reprice_open_service(uuid, numeric) from public, anon, authenticated;
 grant execute on function public.reprice_open_service(uuid, numeric) to service_role;
 
+-- There is no service charge any more (owner's decision, 2026-11-11). Profeco
+-- holds that nothing for service or tip may go on a bill without the
+-- customer's consent; a switch that added a percentage to every bill did
+-- exactly that. Bills nobody has started paying lose it first, by the same
+-- rules as switching it off (only lower, never a promised total); then it is
+-- off and cannot come back. Past orders keep the charge they were made with.
+do $$ declare r record; begin
+  for r in select id from restaurants where service_enabled or service_pct <> 0 order by id loop
+    perform public.reprice_open_service(r.id, 0);
+  end loop;
+end $$;
+update restaurants set service_enabled = false, service_pct = 0 where service_enabled or service_pct <> 0;
+alter table restaurants drop constraint if exists restaurants_no_service_charge;
+alter table restaurants add constraint restaurants_no_service_charge check (not service_enabled and service_pct = 0);
+
 -- Duplicate charges need the same durable retry rule as order cancellations.
 -- Unknown/pending outcomes reuse their immutable request; only a confirmed
 -- terminal failure can advance to a new Stripe idempotency key.

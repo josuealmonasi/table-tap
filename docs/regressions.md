@@ -6549,3 +6549,13 @@ till, waiter pad and offline receipt now freeze each line's promotion revenue.
 understatement of unrelated revenue, bill-wide stacking, extras, combo display
 savings, free food costs, exact cents, legacy fallback and offline replay.
 Reports never fetch current promotions for old sales.
+
+## The service charge is gone (owner's decision, 2026-11-11)
+
+Profeco holds that nothing for service or tip may go on a bill without the
+customer's consent, and a switch that added a percentage to every bill did
+exactly that. The schema lowers every unpaid, unpromised bill to no service
+charge through `reprice_open_service(id, 0)`, switches it off everywhere and
+adds `restaurants_no_service_charge`, so it cannot come back. Settings no longer
+offer it and the route no longer accepts it. Past orders keep the charge they
+were made with, and every screen still shows it on them.

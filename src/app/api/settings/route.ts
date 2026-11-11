@@ -14,16 +14,15 @@ import { clampTicketTimes, DEFAULT_TICKET_LATE_MINUTES, DEFAULT_TICKET_WARN_MINU
 
 export const runtime = "nodejs";
 
-// Fields each role may change. Identity + currency + service fee are the
-// owner's; managers get the operational controls (tax + order pausing).
+// Fields each role may change. Identity + currency are the owner's; managers
+// get the operational controls (tax + order pausing). There is no service
+// charge to set any more (owner's decision, 2026-11-11; the database refuses it).
 const OWNER_FIELDS = new Set([
   "name",
   "logo",
   "tagline",
   "currency",
   "timezone",
-  "service_pct",
-  "service_enabled",
   "tax_pct",
   "tax_show_breakdown",
   "accepting_orders",
