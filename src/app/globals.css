@@ -8149,6 +8149,12 @@ a.tt-user-plan:hover {
 .tt-costs-entry > .tt-costs-product-meta {
   grid-column: 1;
 }
+/* With nothing beside it, the meta line takes the whole row. Kept in the
+   left column under a margin like "Debería haber 12.5 kg", "Contado el … por
+   …" was squeezed until "·" opened a line (stock tab, 360px, layout audit). */
+.tt-costs-entry > .tt-costs-product-meta:last-child {
+  grid-column: 1 / -1;
+}
 .tt-costs-entry > .tt-costs-margin {
   grid-column: 2;
   grid-row: 1;
