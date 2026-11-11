@@ -89,6 +89,7 @@ export async function layoutAuditSelftest(browser) {
     await check('full-screen sheet is not a bar', 'covered-by-bar', `<div style="position:fixed;inset:0;background:white;z-index:30">Sheet</div>${stickyForm(64)}`, false);
     await check('chips scrolled to the fold of a card', 'content-touches-edge', `<section style="border:1px solid #ccc;border-radius:12px;padding:14px;height:80px;overflow:auto"><div style="height:44px"></div><button style="border:1px solid #999;border-radius:8px;padding:8px 14px">Picante</button></section>`, false);
     await check('chip text flush on its card edge', 'content-touches-edge', `<section style="border:1px solid #ccc;border-radius:12px;padding:12px 14px 12px 2px"><span>Picante</span></section>`);
+    await check('toast card floating over a page card', 'cards-touching', `<section style="border:1px solid #ccc;border-radius:12px;padding:12px;margin-top:40px">Page card text</section><div style="position:fixed;top:0;left:0;right:0"><div style="border:1px solid #ccc;border-radius:12px;padding:8px;height:40px">Mesa 10 quiere un mesero</div></div>`, false);
     await check('ordinary button scrolling under tabs', 'covered-by-bar', `<div style="margin-top:800px"><button style="height:40px">Scrolling save</button></div>${bottomBar()}`, false);
     await check('bar excludes its own controls', 'covered-by-bar', bottomBar().replace('Navigation', '<button>Tab</button>'), false);
     await check('small fixed element is not a bar', 'covered-by-bar', pinnedButton() + bottomBar('width:100px'), false);

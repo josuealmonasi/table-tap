@@ -411,7 +411,14 @@ export const SPACING_AUDIT = String.raw`
     if (/^(absolute|fixed)$/.test(s.position)) continue;
     const r = el.getBoundingClientRect();
     if (!cardBox(s, r)) continue;
-    stackedCards.push({ el, r, layer: el.closest('dialog, [role="dialog"], [role="alertdialog"]') });
+    // A card inside a floating layer (a toast, a popover) belongs to that
+    // layer: "Mesa 10 quiere un mesero" floating over the page is not stacked
+    // on the page card beneath it (first full run, 2026-11-11).
+    let floatingLayer = null;
+    for (let up = el.parentElement; up && up !== document.body; up = up.parentElement) {
+      if (/^(absolute|fixed)$/.test(getComputedStyle(up).position)) { floatingLayer = up; break; }
+    }
+    stackedCards.push({ el, r, layer: el.closest('dialog, [role="dialog"], [role="alertdialog"]') ?? floatingLayer });
   }
   stackedCards.sort((a, b) => a.r.top - b.r.top);
   const touching = new Set();
