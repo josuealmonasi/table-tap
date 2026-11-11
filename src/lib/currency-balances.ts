@@ -13,3 +13,13 @@ export function currencyBalances(rows: { currency: string; amount: number }[]): 
 export function balancesLabel(balances: CurrencyBalance[]): string {
   return balances.map(b => formatMoney(b.amount, b.currency)).join(" · ");
 }
+
+/**
+ * What an account owes, as one label. An account with no charges has no
+ * balances at all, and joining nothing gave an empty string: the row read
+ * "Debe  de MX$1,000.00" (owner's screenshot, 2026-11-10). Nothing owed is a
+ * zero in the account's own currency.
+ */
+export function owedLabel(balances: CurrencyBalance[] | undefined, currency: string): string {
+  return balances && balances.length > 0 ? balancesLabel(balances) : formatMoney(0, currency);
+}

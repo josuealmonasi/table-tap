@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import { useT } from "@/lib/i18n/context";
 import { formatMoney } from "@/lib/format";
-import { balancesLabel } from "@/lib/currency-balances";
+import { owedLabel } from "@/lib/currency-balances";
 import { headroom } from "@/lib/accounts";
 import { useOpenAccounts, type AccountListItem } from "@/hooks/useOpenAccounts";
 
@@ -75,7 +75,7 @@ export default function AccountPicker({ active, amount, currency, onPick, busy =
                 <span className="tt-account-pick-name">{a.name}</span>
                 <span className="tt-muted tt-account-pick-owed">
                   {t("accounts.owesOf", {
-                    owed: balancesLabel(a.balances ?? [{ currency: a.currency ?? currency, amount: a.owed }]),
+                    owed: owedLabel(a.balances ?? [{ currency: a.currency ?? currency, amount: a.owed }], a.currency ?? currency),
                     limit: formatMoney(Number(a.credit_limit), currency),
                   })}
                 </span>

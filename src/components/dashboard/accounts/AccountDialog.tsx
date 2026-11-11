@@ -12,7 +12,7 @@ import type { StatementDay } from "@/lib/accounts";
 import type { AccountListItem } from "@/hooks/useOpenAccounts";
 import StatementDays from "@/components/accounts/StatementDays";
 import SettleAccountDialog from "./SettleAccountDialog";
-import { balancesLabel, type CurrencyBalance } from "@/lib/currency-balances";
+import { owedLabel, type CurrencyBalance } from "@/lib/currency-balances";
 
 interface AccountDialogProps {
   account: AccountListItem | null;
@@ -108,7 +108,7 @@ export default function AccountDialog({ account, onClose, currency, timeZone, ca
     <>
       <Modal open onClose={onClose} maxWidth={560} title={account.name}>
         <p className="tt-account-owed">
-          {t("accounts.owesOf", { owed: balancesLabel(balances), limit: money(Number(account.credit_limit)) })}
+          {t("accounts.owesOf", { owed: owedLabel(balances, account.currency ?? currency), limit: money(Number(account.credit_limit)) })}
         </p>
         {account.email && <p className="tt-muted" style={{ marginTop: 0 }}>{account.email}</p>}
 

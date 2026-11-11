@@ -7730,6 +7730,17 @@ a.tt-user-plan:hover {
   font-size: 13px;
   font-variant-numeric: tabular-nums;
 }
+/* On a phone every row is the same shape: the name, and what is owed under
+   it. Side by side, a short balance sat beside its name and a longer one
+   wrapped beneath, so two rows of one list looked like two layouts. */
+@media (max-width: 560px) {
+  .tt-account-row,
+  .tt-account-pick {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 2px;
+  }
+}
 .tt-account-owed,
 .tt-account-settle-owed {
   font-weight: 700;
