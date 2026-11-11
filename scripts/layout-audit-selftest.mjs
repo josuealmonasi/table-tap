@@ -55,16 +55,48 @@ export async function layoutAuditSelftest(browser) {
     const control = text => `<button style="border:1px solid #888;padding:6px;font:inherit;flex:none">${text}</button>`;
     const controls = (gap, extra = '') => `<div style="display:flex;gap:${gap}px;${extra}">${control('First')}${control('Second')}</div>`;
     const entries = (lineHeight, style = '') => `<ul style="margin:0;padding:0;list-style:none;line-height:${lineHeight}px"><li style="${style}">First entry</li><li style="${style}">Second entry</li></ul>`;
+    const bottomBar = (extra = '') => `<nav style="position:fixed;bottom:0;left:0;width:100%;height:56px;z-index:10;background:#333;color:white;${extra}"><span style="display:block;padding:18px">Navigation</span></nav>`;
+    const stickyForm = bottom => `<form><div style="height:1400px">Form fields</div>
+      <footer style="position:sticky;bottom:${bottom}px;padding:8px;background:white">
+        <button style="height:40px">Save changes</button>
+      </footer></form>${bottomBar()}`;
+    const pinnedButton = (extra = '') => `<div style="position:fixed;bottom:8px;left:16px;z-index:1;${extra}"><button style="height:40px">Pinned save</button></div>`;
+    // The early actions are not currently stuck: only their unsafe inset can
+    // expose the fault without scrolling. Exercise current occlusion separately.
+    const earlyActions = bottom => `<form style="min-height:1400px"><footer style="position:sticky;bottom:${bottom}px">
+      <button style="height:40px">Early save</button></footer></form>${bottomBar()}`;
     const twins = [
       ['icon-touches-label', 'icon 2px from label', iconButton(2), iconButton(4)],
       ['content-touches-edge', 'text 2px from inner border', edgeBox(2), edgeBox(6)],
       ['controls-touching', 'controls 2px apart', controls(2), controls(4)],
       ['entries-run-together', 'entries with 1px painted gap', entries(18), entries(24)],
+      ['covered-by-bar', 'sticky actions under bottom tabs', stickyForm(0), stickyForm(64)],
     ];
     for (const [kind, name, broken, fixed] of twins) {
       await check(name, kind, broken);
       await check(`${name}: fixed twin`, kind, fixed, false);
     }
+    const coverageTwins = [
+      ['unsafe sticky inset before sticking', earlyActions(0), earlyActions(64)],
+      ['fixed control covered at its centre', pinnedButton() + bottomBar(), pinnedButton('z-index:20') + bottomBar()],
+    ];
+    for (const [name, broken, fixed] of coverageTwins) {
+      await check(name, 'covered-by-bar', broken);
+      await check(`${name}: fixed twin`, 'covered-by-bar', fixed, false);
+    }
+    await check('sticky bar resting against a scrolled field', 'controls-touching', `<div style="height:2000px"><input style="display:block;height:40px;margin-top:500px;border:1px solid #999" value="Field"><div style="position:sticky;bottom:0;margin-top:1px"><button style="border:1px solid #999;height:40px">Save</button></div></div>`, false);
+    await check('two touching buttons inside a sticky bar', 'controls-touching', `<div style="position:sticky;bottom:0;display:flex"><button style="border:1px solid #999">Cancel</button><button style="border:1px solid #999">Save</button></div>`);
+    await check('ordinary button scrolling under tabs', 'covered-by-bar', `<div style="margin-top:800px"><button style="height:40px">Scrolling save</button></div>${bottomBar()}`, false);
+    await check('bar excludes its own controls', 'covered-by-bar', bottomBar().replace('Navigation', '<button>Tab</button>'), false);
+    await check('small fixed element is not a bar', 'covered-by-bar', pinnedButton() + bottomBar('width:100px'), false);
+    await check('short fixed element is not a bar', 'covered-by-bar', pinnedButton() + bottomBar('height:29px'), false);
+    await check('hidden fixed bar', 'covered-by-bar', stickyForm(0).replace('z-index:10;', 'z-index:10;visibility:hidden;'), false);
+    await check('dialog sticky actions ignore page tabs', 'covered-by-bar', `<div role="dialog" style="position:fixed;inset:0;z-index:20;background:white">${stickyForm(0).replace(bottomBar(), '')}</div>${bottomBar()}`, false);
+    await check('page sticky actions ignored behind dialog', 'covered-by-bar', `${stickyForm(0)}<div role="dialog" style="position:fixed;inset:0;z-index:20;background:white">Dialog</div>`, false);
+    await check('dialog sticky actions without page bar', 'covered-by-bar', `<div role="dialog">${earlyActions(0).replace(bottomBar(), '')}</div>`, false);
+    await check('dialog bar can cover dialog controls', 'covered-by-bar', `<div role="dialog" style="position:fixed;inset:0">${pinnedButton()}${bottomBar()}</div>`);
+    await check('40% overlap needs centre hit confirmation', 'covered-by-bar', pinnedButton('bottom:40px') + bottomBar(), false);
+    await check('top bar covers pinned control', 'covered-by-bar', pinnedButton('bottom:auto;top:8px') + bottomBar('bottom:auto;top:0'));
     await check('small image beside label', 'icon-touches-label', iconButton(2, '<img width="16" height="16" alt="" src="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%2216%22 height=%2216%22%3E%3Crect width=%2216%22 height=%2216%22/%3E%3C/svg%3E">'));
     await check('32px image is not an icon', 'icon-touches-label', iconButton(2, '<img width="32" height="32" alt="">'), false);
     await check('padded label uses text range', 'icon-touches-label', iconButton(0).replace('<span>', '<span style="padding-left:8px">'), false);
@@ -139,7 +171,7 @@ export async function layoutAuditSelftest(browser) {
 
     // Comment out each emitter in the evaluated source, require the broken
     // twin's assertion to fail, then use the unchanged AUDIT for the next run.
-    for (const [kind, name, broken] of twins) {
+    for (const [kind, name, broken] of [...twins, ...coverageTwins.map(([name, broken]) => ['covered-by-bar', name, broken])]) {
       const lines = AUDIT.split('\n');
       const emitters = lines.filter(line => line.includes("report('" + kind + "',"));
       assert.equal(emitters.length, 1, `${kind}: exactly one sabotage target`);

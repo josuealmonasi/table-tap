@@ -185,6 +185,55 @@ export const SPACING_AUDIT = String.raw`
     faults.push({ kind, text, w: Math.round(gap * 10) / 10 });
   };
 
+  // Settings' sticky save actions shared bottom:0 with the fixed phone tabs.
+  // Normal scrolling content may pass beneath a bar; pinned controls cannot
+  // scroll clear. Check the declared sticky inset too, before it gets stuck.
+  const dialogSelector = 'dialog, [role="dialog"], [role="alertdialog"]';
+  const dialogOpen = all.some(el => el.matches(dialogSelector) && readable(el));
+  const barLayer = el => el.closest(dialogSelector);
+  const bars = [];
+  for (const el of all) {
+    if (!readable(el)) continue;
+    const s = getComputedStyle(el), r = painted(el.getBoundingClientRect(), el.parentElement), layer = barLayer(el);
+    if (s.position !== 'fixed' || (dialogOpen ? !layer : layer)) continue;
+    const width = Math.min(innerWidth, r.right) - Math.max(0, r.left);
+    const height = Math.min(innerHeight, r.bottom) - Math.max(0, r.top);
+    if (height >= 30 && width >= innerWidth / 2) bars.push({ el, r, layer, bottom: parseFloat(s.bottom) });
+  }
+  const pinnedCache = new Map();
+  const pinned = el => {
+    if (!el) return false;
+    if (!pinnedCache.has(el)) pinnedCache.set(el,
+      /^(sticky|fixed)$/.test(getComputedStyle(el).position) || pinned(el.parentElement));
+    return pinnedCache.get(el);
+  };
+  for (const el of all) {
+    if (!bars.length || !readable(el)) continue;
+    const s = getComputedStyle(el), layer = barLayer(el);
+    const control = el.matches('button, a, input, select, textarea, [role="button"]');
+    const stickyBottom = s.position === 'sticky' ? parseFloat(s.bottom) : NaN;
+    if (!(control && pinned(el)) && !Number.isFinite(stickyBottom)) continue;
+    const r = painted(el.getBoundingClientRect(), el.parentElement);
+    if (r.width <= 0 || r.height <= 0) continue;
+    for (const bar of bars) {
+      if (layer !== bar.layer || bar.el.contains(el) || el.contains(bar.el)) continue;
+      const width = Math.min(r.right, bar.r.right) - Math.max(r.left, bar.r.left);
+      if (width <= 0) continue;
+      const height = Math.max(0, Math.min(r.bottom, bar.r.bottom) - Math.max(r.top, bar.r.top));
+      const fraction = width * height / (r.width * r.height);
+      const centreX = (r.left + r.right) / 2, centreY = (r.top + r.bottom) / 2;
+      const covered = control && fraction > 0.25 &&
+        bar.el.contains(document.elementsFromPoint(centreX, centreY)[0]);
+      const unsafeInset = Number.isFinite(stickyBottom) && Math.abs(bar.bottom) < 1 &&
+        Math.abs(bar.r.bottom - innerHeight) < 1 && stickyBottom < bar.r.height;
+      if (covered || unsafeInset) {
+        const label = el.getAttribute('aria-label') || el.textContent || el.getAttribute('value') || el.tagName;
+        report('covered-by-bar', label, covered ? fraction * 100 : bar.r.height - stickyBottom);
+        break;
+      }
+    }
+  }
+
   // Sweep cross-axis starts/centres/ends. A >half overlap means at least one
   // rectangle's centre is strictly inside the other. Wrapped controls need
   // only a positive horizontal overlap, so query at interval starts instead.
@@ -243,7 +292,7 @@ export const SPACING_AUDIT = String.raw`
   const iconControl = 'button, a, label, [role="button"], .tt-chip';
   const borderControl = 'button, input, select, textarea, .tt-chip, .tt-pill, [role="radio"]';
   const edgeControl = iconControl + ', input, select, textarea, .tt-pill, [role="radio"]';
-  const contexts = new Map(), iconGroups = new Map(), controlGroups = new Map(), lists = new Map();
+  const contexts = new Map(), iconGroups = new Map(), controlGroups = new Map(), pinnedControlGroups = new Map(), lists = new Map();
   const add = (map, key, item) => {
     if (!map.has(key)) map.set(key, []);
     map.get(key).push(item);
@@ -276,7 +325,9 @@ export const SPACING_AUDIT = String.raw`
       const text = (el.getAttribute('aria-label') || el.textContent || el.getAttribute('value') || el.tagName).trim();
       const paintsBox = surface(s, context.box?.background ?? background(el.parentElement));
       if (el.matches(borderControl) && !context.paintedControl && paintsBox) {
-        if (!context.joined) add(controlGroups, context.layer, { r: ink, text });
+        // A pinned bar's controls are compared only with each other: against the
+        // page scrolling past, the gap changes with every scroll position.
+        if (!context.joined) add(pinned(el) ? pinnedControlGroups : controlGroups, context.layer, { r: ink, text });
         context.paintedControl = el;
       }
       // Unpainted controls use their descendant text Ranges below, never their
@@ -324,7 +375,7 @@ export const SPACING_AUDIT = String.raw`
   // Overlap is not "touching": a sticky save bar sliding over fields while the
   // page scrolls overlaps them by design (Settings on production, 2026-11-11),
   // and painted text over text is the 'overlapping' check's job.
-  for (const items of controlGroups.values()) for (const vertical of [false, true]) neighbours(items, vertical, false, (a, b, gap) => {
+  for (const items of [...controlGroups.values(), ...pinnedControlGroups.values()]) for (const vertical of [false, true]) neighbours(items, vertical, false, (a, b, gap) => {
     if (gap < 0) return;
     report('controls-touching', [a, b].sort((x, y) => x.r.top - y.r.top || x.r.left - y.r.left || x.text.localeCompare(y.text)).map(x => x.text).join(' / '), gap);
   });
