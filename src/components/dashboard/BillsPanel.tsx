@@ -231,6 +231,7 @@ export default function BillsPanel({
 
       {settling && (
         <SettleTableDialog
+          loyalty={loyalty}
           open
           restaurantId={restaurantId}
           tableId={settling.tableId}

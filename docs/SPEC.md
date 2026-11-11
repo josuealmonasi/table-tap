@@ -1680,7 +1680,7 @@ scan-to-collect button shipped and could never open a lens. It is `(self)`.
 
 ## The visit card
 
-A loyalty card a diner keeps on their phone, stamped by staff on each visit and
+A loyalty card a diner keeps on their phone, stamped by payment or by staff, and
 worth the rewards the restaurant chooses, each at a number of visits it chooses
 — a reward ladder: 4 visits a coffee, 8 a dessert, 12 a meal. Every paid tier
 (`plan_limits.allows_loyalty`): Caja carries it, so the tiers above it must. It knows nobody: a card is a random code, a
@@ -1699,6 +1699,39 @@ email or phone.
   so a double tap, two waiters or a race add nothing. `loyalty_stamp()` locks
   the card and refuses when the program is off or the plan does not include
   loyalty, as well as the route refusing it.
+- **Presented before payment** (owner request, 2026-11-11): front-of-house
+  staff (owner, manager, cashier, waiter) may attach a scanned or typed bearer
+  code to an unpaid sale or an open sitting through `POST /api/loyalty/attach`.
+  Kitchen access is refused. An approved live table membership permits a diner
+  to attach the card whose bearer code is saved on their device, only to their
+  own sitting; legacy private-order links grant no attachment permission.
+  Attachment does not stamp. Removal is conditional on the sale still being
+  unpaid or the sitting still being open; a diner can remove only their card.
+  Caja previews the card before its sale exists and carries its code in the
+  immutable sale request and offline replay. The server resolves it within the
+  cashier's restaurant and passes `loyalty_card_id` in the transaction's order
+  payload. **Schema integration requirement:** `pos_insert_order` must persist
+  that field before settlement; the application change alone cannot make Caja
+  stamp. The schema owner supplies and verifies that writer extension.
+- **Payment stamps automatically:** `stamp_loyalty_on_payment` records the
+  restaurant-local day's visit with actor `payment` on an insert already paid
+  or a false-to-true payment transition. Cancelled sales never stamp. An order's
+  card takes precedence over its sitting's card; both must belong to the same
+  restaurant. The program and plan are checked again in SQL and the existing
+  card/day uniqueness keeps two payments on the same day at one visit.
+- **The card on the bill and ticket:** Caja, the table collection dialog reached
+  from Bills or the waiter pad, and the diner's bill offer attachment only when
+  the server confirms the program, tier and target are open. A diner sees the
+  saved-device action only with a valid saved code and a current sitting.
+  Paying controls are disabled while attachment is in flight. Paid receipts
+  (email, staff print, Caja and split payment copies) read confirmed standing,
+  name the next unredeemed ladder reward and print only the code's last four
+  characters. Earned rewards ask for handover on the next visit. Multiple orders
+  with one card print it once. Paper loyalty lines wrap at the ticket's 48
+  columns. Unpaid bill copies do not claim a visit; offline paper labels the
+  card's visit as pending confirmation, never incrementing a cached counter.
+  Replaying collected cash still works after a card is deleted or switched off;
+  SQL decides whether the replay can stamp at that time.
 - **The ladder** is one to four steps `{visits, reward}`, strictly increasing,
   2 to 50 visits and a reward of up to 80 characters each
   (`loyalty_programs.steps`). The last step's visits are the round, and are

@@ -1,5 +1,6 @@
 "use client";
 
+import AttachCard from "./loyalty/AttachCard.react-component";
 import { usePaymentCheck } from "@/hooks/usePaymentCheck";
 
 import { useEffect, useState } from "react";
@@ -26,6 +27,7 @@ import { newRef } from "@/lib/collection-ref";
 
 interface SettleTableDialogProps {
   open: boolean;
+  loyalty?: boolean;
   onClose: () => void;
   restaurantId: string;
   /** The table being collected on, or null for a general-QR order. */
@@ -61,6 +63,7 @@ interface SettleTableDialogProps {
  */
 export default function SettleTableDialog({
   open,
+  loyalty = false,
   onClose,
   restaurantId,
   tableId,
@@ -84,6 +87,7 @@ export default function SettleTableDialog({
   // told "this table owes nothing" by a server that had not said anything.
   const [unread, setUnread] = useState(false);
   const [attempt, setAttempt] = useState(0);
+  const [attachingCard, setAttachingCard] = useState(false);
   const [busy, setBusy] = useState(false);
   const [asking, setAsking] = useState(false);
   // The calculator, for a table paying a bit at a time.
@@ -244,6 +248,8 @@ export default function SettleTableDialog({
       ) : (
         <>
           <SettleBillLines bill={{ ...bill, paid: tableBill(orders ?? [], []).paid }} currency={currency} />
+          {loyalty && <AttachCard key={`${tableId}:${orderId}`} active target={tableId ? { tableId } : { orderId: orderId! }} disabled={busy} onBusy={setAttachingCard} />}
+          <fieldset disabled={attachingCard} style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}>
           {slotSplits.length > 0 ? <TableSplitCollection canApprove={canApprove} onWriteOff={setWritingOff} splits={slotSplits}
             remaining={bill.total} refresh={refreshBill} onCollected={onSettled} onReceipt={rememberReceipt} /> : <>
           <CashChange amount={bill.total} currency={currency} />
@@ -311,6 +317,7 @@ export default function SettleTableDialog({
             </button>}
           </div>
           </>}
+          </fieldset>
         </>
       )}
       </Modal>

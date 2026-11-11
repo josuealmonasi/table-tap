@@ -1,10 +1,11 @@
+import { loyaltyReceiptLines, type ReceiptLoyalty } from "@/lib/loyalty/receipt";
 import type { ReturnComponents } from "@/lib/return-components";
 import { receiptReturnRows, type ReceiptReturn } from "@/lib/receipt-returns";
 import { receiptCents } from "@/lib/receipt-amount";
 import { formatMoney } from "@/lib/format";
 import { lineUnitPrice, orderCode, type OrderLineItem } from "@/lib/types";
 
-export interface ReceiptOrder {
+export interface ReceiptOrder extends ReceiptLoyalty {
   id: string;
   items: OrderLineItem[] | null;
   subtotal: number | string;
@@ -35,7 +36,7 @@ export interface ReceiptForgiveness {
 /** Keep the adjustments this copy included, so a later loss cannot rewrite it. */
 export interface ReceiptVersion { adjustmentIds: string[]; returnCopy?: string; slotCopy?: string }
 
-export interface SlotReceiptPayment {
+export interface SlotReceiptPayment extends ReceiptLoyalty {
   return_components?: ReturnComponents;
   returns?: ReceiptReturn[];
   id: string;
@@ -150,6 +151,7 @@ export function buildReceipt(
     timeZone: place.timeZone,
   });
 
+  const loyaltyLines = loyaltyReceiptLines(payment ? [payment, ...orders] : orders, t);
   const text = [
     place.name,
     t("receipt.heading", { code }),
@@ -161,6 +163,7 @@ export function buildReceipt(
     ...rows.map(([label, amount]) => `${label}  ${amount}`),
     `${totalLabel}  ${formatMoney(paid, cur)}`,
     "",
+    ...loyaltyLines,
     t("receipt.footer"),
     t("receipt.notFiscal"),
   ]
@@ -192,6 +195,7 @@ export function buildReceipt(
       <td style="padding:10px 0 0;text-align:right;font-weight:700;border-top:2px solid #16211C">${esc(formatMoney(paid, cur))}</td>
     </tr>
   </table>
+  ${loyaltyLines.map(line => `<p style="overflow-wrap:anywhere;font-size:13px">${esc(line)}</p>`).join("")}
   <p style="margin-top:24px;color:#6E7A74;font-size:12px">${esc(t("receipt.footer"))}</p>
   <p style="margin-top:8px;color:#6E7A74;font-size:12px">${esc(t("receipt.notFiscal"))}</p>
 </div>`.trim();

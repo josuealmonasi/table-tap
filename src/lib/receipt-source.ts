@@ -1,3 +1,5 @@
+import { receiptCard } from "@/lib/loyalty/attachment-server";
+import { withReceiptCards } from "@/lib/loyalty/receipt-source";
 import { readReturnAdjustments, returnComponents, verifyReturnedOrder } from "@/lib/return-components";
 import { readCancelReturns, readReceiptReturns } from "@/lib/receipt-return-source";
 import { slotReceiptReturns } from "@/lib/slot-receipt-returns";
@@ -80,7 +82,7 @@ export async function readOrderReceipt(db: Database, ids: string[], complete: bo
   const { data: found, error: readError } = await db
     .from("orders")
     .select(
-      "id, restaurant_id, table_id, items, subtotal, discount, service_fee, tip, total, currency, table_label, created_at, pay_method, paid",
+      "id, restaurant_id, table_id, items, subtotal, discount, service_fee, tip, total, currency, table_label, created_at, pay_method, paid, loyalty_card_id, session_id",
     )
     .in("id", ids)
     .order("created_at", { ascending: true });
@@ -106,7 +108,10 @@ export async function readOrderReceipt(db: Database, ids: string[], complete: bo
     || orders.some(o => !o.paid || o.currency !== order.currency || o.table_id !== order.table_id))) {
     throw new ReceiptReadError(404);
   }
-  return orderVersion(db, orders, version);
+  const source = await orderVersion(db, orders, version);
+  const decorated = await withReceiptCards(db, orders);
+  source.orders = source.orders.map(order => ({ ...order, loyalty: decorated.find(row => row.id === order.id)?.loyalty }));
+  return source;
 }
 
 /** A slot receipt names money received, even while the other parts are unpaid. */
@@ -126,7 +131,7 @@ export async function readSlotReceipt(db: Database, id: string, restaurantId?: s
     .eq("id", slots[0].split_id).eq("restaurant_id", payment.restaurant_id).maybeSingle();
   if (splitError) throw new ReceiptReadError(503);
   // The table is the sitting's: bill_splits has no table column of its own.
-  const { data: sitting, error: sittingError } = split ? await db.from("table_sessions").select("table_id")
+  const { data: sitting, error: sittingError } = split ? await db.from("table_sessions").select("table_id, loyalty_card_id")
     .eq("id", split.session_id).eq("restaurant_id", payment.restaurant_id).maybeSingle() : { data: null, error: null };
   if (sittingError) throw new ReceiptReadError(503);
   if (!split || split.model_version !== 2 || split.session_id !== payment.session_id || split.currency !== payment.currency
@@ -146,6 +151,7 @@ export async function readSlotReceipt(db: Database, id: string, restaurantId?: s
     receipt = saved;
   } else if (version === undefined) receipt = await slotReceiptReturns(db, payment.restaurant_id, receipt);
   else if (version.returnCopy || !Array.isArray(version.adjustmentIds) || version.adjustmentIds.length) throw new ReceiptReadError(404);
+  if (sitting?.loyalty_card_id) receipt.loyalty = await receiptCard(payment.restaurant_id, sitting.loyalty_card_id);
   const issued = version ?? { adjustmentIds: [], ...(receipt.returns?.length ? { slotCopy: sealSlotVersion(payment.restaurant_id, receipt) } : {}) };
   return { orders: [], restaurantId: payment.restaurant_id, tableId: sitting?.table_id ?? null, payment: receipt, version: issued };
 }

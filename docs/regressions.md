@@ -6549,3 +6549,26 @@ till, waiter pad and offline receipt now freeze each line's promotion revenue.
 understatement of unrelated revenue, bill-wide stacking, extras, combo display
 savings, free food costs, exact cents, legacy fallback and offline replay.
 Reports never fetch current promotions for old sales.
+
+
+## A card presented before payment is stamped by payment (2026-11-11)
+
+Scanning a visit card separately from taking payment left the two acts unrelated,
+and the customer ticket gave no reward progress. Attachment now names an unpaid
+sale or open sitting; payment stamps it and receipts read the confirmed ladder
+standing. The diner path requires both a live table credential and the card's
+bearer code. A printed code is masked to four characters, including offline paper.
+
+Local specs cover route outcomes, front-of-house roles, foreign/closed sittings,
+conditional removal, Spanish selector states, saved-device selection, receipt
+progress/earned rewards/privacy/width, and the trigger's insert/update/cancelled/
+sitting fallback/day uniqueness contracts. Schema bug plants operate on an
+in-memory copy, keeping `supabase/` untouched. Live API cases create private
+cards, orders, sittings and member credentials and clean them up even after
+partial setup; two payments must create one `payment` visit.
+
+The application hands Caja's transaction a server-resolved `loyalty_card_id`.
+The schema owner must extend `pos_insert_order` to persist it before settlement.
+PostgreSQL execution, payment races, the API gate, promises, layout/screenshots
+and dialogs require the lead's integration pass; local mock and text-contract
+specs are not evidence those live gates passed.
