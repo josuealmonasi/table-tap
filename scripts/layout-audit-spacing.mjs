@@ -156,6 +156,190 @@ export const SPACING_AUDIT = String.raw`
     }
   }
 
+  // Border paint, not a class name or a transparent layout border.
+  const sides = ['Top', 'Right', 'Bottom', 'Left'];
+  const clearPaint = color => /^(transparent|rgba\(.*,\s*0\))$/.test(color);
+  const hasBorder = (s, side) => parseFloat(s['border' + side + 'Width']) > 0 &&
+    !/^(none|hidden)$/.test(s['border' + side + 'Style']) &&
+    !clearPaint(s['border' + side + 'Color']);
+  const backgroundCache = new Map();
+  const background = el => {
+    if (!el) return 'rgb(255, 255, 255)'; // The page canvas beneath transparent ancestors.
+    if (!backgroundCache.has(el)) {
+      const color = getComputedStyle(el).backgroundColor;
+      backgroundCache.set(el, clearPaint(color) ? background(el.parentElement) : color);
+    }
+    return backgroundCache.get(el);
+  };
+  const surface = (s, behind) => sides.some(side => hasBorder(s, side)) ||
+    s.backgroundImage !== 'none' || (!clearPaint(s.backgroundColor) && s.backgroundColor !== behind);
+  const cardBox = (s, r) => sides.every(side => hasBorder(s, side)) &&
+    parseFloat(s.borderTopLeftRadius) >= 6 && parseFloat(s.borderBottomLeftRadius) >= 6 &&
+    r.width >= 120 && r.height >= 24;
+  const reports = new Set();
+  const report = (kind, text, gap) => {
+    text = text.trim().replace(/\s+/g, ' ').slice(0, 60);
+    const key = kind + '|' + text;
+    if (reports.has(key)) return;
+    reports.add(key);
+    faults.push({ kind, text, w: Math.round(gap * 10) / 10 });
+  };
+
+  // Sweep cross-axis starts/centres/ends. A >half overlap means at least one
+  // rectangle's centre is strictly inside the other. Wrapped controls need
+  // only a positive horizontal overlap, so query at interval starts instead.
+  // A prefix-max tree finds the nearest preceding edge in O(log n); mirror
+  // for the other direction. Even coincident controls never need all pairs.
+  const neighbours = (items, vertical, differentTypes, visit) => {
+    for (const direction of [1, -1]) {
+      const points = items.map(item => {
+        const r = item.r, lo = vertical ? r.top : r.left, hi = vertical ? r.bottom : r.right;
+        return { ...item, start: direction > 0 ? lo : -hi, end: direction > 0 ? hi : -lo,
+          low: vertical ? r.left : r.top, high: vertical ? r.right : r.bottom };
+      }).sort((a, b) => a.start - b.start);
+      let size = 1;
+      while (size < points.length) size *= 2;
+      const trees = [new Array(size * 2).fill(-1), new Array(size * 2).fill(-1)];
+      const best = (a, b) => a < 0 ? b : b < 0 ? a : points[a].end >= points[b].end ? a : b;
+      const update = (i, active) => {
+        const tree = trees[points[i].type ?? 0];
+        let p = size + i;
+        tree[p] = active ? i : -1;
+        while (p > 1) { p >>= 1; tree[p] = best(tree[p * 2], tree[p * 2 + 1]); }
+      };
+      const events = [];
+      points.forEach((p, i) => {
+        events.push([p.low, 2, i], [vertical ? p.low : (p.low + p.high) / 2, vertical ? 3 : 1, i], [p.high, 0, i]);
+      });
+      events.sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+      for (const [, event, i] of events) {
+        if (event === 0 || event === 2) { update(i, event === 2); continue; }
+        const a = points[i];
+        update(i, false);
+        let lo = 0, hi = points.length;
+        while (lo < hi) {
+          const mid = (lo + hi) >> 1;
+          if (points[mid].start <= a.start) lo = mid + 1; else hi = mid;
+        }
+        const tree = trees[differentTypes ? 1 - a.type : 0];
+        let left = size, right = size + lo, found = -1;
+        while (left < right) {
+          if (left & 1) found = best(found, tree[left++]);
+          if (right & 1) found = best(found, tree[--right]);
+          left >>= 1; right >>= 1;
+        }
+        if (found >= 0) {
+          const b = points[found], gap = a.start - b.end;
+          const overlap = Math.min(a.high, b.high) - Math.max(a.low, b.low);
+          if (gap < 4 && overlap > (vertical ? 0 : Math.min(a.high - a.low, b.high - b.low) / 2)) visit(a, b, gap);
+        }
+        update(i, true);
+      }
+    }
+  };
+
+  // One DOM walk assigns each painted fragment its nearest control, box, list
+  // entry and dialog layer. Descendant ranges are never rescanned per ancestor.
+  const iconControl = 'button, a, label, [role="button"], .tt-chip';
+  const borderControl = 'button, input, select, textarea, .tt-chip, .tt-pill, [role="radio"]';
+  const edgeControl = iconControl + ', input, select, textarea, .tt-pill, [role="radio"]';
+  const contexts = new Map(), iconGroups = new Map(), controlGroups = new Map(), lists = new Map();
+  const add = (map, key, item) => {
+    if (!map.has(key)) map.set(key, []);
+    map.get(key).push(item);
+  };
+  const edge = (item, context) => {
+    const box = context.box;
+    if (!box || context.edgeRow) return;
+    const r = item.r, b = box.inner;
+    const gap = Math.min(...[r.left - b.left, b.right - r.right, r.top - b.top, b.bottom - r.bottom].filter(n => n >= 0));
+    if (gap >= 0 && gap < 6) report('content-touches-edge', item.text, gap);
+  };
+  const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_ELEMENT);
+  for (let el = walker.nextNode(); el; el = walker.nextNode()) {
+    const parent = contexts.get(el.parentElement) ?? {}, s = getComputedStyle(el);
+    const dialog = el.matches('dialog, [role="dialog"], [role="alertdialog"]');
+    const r = el.getBoundingClientRect();
+    const context = { ...parent, layer: dialog ? el : parent.layer,
+      floating: dialog ? false : parent.floating || /^(absolute|fixed)$/.test(s.position) };
+    // Dialog roots start a new scope, including when portalled inside a card.
+    if (dialog) { context.box = null; context.control = null; context.entry = null; context.list = null; context.paintedControl = null; context.edgeRow = false; context.joined = false; }
+    contexts.set(el, context);
+    if (!readable(el) || context.floating) continue;
+    const ink = painted(r, el.parentElement);
+    if (ink.width <= 0 || ink.height <= 0) continue;
+    const fullRow = context.box && sides.some(side => hasBorder(s, side)) &&
+      Math.abs(r.left - context.box.inner.left) <= 1 && Math.abs(r.right - context.box.inner.right) <= 1;
+    context.edgeRow ||= fullRow;
+    context.joined ||= el.matches('[role="group"][data-joined], .tt-segmented');
+    if (el.matches(edgeControl)) {
+      const text = (el.getAttribute('aria-label') || el.textContent || el.getAttribute('value') || el.tagName).trim();
+      const paintsBox = surface(s, context.box?.background ?? background(el.parentElement));
+      if (el.matches(borderControl) && !context.paintedControl && paintsBox) {
+        if (!context.joined) add(controlGroups, context.layer, { r: ink, text });
+        context.paintedControl = el;
+      }
+      // Unpainted controls use their descendant text Ranges below, never their
+      // invisible hit targets (which may fill or overhang a card).
+      if (paintsBox) edge({ r: ink, text }, context);
+    }
+    if (el.matches(iconControl)) context.control = el;
+    if (cardBox(s, r)) {
+      context.box = { background: background(el), inner: { left: r.left + parseFloat(s.borderLeftWidth), right: r.right - parseFloat(s.borderRightWidth),
+        top: r.top + parseFloat(s.borderTopWidth), bottom: r.bottom - parseFloat(s.borderBottomWidth) } };
+      context.edgeRow = false;
+    }
+    if (el.matches('ul, ol, [role="list"]')) { context.list = el; context.entry = null; }
+    if (el.matches('li, [role="listitem"]') && context.list) {
+      context.entry = { first: Infinity, last: -Infinity, text: [],
+        separated: surface(s, background(el.parentElement)), layer: context.layer };
+      add(lists, context.list, context.entry);
+    }
+    if (context.control && (el.matches('svg') || (el.matches('img') && r.width < 32 && r.height < 32)))
+      add(iconGroups, context.control, { r: ink, text: '', type: 0 });
+    // SVG title/desc nodes describe icons; they are not painted text labels.
+    if (el.namespaceURI !== 'http://www.w3.org/1999/xhtml' ||
+      (s.textShadow === 'none' && clearPaint(s.webkitTextFillColor || s.color))) continue;
+    for (const node of el.childNodes) {
+      if (node.nodeType !== 3 || !node.textContent.trim()) continue;
+      const value = node.textContent, label = value.trim().slice(0, 60), range = document.createRange();
+      range.setStart(node, value.search(/\S/)); range.setEnd(node, value.trimEnd().length);
+      for (const raw of range.getClientRects()) {
+        const line = painted(raw, el);
+        if (line.width <= 0 || line.height <= 0) continue;
+        const item = { r: line, text: label, type: 1 };
+        if (context.control) add(iconGroups, context.control, item);
+        edge(item, context);
+        if (context.entry) {
+          context.entry.first = Math.min(context.entry.first, line.top);
+          context.entry.last = Math.max(context.entry.last, line.bottom);
+          context.entry.text.push(item.text);
+        }
+      }
+    }
+  }
+  for (const items of iconGroups.values()) neighbours(items, false, true, (a, b, gap) => {
+    report('icon-touches-label', a.text || b.text, gap);
+  });
+  // Overlap is not "touching": a sticky save bar sliding over fields while the
+  // page scrolls overlaps them by design (Settings on production, 2026-11-11),
+  // and painted text over text is the 'overlapping' check's job.
+  for (const items of controlGroups.values()) for (const vertical of [false, true]) neighbours(items, vertical, false, (a, b, gap) => {
+    if (gap < 0) return;
+    report('controls-touching', [a, b].sort((x, y) => x.r.top - y.r.top || x.r.left - y.r.left || x.text.localeCompare(y.text)).map(x => x.text).join(' / '), gap);
+  });
+  for (const entries of lists.values()) {
+    let previous;
+    for (const entry of entries) {
+      if (!Number.isFinite(entry.first)) continue;
+      if (previous && previous.layer === entry.layer && !previous.separated && !entry.separated) {
+        const gap = entry.first - previous.last;
+        if (gap >= 0 && gap < 4) report('entries-run-together', previous.text.join(' ').slice(0, 28) + ' / ' + entry.text.join(' ').slice(0, 28), gap);
+      }
+      previous = entry;
+    }
+  }
+
   // "Para empezar" and the Menús card touched: an inline margin: 0 beat the
   // dashboard's 16px rhythm (owner's screenshot, 2026-11-11). Two rounded,
   // fully bordered cards stacked less than 6px apart read as one broken box.
@@ -165,12 +349,8 @@ export const SPACING_AUDIT = String.raw`
     if (!readable(el)) continue;
     const s = getComputedStyle(el);
     if (/^(absolute|fixed)$/.test(s.position)) continue;
-    const bordered = ['Top', 'Right', 'Bottom', 'Left'].every(side =>
-      parseFloat(s['border' + side + 'Width']) > 0 && s['border' + side + 'Style'] !== 'none' &&
-      !/^(transparent|rgba\(.*,\s*0\))$/.test(s['border' + side + 'Color']));
-    if (!bordered || parseFloat(s.borderTopLeftRadius) < 6 || parseFloat(s.borderBottomLeftRadius) < 6) continue;
     const r = el.getBoundingClientRect();
-    if (r.width < 120 || r.height < 24) continue;
+    if (!cardBox(s, r)) continue;
     stackedCards.push({ el, r, layer: el.closest('dialog, [role="dialog"], [role="alertdialog"]') });
   }
   stackedCards.sort((a, b) => a.r.top - b.r.top);

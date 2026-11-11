@@ -7,11 +7,11 @@ import { AUDIT } from "./layout-audit.mjs";
 export async function layoutAuditSelftest(browser) {
   const page = await browser.newPage({ viewport: { width: 390, height: 844 } });
   let count = 0;
-  const check = async (name, kind, html, expected = true) => {
+  const check = async (name, kind, html, expected = true, source = AUDIT) => {
     await page.setContent(`<!doctype html><style>
       body { margin:0; font:16px/20px Arial,sans-serif } * { box-sizing:border-box }
     </style>${html}`);
-    const faults = await page.evaluate(AUDIT);
+    const faults = await page.evaluate(source);
     assert.equal(faults.some(f => f.kind === kind), expected,
       `${name}: expected ${kind} ${expected ? 'present' : 'absent'}; got ${JSON.stringify(faults)}`);
     count++;
@@ -49,6 +49,109 @@ export async function layoutAuditSelftest(browser) {
     await check('cards with the 16px rhythm', 'cards-touching', card() + `<fieldset style="border:0;padding:0;margin:16px 0 0">${card()}</fieldset>`, false);
     await check('cards side by side', 'cards-touching', `<div style="display:flex;gap:2px">${card('width:180px')}${card('width:180px')}</div>`, false);
     await check('card inside a card', 'cards-touching', `<section style="border:1px solid #ccc;border-radius:12px;padding:0">${card()}</section>`, false);
+    const icon = '<svg width="16" height="16"><rect width="16" height="16" fill="black"/></svg>';
+    const iconButton = (gap, graphic = icon) => `<button style="display:inline-flex;align-items:center;gap:${gap}px;font:inherit;padding:8px">${graphic}<span>Save</span></button>`;
+    const edgeBox = (padding, content = 'Box label') => `<section style="width:260px;min-height:32px;border:2px solid #888;border-radius:12px;padding:${padding}px">${content}</section>`;
+    const control = text => `<button style="border:1px solid #888;padding:6px;font:inherit;flex:none">${text}</button>`;
+    const controls = (gap, extra = '') => `<div style="display:flex;gap:${gap}px;${extra}">${control('First')}${control('Second')}</div>`;
+    const entries = (lineHeight, style = '') => `<ul style="margin:0;padding:0;list-style:none;line-height:${lineHeight}px"><li style="${style}">First entry</li><li style="${style}">Second entry</li></ul>`;
+    const twins = [
+      ['icon-touches-label', 'icon 2px from label', iconButton(2), iconButton(4)],
+      ['content-touches-edge', 'text 2px from inner border', edgeBox(2), edgeBox(6)],
+      ['controls-touching', 'controls 2px apart', controls(2), controls(4)],
+      ['entries-run-together', 'entries with 1px painted gap', entries(18), entries(24)],
+    ];
+    for (const [kind, name, broken, fixed] of twins) {
+      await check(name, kind, broken);
+      await check(`${name}: fixed twin`, kind, fixed, false);
+    }
+    await check('small image beside label', 'icon-touches-label', iconButton(2, '<img width="16" height="16" alt="" src="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%2216%22 height=%2216%22%3E%3Crect width=%2216%22 height=%2216%22/%3E%3C/svg%3E">'));
+    await check('32px image is not an icon', 'icon-touches-label', iconButton(2, '<img width="32" height="32" alt="">'), false);
+    await check('padded label uses text range', 'icon-touches-label', iconButton(0).replace('<span>', '<span style="padding-left:8px">'), false);
+    await check('icon in a separate control', 'icon-touches-label', `<div style="display:flex;align-items:center">${iconButton(4).replace('<span>Save</span>', '')}<a>Save</a></div>`, false);
+    await check('unpainted label', 'icon-touches-label', iconButton(2).replace('<span>', '<span style="color:transparent">'), false);
+    await check('floating icon', 'icon-touches-label', iconButton(2).replace('<svg ', '<svg style="position:absolute" '), false);
+    await check('fully clipped icon', 'icon-touches-label', iconButton(2).replace(icon, `<span style="width:0;height:16px;overflow:hidden">${icon}</span>`), false);
+    await check('vertical icon and label', 'icon-touches-label', iconButton(2).replace('align-items:center;', 'flex-direction:column;'), false);
+    await check('control near inner border', 'content-touches-edge', edgeBox(2, control('Save')));
+    await check('right inner border', 'content-touches-edge', edgeBox(12, '<div style="text-align:right;margin-right:-10px">Right</div>'));
+    await check('bottom inner border', 'content-touches-edge', edgeBox(12, 'Bottom').replace('padding:12px', 'padding:12px 12px 2px'));
+    await check('top inner border', 'content-touches-edge', edgeBox(12, 'Top').replace('padding:12px', 'padding:2px 12px 12px'));
+    await check('edge-to-edge bordered row', 'content-touches-edge', edgeBox(0, '<div style="border-bottom:1px solid #888;padding:2px">Edge row</div>'), false);
+    await check('dialog content never uses page box', 'content-touches-edge', edgeBox(0, '<div role="dialog">Dialog label</div>'), false);
+    await check('edge image', 'content-touches-edge', edgeBox(0, '<img width="32" height="32" alt="">'), false);
+    await check('transparent border box', 'content-touches-edge', edgeBox(2).replace('solid #888', 'solid transparent'), false);
+    await check('floating edge text', 'content-touches-edge', edgeBox(0, '<span style="position:absolute">Floating</span>'), false);
+    // Production at 390px: these invisible control boxes touch their cards,
+    // but the field is drawn by its wrapper and the labels have real padding.
+    const search = (paint = '') => `<div class="tt-bill-search" style="display:flex;align-items:center;gap:8px;padding:0 12px;margin:12px 0;border:1px solid #ccc;border-radius:999px;background:white">
+      ${icon}<input class="tt-input" value="Find a bill" style="font:inherit;min-width:0;width:100%;border:0;background:transparent;padding:11px 0;${paint}">
+    </div>`;
+    const planActions = (offset = -16, paint = '') => `<section class="tt-section" style="width:300px;padding:18px;border:1px solid #ccc;border-radius:12px;background:white">
+      <p style="margin:0">Your subscription and billing</p>
+      <div class="tt-plan-actions" style="display:flex;flex-wrap:wrap;gap:8px;margin-top:10px;margin-left:${offset}px">
+        ${['Manage billing', 'Cancel subscription'].map(text => `<button class="tt-btn tt-btn-ghost tt-btn-sm tt-plan-cancel" style="display:inline-flex;align-items:center;justify-content:center;white-space:nowrap;border:0;background:transparent;font:600 13px/20px Arial;padding:8px 16px;${paint}">${text}</button>`).join('')}
+      </div></section>`;
+    const terminalDay = (padding = 12, paint = '') => `<ul class="tt-costs-products" style="list-style:none;margin:10px 0 0;padding:0;display:flex;flex-direction:column;gap:6px">
+      <li class="tt-terminal-day" style="border:1px solid #ccc;border-radius:8px;background:white;padding:0">
+        <button class="tt-terminal-day-head" style="width:100%;display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:baseline;gap:2px 12px;padding:${padding}px;border:0;background:transparent;text-align:left;font:inherit;${paint}">
+          <span class="tt-costs-product-name" style="font-weight:600;min-width:0;overflow-wrap:anywhere">Monday</span>
+          <span class="tt-costs-chip">Received</span>
+          <span class="tt-costs-product-meta" style="grid-column:1/-1;font-size:12px">Payments received</span>
+        </button></li></ul>`;
+    const productionTwins = [
+      ['wrapper-drawn search input', search(), search('border:1px solid #888')],
+      ['plan ghost button hit targets', planActions(), planActions(-30)],
+      ['terminal grid item text', terminalDay(), terminalDay(2)],
+    ];
+    for (const [name, good, broken] of productionTwins) {
+      assert.deepEqual(await check(name, 'content-touches-edge', good, false), [], `${name}: no faults`);
+      await check(`${name}: broken twin`, 'content-touches-edge', broken);
+    }
+    await check('search input matching card background', 'content-touches-edge', search('background:white'), false);
+    await check('search input contrasting background', 'content-touches-edge', search('background:#eee'));
+    await check('plan ghost button with painted background', 'content-touches-edge', planActions(-16, 'background:#eee'));
+    await check('terminal grid button matching card background', 'content-touches-edge', terminalDay(12, 'background:white'), false);
+    await check('terminal grid button contrasting background', 'content-touches-edge', terminalDay(12, 'background:#eee'));
+    await check('wrapped controls 2px apart', 'controls-touching', controls(2, 'width:80px;flex-wrap:wrap'));
+    await check('wrapped controls 4px apart', 'controls-touching', controls(4, 'width:80px;flex-wrap:wrap'), false);
+    await check('deliberately joined controls', 'controls-touching', controls(0).replace('<div ', '<div role="group" data-joined '), false);
+    await check('segmented controls', 'controls-touching', controls(0).replace('<div ', '<div class="tt-segmented" '), false);
+    const flatControls = (gap, paint) => controls(gap).replaceAll('border:1px solid #888', `border:0;background:${paint}`);
+    await check('borderless controls', 'controls-touching', flatControls(0, 'transparent'), false);
+    await check('matching-background controls', 'controls-touching', `<div style="background:white">${flatControls(0, 'white')}</div>`, false);
+    await check('background-only controls 2px apart', 'controls-touching', flatControls(2, '#eee'));
+    await check('background-only controls 4px apart', 'controls-touching', flatControls(4, '#eee'), false);
+    await check('floating control', 'controls-touching', controls(0).replace('font:inherit;', 'font:inherit;position:absolute;'), false);
+    await check('controls across dialog layer', 'controls-touching', `<div role="dialog">${control('Dialog')}</div><div style="margin-top:2px">${control('Page')}</div>`, false);
+    await check('controls inside fixed dialog', 'controls-touching', `<div role="dialog" style="position:fixed">${controls(2)}</div>`);
+    await check('input and select borders', 'controls-touching', '<div style="display:flex;gap:2px"><input style="width:100px"><select><option>Choice</option></select></div>');
+    await check('chip pill and radio borders', 'controls-touching', '<div style="display:flex;gap:2px"><span class="tt-chip" style="border:1px solid">Chip</span><span class="tt-pill" style="border:1px solid">Pill</span><span role="radio" style="border:1px solid">Radio</span></div>');
+    await check('list with dividers', 'entries-run-together', entries(18, 'border-bottom:1px solid #888'), false);
+    await check('list with painted backgrounds', 'entries-run-together', entries(18, 'background:#eee'), false);
+    await check('list with matching backgrounds', 'entries-run-together', `<div style="background:white">${entries(18, 'background:white')}</div>`);
+    await check('wrapped list entry uses its last line', 'entries-run-together', entries(18).replace('First entry', 'First<br>entry'));
+    await check('list role', 'entries-run-together', entries(18).replace('<ul ', '<div role="list" ').replace('</ul>', '</div>').replaceAll('<li ', '<div role="listitem" ').replaceAll('</li>', '</div>'));
+    await check('floating list entries', 'entries-run-together', entries(18, 'position:absolute'), false);
+    await check('fully clipped list entry', 'entries-run-together', entries(18).replace('First entry', '<span style="display:block;height:0;overflow:hidden">First entry</span>'), false);
+    const duplicated = await check('spacing reports deduplicate text', 'icon-touches-label', iconButton(2) + iconButton(2));
+    assert.equal(duplicated.filter(f => f.kind === 'icon-touches-label').length, 1);
+
+    // Comment out each emitter in the evaluated source, require the broken
+    // twin's assertion to fail, then use the unchanged AUDIT for the next run.
+    for (const [kind, name, broken] of twins) {
+      const lines = AUDIT.split('\n');
+      const emitters = lines.filter(line => line.includes("report('" + kind + "',"));
+      assert.equal(emitters.length, 1, `${kind}: exactly one sabotage target`);
+      const sabotaged = lines.map(line => line === emitters[0] ? '// ' + line : line).join('\n');
+      await assert.rejects(check(name, kind, broken, true, sabotaged), error => {
+        assert.equal(error.code, 'ERR_ASSERTION');
+        assert.match(error.message, new RegExp(`expected ${kind} present`));
+        console.log(`  ok       sabotage: ${kind} disabled -> self-test FAILED as expected`);
+        return true;
+      });
+      await check(`${kind}: restored after sabotage`, kind, broken);
+    }
     // One planted specimen for every pre-existing fault kind.
     await check('squashed', 'squashed', '<div style="width:10px;white-space:nowrap">Squashed words</div>');
     await check('overlapping', 'overlapping', '<div>PLANTED ALPHA TEXT</div><div style="margin-top:-18px;margin-left:20px">PLANTED BETA TEXT</div>');

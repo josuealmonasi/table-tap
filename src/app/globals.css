@@ -5176,6 +5176,19 @@ a.tt-btn {
   margin: 6px -24px -24px;
   padding: 14px 24px;
 }
+/* On a phone the dashboard's tab bar is fixed to the bottom of the screen, so
+   a bar sticking to bottom: 0 sat UNDER it: editing the restaurant in
+   Settings, only the top edge of "Guardar cambios" showed above the tabs
+   (390px, production, 2026-11-11). Stick above the tab bar instead, the way
+   the menu's bulk bar does. A dialog's bar keeps its own pin. */
+@media (max-width: 720px) {
+  body:has(.tt-section-nav) .tt-prodform-actions {
+    bottom: calc(64px + env(safe-area-inset-bottom, 0px));
+  }
+  body:has(.tt-section-nav) .tt-modal .tt-prodform-actions {
+    bottom: -24px;
+  }
+}
 .tt-check {
   display: flex;
   align-items: center;
