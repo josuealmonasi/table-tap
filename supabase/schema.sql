@@ -3586,6 +3586,89 @@ $$;
 revoke all on function public.loyalty_unstamp(uuid, uuid, date) from public, anon, authenticated;
 grant execute on function public.loyalty_unstamp(uuid, uuid, date) to service_role;
 
+-- ============================================================================
+-- A card presented before paying is stamped by paying (owner's request,
+-- 2026-11-11). Staff scan the diner's QR at the till, on the table's bill or
+-- the diner adds their own card before paying; the card rides on the sale (an
+-- order) or on the table's bill (a sitting). When the order becomes paid —
+-- by any path: the till, a table collection, a split, a card webhook, an
+-- account — the visit is recorded, still one per card per day, so a table
+-- that pays in three orders earns one stamp, as "Sellar tarjeta" would. The
+-- ticket then shows the card's progress.
+-- ============================================================================
+alter table orders add column if not exists loyalty_card_id uuid references loyalty_cards(id) on delete set null;
+alter table table_sessions add column if not exists loyalty_card_id uuid references loyalty_cards(id) on delete set null;
+
+-- Whether this restaurant's visit card is on and its tier carries it.
+create or replace function public.loyalty_open(p_restaurant uuid)
+returns boolean language sql stable security definer set search_path = public as $$
+  select exists (select 1 from loyalty_programs p join restaurants r on r.id = p.restaurant_id
+    join plan_limits l on l.plan = r.plan
+    where p.restaurant_id = p_restaurant and p.active and l.allows_loyalty);
+$$;
+revoke all on function public.loyalty_open(uuid) from public, anon, authenticated;
+grant execute on function public.loyalty_open(uuid) to service_role;
+
+-- Attach a presented card to one unpaid sale or one open sitting. The card
+-- must be this restaurant's; answers what happened rather than raising, so a
+-- screen can say it: attached, unknown (no such card here), off (the program
+-- is off or the tier lacks it), paid (too late: that sale is settled) or gone.
+create or replace function public.attach_loyalty_card_v1(
+  p_restaurant uuid, p_code text, p_order uuid, p_session uuid, p_actor text
+) returns jsonb language plpgsql security definer set search_path = public as $$
+declare v_card loyalty_cards%rowtype; v_paid boolean;
+begin
+  if num_nonnulls(p_order, p_session) <> 1 or nullif(btrim(coalesce(p_actor, '')), '') is null then
+    raise exception 'invalid loyalty attachment';
+  end if;
+  if not public.loyalty_open(p_restaurant) then return jsonb_build_object('outcome', 'off'); end if;
+  select * into v_card from loyalty_cards
+    where restaurant_id = p_restaurant and code = upper(replace(btrim(coalesce(p_code, '')), '-', ''));
+  if not found then return jsonb_build_object('outcome', 'unknown'); end if;
+  if p_order is not null then
+    select paid into v_paid from orders where id = p_order and restaurant_id = p_restaurant for update;
+    if not found then return jsonb_build_object('outcome', 'gone'); end if;
+    if v_paid then return jsonb_build_object('outcome', 'paid'); end if;
+    update orders set loyalty_card_id = v_card.id where id = p_order and restaurant_id = p_restaurant;
+  else
+    update table_sessions set loyalty_card_id = v_card.id
+      where id = p_session and restaurant_id = p_restaurant and closed_at is null;
+    if not found then return jsonb_build_object('outcome', 'gone'); end if;
+  end if;
+  return jsonb_build_object('outcome', 'attached', 'cardId', v_card.id,
+    'progress', public.loyalty_progress(v_card.id), 'goal', v_card.goal);
+end;
+$$;
+revoke all on function public.attach_loyalty_card_v1(uuid, text, uuid, uuid, text) from public, anon, authenticated;
+grant execute on function public.attach_loyalty_card_v1(uuid, text, uuid, uuid, text) to service_role;
+
+-- Paying stamps the card the sale or its sitting carries: one visit a day,
+-- in the restaurant's zone, like "Sellar tarjeta". Never on a cancelled sale,
+-- never for another restaurant's card, never while the program is off.
+create or replace function public.stamp_loyalty_on_payment()
+returns trigger language plpgsql security definer set search_path = public as $$
+declare v_card uuid; v_day date;
+begin
+  if not new.paid or new.status = 'cancelled' or (tg_op = 'UPDATE' and old.paid) then return null; end if;
+  v_card := coalesce(new.loyalty_card_id,
+    (select s.loyalty_card_id from table_sessions s where s.id = new.session_id and s.restaurant_id = new.restaurant_id));
+  if v_card is null or not public.loyalty_open(new.restaurant_id)
+    or not exists (select 1 from loyalty_cards c where c.id = v_card and c.restaurant_id = new.restaurant_id) then
+    return null;
+  end if;
+  select (now() at time zone coalesce(r.timezone, 'America/Mexico_City'))::date into v_day
+    from restaurants r where r.id = new.restaurant_id;
+  insert into loyalty_visits (card_id, restaurant_id, visit_day, actor_email)
+  values (v_card, new.restaurant_id, v_day, 'payment')
+  on conflict on constraint loyalty_visits_card_id_visit_day_key do nothing;
+  return null;
+end;
+$$;
+revoke all on function public.stamp_loyalty_on_payment() from public, anon, authenticated;
+drop trigger if exists stamp_loyalty_on_payment on orders;
+create trigger stamp_loyalty_on_payment after insert or update of paid on orders
+  for each row execute function public.stamp_loyalty_on_payment();
+
 -- Spend the card's next reward, once. Locked like the stamp, and refused —
 -- nothing returned — unless that reward is ready. The next reward is the lowest
 -- step of the card's ladder with no redemption in the card's current round
