@@ -2,6 +2,8 @@
 
 import { useT } from "@/lib/i18n/context";
 
+import type { FiscalSettings } from "@/lib/fiscal-settings";
+import FiscalCard from "./fiscal-card.react-component";
 import type { Restaurant } from "@/lib/types";
 import type { Role } from "@/lib/membership";
 import { useSettings } from "@/hooks/useSettings";
@@ -20,6 +22,7 @@ import OrderingCard from "./OrderingCard";
 interface SettingsFormProps {
   restaurant: Restaurant;
   role: Role;
+  fiscal?: FiscalSettings;
   /** Whether the plan includes paying at the end. False leaves it visible and off. */
   deferredPayAllowed?: boolean;
   /** The cheapest plan with pay-later, when this one lacks it. */
@@ -37,6 +40,7 @@ interface SettingsFormProps {
 export default function SettingsForm({
   restaurant,
   role,
+  fiscal,
   deferredPayAllowed = false,
   deferredPayUnlocksWith = null,
   inventoryAllowed = false,
@@ -111,6 +115,7 @@ export default function SettingsForm({
             <h2 className="tt-serif tt-settings-group">{t("settingsGroups.restaurant")}</h2>
             <div className="tt-cols">
               <RestaurantCard restaurant={restaurant} saving={saving} save={save} />
+              {fiscal && <FiscalCard fiscal={fiscal} saving={saving} save={save} />}
               <LogoCard restaurant={restaurant} />
               <CoverCard restaurant={restaurant} />
               <PaymentsCard />

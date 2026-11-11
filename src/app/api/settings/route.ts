@@ -1,3 +1,4 @@
+import { FISCAL_KEYS, isFiscalField, normalizeFiscalSettings } from "@/lib/fiscal-settings";
 import { invalidatePublicMenu } from "@/lib/public-menu-cache";
 import { NextRequest, NextResponse } from "next/server";
 import { apiError } from "@/lib/api-error";
@@ -17,6 +18,7 @@ export const runtime = "nodejs";
 // Fields each role may change. Identity + currency + service fee are the
 // owner's; managers get the operational controls (tax + order pausing).
 const OWNER_FIELDS = new Set([
+  ...FISCAL_KEYS,
   "name",
   "logo",
   "tagline",
@@ -89,6 +91,9 @@ export async function POST(req: NextRequest) {
   if (Object.keys(update).length === 0) {
     return NextResponse.json({ ok: true });
   }
+
+  const fiscalError = normalizeFiscalSettings(update);
+  if (fiscalError) return await apiError(fiscalError, 400);
 
   // Letting the food out before it is paid for comes with the plan. Checked
   // when switching it on and not off: someone downgrading has to be able to
@@ -163,6 +168,7 @@ export async function POST(req: NextRequest) {
 
   // Named fields only: a log line reading "settings updated" answers nothing,
   // and the values themselves are what an owner comes back to check.
+  // Private fiscal values stay out of the activity feed shared with staff.
   await logEvent({
     restaurantId: actor.restaurantId,
     actor: actor.email,
@@ -174,7 +180,7 @@ export async function POST(req: NextRequest) {
           : "paused"
         : "updated",
     detail: Object.entries(update)
-      .map(([k, v]) => `${k}: ${typeof v === "string" && v.length > 30 ? "…" : v}`)
+      .map(([k, v]) => isFiscalField(k) ? k : `${k}: ${typeof v === "string" && v.length > 30 ? "…" : v}`)
       .join(", "),
   });
 

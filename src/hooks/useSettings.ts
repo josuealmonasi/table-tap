@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useToast } from "@/components/ui/Toast";
 import { useT } from "@/lib/i18n/context";
+import type { FiscalSettings } from "@/lib/fiscal-settings";
 import type { Restaurant } from "@/lib/types";
 
 /** The restaurant fields editable from Settings (server enforces per role). */
@@ -31,7 +32,7 @@ export type SettingsInput = Pick<
   | "ticket_warn_minutes"
   | "ticket_late_minutes"
   | "auto_print_kitchen"
->;
+> & FiscalSettings;
 
 /**
  * Saves restaurant settings through the role-checked /api/settings route

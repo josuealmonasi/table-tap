@@ -866,6 +866,28 @@ and scrolls:
 Each section has its own icon (`nav.spec.ts` pins both the order and that no
 two sections share an icon).
 
+### Restaurant settings
+
+Settings → “Tu restaurante” includes an owner-only “Datos fiscales y dirección”
+card, saved through the existing settings flow. Every field is optional: legal
+name, RFC, SAT tax regime, street, exterior/interior number, five-digit postal
+code, neighborhood, municipality or borough, one of Mexico’s 32 states, and
+receipt phone number. RFC is uppercased while typing and accepts the 12-character
+company and 13-character individual formats, including Ñ and &. The regime
+selector uses the 19 supported c_RegimenFiscal codes and their official Spanish
+names in either language. Postal code comes before the locality fields to leave
+room for future autofill; none is performed today.
+
+Only owners receive these private values, read server-side with the admin
+client as separate settings props. They are absent from the public restaurant
+row and anonymous grants. Managers see no fiscal card; posting any fiscal field
+returns 403 before any write. The server trims text, turns empty values into
+null, validates types and schema limits, and checks RFC, postal code, phone,
+regime and state against the shared rules. Invalid fields return a specific
+Spanish or English 400 message. Activity logs record fiscal field names without
+copying their private values into the staff feed. This card configures ticket
+identity; the ticket rendering remains a separate concern.
+
 ## Switching over
 
 A café that already keeps its menu in a spreadsheet brings it in at once.
