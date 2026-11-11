@@ -379,7 +379,9 @@ export async function seedMock(pg) {
     );
     const serviceFee = round2(subtotal * 0.1);
     const tip = pickTip(subtotal);
-    const cancelled = Math.random() < 0.07;
+    // The presentation restaurant cancels like a real one (about 1.5%), so its
+    // refunds-to-confirm list is a handful, not thirty.
+    const cancelled = Math.random() < (FEED_DEMO ? 0.015 : 0.07);
     const t = tables[randInt(0, tables.length - 1)];
     const when = randomOrderDate(HISTORY_DAYS);
     // Two in three pay by card; of those, one in five asks for the receipt by

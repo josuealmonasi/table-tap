@@ -26,9 +26,11 @@ async function seedDailyShifts(pg, rid) {
     // Never into the seeder's own shifts, which end the history.
     if (first && new Date(window.closed_at) >= new Date(first)) continue;
     const who = pick(CASHIERS);
+    // Written closed at once: only one shift may be open, and the seeder's
+    // own is. The count is a placeholder until the books are read below.
     const { rows: [shift] } = await pg.query(
-      `insert into cash_shifts (restaurant_id, opened_by, opened_at, opening_amount)
-       values ($1, $2, $3, 1000) returning id`, [rid, who, window.opened_at]);
+      `insert into cash_shifts (restaurant_id, opened_by, opened_at, opening_amount, closed_by, closed_at, counted_cash, expected_cash, difference)
+       values ($1, $2, $3, 1000, $2, $4, 0, 0, 0) returning id`, [rid, who, window.opened_at, window.closed_at]);
     if (Math.random() < 0.3) {
       const [note, amount] = pick([["Compra de hielo", 180], ["Pago al proveedor de verduras", 420],
         ["Gas para la cocina", 350], ["Propinas repartidas al equipo", 600], ["Garrafones de agua", 140]]);
