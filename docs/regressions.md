@@ -6502,3 +6502,12 @@ The last forgiven charge cannot change a legacy credit ceiling's currency.
 | Regression | Automatic check | Live verification still required |
 | --- | --- | --- |
 | R8-4 part 1: uncollected account debt could not be reduced; stale or repeated requests could reduce it twice | account-credit route, maths, schema, money, public-projection and dialog specs; accounts-server history test; sabotage-tested invariants/account-debt; API manager/waiter cases; role entry; attack-account-credit | Run probe-account-credit.mjs on dev after schema application (including both two-connection settle races), then API, roles, attack, money, layout and dialogs; visually inspect phone/tablet in both languages |
+
+## Sweep 10, findings 4, 5 and 7a: IVA and the shift's tips (2026-11-10)
+
+- **The bill's IVA line used today's rate.** It now uses the rate saved on the orders being paid (`BillAmounts.taxPct`). Orders priced at different rates show no single "IVA n%" line (`sweep10-iva.react-component.spec.tsx`).
+- **Net and IVA were rounded separately,** so MX$0.01 at 100% showed MX$0.01 + MX$0.01. `ivaSplit` now works in whole cents, so the parts always add up to the subtotal.
+- **The shift sum did not separate tips.** It now says which part of cash sales was tips (`cash_shift_totals.tips`), without changing the expected cash.
+- **Parked, with notes in `loop/codex/parked/`:**
+  - finding 6, the tip base, which needs the screen and three pay routes changed together;
+  - finding 7's tips paid out, which needs withdrawals to say what they were for.

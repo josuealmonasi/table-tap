@@ -93,6 +93,7 @@ export default function ShiftRecord({ view, timeZone, restaurantName }: ShiftRec
         `<table style="font-size:14px;border-collapse:collapse;margin:12px 0">` +
         row(t("corte.opening"), money(sum.opening)) +
         row(`+ ${t("corte.cashSales")}`, money(sum.cashSales)) +
+        (Number(sum.tips) > 0 ? row(t("corte.cashTips"), money(Number(sum.tips))) : "") +
         row(`− ${t("corte.withdrawals")}`, money(sum.withdrawn)) +
         row(t("corte.expected"), money(Number(shift.expected_cash ?? sum.expected)), true) +
         row(t("shift.countedLabel"), money(Number(shift.counted_cash ?? 0)), true) +
