@@ -7,6 +7,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { buildReceipt, receiptModel, type ReceiptVersion } from "@/lib/receipt";
 import { ticketPdf } from "@/lib/ticket-pdf";
 import { ticketPlace, ticketText } from "@/lib/ticket-place";
+import { ticketLoyalty } from "@/lib/ticket-loyalty";
 import { readOrderReceipt, readSlotReceipt, ReceiptReadError, type ReceiptSource } from "@/lib/receipt-source";
 import { DEFAULT_TIME_ZONE } from "@/lib/open-menus";
 import { DEFAULT_LOCALE, messagesFor, translate } from "@/lib/i18n";
@@ -132,7 +133,9 @@ export async function POST(req: NextRequest) {
       const model = receiptModel(source.orders, where, t, source.payment);
       const firstOrder = source.payment ? null : source.orders[0]?.id;
       const qrUrl = new URL(firstOrder ? `/dashboard/bills?order=${firstOrder}` : "/dashboard/bills", req.nextUrl.origin).toString();
-      const pdf = await ticketPdf(model, await ticketPlace(db, actor.restaurantId, t), ticketText(t), null, qrUrl);
+      // The visit card presented before paying, as this payment left it.
+      const loyalty = await ticketLoyalty(db, actor.restaurantId, source.orders.map(o => o.id), t);
+      const pdf = await ticketPdf(model, await ticketPlace(db, actor.restaurantId, t), ticketText(t), loyalty, qrUrl);
       return new NextResponse(new Uint8Array(pdf), { headers: {
         "content-type": "application/pdf",
         "content-disposition": `inline; filename="ticket-${model.code}.pdf"`,
