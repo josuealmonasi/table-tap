@@ -15,10 +15,14 @@ function plantedOverlap() {
       parentElement: body, classList: { contains: () => false },
       getBoundingClientRect: () => rect, getClientRects: () => [rect],
       contains: () => false, querySelectorAll: () => [],
+      matches: () => false, closest: () => null,
     };
   });
   return runInNewContext(AUDIT, {
-    document: { body, querySelectorAll: () => elements, documentElement: { scrollWidth: 390 } },
+    document: { body, querySelectorAll: () => elements, documentElement: { scrollWidth: 390 },
+      // The spacing checks walk the tree once; the fake tree is the two boxes.
+      createTreeWalker: () => { let i = -1; return { nextNode: () => elements[++i] ?? null }; } },
+    NodeFilter: { SHOW_ELEMENT: 1 },
     window: { innerWidth: 390 },
     getComputedStyle: () => ({ display: "block", visibility: "visible", opacity: "1",
       clip: "auto", clipPath: "none", position: "static" }),
