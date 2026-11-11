@@ -18,6 +18,9 @@ export type NavItem = {
     | "Promotions"
     | "Loyalty"
     | "Table"
+    | "TakeOrder"
+    | "Till"
+    | "HeldSales"
     | "Bills"
     | "Accounts"
     | "Staff"
@@ -42,10 +45,12 @@ export type NavItem = {
  * are listed dynamically on the dashboard, so they're not part of this list.
  */
 export const NAV_ITEMS: NavItem[] = [
-  // In the order they are used (owner's call, 2026-10-28): the menus, then
-  // the floor's live screens, then what collects the money, then what brings
-  // people back, and the books last. The configuration at the end lives in
-  // the account menu, not the tab row.
+  // In the order they are used (owner's call, 2026-10-28, made whole on
+  // 2026-11-10): the menus, the floor's live screens, what collects the
+  // money, what brings people back, then the setup screens, and the books —
+  // Costos and Analíticas — last of all. The tab row leaves out staff,
+  // settings and plan (they live in the account menu); the drawer and the
+  // home tiles show them in this same order.
   {
     // The dashboard home *is* the menus screen — the card at the top of it is
     // the list, and each menu opens from there. Naming it for what it holds
@@ -69,7 +74,7 @@ export const NAV_ITEMS: NavItem[] = [
     // refuses too, but a link to a screen that turns you away is a promise the
     // dashboard should not make.
     href: "/dashboard/pos",
-    icon: "Bills",
+    icon: "Till",
     titleKey: "nav.pos",
     descKey: "nav.posDesc",
     feature: "pos",
@@ -80,7 +85,7 @@ export const NAV_ITEMS: NavItem[] = [
     // refuses too, because a link to a screen that turns you away is a promise
     // the dashboard should not make.
     href: "/dashboard/table-order",
-    icon: "Table",
+    icon: "TakeOrder",
     titleKey: "nav.tableOrder",
     descKey: "nav.tableOrderDesc",
     feature: "waiterService",
@@ -93,6 +98,13 @@ export const NAV_ITEMS: NavItem[] = [
     descKey: "nav.billsDesc",
   },
   {
+    href: "/dashboard/held-sales",
+    icon: "HeldSales",
+    titleKey: "recovery.title",
+    shortKey: "recovery.short",
+    descKey: "recovery.deviceOnly",
+  },
+  {
     // Not gated on the plan: an account opened on a paid tier still owes
     // after a move down, and its page — with the lock on opening new ones —
     // is where it is collected.
@@ -101,13 +113,6 @@ export const NAV_ITEMS: NavItem[] = [
     titleKey: "nav.accounts",
     shortKey: "nav.accountsShort",
     descKey: "nav.accountsDesc",
-  },
-  {
-    href: "/dashboard/held-sales",
-    icon: "Bills",
-    titleKey: "recovery.title",
-    shortKey: "recovery.short",
-    descKey: "recovery.deviceOnly",
   },
   {
     href: "/dashboard/promotions",
@@ -126,14 +131,11 @@ export const NAV_ITEMS: NavItem[] = [
     feature: "loyalty",
   },
   {
-    // What each product leaves: ingredients, recipes, the fee for taking the
-    // money. The restaurant's private books, so owner and manager only, and
-    // only on the tiers that carry it.
-    href: "/dashboard/costs",
-    icon: "Costs",
-    titleKey: "nav.costs",
-    descKey: "nav.costsDesc",
-    feature: "costs",
+    href: "/dashboard/tables",
+    icon: "Table",
+    titleKey: "nav.tables",
+    shortKey: "nav.tablesShort",
+    descKey: "nav.tablesDesc",
   },
   {
     // What was thrown away, recorded by whoever threw it. The team's screen:
@@ -145,23 +147,16 @@ export const NAV_ITEMS: NavItem[] = [
     feature: "costs",
   },
   {
-    href: "/dashboard/analytics",
-    icon: "Analytics",
-    titleKey: "nav.analytics",
-    descKey: "nav.analyticsDesc",
-  },
-  {
-    href: "/dashboard/tables",
-    icon: "Table",
-    titleKey: "nav.tables",
-    shortKey: "nav.tablesShort",
-    descKey: "nav.tablesDesc",
-  },
-  {
     href: "/dashboard/staff",
     icon: "Staff",
     titleKey: "nav.staff",
     descKey: "nav.staffDesc",
+  },
+  {
+    href: "/dashboard/settings",
+    icon: "Settings",
+    titleKey: "nav.settings",
+    descKey: "nav.settingsDesc",
   },
   {
     href: "/dashboard/plan",
@@ -170,10 +165,20 @@ export const NAV_ITEMS: NavItem[] = [
     descKey: "nav.planDesc",
   },
   {
-    href: "/dashboard/settings",
-    icon: "Settings",
-    titleKey: "nav.settings",
-    descKey: "nav.settingsDesc",
+    // What each product leaves: ingredients, recipes, the fee for taking the
+    // money. The restaurant's private books, so owner and manager only, and
+    // only on the tiers that carry it.
+    href: "/dashboard/costs",
+    icon: "Costs",
+    titleKey: "nav.costs",
+    descKey: "nav.costsDesc",
+    feature: "costs",
+  },
+  {
+    href: "/dashboard/analytics",
+    icon: "Analytics",
+    titleKey: "nav.analytics",
+    descKey: "nav.analyticsDesc",
   },
 ];
 

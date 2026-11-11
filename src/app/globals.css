@@ -5888,19 +5888,21 @@ a.tt-btn {
 
 /* The summary sits under the menu name, between what it is and what you can do
    to it. Muted and small: it's a status, not a control. */
+/* It wraps rather than cutting: an ellipsis here hid the hours themselves
+   ("Dom, Sáb 09:00–1…"), which are the whole point of the line. */
 .tt-menu-sched {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 5px;
+  gap: 4px 5px;
   margin-top: 3px;
   font-size: 12px;
   color: var(--tt-muted);
   min-width: 0;
 }
 .tt-menu-sched > span {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 .tt-menu-sched svg {
   flex: none;
@@ -5984,6 +5986,7 @@ a.tt-btn {
    accent, which already means "interactive" elsewhere. */
 .tt-sched-state {
   flex: none;
+  white-space: nowrap;
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.02em;
@@ -6750,6 +6753,21 @@ a.tt-user-plan:hover {
 .tt-section-nav-inner::-webkit-scrollbar {
   display: none;
 }
+/* The scrollbar is hidden, so the edge that has more sections past it fades
+   out instead (useScrollMore sets data-more). A mask only reads opacity, so
+   the colour token here is just "opaque". */
+.tt-section-nav-inner[data-more="right"] {
+  -webkit-mask-image: linear-gradient(to right, var(--tt-ink) calc(100% - 36px), transparent);
+  mask-image: linear-gradient(to right, var(--tt-ink) calc(100% - 36px), transparent);
+}
+.tt-section-nav-inner[data-more="left"] {
+  -webkit-mask-image: linear-gradient(to left, var(--tt-ink) calc(100% - 36px), transparent);
+  mask-image: linear-gradient(to left, var(--tt-ink) calc(100% - 36px), transparent);
+}
+.tt-section-nav-inner[data-more="both"] {
+  -webkit-mask-image: linear-gradient(to right, transparent, var(--tt-ink) 36px, var(--tt-ink) calc(100% - 36px), transparent);
+  mask-image: linear-gradient(to right, transparent, var(--tt-ink) 36px, var(--tt-ink) calc(100% - 36px), transparent);
+}
 .tt-section-link {
   display: flex;
   align-items: center;
@@ -6794,17 +6812,23 @@ a.tt-user-plan:hover {
     /* Clear of the home indicator on a phone with no bezel. */
     padding-bottom: env(safe-area-inset-bottom, 0);
   }
+  /* Every section stays in the bar and the bar scrolls (owner's call,
+     2026-11-10). It used to share the width out equally with 2px a side, so
+     with sixteen sections "Tomar pedido" and "Cuentas" ran into each other.
+     Each tab now keeps its own width and 10px a side; when few tabs fit with
+     room to spare, they still grow to fill the bar. */
   .tt-section-nav-inner {
-    gap: 0;
-    justify-content: space-around;
+    gap: 2px;
+    justify-content: flex-start;
     padding-left: 4px;
     padding-right: 4px;
   }
   .tt-section-link {
-    flex: 1 1 0;
+    flex: 1 0 auto;
+    min-width: 64px;
     flex-direction: column;
     gap: 3px;
-    padding: 8px 2px;
+    padding: 8px 10px;
     font-size: 11px;
     letter-spacing: -0.01em;
     border-bottom: none;
