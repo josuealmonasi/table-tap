@@ -13312,8 +13312,8 @@ begin
   -- the cutoff. Account birth and paid-state changes must have real sources.
   if tg_table_name = 'orders' then
     if tg_op = 'UPDATE' and exists (select 1 from customer_accounts where id = v_old and journal_started_at is not null)
-      and (new.account_id, new.restaurant_id, new.currency, new.charged_at) is distinct from
-          (old.account_id, old.restaurant_id, old.currency, old.charged_at) then
+      and (new.id, new.account_id, new.restaurant_id, new.currency, new.charged_at) is distinct from
+          (old.id, old.account_id, old.restaurant_id, old.currency, old.charged_at) then
       raise exception 'started account charge identity is immutable';
     end if;
     if tg_op <> 'DELETE' and exists (select 1 from customer_accounts where id = v_new and journal_started_at is not null) then
@@ -13366,9 +13366,9 @@ drop trigger if exists check_account_journal_order_update on orders;
 create constraint trigger check_account_journal_order_update after update on orders
   deferrable initially deferred for each row
   when ((old.account_id is not null or new.account_id is not null) and
-    (old.account_id, old.restaurant_id, old.currency, old.charged_at, old.paid,
+    (old.id, old.account_id, old.restaurant_id, old.currency, old.charged_at, old.paid,
      old.written_off, old.total, old.tip, old.service_fee, old.status = 'cancelled') is distinct from
-    (new.account_id, new.restaurant_id, new.currency, new.charged_at, new.paid,
+    (new.id, new.account_id, new.restaurant_id, new.currency, new.charged_at, new.paid,
      new.written_off, new.total, new.tip, new.service_fee, new.status = 'cancelled'))
   execute function public.check_account_journal_v1();
 drop trigger if exists check_account_journal on customer_accounts;
@@ -13377,13 +13377,16 @@ create constraint trigger check_account_journal after insert or update on custom
 
 -- The once-per-account cache above holds only while nothing writes after an
 -- account was reconciled. Deferred writers do: finish_payment_allocation
--- updates payments at commit. So every journal-relevant write, as it happens,
--- drops its accounts from the cache, and their own queued check runs again.
+-- updates payments at commit. So every journal-relevant write drops its
+-- accounts from the cache BEFORE it happens, and their own queued check runs
+-- again. BEFORE, not AFTER: with SET CONSTRAINTS ALL IMMEDIATE the AFTER check
+-- fired first (alphabetical order) and read the stale cache (Codex review).
 create or replace function public.forget_account_journal_check_v1()
 returns trigger language plpgsql security definer set search_path = public as $$
 declare v_checked text := current_setting('tabletap.journal_checked', true); v_old uuid; v_new uuid;
 begin
-  if coalesce(v_checked, '') in ('', '{}') then return null; end if;
+  -- BEFORE ROW: returning null would cancel the write, so always hand the row on.
+  if coalesce(v_checked, '') in ('', '{}') then return case when tg_op = 'DELETE' then old else new end; end if;
   if tg_table_name = 'customer_accounts' then
     v_new := new.id;
   elsif tg_table_name = 'order_adjustments' then
@@ -13395,28 +13398,24 @@ begin
   end if;
   perform set_config('tabletap.journal_checked',
     array_remove(array_remove(v_checked::uuid[], v_old), v_new)::text, true);
-  return null;
+  return case when tg_op = 'DELETE' then old else new end;
 end $$;
 revoke all on function public.forget_account_journal_check_v1() from public, anon, authenticated, service_role;
 do $$ declare t text; begin
   foreach t in array array['payments', 'order_adjustments', 'account_movements', 'customer_accounts'] loop
     execute format('drop trigger if exists forget_account_journal_check on %I', t);
-    execute format('create trigger forget_account_journal_check after insert or update or delete on %I
+    execute format('create trigger forget_account_journal_check before insert or update or delete on %I
       for each row execute function public.forget_account_journal_check_v1()', t);
   end loop;
 end $$;
 drop trigger if exists forget_account_journal_check on orders;
-create trigger forget_account_journal_check after insert or delete on orders
+create trigger forget_account_journal_check before insert or delete on orders
   for each row execute function public.forget_account_journal_check_v1();
 drop trigger if exists forget_account_journal_check_update on orders;
-create trigger forget_account_journal_check_update after update on orders
-  for each row
-  when ((old.account_id is not null or new.account_id is not null) and
-    (old.account_id, old.restaurant_id, old.currency, old.charged_at, old.paid,
-     old.written_off, old.total, old.tip, old.service_fee, old.status = 'cancelled') is distinct from
-    (new.account_id, new.restaurant_id, new.currency, new.charged_at, new.paid,
-     new.written_off, new.total, new.tip, new.service_fee, new.status = 'cancelled'))
-  execute function public.forget_account_journal_check_v1();
+-- No WHEN: another BEFORE trigger may still change a money column after this
+-- one is evaluated. Outside commit the cache is empty and it returns at once.
+create trigger forget_account_journal_check_update before update on orders
+  for each row execute function public.forget_account_journal_check_v1();
 
 -- A zero-priced order in a positive bill still has one charge event.
 alter table account_movements drop constraint if exists account_movements_debt;

@@ -4,7 +4,7 @@ import { expect, it } from "vitest";
 const schema = readFileSync("supabase/schema.sql", "utf8");
 const check = (sql: string): string => sql.split("create or replace function public.check_account_journal_v1()")[1].split("$$;")[0];
 const update = (sql: string): string => sql.split("create constraint trigger check_account_journal_order_update")[1].split(";")[0];
-const moneyFields = ["account_id", "restaurant_id", "currency", "charged_at", "paid",
+const moneyFields = ["id", "account_id", "restaurant_id", "currency", "charged_at", "paid",
   "written_off", "total", "tip", "service_fee"];
 
 function moneyOrderUpdates(sql: string): void {
@@ -94,37 +94,49 @@ it("planted: ordinary kitchen stages and non-account updates cannot queue journa
   }
 });
 
-// The cache is only sound if a write AFTER an account was reconciled forgets
-// it: finish_payment_allocation updates payments at commit, after the
-// journal check of that same payment may already have run.
+// The cache is only sound if every journal-relevant write forgets its
+// accounts BEFORE the AFTER check can run: finish_payment_allocation writes at
+// commit, and with SET CONSTRAINTS ALL IMMEDIATE an AFTER forget ran after the
+// check had already read the stale cache (Codex review).
 function forgetsOnWrite(sql: string): void {
   const body = sql.split("create or replace function public.forget_account_journal_check_v1()")[1]?.split("$$;")[0] ?? "";
   expect(body).toContain("array_remove(array_remove(v_checked::uuid[], v_old), v_new)");
+  // A BEFORE trigger that returns null cancels the write.
+  expect(body).not.toMatch(/return null/);
+  expect(body.match(/return case when tg_op = 'DELETE' then old else new end;/g)).toHaveLength(2);
   const block = sql.split("create or replace function public.forget_account_journal_check_v1()")[1] ?? "";
   expect(block).toMatch(/array\['payments', 'order_adjustments', 'account_movements', 'customer_accounts'\]/);
   const triggers = block.match(/create trigger forget_account_journal_check[^;]*;/g) ?? [];
-  // Immediate, never deferred: it must run as the late write happens.
   expect(triggers.length).toBe(3);
-  for (const t of triggers) expect(t).not.toMatch(/deferr/);
-  const orderUpdate = triggers.find(t => t.includes("forget_account_journal_check_update")) ?? "";
-  const when = (t: string): string => t.replace(/\s+/g, " ").split(" when ")[1]?.split(" execute ")[0] ?? "missing";
-  expect(when(orderUpdate)).toBe(when(`x when ${update(sql).split(" when ")[1] ?? ""} execute`).replace(/\s+/g, " "));
+  for (const t of triggers) {
+    expect(t).toMatch(/ before (insert|update)/);
+    expect(t).not.toMatch(/deferr| when /);
+  }
 }
 
-it("forgets a reconciled account when a later write in the same transaction touches it", () => {
+it("forgets a reconciled account before any later write in the same transaction", () => {
   forgetsOnWrite(schema);
 });
 
-it("planted: a missing, deferred or narrower forget trigger breaks the cache's soundness", () => {
+it("planted: a missing, AFTER, filtered or row-cancelling forget trigger breaks the cache's soundness", () => {
   for (const [before, after] of [
     ["array_remove(array_remove(v_checked::uuid[], v_old), v_new)", "v_checked::uuid[]"],
-    ["create trigger forget_account_journal_check_update after update on orders\n  for each row",
-      "create trigger forget_account_journal_check_update after update on orders\n  deferrable initially deferred for each row"],
-    ["array['payments', 'order_adjustments', 'account_movements', 'customer_accounts'] loop\n    execute format('drop trigger if exists forget",
-      "array['payments', 'order_adjustments', 'account_movements'] loop\n    execute format('drop trigger if exists forget"],
+    ["create trigger forget_account_journal_check_update before update on orders", "create trigger forget_account_journal_check_update after update on orders"],
+    ["create trigger forget_account_journal_check_update before update on orders\n  for each row",
+      "create trigger forget_account_journal_check_update before update on orders\n  for each row when (old.total is distinct from new.total)"],
+    ["'account_movements', 'customer_accounts'] loop\n    execute format('drop trigger if exists forget",
+      "'account_movements'] loop\n    execute format('drop trigger if exists forget"],
+    ["  return case when tg_op = 'DELETE' then old else new end;\nend $$;", "  return null;\nend $$;"],
   ]) {
     const planted = schema.replace(before, after);
     expect(planted).not.toBe(schema);
     expect(() => forgetsOnWrite(planted)).toThrow();
   }
+});
+
+it("refuses an id change on a started account's charged order, and checks one", () => {
+  expect(check(schema)).toContain("(new.id, new.account_id, new.restaurant_id, new.currency, new.charged_at) is distinct from");
+  const planted = schema.replace("(new.id, new.account_id, new.restaurant_id, new.currency, new.charged_at)", "(new.account_id, new.restaurant_id, new.currency, new.charged_at)");
+  expect(planted).not.toBe(schema);
+  expect(check(planted)).not.toContain("(new.id, new.account_id");
 });
