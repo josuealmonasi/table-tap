@@ -28,25 +28,32 @@ export default function SignupVerification({ initialEmail = "", initialSent = tr
     } catch { setError(t("done.networkError")); }
     finally { setBusy(false); }
   }
+  // Laid out like the sign-in card it sits beside. It used a bare label and
+  // bare links: the address field sat flush on a button wider than itself, and
+  // the links were the browser's default blue (layout audit, 2026-11-11).
   return <div className="tt-login"><div className="container"><div className="tt-login-card">
-    <h1 className="tt-serif">{t("auth.verifyTitle")}</h1>
-    <p>{t("auth.verifyBody")}</p>
-    {expired && <p role="alert">{t("auth.verifyExpired")}</p>}
-    {!initialSent && <p role="alert">{t("auth.verificationSendFailed")}</p>}
+    <h1 className="tt-serif" style={{ margin: "8px 0 4px" }}>{t("auth.verifyTitle")}</h1>
+    <p className="tt-muted" style={{ marginTop: 0 }}>{t("auth.verifyBody")}</p>
+    {expired && <p className="tt-field-error" role="alert">{t("auth.verifyExpired")}</p>}
+    {!initialSent && <p className="tt-field-error" role="alert">{t("auth.verificationSendFailed")}</p>}
     <form onSubmit={resend}>
-      <label className="tt-field">
-        <span>{t("auth.emailPlaceholder")}</span>
-        <input className="tt-input" type="email" autoComplete="email" value={email}
-          onChange={e => setEmail(e.target.value)} required />
-      </label>
-      <button className="tt-btn tt-btn-primary" disabled={busy || !email.trim()}>
+      <input className="tt-input" type="email" autoComplete="email" value={email}
+        placeholder={t("auth.emailPlaceholder")} aria-label={t("auth.emailPlaceholder")}
+        onChange={e => setEmail(e.target.value)} style={{ marginBottom: 12 }} required />
+      <button className="tt-btn tt-btn-primary" style={{ width: "100%" }} disabled={busy || !email.trim()}>
         {t(busy ? "auth.sending" : "auth.resendVerification")}
       </button>
     </form>
-    {sent && <p role="status">{t("auth.verificationResent")}</p>}
+    {sent && <p className="tt-login-sent" role="status" style={{ marginTop: 12 }}>{t("auth.verificationResent")}</p>}
     {error && <p className="tt-field-error" role="alert">{error}</p>}
-    <p><Link href="/signup/complete">{t("auth.verificationContinue")}</Link></p>
-    <p><Link href="/login">{t("auth.backToSignIn")}</Link></p>
-    <p><Link href="/signup">{t("auth.verificationDifferentEmail")}</Link></p>
+    <p className="tt-muted" style={{ fontSize: 13, marginTop: 20 }}>
+      <Link href="/signup/complete" className="tt-accent">{t("auth.verificationContinue")}</Link>
+    </p>
+    <p className="tt-muted" style={{ fontSize: 13 }}>
+      <Link href="/login" className="tt-accent">{t("auth.backToSignIn")}</Link>
+    </p>
+    <p className="tt-muted" style={{ fontSize: 13 }}>
+      <Link href="/signup" className="tt-accent">{t("auth.verificationDifferentEmail")}</Link>
+    </p>
   </div></div></div>;
 }
