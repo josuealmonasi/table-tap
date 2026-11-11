@@ -3,6 +3,7 @@ import type { PosSaleBody } from "@/lib/pos-sale";
 import { offlineLines, type OfflineCharge } from "@/lib/offline-sale";
 import { cashAmount } from "@/lib/cash-drawer";
 import { round2 } from "@/lib/money";
+import type { HeldResolution } from "@/lib/held-resolution";
 
 export interface QueuedOfflineSale {
   pos_ref: string;
@@ -13,6 +14,8 @@ export interface QueuedOfflineSale {
   reason: string;
   approved_by: string | null;
   approved_at: string | null;
+  resolved_at?: string | null;
+  resolution?: HeldResolution | null;
 }
 
 export function reviewSale(row: QueuedOfflineSale, restaurantId: string): HeldSale {

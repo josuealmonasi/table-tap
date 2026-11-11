@@ -1638,6 +1638,20 @@ server applies it only if nothing has happened since.
   original receipt. `/dashboard/held-sales` lets a manager review it on any
   device, confirm the original collector/currency/time and enter an approval
   reason. Approval never restores permission to create new sales on that plan.
+- A manager can resolve a pending **cash** receipt without creating a sale at
+  `POST /api/pos/recover/resolve`. The session supplies the actor and restaurant;
+  the decision records a reason (8–500 characters), original collector,
+  collection time, currency and an amount with cent precision. Cash kept becomes
+  unclassified cash in the open shift, separate from sales. Cash returned also
+  requires a matching recorded withdrawal from that shift. A duplicate links
+  exactly one existing cash payment or held cash receipt. No cash collected
+  requires zero and no links. The SQL transaction preserves the raw receipt,
+  freezes the resolution and answers an identical retry with the same record.
+  Resolved receipts leave pending, cannot later be approved and appear alongside
+  approvals in history, newest decision first, labelled by disposition with the
+  resolver, reason and amount. Card receipts have no resolve action. The form
+  reads only the acting restaurant's open-shift withdrawals through the sibling
+  route's manager-only GET; SQL rechecks all links under the money lock.
 - Intake refuses non-string, non-null whole-order notes/names and money fields
   that are not finite JavaScript numbers in cents (allowing float noise).
   The normalized tip cannot exceed the total; the sum retains its one-cent
@@ -1654,7 +1668,7 @@ server applies it only if nothing has happened since.
   history, printed receipt, activity log and manager queue show the original.
 - Analytics' "Ventas sin conexión" counts current-currency offline sales of the
   last 44 days and lists every one with a difference. The manager queue keeps
-  every received exception regardless of age, including approved history.
+  every received exception regardless of age, including approved and resolved history.
 - While the device holds unsent sales, it cannot close the shift or sign out:
   they are the only record of money in the drawer. One the server refuses is
   kept with the reason, never thrown away.

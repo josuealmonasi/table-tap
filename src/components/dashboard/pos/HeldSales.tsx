@@ -9,6 +9,8 @@ import { orderCode } from "@/lib/types";
 import type { RecoveryDetails } from "./RecoveryForm";
 import RecoveryReview from "./RecoveryReview";
 import { useHeldSales } from "@/hooks/useHeldSales";
+import HeldResolutionForm from "./HeldResolutionForm.react-component";
+import type { HeldResolutionDetails } from "@/lib/held-resolution";
 
 interface Props { restaurantId: string; currency: string }
 
@@ -22,6 +24,23 @@ export default function HeldSales({ restaurantId, currency }: Props) {
   const { rows, pendingCount, loading, error, hasMore, reload, refreshPending } = useHeldSales(restaurantId, history, page);
   const [selected, setSelected] = useState<QueuedOfflineSale | null>(null);
   const [busy, setBusy] = useState(false);
+  const [resolving, setResolving] = useState<QueuedOfflineSale | null>(null);
+
+  async function resolve(details: HeldResolutionDetails) {
+    if (!resolving || busy) return;
+    setBusy(true);
+    try {
+      const res = await fetch("/api/pos/recover/resolve", { method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ restaurantId, posRef: resolving.pos_ref, ...details }) });
+      const data = await res.json();
+      if (!res.ok) { toast(data.error ?? t("done.networkError"), "error"); return; }
+      if (data.restaurant_id !== restaurantId || data.pos_ref !== resolving.pos_ref || data.disposition !== details.disposition) {
+        toast(t("done.networkError"), "error"); return;
+      }
+      setResolving(null); await refreshPending(); toast(t("heldResolve.done"));
+    } catch { toast(t("done.networkError"), "error"); }
+    finally { setBusy(false); }
+  }
 
   async function sendLocal() {
     setBusy(true);
@@ -66,9 +85,16 @@ export default function HeldSales({ restaurantId, currency }: Props) {
         const sale = reviewSale(row, restaurantId);
         return <div key={row.pos_ref} className="tt-bill-row tt-bill-approval">
           <div className="tt-bill-main"><strong>{orderCode(row.pos_ref)} · {sale.currency ? formatMoney(sale.charge.total, sale.currency) : sale.charge.total.toFixed(2)} {sale.currency ?? ""}</strong>
-            <span className="tt-muted tt-bill-sub">{row.approved_at ? t("recovery.approved", { by: row.approved_by ?? "", at: new Date(row.approved_at).toLocaleString(dateLocale(locale)) }) : t(row.reason)}</span>
+            <span className="tt-muted tt-bill-sub">{row.resolved_at ? t(`heldResolve.${row.resolution?.disposition ?? "resolved"}`) : row.approved_at ? t("recovery.approved", { by: row.approved_by ?? "", at: new Date(row.approved_at).toLocaleString(dateLocale(locale)) }) : t(row.reason)}</span>
+            {row.resolution && <>
+              <span className="tt-muted tt-bill-sub">{t("heldResolve.audit", { by: row.resolution.resolved_by, at: new Date(row.resolution.resolved_at).toLocaleString(dateLocale(locale)), amount: formatMoney(row.resolution.amount, row.resolution.currency) })}</span>
+              <span className="tt-bill-sub">{row.resolution.reason}</span>
+            </>}
             <span className="tt-muted tt-bill-sub">{row.collector ?? t("recovery.legacyCollector")}</span></div>
-          {!row.approved_at && <button className="tt-btn tt-btn-primary tt-btn-sm" disabled={busy} onClick={() => setSelected(row)}>{t("recovery.review")}</button>}
+          {!row.approved_at && !row.resolved_at && <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+            <button className="tt-btn tt-btn-primary tt-btn-sm" disabled={busy} onClick={() => setSelected(row)}>{t("recovery.review")}</button>
+            {sale.method === "cash" && <button className="tt-btn tt-btn-secondary tt-btn-sm" disabled={busy} onClick={() => setResolving(row)}>{t("heldResolve.action")}</button>}
+          </div>}
         </div>;
       })}
       {history && <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 8 }}>
@@ -79,5 +105,7 @@ export default function HeldSales({ restaurantId, currency }: Props) {
     </section>
     {selected && <RecoveryReview key={selected.pos_ref} sale={reviewSale(selected, restaurantId)} currentCurrency={currency} busy={busy}
       onClose={() => { if (!busy) setSelected(null); }} onSubmit={details => void recover(details)} />}
+    {resolving && <HeldResolutionForm key={resolving.pos_ref} sale={reviewSale(resolving, restaurantId)} currentCurrency={currency} busy={busy}
+      onClose={() => { if (!busy) setResolving(null); }} onSubmit={resolve} />}
   </>;
 }
