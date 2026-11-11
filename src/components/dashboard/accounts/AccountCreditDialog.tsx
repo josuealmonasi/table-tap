@@ -41,24 +41,35 @@ export default function AccountCreditDialog({ charge, owed, currency, onClose, o
     finally { sending.current = false; setBusy(false); }
   }
   return <Modal open onClose={busy ? () => {} : onClose} maxWidth={440} title={t("accountCredit.title")}>
-    <label className="tt-mod-label" htmlFor="account-credit-amount">{t("accountCredit.amount")}</label>
-    <input id="account-credit-amount" className="tt-input" inputMode="decimal" value={amount}
-      disabled={busy} onChange={e => setAmount(e.target.value)} />
-    <div className="tt-mod-label">{t("writeOff.reason")}</div>
-    <div className="tt-tip-row" style={{ flexWrap: "wrap" }}>
-      {WRITE_OFF_REASONS.map(key => <button key={key} type="button" disabled={busy}
-        className={`tt-tip-chip ${reason === key ? "tt-tip-chip-active" : ""}`} aria-pressed={reason === key}
-        onClick={() => setReason(key)}>{t(`accountCredit.${key}`)}</button>)}
+    {/* Each group is a field (label over its control, 6px) and the groups
+        stand 16px apart. As bare inline labels, "Motivo" sat on the amount
+        box above it: an inline label's margin does not push anything. */}
+    <div className="tt-credit-form">
+      <div className="tt-field">
+        <label className="tt-mod-label" htmlFor="account-credit-amount">{t("accountCredit.amount")}</label>
+        <input id="account-credit-amount" className="tt-input" inputMode="decimal" value={amount}
+          disabled={busy} onChange={e => setAmount(e.target.value)} />
+      </div>
+      <div className="tt-field" role="group" aria-labelledby="account-credit-reason">
+        <div className="tt-mod-label" id="account-credit-reason">{t("writeOff.reason")}</div>
+        <div className="tt-tip-row" style={{ flexWrap: "wrap" }}>
+          {WRITE_OFF_REASONS.map(key => <button key={key} type="button" disabled={busy}
+            className={`tt-tip-chip ${reason === key ? "tt-tip-chip-active" : ""}`} aria-pressed={reason === key}
+            onClick={() => setReason(key)}>{t(`accountCredit.${key}`)}</button>)}
+        </div>
+      </div>
+      <div className="tt-field">
+        <label className="tt-mod-label" htmlFor="account-credit-note">
+          {t(noteRequired(reason) ? "writeOff.noteRequired" : "writeOff.noteOptional")}
+        </label>
+        <textarea id="account-credit-note" className="tt-input" maxLength={NOTE_MAX} value={note}
+          disabled={busy} onChange={e => setNote(e.target.value)} />
+      </div>
+      {preview && <div className="tt-credit-preview">
+        <p>{t("accountCredit.remaining", { amount: formatMoney(preview.remainingCents / 100, currency) })}</p>
+        <p>{t("accountCredit.balance", { amount: formatMoney(preview.balanceCents / 100, currency) })}</p>
+      </div>}
     </div>
-    <label className="tt-mod-label" htmlFor="account-credit-note">
-      {t(noteRequired(reason) ? "writeOff.noteRequired" : "writeOff.noteOptional")}
-    </label>
-    <textarea id="account-credit-note" className="tt-input" maxLength={NOTE_MAX} value={note}
-      disabled={busy} onChange={e => setNote(e.target.value)} />
-    {preview && <>
-      <p>{t("accountCredit.remaining", { amount: formatMoney(preview.remainingCents / 100, currency) })}</p>
-      <p>{t("accountCredit.balance", { amount: formatMoney(preview.balanceCents / 100, currency) })}</p>
-    </>}
     {error && <p className="tt-field-error" role="alert">{error}</p>}
     <div className="tt-bill-actions">
       <button type="button" className="tt-btn tt-btn-danger" disabled={busy || !preview || Boolean(noteProblem(reason, note))}
