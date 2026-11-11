@@ -226,6 +226,22 @@ alter table restaurants drop constraint if exists restaurants_service_pct_range;
 alter table restaurants add constraint restaurants_service_pct_range
   check (service_pct >= 0 and service_pct <= 30);
 
+-- The restaurant's address and fiscal data, for its tickets (SAT's simplified
+-- receipt, RMF 2.7.1.24: issuer's name, RFC, regime and the issuing location's
+-- address). All optional, set by the owner only (owner's request, 2026-11-11).
+-- Never granted to anon: only the server reads them, to print a ticket.
+alter table restaurants add column if not exists legal_name text check (legal_name is null or char_length(legal_name) <= 254);
+alter table restaurants add column if not exists rfc text check (rfc is null or rfc ~ '^[A-ZÑ&]{3,4}[0-9]{6}[A-Z0-9]{3}$');
+alter table restaurants add column if not exists tax_regime text check (tax_regime is null or tax_regime ~ '^[0-9]{3}$');
+alter table restaurants add column if not exists address_street text check (address_street is null or char_length(address_street) <= 160);
+alter table restaurants add column if not exists address_ext_number text check (address_ext_number is null or char_length(address_ext_number) <= 20);
+alter table restaurants add column if not exists address_int_number text check (address_int_number is null or char_length(address_int_number) <= 20);
+alter table restaurants add column if not exists address_colonia text check (address_colonia is null or char_length(address_colonia) <= 120);
+alter table restaurants add column if not exists address_postal_code text check (address_postal_code is null or address_postal_code ~ '^[0-9]{5}$');
+alter table restaurants add column if not exists address_municipality text check (address_municipality is null or char_length(address_municipality) <= 120);
+alter table restaurants add column if not exists address_state text check (address_state is null or char_length(address_state) <= 60);
+alter table restaurants add column if not exists ticket_phone text check (ticket_phone is null or ticket_phone ~ '^[0-9 +()-]{7,20}$');
+
 alter table restaurants drop constraint if exists restaurants_tax_pct_range;
 alter table restaurants add constraint restaurants_tax_pct_range
   check (tax_pct >= 0 and tax_pct <= 100);
