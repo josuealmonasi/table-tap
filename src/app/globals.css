@@ -5041,7 +5041,9 @@ a.tt-btn {
 .tt-reorder {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  /* Up and down are opposite moves: at 2px apart a near miss sent a menu
+     the wrong way (controls-touching, dashboard and menu editor). */
+  gap: 6px;
   flex-shrink: 0;
 }
 .tt-reorder-btn {
@@ -5071,7 +5073,7 @@ a.tt-btn {
 /* on touch screens, grow to a comfortable tap target */
 @media (max-width: 640px) {
   .tt-reorder {
-    gap: 4px;
+    gap: 6px;
     justify-content: space-between;
   }
   .tt-reorder-btn {
@@ -5798,7 +5800,7 @@ a.tt-btn {
 .tt-rating-inline {
   display: inline-flex;
   align-items: center;
-  gap: 3px;
+  gap: 4px;
   font-size: 12px;
   font-weight: 700;
   color: var(--tt-ink-2);

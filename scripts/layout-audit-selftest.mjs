@@ -86,6 +86,7 @@ export async function layoutAuditSelftest(browser) {
     }
     await check('sticky bar resting against a scrolled field', 'controls-touching', `<div style="height:2000px"><input style="display:block;height:40px;margin-top:500px;border:1px solid #999" value="Field"><div style="position:sticky;bottom:0;margin-top:1px"><button style="border:1px solid #999;height:40px">Save</button></div></div>`, false);
     await check('two touching buttons inside a sticky bar', 'controls-touching', `<div style="position:sticky;bottom:0;display:flex"><button style="border:1px solid #999">Cancel</button><button style="border:1px solid #999">Save</button></div>`);
+    await check('full-screen sheet is not a bar', 'covered-by-bar', `<div style="position:fixed;inset:0;background:white;z-index:30">Sheet</div>${stickyForm(64)}`, false);
     await check('ordinary button scrolling under tabs', 'covered-by-bar', `<div style="margin-top:800px"><button style="height:40px">Scrolling save</button></div>${bottomBar()}`, false);
     await check('bar excludes its own controls', 'covered-by-bar', bottomBar().replace('Navigation', '<button>Tab</button>'), false);
     await check('small fixed element is not a bar', 'covered-by-bar', pinnedButton() + bottomBar('width:100px'), false);

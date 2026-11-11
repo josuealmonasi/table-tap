@@ -6508,6 +6508,12 @@ The owner found these on an iPhone, on production, with every gate green. Every 
 - **The rewards ladder** (found by the new `cards-touching` check on its first run): the visit card's steps, each a bordered box, sat 4px apart on the diner's `/rewards` and in the loyalty screens. They are 8px apart now.
 - **"Guardar cambios" under the tab bar.** Settings' restaurant form keeps its save bar stuck to the bottom of the screen, and on a phone the fixed tab bar covers exactly that strip: only the bar's top edge showed while editing. It now sticks 64px up, like the menu's bulk bar, whenever the tab bar is there; a dialog's bar keeps its own pin. Found by eye while judging the new checks' hits; Profile's "Guardar datos" and "Actualizar contraseña" had the same fault. The audit's `covered-by-bar` check (Codex) now fails a control pinned under a fixed bar, or a sticky inset smaller than the bar it shares the bottom edge with. On production it flagged exactly those four buttons, and none once the fix was injected.
 - **Four more audit kinds** (Codex): `icon-touches-label`, `content-touches-edge`, `controls-touching` and `entries-run-together`. Each measures paint, not boxes, after three false positives on production (a borderless search input in its bordered wrapper, ghost buttons, a grid item's box). Overlap is not "touching": a sticky bar sliding over fields overlaps by design. 90 self-test fixtures, and each check is proven load-bearing by switching it off.
+- **First full run of the new checks** (2026-11-11). Real faults:
+  - **Signup's "Verifica tu correo".** The address field sat flush on a button wider than itself, and the links were browser-default blue. It is now laid out like the sign-in card.
+  - **The reorder arrows.** Up and down were 2px apart, so a near miss moved a menu the wrong way. They are 6px apart now.
+  - **The rating star.** It sat 3px from its score; now 4px.
+
+  False positives fixed in the check: a full-screen sheet (the diner's dish sheet and cart) is not a "bar". Bars are strips, at most 35% of the screen tall.
 - **The stock tab's last-count line** sat in the narrow left column under "Debería haber …", so its dot opened a line at 360px. A meta line with nothing beside it now takes the whole row.
 ## R8-4 part 1 — account debt and manager credits
 

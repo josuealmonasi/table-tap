@@ -198,7 +198,10 @@ export const SPACING_AUDIT = String.raw`
     if (s.position !== 'fixed' || (dialogOpen ? !layer : layer)) continue;
     const width = Math.min(innerWidth, r.right) - Math.max(0, r.left);
     const height = Math.min(innerHeight, r.bottom) - Math.max(0, r.top);
-    if (height >= 30 && width >= innerWidth / 2) bars.push({ el, r, layer, bottom: parseFloat(s.bottom) });
+    // A bar is a strip. The diner's dish sheet and cart are fixed full-screen
+    // layers with no dialog role; counted as bars, they "covered" the page
+    // behind them on every coupon and tip screen (first full run, 2026-11-11).
+    if (height >= 30 && height <= innerHeight * 0.35 && width >= innerWidth / 2) bars.push({ el, r, layer, bottom: parseFloat(s.bottom) });
   }
   const pinnedCache = new Map();
   const pinned = el => {
