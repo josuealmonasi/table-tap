@@ -6549,3 +6549,15 @@ till, waiter pad and offline receipt now freeze each line's promotion revenue.
 understatement of unrelated revenue, bill-wide stacking, extras, combo display
 savings, free food costs, exact cents, legacy fallback and offline replay.
 Reports never fetch current promotions for old sales.
+## R8-7 — dormant account journal and historical debt
+
+An opening balance and imported history must not count the same debt twice.
+PR 1 creates the schema and service-only backfill function without starting any
+account. PR 2 must activate all writers and the backfill together under the money
+lock, choosing the cutoff after it holds the lock. An opening stores current
+reduced debt; historical credits and collections have zero debt effect. Missing
+charge dates and original components remain unknown.
+
+| Regression | Automatic check | Live verification still required |
+| --- | --- | --- |
+| R8-7: premature journal activation loses intervening events; replay or imported history could double debt; mutable or cross-tenant records could corrupt the journal | account-journal-schema.spec.ts; invariants/account-journal-dormant.spec.ts (with sabotage cases) | After applying schema on dev, run probe-account-journal.mjs for per-currency debt, partial/full credit and collection history, replay, privileged update/delete guards, bad signs/missing sources, tenant/currency isolation, grants, restaurant cascade and both two-connection money-lock races; run the existing money gate. No production backfill in PR 1. |
