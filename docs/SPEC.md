@@ -1345,8 +1345,9 @@ from table 6 still has to be carried to table 6, so a QR order is unchanged.
 
 The order dialog's "Ticket (PDF)" asks `/api/orders/print` for `format: "pdf"`
 (front of house only, the caller's restaurant, like the HTML receipt) and opens
-a PDF shaped like thermal paper: 80 mm wide, Courier, the page cut to the
-ticket's length (`src/lib/ticket-pdf.ts`). Its amounts come from
+a PDF shaped like thermal paper: 80 mm wide, the page cut to the ticket's
+length (`src/lib/ticket-pdf.ts`), the columns laid out by the font's own
+measure. Its amounts come from
 `receiptModel`, the same calculation as the email and the reprint.
 
 - Header: the logo when it is a PNG or JPEG at an https address, the name,
@@ -1357,9 +1358,19 @@ ticket's length (`src/lib/ticket-pdf.ts`). Its amounts come from
 - Body: date, folio (the order code), table, four columns (quantity, item,
   unit price, amount), the number of items, the receipt's rows, the total and
   how it was paid.
-- The visit card's progress when a card was presented before paying (from the
-  loyalty branch), the order's QR (it opens the sale on Cuentas for the
-  staff), thanks, and "this is not an invoice".
+- The visit card when a card was presented before paying: its stamps drawn
+  as circles (the earned ones filled), the code's last four, and the next
+  reward. It is read from the receipt source — the sale's card, its sitting's,
+  or a split part's sitting — the same read as the HTML receipt
+  (`ticket-loyalty.ts`). Then the order's QR (it opens the sale on Cuentas for
+  the staff), thanks, and "this is not an invoice".
+- **The typeface is the owner's choice** (Settings → "Letra del ticket",
+  `restaurants.ticket_font`): Archivo, the app's own and the default; IBM Plex
+  Mono; or the classic Courier. Each option opens a sample ticket with the
+  restaurant's own header (`/api/settings/ticket-preview`, owner only). The
+  two embedded faces are static OFL files in `src/lib/fonts` — pdfkit cannot
+  embed the variable Archivo — traced into the routes that print by
+  `next.config.ts`.
 
 ## The customer can decline the ticket
 
