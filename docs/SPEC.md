@@ -818,9 +818,10 @@ Assume the browser is hostile; it holds the publishable key and nothing else.
 - **One public storage bucket**, `menu`. Reads are public by policy because the
   pictures hang off a QR poster; writes are manager-scoped by path, the first
   segment of the object name being the restaurant id that `storage_restaurant()`
-  reads back. The bucket itself is bounded — 5 MB, `image/webp` only — and that
+  reads back. The bucket itself is bounded — 5 MB, WebP, JPEG and PNG — and that
   bound is the Storage API's, not RLS's, so it holds against the service key
-  too.
+  too. Menu photos use WebP with a JPEG fallback; restaurant logos use PNG
+  at `restaurant-id/logo.png` to keep transparency and print in ticket PDFs.
 
 ## What exists
 

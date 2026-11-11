@@ -16,8 +16,8 @@ export function coverPath(restaurantId: string, ext = "webp"): string {
 }
 
 /** The restaurant's own mark. One per restaurant, so it overwrites. */
-export function logoPath(restaurantId: string, ext = "webp"): string {
-  return `${restaurantId}/logo.${ext}`;
+export function logoPath(restaurantId: string): string {
+  return `${restaurantId}/logo.png`;
 }
 
 /**
@@ -53,6 +53,7 @@ export function pathFromUrl(url: string): string | null {
  * we warn rather than refuse, since a slightly small photo still beats none.
  */
 export interface ImageSpec {
+  encoding?: "png";
   width: number;
   height: number;
   minWidth: number;
@@ -79,6 +80,7 @@ export const DISH: ImageSpec = {
  * sharp on a 3x screen and survives a future larger placement.
  */
 export const LOGO: ImageSpec = {
+  encoding: "png",
   width: 256,
   height: 256,
   minWidth: 128,

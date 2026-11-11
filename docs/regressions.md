@@ -34,6 +34,7 @@ and that a new party cannot see the previous party's waiting phones.
 | A duplicate refund tracks customer completion and fee completion separately (S11 I5) | A failed fee return disappeared behind an already-refunded customer payment |
 | A duplicate refund keeps its original charge currency everywhere (S11 I9) | Changing the menu currency relabelled money owed back and the approval amount |
 |---|---|
+| Restaurant logos use PNG bytes, content type and path, and the bucket accepts PNG | The photo encoder stored WebP logos that the ticket PDF could not print; changing only the encoder would leave a WebP path and a bucket that refused PNG. `image-resize.spec.ts` checks logos and unchanged photo encodings; `images.spec.ts` checks the bucket allowlist |
 | Layout audits measure cramped text, stranded separators, clipped numbers and undisclosed bar overflow (owner report, 2026-11-10) | iPhone tabs nearly touched and hid the last tab, setup stranded its separator, and menu hours ended in an ellipsis. Shared `AUDIT` checks painted geometry; `layout-audit-selftest.mjs` plants broken/fixed twins and every older fault before the layout gate visits pages |
 | Unpaid counter checkouts share a restaurant ceiling (production attack M1, 2026-11-10) | Rotating client addresses filled the kitchen with unpaid phone orders |
 | Cart quantities are refused before pricing (production attack L1, 2026-11-10) | Negative, fractional and enormous quantities silently became different orders |
@@ -6549,3 +6550,18 @@ till, waiter pad and offline receipt now freeze each line's promotion revenue.
 understatement of unrelated revenue, bill-wide stacking, extras, combo display
 savings, free food costs, exact cents, legacy fallback and offline replay.
 Reports never fetch current promotions for old sales.
+
+
+## Restaurant logos print on the ticket (2026-11-11)
+
+The logo uploader and the ticket PDF had to agree on a format. The shared photo
+encoder chose WebP in Chrome, but pdfkit accepts only PNG and JPEG. Logos now
+request PNG so their transparent parts survive, while cover and dish photos
+keep WebP with the existing JPEG fallback. The upload and removal use the same
+`logo.png` path; the content type and bytes are PNG, and the bucket permits it.
+
+`image-resize.spec.ts` reproduces the old WebP/JPEG logo output and checks PNG
+logos in both browser modes alongside unchanged menu photos. `images.spec.ts`
+checks that the schema permits the uploaded format. After applying the bucket
+allowlist, upload a transparent logo in settings and check its preview and an
+80 mm ticket PDF. No existing logos need migrating.
