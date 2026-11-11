@@ -3641,7 +3641,7 @@ grant execute on function public.loyalty_open(uuid) to service_role;
 create or replace function public.attach_loyalty_card_v1(
   p_restaurant uuid, p_code text, p_order uuid, p_session uuid, p_actor text
 ) returns jsonb language plpgsql security definer set search_path = public as $$
-declare v_card loyalty_cards%rowtype; v_paid boolean;
+declare v_card loyalty_cards%rowtype; v_paid boolean; v_status text;
 begin
   if num_nonnulls(p_order, p_session) <> 1 or nullif(btrim(coalesce(p_actor, '')), '') is null then
     raise exception 'invalid loyalty attachment';
@@ -3651,8 +3651,10 @@ begin
     where restaurant_id = p_restaurant and code = upper(replace(btrim(coalesce(p_code, '')), '-', ''));
   if not found then return jsonb_build_object('outcome', 'unknown'); end if;
   if p_order is not null then
-    select paid into v_paid from orders where id = p_order and restaurant_id = p_restaurant for update;
-    if not found then return jsonb_build_object('outcome', 'gone'); end if;
+    -- Read under the lock: a cancellation that commits after the route's
+    -- own check must still answer "gone" (Codex review of #620).
+    select paid, status into v_paid, v_status from orders where id = p_order and restaurant_id = p_restaurant for update;
+    if not found or v_status = 'cancelled' then return jsonb_build_object('outcome', 'gone'); end if;
     if v_paid then return jsonb_build_object('outcome', 'paid'); end if;
     update orders set loyalty_card_id = v_card.id where id = p_order and restaurant_id = p_restaurant;
   else
@@ -3667,21 +3669,48 @@ $$;
 revoke all on function public.attach_loyalty_card_v1(uuid, text, uuid, uuid, text) from public, anon, authenticated;
 grant execute on function public.attach_loyalty_card_v1(uuid, text, uuid, uuid, text) to service_role;
 
--- Paying stamps the card the sale or its sitting carries: one visit a day,
--- in the restaurant's zone, like "Sellar tarjeta". Never on a cancelled sale,
--- never for another restaurant's card, never while the program is off.
+-- The moment a sale becomes paid it takes its sitting's card, if it has none
+-- of its own, and keeps it: the receipt and every reprint then name the card
+-- this payment stamped, even if the table's bill is given another card or none
+-- afterwards (Codex review of #620). Only a card of this restaurant while the
+-- program is open, so a receipt never shows a card that was not stamped.
+create or replace function public.fix_loyalty_card_on_payment()
+returns trigger language plpgsql security definer set search_path = public as $$
+begin
+  if not new.paid or new.status = 'cancelled' or (tg_op = 'UPDATE' and old.paid) then return new; end if;
+  if new.loyalty_card_id is null and new.session_id is not null then
+    new.loyalty_card_id := (select s.loyalty_card_id from table_sessions s
+      where s.id = new.session_id and s.restaurant_id = new.restaurant_id);
+  end if;
+  if new.loyalty_card_id is not null and (not public.loyalty_open(new.restaurant_id)
+    or not exists (select 1 from loyalty_cards c where c.id = new.loyalty_card_id and c.restaurant_id = new.restaurant_id)) then
+    new.loyalty_card_id := null;
+  end if;
+  return new;
+end;
+$$;
+revoke all on function public.fix_loyalty_card_on_payment() from public, anon, authenticated;
+drop trigger if exists fix_loyalty_card_on_payment on orders;
+create trigger fix_loyalty_card_on_payment before insert or update of paid on orders
+  for each row execute function public.fix_loyalty_card_on_payment();
+
+-- Paying stamps the card the sale carries (fixed onto it above): one visit a
+-- day, in the restaurant's zone, like "Sellar tarjeta". Never on a cancelled
+-- sale, never for another restaurant's card, never while the program is off.
+-- A sale rung offline counts on the day it was rung, not the day it reached
+-- the server: replayed two days later it must not earn a second visit, nor
+-- several offline days collapse into one (Codex review of #620).
 create or replace function public.stamp_loyalty_on_payment()
 returns trigger language plpgsql security definer set search_path = public as $$
 declare v_card uuid; v_day date;
 begin
   if not new.paid or new.status = 'cancelled' or (tg_op = 'UPDATE' and old.paid) then return null; end if;
-  v_card := coalesce(new.loyalty_card_id,
-    (select s.loyalty_card_id from table_sessions s where s.id = new.session_id and s.restaurant_id = new.restaurant_id));
+  v_card := new.loyalty_card_id;
   if v_card is null or not public.loyalty_open(new.restaurant_id)
     or not exists (select 1 from loyalty_cards c where c.id = v_card and c.restaurant_id = new.restaurant_id) then
     return null;
   end if;
-  select (now() at time zone coalesce(r.timezone, 'America/Mexico_City'))::date into v_day
+  select (coalesce(new.offline_at, now()) at time zone coalesce(r.timezone, 'America/Mexico_City'))::date into v_day
     from restaurants r where r.id = new.restaurant_id;
   insert into loyalty_visits (card_id, restaurant_id, visit_day, actor_email)
   values (v_card, new.restaurant_id, v_day, 'payment')

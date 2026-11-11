@@ -151,7 +151,8 @@ export async function readSlotReceipt(db: Database, id: string, restaurantId?: s
     receipt = saved;
   } else if (version === undefined) receipt = await slotReceiptReturns(db, payment.restaurant_id, receipt);
   else if (version.returnCopy || !Array.isArray(version.adjustmentIds) || version.adjustmentIds.length) throw new ReceiptReadError(404);
-  if (sitting?.loyalty_card_id) receipt.loyalty = await receiptCard(payment.restaurant_id, sitting.loyalty_card_id);
+  // Optional: a card that cannot be read is left off, the receipt still issues.
+  if (sitting?.loyalty_card_id) receipt.loyalty = await receiptCard(payment.restaurant_id, sitting.loyalty_card_id).catch(() => null);
   const issued = version ?? { adjustmentIds: [], ...(receipt.returns?.length ? { slotCopy: sealSlotVersion(payment.restaurant_id, receipt) } : {}) };
   return { orders: [], restaurantId: payment.restaurant_id, tableId: sitting?.table_id ?? null, payment: receipt, version: issued };
 }

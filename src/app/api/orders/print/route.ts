@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { randomUUID } from "node:crypto";
 import { apiError } from "@/lib/api-error";
+import { isRoomLimited } from "@/lib/rate-limit";
 import { jsonBody } from "@/lib/json-body";
 import { actingStaff, actingFrontOfHouse } from "@/lib/api-guard";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -127,6 +128,9 @@ export async function POST(req: NextRequest) {
     locale: locale === "en" ? "en-US" : "es-MX",
   };
   if (body.format === "pdf") {
+    // Two layouts, fonts, a QR and maybe a logo per request: throttled before
+    // any of it is drawn (Codex review of #620).
+    if (await isRoomLimited(req, "ticket-pdf", 30)) return await apiError("apiErr.tooManyRequests", 429);
     // The same calculation as the HTML receipt, laid out as the 80 mm ticket.
     // Its QR opens this sale for the staff (owner's choice, 2026-11-11).
     try {

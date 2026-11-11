@@ -51,16 +51,25 @@ it("English receipts have the same progress", () => {
   const text = buildReceipt([{ ...order, loyalty: card() }], place, (k, v) => translate(messagesFor("en"), k, v)).text.replaceAll("\n", " ");
   expect(text).toContain("5 of 8 · 3 more for Dessert");
 });
-it("uses the sitting only when a paid order has no card, scoped to the restaurant", async () => {
-  f.card.mockResolvedValue(card()); const filters = vi.fn();
-  const q = { select: () => q, eq: (...args: unknown[]) => { filters(...args); return q; }, maybeSingle: async () => ({ data: { loyalty_card_id: "session-card" }, error: null }) };
-  const db = { from: vi.fn(() => q) };
+it("names the card payment fixed on each paid order, never the sitting's card now (Codex review of #620)", async () => {
+  f.card.mockResolvedValue(card());
+  const db = { from: vi.fn() };
   const records = [{ ...order, restaurant_id: "r", paid: true, session_id: "s", loyalty_card_id: "order-card" },
-    { ...order, id: "second", restaurant_id: "r", paid: true, session_id: "s" }, { ...order, id: "unpaid", restaurant_id: "r", paid: false, session_id: "s" }];
+    { ...order, id: "second", restaurant_id: "r", paid: true, session_id: "s" }, { ...order, id: "unpaid", restaurant_id: "r", paid: false, session_id: "s", loyalty_card_id: "x" }];
   const result = await withReceiptCards(db as never, records);
-  expect(f.card).toHaveBeenCalledWith("r", "order-card"); expect(f.card).toHaveBeenCalledWith("r", "session-card");
-  expect(filters).toHaveBeenCalledWith("restaurant_id", "r"); expect(filters).toHaveBeenCalledWith("id", "s");
-  expect(db.from).toHaveBeenCalledTimes(1); expect(result[2].loyalty).toBeUndefined();
+  expect(f.card).toHaveBeenCalledTimes(1);
+  expect(f.card).toHaveBeenCalledWith("r", "order-card");
+  // No sitting read: a card given to the table's bill after this payment is not this receipt's.
+  expect(db.from).not.toHaveBeenCalled();
+  expect(result[1].loyalty).toBeUndefined(); expect(result[2].loyalty).toBeUndefined();
+});
+
+it("issues the receipt without the card when the card cannot be read (Codex review of #620)", async () => {
+  f.card.mockRejectedValue(new Error("Could not read attached loyalty card"));
+  const result = await withReceiptCards({ from: vi.fn() } as never,
+    [{ ...order, restaurant_id: "r", paid: true, loyalty_card_id: "order-card" }]);
+  expect(result[0].loyalty).toBeNull();
+  expect(buildReceipt(result, place, t).text).not.toContain("Tarjeta de visitas");
 });
 
 it("does not collapse distinct cards with the same printed suffix", () => {
