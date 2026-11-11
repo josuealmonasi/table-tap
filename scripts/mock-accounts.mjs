@@ -63,6 +63,8 @@ export async function seedAccounts(pg, rid) {
     rows,
     "id",
   );
+  // The writer creates account_movements for started accounts. db:mock then
+  // activates dormant accounts through journal-activate.sql, including Luis.
   const { rows: [result] } = await pg.query(
     "select account_charge_v2($1,$2,$3,$4,'demo-cashier@tabletap.dev') value",
     [rid, carmen.id, inserted.map(o => o.id), rows.reduce((sum, row) => sum + row[5], 0)],

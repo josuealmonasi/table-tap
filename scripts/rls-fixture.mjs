@@ -50,9 +50,10 @@ async function sweepLeftovers(admin) {
     .map(o => o.id);
 
   if (ids.length > 0) {
-    for (const table of ["dish_ratings", "coupon_redemptions", "print_jobs", "payments"]) {
+    for (const table of ["dish_ratings", "coupon_redemptions", "print_jobs"]) {
       await admin.from(table).delete().in("order_id", ids);
     }
+    await admin.from("payments").delete().is("account_id", null).in("order_id", ids);
     await admin.from("orders").delete().in("id", ids);
   }
 
@@ -62,7 +63,7 @@ async function sweepLeftovers(admin) {
   const { data: orphans } = await admin
     .from("payments").select("id").eq("actor_email", ACTOR);
   if (orphans?.length) {
-    await admin.from("payments").delete().in("id", orphans.map(p => p.id));
+    await admin.from("payments").delete().is("account_id", null).in("id", orphans.map(p => p.id));
   }
 
   // A loyalty card and program from a run that did not finish. The card's code

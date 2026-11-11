@@ -31,7 +31,7 @@ export async function arrangeRetry(f, state, kind) {
       await checked(f.admin.from("coupons").delete().eq("id", state.coupon.id));
     }
     if (ids.length) {
-      await checked(f.admin.from("payments").delete().in("order_id", ids));
+      await checked(f.admin.from("payments").delete().is("account_id", null).in("order_id", ids));
       await checked(f.admin.from("orders").delete().in("id", ids));
       await checked(f.admin.from("ingredient_consumption").delete().eq("source_kind", "sale").in("source_id", ids));
       const reservations = orders.map(o => o.stock_reservation_id).filter(Boolean);

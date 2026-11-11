@@ -46,7 +46,7 @@ export function paymentCounterCases(fx) {
         }).select("id").single();
         f.listosOrder = data?.id ?? "";
         return async () => {
-          await f.admin.from("payments").delete().eq("order_id", f.listosOrder);
+          await f.admin.from("payments").delete().is("account_id", null).eq("order_id", f.listosOrder);
           await f.admin.from("orders").delete().eq("id", f.listosOrder);
         };
       },

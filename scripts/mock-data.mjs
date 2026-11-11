@@ -463,7 +463,7 @@ export async function seedMock(pg) {
   const takers = DEMO_TEAM.filter(m => m.role === "cashier" || m.role === "waiter").map(m => m.email);
   const { rows: settled } = await pg.query(
     `select id, restaurant_id, session_id, total, pay_method, created_at
-       from orders where restaurant_id = $1 and paid and total > 0`,
+       from orders where restaurant_id = $1 and account_id is null and paid and total > 0`,
     [rid],
   );
   if (settled.length > 0) {
@@ -651,6 +651,7 @@ export async function seedMock(pg) {
             o.created_at, o.created_at
        from orders o
       where o.restaurant_id = $1
+        and o.account_id is null
         and o.paid
         and o.total > 0
         and not exists (select 1 from payments p where p.order_id = o.id)`,

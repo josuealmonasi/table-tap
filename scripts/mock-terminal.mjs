@@ -39,7 +39,8 @@ export async function seedTerminal(pg, rid) {
   }
   await pg.query(
     `update payments set terminal_ref = 'AUT ' || (100000 + (abs(hashtext(id::text)) % 900000))::text
-      where id in (select id from payments where restaurant_id = $1 and method = 'card'
+      where account_id is null and order_id in (select id from orders where account_id is null)
+        and id in (select id from payments where restaurant_id = $1 and method = 'card'
                      and stripe_payment_intent is null order by created_at desc limit 6)`,
     [rid],
   );

@@ -155,12 +155,12 @@ async function sweep() {
   const orderIds = (marked ?? []).map(o => o.id);
   // The ledger first: `payments.order_id` is `on delete set null`, so removing
   // the orders first would cut these loose rather than remove them.
-  if (orderIds.length) await admin.from("payments").delete().in("order_id", orderIds);
+  if (orderIds.length) await admin.from("payments").delete().is("account_id", null).in("order_id", orderIds);
   if (sittingIds.length) {
-    await admin.from("payments").delete().in("session_id", sittingIds);
+    await admin.from("payments").delete().is("account_id", null).in("session_id", sittingIds);
     await admin.from("bill_splits").delete().in("session_id", sittingIds);
   }
-  await admin.from("payments").delete().like("client_ref", `${MARK}%`);
+  await admin.from("payments").delete().is("account_id", null).like("client_ref", `${MARK}%`);
   await admin.from("orders").delete().eq("note", MARK);
   // The last-portion race orders through the route, which writes no marker.
   if (tableIds.length) await admin.from("orders").delete().in("table_id", tableIds);
@@ -398,7 +398,7 @@ try {
       : bad(`old owed ${oldOwed} got ${oldGot}, new owed ${newOwed} got ${newGot}`);
 
     // Tidy: the money, then the orders, then the sittings and the table.
-    await admin.from("payments").delete().in("session_id", [stale.id, fresh.id]);
+    await admin.from("payments").delete().is("account_id", null).in("session_id", [stale.id, fresh.id]);
     await admin.from("orders").delete().in("id", [old?.id, recent?.id].filter(Boolean));
     await admin.from("table_sessions").delete().in("id", [stale.id, fresh.id]);
     await admin.from("restaurant_tables").delete().eq("id", two.id);
@@ -576,7 +576,7 @@ try {
       ? ok("and the share frozen before it cannot be charged")
       : bad(`the share route answered ${res.status}${res.body.url ? " with a checkout url" : ""} after the waiter took the cash`);
 
-    await admin.from("payments").delete().eq("session_id", sat.id);
+    await admin.from("payments").delete().is("account_id", null).eq("session_id", sat.id);
     await admin.from("bill_split_claims").delete().eq("split_id", frozen.id);
     await admin.from("bill_splits").delete().eq("id", frozen.id);
     await admin.from("orders").delete().eq("session_id", sat.id);
@@ -688,7 +688,7 @@ try {
       ? ok("and the ones that lost the race are told the bill is covered")
       : bad(`a lost race answered ${shots.map(s => s.status).join("/")} — 500 is not an answer`);
 
-    await admin.from("payments").delete().eq("session_id", sat.id);
+    await admin.from("payments").delete().is("account_id", null).eq("session_id", sat.id);
     await admin.from("orders").delete().eq("session_id", sat.id);
     await admin.from("table_sessions").delete().eq("id", sat.id);
     await admin.from("restaurant_tables").delete().eq("id", spare.id);
@@ -740,7 +740,7 @@ try {
       ? ok("and exactly one of them is told it settled; the rest are told the bill is not owed")
       : bad(`settling at once answered ${shots.map(s => s.status).join("/")}`);
 
-    await admin.from("payments").delete().eq("session_id", sat.id);
+    await admin.from("payments").delete().is("account_id", null).eq("session_id", sat.id);
     await admin.from("orders").delete().eq("session_id", sat.id);
     await admin.from("table_sessions").delete().eq("id", sat.id);
     await admin.from("restaurant_tables").delete().eq("id", spare.id);
@@ -803,7 +803,7 @@ try {
 
     await admin.from("refunds_due").delete().in("stripe_payment_intent", [intentFor("ok"), intentFor("twice")]);
     await admin.from("notifications").delete().eq("restaurant_id", home.id).eq("kind", "refund_due").eq("data->>table", spare.label);
-    await admin.from("payments").delete().eq("session_id", sat.id);
+    await admin.from("payments").delete().is("account_id", null).eq("session_id", sat.id);
     await admin.from("orders").delete().eq("session_id", sat.id);
     await admin.from("table_sessions").delete().eq("id", sat.id);
     await admin.from("restaurant_tables").delete().eq("id", spare.id);
