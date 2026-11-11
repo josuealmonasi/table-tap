@@ -2704,3 +2704,38 @@ the same amount limits and signed payment/return manifest as credits. Costs reta
 the existing MXN processing estimate; other payment currencies use original
 connected-charge provider evidence and its settlement exchange rate. Missing fee
 evidence makes the report unavailable for retry instead of mixing currencies.
+
+## Customer-account credits (R8-4, part 1)
+
+An owner or manager can credit an uncollected account order from its staff
+statement. The dialog defaults to the remaining order amount, requires a reason
+(and a note for Other), and previews the remaining order and same-currency
+account balance. Cashiers, waiters and kitchen users cannot grant credits.
+`walkout` is labelled uncollectible debt here; comp, billing error and other
+retain the existing write-off reason codes and note limits.
+
+`POST /api/accounts/credit` calls the service-only `account_credit_v1` writer.
+It serializes restaurant money, then locks the account and order, validates the
+reviewed cents and refuses unresolved online checkout or collected/unattributed
+money. Reusing a request UUID with the same payload returns the saved result;
+a different payload conflicts. Partial credits may repeat with new request IDs.
+Principal is relieved before tip; food and service use the return writer's
+largest-remainder rule, with food first on a tie. Full relief sets written_off,
+never paid. No payment, payout, stock movement or wallet balance is created.
+A legacy account's approved ceiling currency is preserved before full relief.
+
+Each immutable `order_adjustments.account_credit` row stores the account in its
+request context, order, actor, reason, note, currency, request ID, credited cents
+and exact before/after total, tip and service fee. These snapshots permit a later
+journal import; this feature has no journal-table dependency. Staff see dated
+credits and who granted them and why. Public statements and emails expose only
+amount, currency and date. History remains visible after full relief or later
+collection and contributes no debt after settlement.
+
+Debt readers use the reduced orders.total and exclude written_off. Staff and
+online collection retain their locked expected-balance checks. A credit emits
+the same dated bill/written_off event used by table forgiveness for corte;
+receipts and drawers are unchanged. Existing reports do not distinguish reason
+codes when reducing sales for table forgiveness: every reason lowers the live
+paid total and appears as a write-off. Account credits follow that existing
+behavior; reason-specific sales/loss reporting is not changed by this feature.

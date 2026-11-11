@@ -3777,6 +3777,18 @@ a.tt-btn {
   margin-bottom: 0;
 }
 
+/* The account credit dialog: field groups 16px apart, and the two preview
+   lines read as one block under them. */
+.tt-credit-form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.tt-credit-preview p {
+  margin: 0 0 4px;
+  font-variant-numeric: tabular-nums;
+}
+
 /* toasts */
 .tt-toasts {
   position: fixed;

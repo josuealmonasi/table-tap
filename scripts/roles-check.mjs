@@ -131,6 +131,7 @@ const ROUTES = [
   { m: "POST", p: "/api/accounts", body: { name: " " }, allow: SERVES, passes: 400 },
   { m: "PATCH", p: "/api/accounts", body: {}, allow: SERVES, passes: 400 },
   { m: "POST", p: "/api/accounts/charge", body: {}, allow: SERVES, passes: 400 },
+  { m: "POST", p: "/api/accounts/credit", body: {}, allow: MANAGES, passes: 400 },
   { m: "POST", p: "/api/accounts/settle", body: {}, allow: SERVES, passes: 400 },
   // The cash drawer: those who run it write its opening and withdrawals; only
   // a manager strikes one off. Refused on shape — no kind, no id — so nothing
