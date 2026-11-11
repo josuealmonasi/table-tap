@@ -6549,3 +6549,21 @@ till, waiter pad and offline receipt now freeze each line's promotion revenue.
 understatement of unrelated revenue, bill-wide stacking, extras, combo display
 savings, free food costs, exact cents, legacy fallback and offline replay.
 Reports never fetch current promotions for old sales.
+
+## Sweep 11 — absent fees and terminal return rates
+
+An application fee can appear after its charge was refunded. The reconciler
+now checks the saved fee ledger and checkout before verifying zero; a positive
+fee or missing evidence keeps recovery pending. `fee-not-created.react-component.spec.tsx`
+covers delayed creation, zero-fee checkouts and failed reads. The platform's
+`application_fee.created` event also enqueues recovery before acknowledgement
+(`created-fee.react-component.spec.tsx`). Subscribe that endpoint to the event.
+
+Costs now reads terminal receipts, returns and signed rates together: MX$100
+less a same-day MX$40 return at 3.5% costs MX$2.10 and leaves MX$57.90. A later-day
+return retains the fee. `costs-terminal-returns.react-component.spec.tsx` checks
+both, historical and zero rates, local dates, rounding, voids and failed reads.
+`terminal-snapshot.spec.ts` signs the later deposit at 5% and keeps the original
+MX$96.50 carried return beside MX$200 takings, MX$10 fees and MX$93.50 expected.
+Each original bug was planted back and made its scenario fail. Provider delivery
+and database execution still require Claude's live checks.

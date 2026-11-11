@@ -2,6 +2,7 @@ import { beforeEach, expect, it, vi } from "vitest";
 
 const state = vi.hoisted(() => ({ rows: {} as Record<string, object[]> }));
 vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({
+  rpc: () => ({ order: () => ({ range: async () => ({ data: [], error: null }) }) }),
   from: (table: string) => {
     let offset = 0;
     const q: Record<string, unknown> = {};

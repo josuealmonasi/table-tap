@@ -4,6 +4,7 @@ import * as React from "react";
 const state = vi.hoisted(() => ({ rows: {} as Record<string, Record<string, unknown>[]>, failed: "" }));
 vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({ from: query, rpc: (name: string, args: { p_restaurant: string; p_currency: string | null }) => name === "order_return_events_v1"
   ? query("return_events").eq("restaurant_id", args.p_restaurant).eq("currency", args.p_currency)
+  : name === "terminal_deposit_ledger_v1" ? query("terminal_ledger")
   : Promise.resolve({ data: [], error: null }) }) }));
 vi.mock("@/lib/supabase/server", () => ({ createClient: async () => ({ from: query }) }));
 vi.mock("@/lib/page-guard", () => ({ requireManager: async () => ({ restaurant: { id: "r", currency: "USD", timezone: "UTC" } }) }));

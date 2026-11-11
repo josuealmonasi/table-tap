@@ -517,6 +517,10 @@ dishes on a bill the restaurant has just cancelled.
   in `fee_reconcile_queue` before the webhook answers. An ack removes only the
   generation it reconciled. This is how a refund the restaurant made by hand in
   Stripe gets our fee share back automatically, as the terms promise.
+  An absent Stripe application fee stays pending when our fee ledger or saved
+  checkout proves a positive fee; only local zero-fee evidence permits zero
+  verification. The platform webhook also enqueues `application_fee.created`,
+  resolving its charge on the original connected account before acknowledging.
   Duplicate-charge refunds record every contributing refund in
   `refund_due_coverage`, and complete only when the active ones pay it all.
   Its exact fee request
@@ -946,6 +950,10 @@ business's profit.
   rate (3.6% + MX$3, IVA on the fee) and TableTap's per-order fee
   (`platform_fees`, net of returned fees); a card on the restaurant's terminal pays
   `restaurants.terminal_fee_pct`, which the owner sets (3.5% until they do).
+  Terminal fees use the original sales day's signed deposit rate when present,
+  otherwise the current rate. Same-day returns reverse that fee; later-day
+  returns retain it. A carried same-day return keeps the original signed rate
+  after another deposit consumes it, so the terminal display still adds up.
   Fees over takings is one rate, applied to each product's price
   (`src/lib/costs/fees.ts`).
   Takings and platform fees use the current report currency. A fee's original
