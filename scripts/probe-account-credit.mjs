@@ -46,7 +46,7 @@ async function queued() {
 }
 try {
   await db.connect(); await peer.connect();
-  await db.query("insert into restaurants(id,name,currency) values($1,'Credit probe','MXN'),($2,'Foreign credit probe','MXN')", [restaurant, foreign]);
+  await db.query("insert into restaurants(id,name,plan,plan_status,currency) values($1,'Credit probe','servicio','active','MXN'),($2,'Foreign credit probe','servicio','active','MXN')", [restaurant, foreign]);
   const f = await fixture(), request = args(f.order, 3300);
   const first = await credit(request);
   assert.equal(first.outcome, "credited"); assert.equal(first.remainingCents, 7700);

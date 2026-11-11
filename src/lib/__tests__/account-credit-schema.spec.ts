@@ -9,7 +9,9 @@ it("locks restaurant, account, then order and rechecks eligibility before writin
   for (const x of locks) expect(credit).toContain(x);
   expect(credit).toContain("o.account_id is distinct from a.id or o.paid or o.written_off");
   expect(credit).toContain("o.status in ('cancelled', 'pending_payment')");
-  expect(credit).toContain("unresolved_account_page_v1(p_restaurant, a.id) or a.checkout_until > now()");
+  // An open card page decides, at any age; the hold deadline never authorizes.
+  expect(credit).toContain("if public.unresolved_account_page_v1(p_restaurant, a.id) then");
+  expect(credit).not.toContain("checkout_until");
   expect(credit.indexOf("(d.request - 'account') is distinct from v_request")).toBeLessThan(credit.indexOf("id = v_account for update"));
   expect(credit.indexOf("v_total <> p_expected_cents")).toBeLessThan(credit.indexOf("insert into order_adjustments"));
 });

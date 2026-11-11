@@ -12927,7 +12927,7 @@ begin
   if o.account_id is distinct from a.id or o.paid or o.written_off or o.status in ('cancelled', 'pending_payment') then
     return jsonb_build_object('outcome', 'ineligible');
   end if;
-  if public.unresolved_account_page_v1(p_restaurant, a.id) or a.checkout_until > now() then
+  if public.unresolved_account_page_v1(p_restaurant, a.id) then
     return jsonb_build_object('outcome', 'paying');
   end if;
   v_coverage := public.order_coverage(p_restaurant, array[o.id])->0;
