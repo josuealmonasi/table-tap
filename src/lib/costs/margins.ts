@@ -84,6 +84,7 @@ export interface Contribution {
   revenue: number;
   cost: number;
   fees: number;
+  returned: number;
   contribution: number;
   /** Every unit sold has a saved ingredient valuation. */
   complete: boolean;
@@ -99,6 +100,8 @@ export interface PeriodContribution {
   revenue: number;
   cost: number;
   fees: number;
+  /** Completed food returns without IVA, on their success dates. */
+  returned: number;
   contribution: number;
   /** Revenue from lines left out because their saved ingredient cost is unknown. */
   uncosted: number;
@@ -110,40 +113,46 @@ export interface PeriodContribution {
  * An order's own discounts — a promotion, a coupon — are shared across its
  * lines by value, since they were taken off the order as a whole.
  */
-export function periodContribution(orders: SoldOrder[], feeRate: number): PeriodContribution {
+export interface ContributionReturn { order: SoldOrder; food: number }
+
+export function periodContribution(orders: SoldOrder[], feeRate: number, returns: ContributionReturn[] = []): PeriodContribution {
   const byKey = new Map<string, Contribution>();
-  const total = { revenue: 0, cost: 0, fees: 0, uncosted: 0 };
-  for (const order of orders) {
+  const total = { revenue: 0, cost: 0, fees: 0, returned: 0, uncosted: 0 };
+  const entries = [...orders.map(order => ({ order, food: undefined })), ...returns];
+  for (const { order, food } of entries) {
+    const isReturn = food !== undefined;
     const lines = Array.isArray(order.items) ? order.items : [];
-    const revenues = lineRevenues(order);
+    const revenues = lineRevenues(order, food);
     lines.forEach((line, i) => {
       const gross = revenues[i];
       const revenue = withoutIva(gross, Number(order.tax_pct) || 0);
-      const fees = gross * feeRate;
+      const fees = isReturn ? 0 : gross * feeRate;
       // Today's recipe and supplier price cannot tell us what yesterday used.
       const saved = order.ingredient_costs?.[i];
       const complete = typeof saved === "number" && Number.isFinite(saved) && saved >= 0;
-      const cost = complete ? saved : 0;
+      const cost = complete && !isReturn ? saved : 0;
       const key = line.comboId ? `combo:${line.comboId}` : line.itemId;
       const row = byKey.get(key) ?? {
-        key, name: line.name, emoji: line.emoji ?? null, units: 0, revenue: 0, cost: 0, fees: 0, contribution: 0, complete: true,
+        key, name: line.name, emoji: line.emoji ?? null, units: 0, revenue: 0, cost: 0, fees: 0, returned: 0, contribution: 0, complete: true,
       };
-      row.units += line.qty;
-      row.revenue += revenue;
+      row.units += isReturn ? 0 : line.qty;
+      row.revenue += isReturn ? 0 : revenue;
+      row.returned += isReturn ? revenue : 0;
       row.cost += cost;
       row.fees += fees;
-      row.contribution = row.revenue - row.cost - row.fees;
+      row.contribution = row.revenue - row.cost - row.fees - row.returned;
       row.complete &&= complete;
       byKey.set(key, row);
       if (complete) {
-        total.revenue += revenue;
+        total.revenue += isReturn ? 0 : revenue;
+        total.returned += isReturn ? revenue : 0;
         total.cost += cost;
         total.fees += fees;
       } else {
-        total.uncosted += revenue;
+        total.uncosted += isReturn ? -revenue : revenue;
       }
     });
   }
   const rows = [...byKey.values()].sort((a, b) => b.contribution - a.contribution);
-  return { rows, ...total, contribution: total.revenue - total.cost - total.fees };
+  return { rows, ...total, contribution: total.revenue - total.cost - total.fees - total.returned };
 }

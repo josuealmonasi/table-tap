@@ -1505,6 +1505,7 @@ foundingLeftBody: "Subscribe now and keep this subscription price for as long as
     writeOffSplit: "Choose the whole divided bill to write off the rest. If the split is still a proposal, cancel it first.",
     writeOffUnresolved: "A payment on this table is not yet matched to an order. Ask a manager to review it before writing off.",
     discountPartPaid: "Part of this bill is already paid, so it can't be discounted.",
+    discountChanged: "The bill or promotion changed. Review the bill and try the discount again.",
     discountPartPaidLater: "Part of this bill was paid after the discount was asked for, so it can't be applied.",
     approvalChanged: "The bill changed since this request was shown. Reject it and ask for a new request.",
     requestGone: "That request has already been decided.",

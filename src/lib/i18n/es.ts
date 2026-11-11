@@ -1499,6 +1499,7 @@ foundingLeftBody: "Quien contrata ahora conserva este precio de suscripción mie
     writeOffSplit: "Elige toda la cuenta dividida para perdonar lo que falta. Si la división aún es una propuesta, cancélala primero.",
     writeOffUnresolved: "Hay un pago en esta mesa que aún no se sabe a qué pedido corresponde. Pide a un gerente que lo revise antes de cancelar.",
     discountPartPaid: "Ya se pagó una parte de esta cuenta, así que no se le puede aplicar un descuento.",
+    discountChanged: "La cuenta o la promoción cambió. Revisa la cuenta e intenta aplicar el descuento de nuevo.",
     discountPartPaidLater: "Ya pagaron una parte de esta cuenta desde que se pidió el descuento, así que no se puede aplicar.",
     approvalChanged: "La cuenta cambió desde que se mostró esta solicitud. Recházala y pide una nueva solicitud.",
     requestGone: "Esa solicitud ya fue resuelta.",
