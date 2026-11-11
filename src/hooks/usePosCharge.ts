@@ -1,5 +1,6 @@
 "use client";
 
+import { saveSaleEmail } from "@/lib/loyalty/save-sale-email";
 import { orderItemsWithRevenue } from "@/lib/order-line-revenue";
 import type { PricedCart } from "@/lib/pricing";
 
@@ -139,8 +140,13 @@ export function usePosCharge({ collector, collectorContext, restaurant, cart, de
     // A held account request has been sent before: this is its retry.
     const retriedAccount = accountRequest.current !== null;
     accountResent.current = retriedAccount;
+    const saleEmail = canEmailReceipt && !details.noTicket && (!details.loyaltyCard || details.cardEmail === null)
+      ? details.email.trim() || undefined : undefined;
+    // The one-sale email already delivers this ticket. A lost card-save reply must not send it twice.
+    const skipTicketEmail = details.skipTicketEmail || details.noTicket || Boolean(details.loyaltyCard && saleEmail) || undefined;
     const sale: HeldSale | null = method === "account" ? null : {
       loyaltyCode: details.loyaltyCard?.code,
+      skipTicketEmail,
       preparationPending: navigator.onLine,
       posRef, collector, collectorContext, restaurantId: restaurant.id, at: new Date().toISOString(), method, items: orderItemsWithRevenue(lines, pricing),
       // The tax rate it was sold under travels with it: replayed tomorrow, a
@@ -162,7 +168,8 @@ export function usePosCharge({ collector, collectorContext, restaurant, cart, de
     // email would otherwise flash an empty window (a new tab on an iPad) on
     // every charge. If that email fails, the fallback print opens late and may
     // be blocked; the toast says so and Orders reprints it.
-    const printsHere = !details.noTicket && !(canEmailReceipt && details.email.trim());
+    const cardEmailActive = Boolean(canEmailReceipt && details.cardEmail && !details.skipTicketEmail && !details.noTicket);
+    const printsHere = !details.noTicket && !saleEmail && !cardEmailActive;
     const paper = !printsHere ? reserveLate() : reserveReceiptPopup(reason => {
       // A blocked pop-up must not look like a printed ticket.
       toast(t(reason === "blocked" ? "pos.printBlocked" : "pos.printFailed"), "error");
@@ -179,11 +186,17 @@ export function usePosCharge({ collector, collectorContext, restaurant, cart, de
     setBusy(true);
     inFlight.current = true;
     try {
+      // Saving a card address is optional: a failed save must never hold up collected money.
+      if (!retriedAccount && canEmailReceipt && details.saveCardEmail && details.emailConsent && details.loyaltyCard && details.email.trim() && !details.noTicket && details.cardEmail === null) {
+        const saved = await saveSaleEmail(details.loyaltyCard.code, details.email.trim());
+        if (!saved.saved) toast(saved.suffix ? t("cardEmail.taken", { suffix: saved.suffix }) : t("cardEmail.saveFailed"), "error");
+      }
       let res: Response;
       try {
         const request = JSON.stringify({
           posRef,
           loyaltyCode: details.loyaltyCard?.code,
+          skipTicketEmail,
           collectorContext,
           currency: restaurant.currency,
           restaurantId: restaurant.id,
@@ -196,10 +209,7 @@ export function usePosCharge({ collector, collectorContext, restaurant, cart, de
           // On an account the tip waits for the day it is paid.
           tipPct: account ? undefined : tipCustom === null ? tipPct : undefined,
           tipAmount: account ? undefined : (tipCustom ?? undefined),
-          email:
-            canEmailReceipt && !details.noTicket
-              ? details.email.trim() || undefined
-              : undefined,
+          email: saleEmail,
           noReceipt: details.noTicket || undefined,
           terminalRef: method === "card" ? details.terminalRef.trim() || undefined : undefined,
         });
@@ -269,7 +279,8 @@ export function usePosCharge({ collector, collectorContext, restaurant, cart, de
       if (data.receipt === "failed") toast(t("pos.receiptFailed"), "error");
       else if (data.receipt === "sent") toast(t("pos.receiptSent"));
       // No address, or an address the mail never reached: it prints.
-      if (data.receiptHtml) printReceipt(data.receiptHtml, paper);
+      // A card sends its ticket automatically; printing here would make an unwanted paper copy.
+      if (data.receiptHtml && !cardEmailActive) printReceipt(data.receiptHtml, paper);
       setTicket({
         code: data.code,
         total: data.total,
