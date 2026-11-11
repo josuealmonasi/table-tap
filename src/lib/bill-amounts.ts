@@ -19,6 +19,12 @@ export interface BillAmounts {
   priorTip: number;
   dishes: number;
   servicePct: number;
+  /**
+   * The IVA rate saved on the orders being paid, never today's setting (sweep
+   * 10, finding 4). Null when they were priced at different rates: no single
+   * "IVA n%" line would be true.
+   */
+  taxPct: number | null;
 }
 
 /**
@@ -48,6 +54,8 @@ export function billAmounts(
   const { tip } = applyPayment(base, base, tipCustom ?? round2(base * (tipPct / 100)));
   const total = round2(base + tip);
   const service = scope === "mine" ? bill.mine.service : bill.service;
+  const paying = scope === "mine" ? bill.mine.orders : [...bill.mine.orders, ...bill.others.orders];
+  const rates = new Set(paying.map(o => Number(o.tax_pct) || 0));
   const dishes = round2(food - service - priorTip);
   return {
     food,
@@ -62,5 +70,6 @@ export function billAmounts(
     priorTip,
     dishes,
     servicePct: servicePercent(service, dishes),
+    taxPct: rates.size === 1 ? [...rates][0] : null,
   };
 }

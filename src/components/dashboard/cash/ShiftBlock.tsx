@@ -109,6 +109,10 @@ export default function ShiftBlock({ shifts, currency, timeZone, restaurantName 
               <span role="cell">+ {t("corte.cashSales")}</span>
               <span role="cell">{money(current.sum.cashSales)}</span>
             </div>
+            {Number(current.sum.tips) > 0 && <div className="tt-cashbox-line tt-muted" role="row">
+              <span role="cell">{t("corte.cashTips")}</span>
+              <span role="cell">{money(Number(current.sum.tips))}</span>
+            </div>}
             <div className="tt-cashbox-line" role="row">
               <span role="cell">− {t("corte.withdrawals")}</span>
               <span role="cell">{money(current.sum.withdrawn)}</span>

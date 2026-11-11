@@ -10298,7 +10298,9 @@ returns jsonb language sql stable security definer set search_path = public as $
     select *, least(coalesce(closed_at, p_until), p_until) until_at
       from cash_shifts where id = p_shift and restaurant_id = p_restaurant
   ), receipts as (
-    select coalesce(sum(p.amount), 0) amount from payments p, s
+    -- The tips inside those receipts, said apart so a shift can show what was
+    -- takings and what belongs to the staff (sweep 10, finding 7).
+    select coalesce(sum(p.amount), 0) amount, coalesce(sum(p.tip), 0) tip from payments p, s
       where p.restaurant_id = p_restaurant and p.currency = s.currency
         and p.method = 'cash' and nullif(p.actor_email, '') is not null
         and p.created_at between s.opened_at and s.until_at
@@ -10327,7 +10329,7 @@ returns jsonb language sql stable security definer set search_path = public as $
         and m.kind = 'withdrawal' and m.currency = s.currency
   )
   select jsonb_build_object('opening', round(s.opening_amount, 2),
-    'cashSales', round(r.amount - f.amount - h.amount, 2), 'withdrawn', round(w.amount, 2),
+    'cashSales', round(r.amount - f.amount - h.amount, 2), 'tips', round(r.tip, 2), 'withdrawn', round(w.amount, 2),
     'expected', round(s.opening_amount + r.amount - f.amount - h.amount - w.amount, 2))
     from s cross join receipts r cross join returns f cross join old_returns h cross join withdrawals w;
 $$;
