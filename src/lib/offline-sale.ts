@@ -35,16 +35,21 @@ export function offlineCharge(raw: unknown, now = Date.now(), recovery = false):
   const r = raw as Record<string, unknown>;
   const at = typeof r.at === "string" ? Date.parse(r.at) : NaN;
   if (!Number.isFinite(at) || at > now + CLOCK_SKEW_MS || (!recovery && now - at > OFFLINE_MAX_AGE_DAYS * 86_400_000) || at < Date.UTC(2000, 0, 1)) return null;
-  const money = (v: unknown) => cashAmount(typeof v === "number" ? round2(v) : v, false);
+  // Receipts contain numeric cents, not the locale-formatted text of an input.
+  // Reject real sub-cent amounts before rounding; tolerate only float noise.
+  const money = (v: unknown) => typeof v === "number" && Number.isFinite(v)
+    && Math.abs(v * 100 - Math.round(v * 100)) <= 1e-6
+    ? cashAmount(round2(v), false) : null;
   const subtotal = money(r.subtotal);
   const serviceFee = money(r.serviceFee);
   const tip = money(r.tip);
   const discount = money(r.discount);
   const total = money(r.total);
   if (subtotal === null || serviceFee === null || tip === null || discount === null || total === null) return null;
+  if (tip > total) return null;
   // The subtotal is already after the discounts; the service charge and the
   // tip go on top of it. A total that is not those three is not a charge.
-  if (Math.abs(round2(subtotal + serviceFee + tip) - total) > 0.01) return null;
+  if (Math.abs(Math.round(round2(subtotal + serviceFee + tip) * 100) - Math.round(total * 100)) > 1) return null;
   const taxPct = typeof r.taxPct === "number" && Number.isFinite(r.taxPct) && r.taxPct >= 0 && r.taxPct <= 100 ? r.taxPct : undefined;
   return { at: new Date(at).toISOString(), subtotal, serviceFee, tip, discount, total, ...(taxPct !== undefined ? { taxPct } : {}) };
 }

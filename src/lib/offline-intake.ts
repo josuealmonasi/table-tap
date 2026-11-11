@@ -17,7 +17,9 @@ export async function receiveOffline(actor: Actor, body: PosSaleBody & { offline
   // stays in the immutable receipt; only a manager can supply a corrected one.
   const charge = original && typeof original.at === "string" && original.at.length <= 80
     ? offlineCharge({ ...original, at: new Date().toISOString() }) : null;
-  if (!charge || !/^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(body.posRef ?? "")
+  if (!charge || (body.note != null && typeof body.note !== "string")
+    || (body.customerName != null && typeof body.customerName !== "string")
+    || !/^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(body.posRef ?? "")
     || !Array.isArray(body.items) || !body.items.length || body.items.length > 100
     || offlineLines(body.items).length !== body.items.length) {
     return await apiError("apiErr.offlineSale", 400, undefined, { held: true });
