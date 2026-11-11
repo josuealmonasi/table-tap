@@ -6489,3 +6489,17 @@ first version left the editor's saves out, so a price or a sold-out switch
 reached diners up to 30 seconds late; the second rule found a copied dish's
 extras still missing a refresh.
 
+
+## Owner's phone screenshot — spacing nobody had checked (2026-11-10)
+
+The owner found these on an iPhone, on production, with every gate green. Every one was two places that had to agree:
+- **The bottom bar.** It shared its width out equally among up to 16 sections, 2px a side. "Tomar pedido" and "Cuentas" touched, and the last tab was cut at the edge with no sign the bar scrolled.
+  - Now each tab keeps its own width and 10px a side, and the edge with more tabs fades (`useScrollMore` sets `data-more`).
+  - The audit's `cramped` and `bar-cut-off` checks catch it.
+- **"· opcional".** It was its own row in a flex column, so the row began with the dot.
+  - It now sits in its title's line, joined by no-break spaces.
+  - The audit's `separator-starts-line` check catches it.
+- **The menu schedule.** Its ellipsis cut the hours themselves ("09:00–1…"). It wraps now; the audit's `truncated-number` check catches it.
+- **Tab icons.** Caja, Cuentas and Guardadas shared one icon, and Tomar pedido and Mesas another. `nav.spec.ts` now refuses two sections with one icon.
+- **The tab order.** It was asked for in full and only half done. `nav.spec.ts` pins the owner's order.
+- **An account with no charges** read "Debe  de MX$1,000.00": joining no balances gave an empty string. `owedLabel` says MX$0.00 on the list, the account dialog and the till's account picker (`owed-label.spec.ts`).
