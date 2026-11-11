@@ -34,6 +34,7 @@ and that a new party cannot see the previous party's waiting phones.
 | A duplicate refund tracks customer completion and fee completion separately (S11 I5) | A failed fee return disappeared behind an already-refunded customer payment |
 | A duplicate refund keeps its original charge currency everywhere (S11 I9) | Changing the menu currency relabelled money owed back and the approval amount |
 |---|---|
+| Layout audits measure cramped text, stranded separators, clipped numbers and undisclosed bar overflow (owner report, 2026-11-10) | iPhone tabs nearly touched and hid the last tab, setup stranded its separator, and menu hours ended in an ellipsis. Shared `AUDIT` checks painted geometry; `layout-audit-selftest.mjs` plants broken/fixed twins and every older fault before the layout gate visits pages |
 | Unpaid counter checkouts share a restaurant ceiling (production attack M1, 2026-11-10) | Rotating client addresses filled the kitchen with unpaid phone orders |
 | Cart quantities are refused before pricing (production attack L1, 2026-11-10) | Negative, fractional and enormous quantities silently became different orders |
 | A sitting has five pending admission places (production attack M2, 2026-11-10) | Fresh phones filled the floor's approval list without limit |

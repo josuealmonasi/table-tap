@@ -20,6 +20,8 @@
  *
  * Kept as a plain string of source because it is evaluated in the browser.
  */
+import { SPACING_AUDIT } from "./layout-audit-spacing.mjs";
+
 export const AUDIT = `(() => {
   const vis = el => {
     const s = getComputedStyle(el);
@@ -298,10 +300,14 @@ export const AUDIT = `(() => {
     break;
   }
 
+  ${SPACING_AUDIT}
+
   // The page running off the side first. The list is cut at twelve, and thirty
   // squashed chart labels once filled every place in it, so the fault that
   // mattered most — the whole page scrolling sideways — was the one cut off.
-  faults.sort((a, b) => (b.kind === "overflowing") - (a.kind === "overflowing"));
+  const priority = { overflowing: 0, cramped: 1, 'separator-starts-line': 1,
+    'truncated-number': 1, 'bar-cut-off': 1, squashed: 2 };
+  faults.sort((a, b) => (priority[a.kind] ?? 3) - (priority[b.kind] ?? 3));
 
   // The same fault on twenty rows of a list is one fault, not twenty.
   const seen = new Set();

@@ -39,6 +39,7 @@
     "roles": "node scripts/roles-check.mjs",
     "roles:prod": "node scripts/roles-check.mjs --prod",
     "layout": "node scripts/layout-check.mjs",
+    "layout:selftest": "node scripts/layout-audit-selftest.mjs",
     "layout:prod": "node scripts/layout-check.mjs --prod",
     "rls:audit": "node scripts/rls-audit.mjs",
     "rls:audit:prod": "node scripts/rls-audit.mjs --prod",
