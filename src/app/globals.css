@@ -7302,7 +7302,9 @@ a.tt-user-plan:hover {
   max-width: 360px;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  /* 8px, not 4: each step is its own bordered box, and at 4px the steps
+     read as one box with stray lines (cards-touching, /rewards, 360px). */
+  gap: 8px;
   font-size: 13px;
   text-align: left;
 }
