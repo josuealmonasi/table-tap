@@ -475,6 +475,12 @@ a.tt-btn {
   cursor: pointer;
   text-decoration: underline;
 }
+/* An icon in a text link ("¿Tienes un cupón?") got only a space, about 3px:
+   the coupon glyph read as part of the word (icon-touches-label, cart). */
+.tt-linkbtn > svg {
+  margin-right: 4px;
+  vertical-align: -2px;
+}
 
 /* The "already paid" heading is a button because it opens the list, but it
    must not look like one: it is a label, not the screen's action. Without this

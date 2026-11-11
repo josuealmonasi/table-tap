@@ -304,6 +304,12 @@ export const SPACING_AUDIT = String.raw`
     const box = context.box;
     if (!box || context.edgeRow) return;
     const r = item.r, b = box.inner;
+    // Content scrolled part-way out of a card is cut by the scroll, not
+    // cramped: a dialog's chips at the fold read "0px from the edge" while
+    // the same chips scrolled into view had 14px (product dialog, 2026-11-11).
+    const raw = item.raw;
+    if (raw && (Math.abs(raw.top - r.top) > 0.5 || Math.abs(raw.bottom - r.bottom) > 0.5 ||
+      Math.abs(raw.left - r.left) > 0.5 || Math.abs(raw.right - r.right) > 0.5)) return;
     const gap = Math.min(...[r.left - b.left, b.right - r.right, r.top - b.top, b.bottom - r.bottom].filter(n => n >= 0));
     if (gap >= 0 && gap < 6) report('content-touches-edge', item.text, gap);
   };
@@ -335,7 +341,7 @@ export const SPACING_AUDIT = String.raw`
       }
       // Unpainted controls use their descendant text Ranges below, never their
       // invisible hit targets (which may fill or overhang a card).
-      if (paintsBox) edge({ r: ink, text }, context);
+      if (paintsBox) edge({ r: ink, raw: r, text }, context);
     }
     if (el.matches(iconControl)) context.control = el;
     if (cardBox(s, r)) {
@@ -363,7 +369,7 @@ export const SPACING_AUDIT = String.raw`
         if (line.width <= 0 || line.height <= 0) continue;
         const item = { r: line, text: label, type: 1 };
         if (context.control) add(iconGroups, context.control, item);
-        edge(item, context);
+        edge({ ...item, raw }, context);
         if (context.entry) {
           context.entry.first = Math.min(context.entry.first, line.top);
           context.entry.last = Math.max(context.entry.last, line.bottom);

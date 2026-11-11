@@ -6513,7 +6513,9 @@ The owner found these on an iPhone, on production, with every gate green. Every 
   - **The reorder arrows.** Up and down were 2px apart, so a near miss moved a menu the wrong way. They are 6px apart now.
   - **The rating star.** It sat 3px from its score; now 4px.
 
-  False positives fixed in the check: a full-screen sheet (the diner's dish sheet and cart) is not a "bar". Bars are strips, at most 35% of the screen tall.
+  - **The cart's "¿Tienes un cupón?".** Its icon sat a space (about 3px) from the words; it gets 4px more now.
+
+  False positives fixed in the check: content cut by a card's own scroll (a dialog's chips at the fold) is not "touching" its edge, and a full-screen sheet (the diner's dish sheet and cart) is not a "bar". Bars are strips, at most 35% of the screen tall.
 - **The stock tab's last-count line** sat in the narrow left column under "Debería haber …", so its dot opened a line at 360px. A meta line with nothing beside it now takes the whole row.
 ## R8-4 part 1 — account debt and manager credits
 
