@@ -1,3 +1,4 @@
+import type { AccountCreditLine } from "@/lib/account-credit-history";
 // ============================================================================
 // Customer accounts — the rules that need no database.
 //
@@ -56,6 +57,8 @@ export interface StatementLine {
 
 /** One order put on the account. */
 export interface StatementCharge {
+  credits?: AccountCreditLine[];
+  creditable?: boolean;
   currency?: string;
   orderId: string;
   /** When it was charged (the order's time if it was charged at once). */

@@ -1,3 +1,4 @@
+import { withAccountCredits } from "@/lib/account-credit-history";
 import { unresolvedAccounts } from "@/lib/account-checkout-state";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { everyRow } from "@/lib/paged";
@@ -112,6 +113,7 @@ export interface Statement {
 }
 
 interface StatementOrder {
+  status: string;
   currency: string;
   id: string;
   items: unknown;
@@ -126,7 +128,7 @@ interface StatementOrder {
 export async function statementOf(account: AccountRow, timeZone?: string | null): Promise<Statement> {
   const db = createAdminClient();
   const [orders, paymentsRes] = await Promise.all([
-    everyRow<StatementOrder>((a, b) => db.from("orders").select("id, items, total, currency, table_label, created_at, charged_at, charged_by")
+    everyRow<StatementOrder>((a, b) => db.from("orders").select("id, items, total, currency, table_label, created_at, charged_at, charged_by, status")
       .eq("restaurant_id", account.restaurant_id).eq("account_id", account.id).eq("paid", false).eq("written_off", false).neq("status", "cancelled")
       .order("id").range(a, b), "the account's orders"),
     db.from("payments").select("amount, tip, currency, method, created_at")
@@ -139,6 +141,7 @@ export async function statementOf(account: AccountRow, timeZone?: string | null)
   const charges: StatementCharge[] = orders.map(o => ({
     currency: o.currency,
     orderId: o.id,
+    creditable: o.status !== "pending_payment" && Number(o.total) > 0,
     at: o.charged_at ?? o.created_at,
     tableLabel: o.table_label,
     lines: linesOf(o.items),
@@ -152,7 +155,7 @@ export async function statementOf(account: AccountRow, timeZone?: string | null)
     currency: balances.length === 1 ? balances[0].currency : null,
     balances,
     owed: balances.length > 1 ? 0 : round2(charges.reduce((sum, c) => sum + c.total, 0)),
-    days: byDay(charges, timeZone ?? DEFAULT_TIME_ZONE),
+    days: byDay(await withAccountCredits(db, account.restaurant_id, account.id, charges), timeZone ?? DEFAULT_TIME_ZONE),
     payments: payments.map(p => ({ at: p.created_at, amount: Number(p.amount), tip: Number(p.tip), method: p.method, currency: p.currency })),
     returns: returns.map(r => ({ id: r.id, amount: Number(r.amount), currency: r.currency, status: r.status, created_at: r.created_at })),
     chargedBy: Object.fromEntries(orders.map(o => [o.id, o.charged_by])),

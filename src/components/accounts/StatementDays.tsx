@@ -9,6 +9,7 @@ interface StatementDaysProps {
   days: (Omit<StatementDay, "charges"> & {
     charges: (StatementDay["charges"][number] & { chargedBy?: string | null })[];
   })[];
+  onCredit?: (charge: StatementDay["charges"][number]) => void;
   currency: string;
   timeZone?: string;
 }
@@ -18,7 +19,7 @@ interface StatementDaysProps {
  * charge — the list a customer checks before paying, and the one the till
  * reads back to them. The staff's copy also names who put each charge on.
  */
-export default function StatementDays({ days, currency, timeZone }: StatementDaysProps) {
+export default function StatementDays({ days, currency, timeZone, onCredit }: StatementDaysProps) {
   const t = useT();
   const { locale } = useLocale();
   const day = (key: string) =>
@@ -58,6 +59,15 @@ export default function StatementDays({ days, currency, timeZone }: StatementDay
                   </li>
                 ))}
               </ul>
+              {c.credits?.map((credit, index) => <p className="tt-muted" key={`${credit.at}-${index}`}>
+                {t("accountCredit.line", { amount: formatMoney(credit.amount, credit.currency) })}
+                {SEP}{new Intl.DateTimeFormat(dateLocale(locale), { dateStyle: "medium", timeStyle: "short", timeZone }).format(new Date(credit.at))}
+                {credit.actor && <>{SEP}{t("accountCredit.by", { who: credit.actor })}</>}
+                {credit.reason && <>{SEP}{t(`accountCredit.${credit.reason}`)}</>}
+                {credit.note && <>{SEP}{credit.note}</>}
+              </p>)}
+              {onCredit && c.creditable && <button type="button" className="tt-btn tt-btn-ghost tt-btn-sm"
+                onClick={() => onCredit(c)}>{t("accountCredit.action")}</button>}
             </div>
           ))}
         </section>

@@ -1,3 +1,4 @@
+import { attackAccountCredit } from "./attack-account-credit.mjs";
 // ============================================================================
 // Customer accounts, attacked by people who are signed in.
 //
@@ -42,6 +43,7 @@ export async function attackAccounts({ admin, post, who, home, neighbour, ok, ba
     (await admin.from("payments").select("amount, tip").eq("account_id", accountId)).data ?? [];
 
   try {
+    await attackAccountCredit({ admin, post, who, home, neighbour, ok, bad, account, order });
     const mine = await account(home.id, 1000);
     const theirs = await account(neighbour.id, 1000);
 

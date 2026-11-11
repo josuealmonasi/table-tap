@@ -56,7 +56,8 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     // Without the order ids: row ids are nobody's business outside the staff.
     days: statement.days.map(d => ({
       ...d,
-      charges: d.charges.map(c => ({ at: c.at, tableLabel: c.tableLabel, lines: c.lines, total: c.total, currency: c.currency })),
+      charges: d.charges.map(c => ({ at: c.at, tableLabel: c.tableLabel, lines: c.lines, total: c.total, currency: c.currency,
+        credits: c.credits?.map(({ at, amount, currency }) => ({ at, amount, currency })) })),
     })),
     payments: statement.payments,
     returns: statement.returns,

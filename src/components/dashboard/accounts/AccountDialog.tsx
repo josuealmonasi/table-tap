@@ -11,6 +11,7 @@ import { qrSvg } from "@/lib/qr";
 import type { StatementDay } from "@/lib/accounts";
 import type { AccountListItem } from "@/hooks/useOpenAccounts";
 import StatementDays from "@/components/accounts/StatementDays";
+import AccountCreditDialog from "./AccountCreditDialog";
 import SettleAccountDialog from "./SettleAccountDialog";
 import { owedLabel, type CurrencyBalance } from "@/lib/currency-balances";
 
@@ -44,6 +45,7 @@ export default function AccountDialog({ account, onClose, currency, timeZone, ca
   const [statement, setStatement] = useState<StaffStatement | null>(null);
   const [failed, setFailed] = useState(false);
   const [svg, setSvg] = useState<string | null>(null);
+  const [crediting, setCrediting] = useState<StatementDay["charges"][number] | null>(null);
   const [collecting, setCollecting] = useState<string | null>(null);
   const [limit, setLimit] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -55,6 +57,7 @@ export default function AccountDialog({ account, onClose, currency, timeZone, ca
     if (!account) return;
     let live = true;
     setStatement(null);
+    setCrediting(null);
     setFailed(false);
     setLimit(String(account.credit_limit));
     fetch(`/api/accounts?id=${account.id}`)
@@ -106,7 +109,7 @@ export default function AccountDialog({ account, onClose, currency, timeZone, ca
 
   return (
     <>
-      <Modal open onClose={onClose} maxWidth={560} title={account.name}>
+      <Modal open={!crediting} onClose={onClose} maxWidth={560} title={account.name}>
         <p className="tt-account-owed">
           {t("accounts.owesOf", { owed: owedLabel(balances, account.currency ?? currency), limit: money(Number(account.credit_limit)) })}
         </p>
@@ -129,6 +132,7 @@ export default function AccountDialog({ account, onClose, currency, timeZone, ca
             }))}
             currency={currency}
             timeZone={timeZone}
+            onCredit={canManage ? setCrediting : undefined}
           />
         )}
 
@@ -210,6 +214,9 @@ export default function AccountDialog({ account, onClose, currency, timeZone, ca
           </div>
         )}
       </Modal>
+      {crediting && <AccountCreditDialog charge={crediting} currency={crediting.currency ?? currency}
+        owed={balances.find(b => b.currency === (crediting.currency ?? currency))?.amount ?? 0}
+        onClose={() => setCrediting(null)} onCredited={() => { setAttempt(n => n + 1); onChanged(); }} />}
       <SettleAccountDialog
         key={selected?.currency}
         open={Boolean(collecting)}
