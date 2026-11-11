@@ -1,7 +1,7 @@
 import { beforeEach, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
 
-const update = vi.hoisted(() => vi.fn((_row: Record<string, unknown>) => ({ eq: async () => ({ error: null }) })));
+const update = vi.hoisted(() => vi.fn((row: Record<string, unknown>) => ({ row, eq: async () => ({ error: null }) })));
 vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({ from: () => ({ update }) }) }));
 vi.mock("@/lib/api-guard", () => ({ actingManager: async () => ({ role: "owner", restaurantId: "r", email: "owner" }) }));
 vi.mock("@/lib/plan-guard", () => ({ frozenBlocks: async () => null, planBlocks: async () => null }));
