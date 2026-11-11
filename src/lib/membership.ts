@@ -1,4 +1,5 @@
 import { cache } from "react";
+import type { User } from "@supabase/supabase-js";
 import { currentUser } from "@/lib/current-user";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { Restaurant } from "@/lib/types";
@@ -103,6 +104,11 @@ export interface Membership {
   role: Role;
 }
 
+interface VerifiedMembership {
+  membership: Membership;
+  user: User;
+}
+
 /**
  * The restaurant row as pages may see it: everything but its credentials.
  *
@@ -142,7 +148,7 @@ interface StaffRow {
  * Still runs on the user-scoped client, so RLS applies exactly as before —
  * this is a round-trip change, not a permission change.
  */
-export const getMembership = cache(async (): Promise<Membership | null> => {
+export const getMembershipWithUser = cache(async (): Promise<VerifiedMembership | null> => {
   const user = await currentUser();
   if (!user) return null;
 
@@ -173,7 +179,7 @@ export const getMembership = cache(async (): Promise<Membership | null> => {
   const failed = ownedRes.error ?? staffRes.error;
   if (failed) throw new Error(`membership lookup failed: ${failed.message}`);
 
-  if (ownedRes.data) return { restaurant: withoutCredentials(ownedRes.data as Restaurant), role: "owner" };
+  if (ownedRes.data) return { user, membership: { restaurant: withoutCredentials(ownedRes.data as Restaurant), role: "owner" } };
 
   const staff = staffRes.data;
   if (!staff?.restaurant) return null;
@@ -181,5 +187,10 @@ export const getMembership = cache(async (): Promise<Membership | null> => {
   // map through directly. An unrecognised role falls back to the least
   // privileged one rather than being trusted.
   const role: Role = ROLES.includes(staff.role as Role) ? (staff.role as Role) : "kitchen";
-  return { restaurant: withoutCredentials(staff.restaurant), role };
+  return { user, membership: { restaurant: withoutCredentials(staff.restaurant), role } };
+});
+
+/** Keep the verified auth user server-side; page membership props stay unchanged. */
+export const getMembership = cache(async (): Promise<Membership | null> => {
+  return (await getMembershipWithUser())?.membership ?? null;
 });

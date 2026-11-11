@@ -4,7 +4,8 @@ import { MEMBER_COOKIE, newMemberToken } from "@/lib/table-member-cookie";
 
 const state = vi.hoisted(() => ({ role: "waiter", restaurant: "11111111-1111-1111-1111-111111111111", member: false, rpc: vi.fn() }));
 vi.mock("@/lib/current-user", () => ({ currentUser: async () => ({ email: "staff@test" }) }));
-vi.mock("@/lib/membership", () => ({ getMembership: async () => ({ role: state.role, restaurant: { id: state.restaurant } }), MANAGES: () => false }));
+vi.mock("@/lib/membership", () => ({ getMembership: async () => ({ role: state.role, restaurant: { id: state.restaurant } }),
+  getMembershipWithUser: async () => ({ membership: { role: state.role, restaurant: { id: state.restaurant } }, user: { email: "staff@test" } }), MANAGES: () => false }));
 vi.mock("@/lib/rate-limit", () => ({ isRateLimited: async () => false, isRoomLimited: async () => false, isTableLimited: async () => false, clientKey: () => "test", PHONES_PER_ADDRESS: 160, forTheRoom: (n: number) => n }));
 vi.mock("@/lib/api-error", () => ({ apiError: async (error: string, status: number) => NextResponse.json({ error }, { status }) }));
 vi.mock("@/lib/table-membership", () => ({ tableMember: async () => state.member ? { id: "member" } : null }));

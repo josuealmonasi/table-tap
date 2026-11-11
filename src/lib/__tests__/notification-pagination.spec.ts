@@ -58,7 +58,7 @@ it("finishes the unread page before continuing into read history", async () => {
   expect(result.notifications).toHaveLength(50);
   expect(result.notifications[0].id).toBe(notice(99).id);
   expect(result.nextCursor).toBe(`r|${notice(2).created_at}|${notice(2).id}`);
-  expect(state.queries[2].not).toHaveBeenCalledWith("read_at", "is", null);
+  expect(state.queries[3].not).toHaveBeenCalledWith("read_at", "is", null);
 });
 it("continues read history without replaying unread entries", async () => {
   state.results.push({ data: [{ ...notice(1), read_at: "2026-10-29T13:00:00Z" }], error: null }, { count: 1, error: null });
