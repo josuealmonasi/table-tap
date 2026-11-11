@@ -152,6 +152,8 @@ export type Restaurant = {
   auto_print_kitchen?: boolean;
   /** The ticket's typeface (ticket-font-ids.ts). */
   ticket_font?: string;
+  /** The till prints the customer's ticket on every charge. Off by default: paperless. */
+  print_ticket_at_till?: boolean;
   /** Which version of the terms this restaurant's owner accepted. */
   terms_version?: string | null;
   /** The subscription tier this restaurant is on. */

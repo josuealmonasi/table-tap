@@ -1948,9 +1948,11 @@ foundingLeftBody: "Quien contrata ahora conserva este precio de suscripción mie
   dash: {
     partlyPaid: "{amount} ya cobrado",
     splitting: "Dividiendo · {paid} de {of} pagadas · {amount} recibido",
-    printingTitle: "Impresora de cocina",
+    printingTitle: "Impresión",
     autoPrintLabel: "Imprimir los pedidos automáticamente",
     autoPrintHint: "Cada pedido que llega a la barra se imprime en la cocina.",
+    tillPrintLabel: "Imprimir el ticket al cobrar en caja",
+    tillPrintHint: "Apagado no se gasta papel: el ticket queda a un toque en la confirmación de la venta, por correo, en PDF y para reimprimir desde Pedidos.",
     printerUrlLabel: "Dirección de la impresora",
     printerUrlNone: "Todavía no hay dirección. Crea una y captúrala en la configuración CloudPRNT de la impresora.",
     printerUrlHidden: "Ya está configurada. Si creas una dirección nueva, la anterior deja de funcionar.",

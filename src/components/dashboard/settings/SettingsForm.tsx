@@ -93,6 +93,7 @@ export default function SettingsForm({
               whoever is running the shift is who turns it off when it jams. */}
           <PrintingCard
             autoPrint={restaurant.auto_print_kitchen === true}
+            tillPrint={restaurant.print_ticket_at_till === true}
             hasToken={printerConfigured}
             saving={saving}
             save={save}
