@@ -75,8 +75,11 @@ export async function shiftSumOf(restaurantId: string, shift: CashShift, until: 
   if (error || !data) throw new Error(`the shift's total: ${error?.message ?? "shift not found"}`);
   // `tips` must be carried: dropped here, the shift's "of which, tips" line
   // never showed (Codex review of #603).
-  return { opening: Number(data.opening), cashSales: Number(data.cashSales), tips: Number(data.tips ?? 0),
-    withdrawn: Number(data.withdrawn), expected: Number(data.expected) };
+  return {
+    opening: Number(data.opening), cashSales: Number(data.cashSales),
+    tips: Number(data.tips ?? 0), tips_out: Number(data.tips_out ?? 0),
+    withdrawn: Number(data.withdrawn), expected: Number(data.expected),
+  };
 }
 
 /** What happened to the money during a shift: refunds, discounts, cancellations, withdrawals. */

@@ -95,6 +95,7 @@ export default function ShiftRecord({ view, timeZone, restaurantName }: ShiftRec
         row(t("corte.opening"), money(sum.opening)) +
         row(`+ ${t("corte.cashSales")}`, money(sum.cashSales)) +
         (Number(sum.tips) > 0 ? row(t("corte.cashTips"), money(Number(sum.tips))) : "") +
+        (Number(sum.tips_out) > 0 ? row(t("corte.tipsOut"), money(Number(sum.tips_out))) : "") +
         row(`− ${t("corte.withdrawals")}`, money(sum.withdrawn)) +
         row(t("corte.expected"), money(Number(shift.expected_cash ?? sum.expected)), true) +
         row(t("shift.countedLabel"), money(Number(shift.counted_cash ?? 0)), true) +
@@ -133,6 +134,14 @@ export default function ShiftRecord({ view, timeZone, restaurantName }: ShiftRec
       </div>
 
       <div className="tt-cashbox-sum" role="table" aria-label={t("shift.sheetTitle")}>
+        {Number(sum.tips) > 0 && <div className="tt-cashbox-line tt-muted" role="row">
+          <span role="cell">{t("corte.cashTips")}</span>
+          <span role="cell">{money(Number(sum.tips))}</span>
+        </div>}
+        {Number(sum.tips_out) > 0 && <div className="tt-cashbox-line tt-muted" role="row">
+          <span role="cell">{t("corte.tipsOut")}</span>
+          <span role="cell">{money(Number(sum.tips_out))}</span>
+        </div>}
         <div className="tt-cashbox-line" role="row">
           <span role="cell">{t("corte.expected")}</span>
           <span role="cell">{money(Number(shift.expected_cash ?? sum.expected))}</span>
