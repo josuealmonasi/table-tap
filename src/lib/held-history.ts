@@ -11,7 +11,7 @@ interface HistoryRow extends Omit<QueuedOfflineSale, "resolution"> { resolution?
 export async function heldHistory(restaurantId: string, from: number, size: number) {
   const db = createAdminClient();
   const read = (clock: "approved_at" | "resolved_at") => everyRow<HistoryRow>((a, b) => a > from + size ? Promise.resolve({ data: [], error: null }) : db.from("offline_sale_queue")
-    .select(clock === "resolved_at" ? `${columns}, resolution:held_sale_resolutions(disposition, resolved_by, resolved_at, reason, amount, currency)` : columns)
+    .select(clock === "resolved_at" ? `${columns}, resolution:held_sale_resolutions(disposition, resolved_by, resolved_at, reason, amount, currency, cash_receipt_id, payment_id, payout_id)` : columns)
     .eq("restaurant_id", restaurantId).not(clock, "is", null)
     .order(clock, { ascending: false }).order("pos_ref").range(a, Math.min(b, from + size)).returns<HistoryRow[]>(), "held history");
   const [approved, resolved] = await Promise.all([read("approved_at"), read("resolved_at")]);

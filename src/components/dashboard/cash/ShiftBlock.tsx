@@ -8,7 +8,7 @@ import { otherCurrencyLines } from "@/lib/other-currency";
 import { useToast } from "@/components/ui/Toast";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import type { CashMovement } from "@/lib/cash-drawer";
-import type { ShiftView } from "@/lib/cash-shift";
+import { shiftOtherCurrencies, type ShiftView } from "@/lib/cash-shift";
 import CashMovementDialog from "./CashMovementDialog";
 import CloseShiftDialog from "./CloseShiftDialog";
 import ShiftRecord from "./ShiftRecord";
@@ -38,6 +38,7 @@ export default function ShiftBlock({ shifts, currency, timeZone, restaurantName 
   const confirm = useConfirm();
   const [dialog, setDialog] = useState<"opening" | "withdrawal" | "close" | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
+  const [withdrawalError, setWithdrawalError] = useState<{ id: string; message: string } | null>(null);
   const current = shifts.find(v => v.shift.closed_at === null) ?? null;
   const drawerCurrency = current?.shift.currency ?? currency;
   const money = (n: number) => formatMoney(n, drawerCurrency);
@@ -53,6 +54,7 @@ export default function ShiftBlock({ shifts, currency, timeZone, restaurantName 
     });
     if (!ok) return;
     setBusy(w.id);
+    setWithdrawalError(null);
     try {
       const res = await fetch("/api/cash-drawer", {
         method: "DELETE",
@@ -60,12 +62,17 @@ export default function ShiftBlock({ shifts, currency, timeZone, restaurantName 
         body: JSON.stringify({ id: w.id }),
       });
       const data = await res.json().catch(() => ({}));
-      if (!res.ok) toast(data.error ?? t("done.networkError"), "error");
+      if (!res.ok) {
+        const message = data.error ?? t("done.networkError");
+        setWithdrawalError({ id: w.id, message });
+        toast(message, "error");
+      }
       else {
         toast(t("corte.withdrawalRemoved"));
         router.refresh();
       }
     } catch {
+      setWithdrawalError({ id: w.id, message: t("done.networkError") });
       toast(t("done.networkError"), "error");
     } finally {
       setBusy(null);
@@ -113,6 +120,10 @@ export default function ShiftBlock({ shifts, currency, timeZone, restaurantName 
               <span role="cell">{t("corte.cashTips")}</span>
               <span role="cell">{money(Number(current.sum.tips))}</span>
             </div>}
+            {Number(current.sum.unclassifiedCash) > 0 && <div className="tt-cashbox-line" role="row">
+              <span role="cell">+ {t("corte.unclassifiedCash")}</span>
+              <span role="cell">{money(Number(current.sum.unclassifiedCash))}</span>
+            </div>}
             <div className="tt-cashbox-line" role="row">
               <span role="cell">− {t("corte.withdrawals")}</span>
               <span role="cell">{money(current.sum.withdrawn)}</span>
@@ -122,7 +133,7 @@ export default function ShiftBlock({ shifts, currency, timeZone, restaurantName 
               <strong role="cell">{money(current.sum.expected)}</strong>
             </div>
           </div>
-          {otherCurrencyLines(current.otherCurrencies, t, formatMoney).map(line => (
+          {otherCurrencyLines(shiftOtherCurrencies(current), t, formatMoney).map(line => (
             <p key={line} className="tt-muted tt-costs-hint">{line}</p>
           ))}
           {current.withdrawals.length > 0 && (
@@ -135,6 +146,7 @@ export default function ShiftBlock({ shifts, currency, timeZone, restaurantName 
                       {time(w.created_at)} · {w.actor_email}
                       {w.note ? `${SEP}${w.note}` : ""}
                     </span>
+                    {withdrawalError?.id === w.id && <span role="alert">{withdrawalError.message}</span>}
                   </span>
                   <button className="tt-btn tt-btn-ghost tt-btn-sm" disabled={busy === w.id} onClick={() => void strike(w)}>
                     {t("corte.removeWithdrawal")}

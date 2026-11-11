@@ -15,6 +15,9 @@ export interface HeldResolutionDetails {
 
 export interface HeldResolutionBody extends HeldResolutionDetails { restaurantId: string; posRef: string }
 export interface HeldResolution {
+  cash_receipt_id?: string | null;
+  payment_id?: string | null;
+  payout_id?: string | null;
   disposition: HeldDisposition;
   reason: string;
   resolved_by: string;
@@ -64,6 +67,7 @@ export const RESOLUTION_ERRORS: Record<string, [string, number]> = {
   "open shift required": ["heldResolveOpenShift", 409],
   "matching recorded payout required": ["heldResolvePayout", 400],
   "unexpected payout": ["heldResolveUnexpectedPayout", 400],
+  "foreign returned cash takes no payout": ["heldResolveForeignPayout", 400],
   "no_cash takes no amount and no links": ["heldResolveNoCash", 400],
   "unexpected receipt link": ["heldResolveUnexpectedReceipt", 400],
   "new cash receipt required": ["heldResolveNewCash", 400],

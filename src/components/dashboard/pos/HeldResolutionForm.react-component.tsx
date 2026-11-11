@@ -33,6 +33,7 @@ export default function HeldResolutionForm({ sale, currentCurrency, busy, onClos
   const [payoutId, setPayoutId] = useState("");
   const [withdrawals, setWithdrawals] = useState<CashMovement[]>([]);
   const [shiftState, setShiftState] = useState("loading");
+  const [shiftCurrency, setShiftCurrency] = useState<string | null>(null);
   useEffect(() => {
     const controller = new AbortController();
     async function load() {
@@ -41,7 +42,7 @@ export default function HeldResolutionForm({ sale, currentCurrency, busy, onClos
         if (!res.ok) throw new Error("Could not read withdrawals");
         const data = await res.json();
         if (data.restaurantId !== sale.restaurantId) throw new Error("Other restaurant's withdrawals");
-        if (!controller.signal.aborted) { setWithdrawals(data.withdrawals); setShiftState(data.shiftId ? "open" : "closed"); }
+        if (!controller.signal.aborted) { setWithdrawals(data.withdrawals); setShiftCurrency(data.shiftCurrency); setShiftState(data.shiftId ? "open" : "closed"); }
       } catch { if (!controller.signal.aborted) setShiftState("error"); }
     }
     void load();
@@ -50,17 +51,18 @@ export default function HeldResolutionForm({ sale, currentCurrency, busy, onClos
   const noCash = disposition === "no_cash";
   const value = noCash ? 0 : Number(amount);
   const matching = withdrawals.filter(w => w.currency === currency && w.amount === value);
+  const needsPayout = disposition === "returned_cash" && currency === shiftCurrency;
   const ready = reason.trim().length >= 8 && collector.trim() && at && Number.isFinite(Date.parse(at))
     && Number.isFinite(value) && value >= 0 && value <= 1_000_000 && (noCash || value > 0)
     && (disposition !== "duplicate" || /^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(link))
-    && (disposition !== "returned_cash" || (shiftState === "open" && matching.some(w => w.id === payoutId)));
+    && (disposition !== "returned_cash" || (shiftState === "open" && Boolean(shiftCurrency) && (!needsPayout || matching.some(w => w.id === payoutId))));
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     if (!ready || busy) return;
     await onSubmit({ disposition, reason: reason.trim(), collector: collector.trim(), amount: value,
       currency: currency as "MXN" | "USD", collectedAt: new Date(at).toISOString(),
       ...(disposition === "duplicate" ? { [linkKind]: link } : {}),
-      ...(disposition === "returned_cash" ? { payoutId } : {}),
+      ...(needsPayout ? { payoutId } : {}),
     });
   }
   return <Modal open onClose={onClose} title={t("heldResolve.action")} maxWidth={540}>
@@ -87,13 +89,13 @@ export default function HeldResolutionForm({ sale, currentCurrency, busy, onClos
         </label>
         {disposition === "returned_cash" && <>
           {shiftState !== "open" && <p role="status">{t(shiftState === "closed" ? "apiErr.heldResolveOpenShift" : shiftState === "error" ? "done.networkError" : "common.loading")}</p>}
-          <label className="tt-field"><span>{t("heldResolve.payout")}</span>
+          {needsPayout && <label className="tt-field"><span>{t("heldResolve.payout")}</span>
             <select className="tt-input" required value={payoutId} onChange={e => setPayoutId(e.target.value)}>
               <option value="">{t("heldResolve.choosePayout")}</option>
               {matching.map(w => <option key={w.id} value={w.id}>{formatMoney(w.amount, w.currency)} · {w.note ?? w.created_at}</option>)}
             </select>
-          </label>
-          {shiftState === "open" && !matching.length && <p>{t("heldResolve.recordPayout")}</p>}
+          </label>}
+          {needsPayout && shiftState === "open" && !matching.length && <p>{t("heldResolve.recordPayout")}</p>}
         </>}
         {disposition === "duplicate" && <>
           <label className="tt-field"><span>{t("heldResolve.linkKind")}</span>

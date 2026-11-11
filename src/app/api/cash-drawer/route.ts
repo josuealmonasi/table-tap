@@ -76,6 +76,7 @@ export async function DELETE(req: NextRequest) {
   });
   if (error) return await apiError("apiErr.generic", 500);
   if (!data) return await apiError("apiErr.cashMovementNotFound", 404);
+  if (data.outcome === "linked") return await apiError("apiErr.cashWithdrawalLinked", 409);
 
   await logEvent({
     restaurantId: actor.restaurantId,

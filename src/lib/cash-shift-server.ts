@@ -76,6 +76,8 @@ export async function shiftSumOf(restaurantId: string, shift: CashShift, until: 
   // `tips` must be carried: dropped here, the shift's "of which, tips" line
   // never showed (Codex review of #603).
   return { opening: Number(data.opening), cashSales: Number(data.cashSales), tips: Number(data.tips ?? 0),
+    unclassifiedCash: Number(data.unclassifiedCash ?? 0),
+    unclassifiedCashByCurrency: Object.fromEntries(Object.entries(data.unclassifiedCashByCurrency ?? {}).map(([currency, amount]) => [currency, Number(amount)])),
     withdrawn: Number(data.withdrawn), expected: Number(data.expected) };
 }
 

@@ -3,8 +3,9 @@ import React, { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { SWRConfig } from "swr";
-const state = vi.hoisted(() => ({ fetch: vi.fn(), method: "cash", resolved: false }));
-vi.mock("@/lib/i18n/context", () => ({ useT: () => (key: string) => key, useLocale: () => ({ locale: "en" }) }));
+import { messagesFor, translate, type Locale } from "@/lib/i18n";
+const state = vi.hoisted(() => ({ fetch: vi.fn(), method: "cash", resolved: false, shiftCurrency: "MXN", shiftId: "open", withdrawals: true, locale: "keys" as "keys" | Locale, links: {} as Record<string, string | null> }));
+vi.mock("@/lib/i18n/context", () => ({ useT: () => (key: string, vars?: Record<string, string | number>) => state.locale === "keys" ? key : translate(messagesFor(state.locale), key, vars), useLocale: () => ({ locale: state.locale === "keys" ? "en" : state.locale }) }));
 vi.mock("@/components/ui/Toast", () => ({ useToast: () => vi.fn() }));
 vi.mock("@/hooks/useOfflineSales", () => ({ useOfflineSales: () => ({ held: [], flush: vi.fn() }) }));
 vi.mock("@/components/ui/Modal", () => ({ Modal: ({ children }: { children: React.ReactNode }) => <div role="dialog">{children}</div> }));
@@ -12,18 +13,18 @@ import HeldSales from "@/components/dashboard/pos/HeldSales";
 const restaurantId = "11111111-1111-4111-8111-111111111111", posRef = "22222222-2222-4222-8222-222222222222", link = "33333333-3333-4333-8333-333333333333";
 const collectedAt = "2026-11-10T12:00:00.000Z";
 const row = () => ({ pos_ref: posRef, collector: "cashier@test.dev", currency: "MXN", approved_at: null, resolved_at: state.resolved ? collectedAt : null,
-  resolution: state.resolved ? { disposition: "no_cash", resolved_by: "manager@test.dev", resolved_at: collectedAt, reason: "No money taken", amount: 0, currency: "MXN" } : null,
+  resolution: state.resolved ? { disposition: "no_cash", resolved_by: "manager@test.dev", resolved_at: collectedAt, reason: "No money taken", amount: 0, currency: "MXN", ...state.links } : null,
   body: { method: state.method, items: [], offline: { at: collectedAt, total: 12.5 } } });
 let host: HTMLDivElement, root: Root;
 beforeEach(() => {
   vi.stubGlobal("React", React); vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true); vi.stubGlobal("fetch", state.fetch);
-  state.method = "cash"; state.resolved = false; state.fetch.mockReset();
+  state.locale = "keys"; state.links = {}; state.method = "cash"; state.resolved = false; state.shiftCurrency = "MXN"; state.shiftId = "open"; state.withdrawals = true; state.fetch.mockReset();
   state.fetch.mockImplementation(async (url: string, init?: RequestInit) => {
     if (init?.method === "POST") {
       state.resolved = true;
       return Response.json({ restaurant_id: restaurantId, pos_ref: posRef, disposition: JSON.parse(String(init.body)).disposition });
     }
-    if (url.endsWith("/resolve")) return Response.json({ restaurantId, shiftId: "open", withdrawals: [{ id: link, amount: 12.5, currency: "MXN", note: "Returned cash" }, { id: "wrong", amount: 1, currency: "MXN" }] });
+    if (url.endsWith("/resolve")) return Response.json({ restaurantId, shiftId: state.shiftId, shiftCurrency: state.shiftCurrency, withdrawals: state.withdrawals ? [{ id: link, amount: 12.5, currency: "MXN", note: "Returned cash" }, { id: "wrong", amount: 1, currency: "MXN" }] : [] });
     return Response.json({ restaurantId, sales: url.includes("history") || !state.resolved ? [row()] : [] });
   });
   host = document.createElement("div"); document.body.append(host); root = createRoot(host);
@@ -67,4 +68,46 @@ it("moves a resolved receipt from pending to history with its disposition and au
     approved: host.textContent?.includes("recovery.approved"), action: host.textContent?.includes("heldResolve.action") }).toEqual({
     pending: false, history: true, disposition: true, reason: true, approved: false, action: false,
   });
+});
+
+it("foreign returned cash submits without a payout or payout instructions", async () => {
+  state.shiftCurrency = "USD"; state.withdrawals = false;
+  await mount(); await click("heldResolve.action"); await radio("returned_cash"); await input("textarea", "Cash already returned");
+  expect(host.textContent).not.toContain("heldResolve.choosePayout");
+  expect(host.textContent).not.toContain("heldResolve.recordPayout");
+  await act(async () => host.querySelector("form")!.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })));
+  const sent = state.fetch.mock.calls.find(([, init]) => init?.method === "POST");
+  expect(sent).toBeDefined();
+  expect(JSON.parse(sent![1].body)).toMatchObject({ disposition: "returned_cash", currency: "MXN", amount: 12.5 });
+  expect(JSON.parse(sent![1].body)).not.toHaveProperty("payoutId");
+});
+it("drawer-currency returns with no matching payout explain what to record and cannot submit", async () => {
+  state.withdrawals = false;
+  await mount(); await click("heldResolve.action"); await radio("returned_cash"); await input("textarea", "Cash already returned");
+  expect(host.textContent).toContain("heldResolve.recordPayout");
+  expect(host.querySelector<HTMLButtonElement>('button[type="submit"]')!.disabled).toBe(true);
+});
+it("foreign returned cash still requires an open shift", async () => {
+  state.shiftCurrency = "USD"; state.shiftId = "";
+  await mount(); await click("heldResolve.action"); await radio("returned_cash"); await input("textarea", "Cash already returned");
+  expect(host.textContent).toContain("apiErr.heldResolveOpenShift");
+  expect(host.textContent).not.toContain("heldResolve.recordPayout");
+  expect(host.querySelector<HTMLButtonElement>('button[type="submit"]')!.disabled).toBe(true);
+});
+
+it.each(["es", "en"] as const)("history exposes each accounting link and copies its full id (%s)", async locale => {
+  state.locale = locale; state.resolved = true;
+  const receipt = "44444444-4444-4444-8444-444444444444", payout = "55555555-5555-4555-8555-555555555555";
+  state.links = { cash_receipt_id: receipt, payment_id: link, payout_id: payout };
+  const writeText = vi.fn().mockResolvedValue(undefined);
+  Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText } });
+  await mount(); await click(translate(messagesFor(locale), "heldSalesView.history"));
+  for (const [key, id] of Object.entries(state.links)) {
+    const label = translate(messagesFor(locale), `heldResolve.${key}`, { id: `${id!.slice(0, 8)}…` });
+    const button = [...host.querySelectorAll("button")].find(b => b.textContent?.trim() === label)!;
+    expect(button, label).toBeDefined(); expect(button.title).toBe(id);
+    await act(async () => button.click());
+    expect(writeText).toHaveBeenLastCalledWith(id);
+  }
+  expect(host.textContent).not.toContain("undefined"); expect(host.textContent).not.toContain("null");
 });

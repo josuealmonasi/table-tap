@@ -22,13 +22,15 @@ vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({ from: () =>
 } }) }));
 import { GET } from "@/app/api/pos/recover/route";
 const get = (search = "") => GET(new NextRequest(`http://localhost/api/pos/recover${search}`));
-const resolution = { disposition: "no_cash", resolved_by: "manager@test.dev", resolved_at: "2026-11-11T12:00:00Z", reason: "No money was taken", amount: 0, currency: "MXN" };
+const resolution = { disposition: "no_cash", resolved_by: "manager@test.dev", resolved_at: "2026-11-11T12:00:00Z", reason: "No money was taken", amount: 0, currency: "MXN", cash_receipt_id: "retained-receipt", payment_id: null, payout_id: "linked-payout" };
 const row = (pos_ref: string, approved_at: string | null, resolved_at: string | null, restaurant_id = "r") => ({ pos_ref, approved_at, resolved_at, restaurant_id });
 beforeEach(() => { state.rows = []; state.reads = []; state.cap = 1000; });
 it("includes resolution audit alongside approvals in decision order", async () => {
   state.rows = [row("approved", "2026-11-10T12:00:00Z", null), { ...row("resolved", null, resolution.resolved_at), resolution: [resolution] },
     row("pending", null, null), { ...row("other", null, "2026-11-12T12:00:00Z", "other"), resolution }];
   const res = await get("?view=history");
+  const resolvedRead = state.reads.find(read => "clock" in read && read.clock === "resolved_at") as { columns: string };
+  for (const key of ["cash_receipt_id", "payment_id", "payout_id"]) expect(resolvedRead.columns).toContain(key);
   expect({ status: res.status, body: await res.json() }).toEqual({ status: 200, body: { restaurantId: "r", hasMore: false, sales: [
     { ...row("resolved", null, resolution.resolved_at), resolution }, { ...row("approved", "2026-11-10T12:00:00Z", null), resolution: null },
   ] } });

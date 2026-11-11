@@ -65,7 +65,8 @@ const errors = [
   ["collector changed", "heldResolveCollector", 409], ["existing accounting requires duplicate resolution", "heldResolveExisting", 409],
   ["one duplicate link required", "heldResolveOneLink", 400], ["matching cash payment required", "heldResolvePayment", 400],
   ["matching cash receipt required", "heldResolveReceipt", 400], ["open shift required", "heldResolveOpenShift", 409],
-  ["matching recorded payout required", "heldResolvePayout", 400], ["unexpected payout", "heldResolveUnexpectedPayout", 400],
+  ["matching recorded payout required", "heldResolvePayout", 400],
+  ["foreign returned cash takes no payout", "heldResolveForeignPayout", 400], ["unexpected payout", "heldResolveUnexpectedPayout", 400],
   ["no_cash takes no amount and no links", "heldResolveNoCash", 400], ["unexpected receipt link", "heldResolveUnexpectedReceipt", 400],
   ["new cash receipt required", "heldResolveNewCash", 400], ["unique", "heldResolveLinkUsed", 409], ["conflict", "heldResolveDecided", 409],
 ] as const;
@@ -80,16 +81,16 @@ it.each([{ data: null, error: { message: "network" } }, { data: null, error: nul
   expect((await post(body)).status).toBe(503);
 });
 it("returns only the acting restaurant's open-shift withdrawals", async () => {
-  state.open.mockResolvedValue({ id }); state.withdrawals.mockResolvedValue([{ id: "payout", amount: 12 }]);
+  state.open.mockResolvedValue({ id, currency: "USD" }); state.withdrawals.mockResolvedValue([{ id: "payout", amount: 12 }]);
   const res = await GET();
   expect({ status: res.status, body: await res.json(), open: state.open.mock.calls, withdrawals: state.withdrawals.mock.calls }).toEqual({
-    status: 200, body: { restaurantId: body.restaurantId, shiftId: id, withdrawals: [{ id: "payout", amount: 12 }] },
+    status: 200, body: { restaurantId: body.restaurantId, shiftId: id, shiftCurrency: "USD", withdrawals: [{ id: "payout", amount: 12 }] },
     open: [[body.restaurantId]], withdrawals: [[body.restaurantId, id]],
   });
 });
 it("offers no withdrawals without an open shift", async () => {
   state.open.mockResolvedValue(null);
-  expect({ body: await (await GET()).json(), calls: state.withdrawals.mock.calls.length }).toEqual({ body: { restaurantId: body.restaurantId, shiftId: null, withdrawals: [] }, calls: 0 });
+  expect({ body: await (await GET()).json(), calls: state.withdrawals.mock.calls.length }).toEqual({ body: { restaurantId: body.restaurantId, shiftId: null, shiftCurrency: null, withdrawals: [] }, calls: 0 });
 });
 it("reports withdrawal read failures", async () => {
   state.open.mockRejectedValue(new Error("offline"));

@@ -26,6 +26,11 @@ export default function HeldSales({ restaurantId, currency }: Props) {
   const [busy, setBusy] = useState(false);
   const [resolving, setResolving] = useState<QueuedOfflineSale | null>(null);
 
+  async function copyLink(id: string): Promise<void> {
+    try { await navigator.clipboard.writeText(id); toast(t("heldResolve.linkCopied")); }
+    catch { toast(t("done.networkError"), "error"); }
+  }
+
   async function resolve(details: HeldResolutionDetails) {
     if (!resolving || busy) return;
     setBusy(true);
@@ -89,6 +94,12 @@ export default function HeldSales({ restaurantId, currency }: Props) {
             {row.resolution && <>
               <span className="tt-muted tt-bill-sub">{t("heldResolve.audit", { by: row.resolution.resolved_by, at: new Date(row.resolution.resolved_at).toLocaleString(dateLocale(locale)), amount: formatMoney(row.resolution.amount, row.resolution.currency) })}</span>
               <span className="tt-bill-sub">{row.resolution.reason}</span>
+              {(["cash_receipt_id", "payment_id", "payout_id"] as const).map(key => {
+                const id = row.resolution?.[key];
+                return id ? <button key={key} className="tt-btn tt-btn-ghost tt-btn-sm" title={id} onClick={() => void copyLink(id)}>
+                  {t(`heldResolve.${key}`, { id: `${id.slice(0, 8)}…` })}
+                </button> : null;
+              })}
             </>}
             <span className="tt-muted tt-bill-sub">{row.collector ?? t("recovery.legacyCollector")}</span></div>
           {!row.approved_at && !row.resolved_at && <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>

@@ -15,7 +15,7 @@ export async function GET(): Promise<NextResponse> {
   try {
     const shift = await openShift(actor.restaurantId);
     const withdrawals = shift ? await shiftWithdrawals(actor.restaurantId, shift.id) : [];
-    return NextResponse.json({ restaurantId: actor.restaurantId, shiftId: shift?.id ?? null, withdrawals });
+    return NextResponse.json({ restaurantId: actor.restaurantId, shiftId: shift?.id ?? null, shiftCurrency: shift?.currency ?? null, withdrawals });
   } catch { return await apiError("apiErr.generic", 503); }
 }
 
