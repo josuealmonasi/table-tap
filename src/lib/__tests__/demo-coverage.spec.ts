@@ -41,9 +41,6 @@ const NOT_DEMO_DATA = new Set([
   "kitchen_tickets", // filled by the trigger on the seeder's orders
   "kitchen_requests", // filled by the trigger on the seeder's service requests
   "account_checkouts", // an online payment in progress; only the pay route opens one
-  // Dormant in journal PR 1: nothing writes it until PR 2 installs the writers
-  // and runs the backfill. The spec below fails once PR 2's journal check exists.
-  "account_movements",
   "restaurant_billing_operations", // an in-flight billing claim; seeding one would block checkout
   "refunds_due", // money taken twice; only the webhook finds one, and a demo with one teaches that it happens
   "refund_failures", // Stripe failing a refund it reported succeeded; only its webhook writes one

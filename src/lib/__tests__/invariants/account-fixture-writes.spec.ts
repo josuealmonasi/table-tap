@@ -3,7 +3,19 @@ import { read, walkAll } from "./helpers";
 import { fixtureBypasses } from "./account-fixture-writes";
 
 const history = "scripts/account-journal-probe-fixtures.mjs";
-const scripts = walkAll("scripts").filter(file => file.endsWith(".mjs") && !file.includes("/__tests__/"));
+// The deferred-check attack probe writes a raw account receipt on purpose: it
+// proves the journal check refuses one. It runs only inside the dev probe,
+// which refuses production — the last two specs below hold it to that.
+const attackProbe = "scripts/account-journal-deferred-probe.mjs";
+const scripts = walkAll("scripts").filter(file => file.endsWith(".mjs") && !file.includes("/__tests__/") && file !== attackProbe);
+
+it("the raw-write attack probe is reached only from the probe that refuses production", () => {
+  const importers = walkAll("scripts").concat(walkAll("src"))
+    .filter(file => /\.(m?js|tsx?)$/.test(file) && file !== attackProbe && !file.includes("/__tests__/")
+      && read(file).includes("account-journal-deferred-probe"));
+  expect(importers).toEqual(["scripts/probe-account-journal.mjs"]);
+  expect(read("scripts/probe-account-journal.mjs")).toContain('throw new Error("refusing to probe production or an unknown database")');
+});
 
 it("gate fixtures use writers for account charges, receipts and adjustments", () => {
   expect(scripts.flatMap(file => fixtureBypasses(read(file), file === history).map(failure => `${file}:${failure}`))).toEqual([]);

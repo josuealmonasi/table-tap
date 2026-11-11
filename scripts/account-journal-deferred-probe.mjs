@@ -144,8 +144,7 @@ async function probeKitchenCommit(db) {
   const restaurant = randomUUID();
   try {
     await db.query("begin");
-    await db.query(`insert into restaurants(id,name,plan,plan_status,currency,account_journal_started_at)
-      values($1,'Journal kitchen probe','servicio','active','MXN',now())`, [restaurant]);
+    await db.query("insert into restaurants(id,name,plan,plan_status,currency,account_journal_started_at) values($1,'Journal kitchen probe','servicio','active','MXN',now())", [restaurant]);
     const owner = await account(db, restaurant), [id] = await chargedOrders(db, restaurant, owner);
     await db.query("update orders set status='preparing' where id=$1", [id]);
     await db.query("commit");
