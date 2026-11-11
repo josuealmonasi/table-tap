@@ -9151,7 +9151,11 @@ create table if not exists held_sale_resolutions (
   foreign key (restaurant_id, payout_id) references cash_movements(restaurant_id, id),
   check ((disposition = 'retained_cash' and amount > 0 and cash_receipt_id is not null and payment_id is null and payout_id is null)
     or (disposition = 'duplicate' and amount > 0 and num_nonnulls(payment_id, cash_receipt_id) = 1 and payout_id is null)
-    or (disposition = 'returned_cash' and amount > 0 and cash_receipt_id is not null and payout_id is not null and payment_id is null)
+    -- Handed back in the drawer's currency: its receipt and the withdrawal that
+    -- paid it out. In another currency the drawer never held it in its books
+    -- (withdrawals are in the drawer's currency): neither link.
+    or (disposition = 'returned_cash' and amount > 0 and payment_id is null
+      and ((cash_receipt_id is not null and payout_id is not null) or (cash_receipt_id is null and payout_id is null)))
     or (disposition = 'no_cash' and amount = 0 and num_nonnulls(payment_id, cash_receipt_id, payout_id) = 0))
 );
 -- Two receipts dismissed as duplicates of the same money would make one
@@ -9166,6 +9170,8 @@ revoke all on held_cash_receipts from public, authenticated;
 revoke all on held_cash_receipts from anon;
 revoke all on held_sale_resolutions from public, authenticated;
 revoke all on held_sale_resolutions from anon;
+-- Evidence: the service key reads it; only resolve_held_sale writes it.
+revoke all on held_cash_receipts, held_sale_resolutions from service_role;
 grant select on held_cash_receipts, held_sale_resolutions to service_role;
 
 -- The resolution and the raw receipt are evidence: frozen, and a late approval
@@ -9253,15 +9259,21 @@ begin
     if p_amount <= 0 or p_payment is not null then raise exception 'new cash receipt required'; end if;
     select * into s from cash_shifts where restaurant_id = p_restaurant and closed_at is null for update;
     if not found then raise exception 'open shift required'; end if;
-    if p_disposition = 'returned_cash' then
-      if p_payout is null or not exists(select 1 from cash_movements where restaurant_id = p_restaurant and id = p_payout
-        and kind = 'withdrawal' and shift_id = s.id and currency = p_currency and amount = p_amount) then
-        raise exception 'matching recorded payout required';
-      end if;
-    elsif p_payout is not null then raise exception 'unexpected payout'; end if;
     v_at := clock_timestamp();
-    insert into held_cash_receipts(restaurant_id, pos_ref, shift_id, amount, currency, collector, collected_at, recognized_at)
-      values(p_restaurant, p_ref, s.id, p_amount, p_currency, btrim(p_collector), p_collected_at, v_at) returning id into v_receipt;
+    if p_disposition = 'returned_cash' and p_currency <> s.currency then
+      -- Foreign cash handed back: no withdrawal can record it, and it never
+      -- entered this drawer's books. Recorded as returned, with no links.
+      if p_payout is not null then raise exception 'foreign returned cash takes no payout'; end if;
+    else
+      if p_disposition = 'returned_cash' then
+        if p_payout is null or not exists(select 1 from cash_movements where restaurant_id = p_restaurant and id = p_payout
+          and kind = 'withdrawal' and shift_id = s.id and currency = p_currency and amount = p_amount) then
+          raise exception 'matching recorded payout required';
+        end if;
+      elsif p_payout is not null then raise exception 'unexpected payout'; end if;
+      insert into held_cash_receipts(restaurant_id, pos_ref, shift_id, amount, currency, collector, collected_at, recognized_at)
+        values(p_restaurant, p_ref, s.id, p_amount, p_currency, btrim(p_collector), p_collected_at, v_at) returning id into v_receipt;
+    end if;
   elsif p_amount <> 0 or num_nonnulls(p_payment, p_cash_receipt, p_payout) <> 0 then
     raise exception 'no_cash takes no amount and no links';
   end if;
@@ -9939,6 +9951,14 @@ begin
   insert into restaurant_accounting_records (restaurant_id, source_table, source_id, row_data)
     select p_restaurant, 'offline_sale_queue', q.pos_ref, to_jsonb(q)
     from (select * from offline_sale_queue where restaurant_id = p_restaurant for update) q;
+  -- A resolved receipt's cash and its audit are books too: a closed shift
+  -- counted that cash, and only these rows say why (Codex review of #611).
+  insert into restaurant_accounting_records (restaurant_id, source_table, source_id, row_data)
+    select p_restaurant, 'held_cash_receipts', c.id, to_jsonb(c)
+    from (select * from held_cash_receipts where restaurant_id = p_restaurant for update) c;
+  insert into restaurant_accounting_records (restaurant_id, source_table, source_id, row_data)
+    select p_restaurant, 'held_sale_resolutions', r.pos_ref, to_jsonb(r)
+    from (select * from held_sale_resolutions where restaurant_id = p_restaurant for update) r;
   -- The privacy notice keeps admission decisions with the visit and orders.
   -- Members have no restaurant_id; reach them only through this restaurant's visits.
   insert into restaurant_accounting_records (restaurant_id, source_table, source_id, row_data)
@@ -10536,12 +10556,21 @@ returns jsonb language sql stable security definer set search_path = public as $
     select coalesce(sum(c.amount), 0) amount from held_cash_receipts c, s
       where c.restaurant_id = p_restaurant and c.shift_id = s.id and c.currency = s.currency
         and c.recognized_at between s.opened_at and s.until_at
+  ), unclassified_currencies as (
+    -- Every currency, the drawer's included: foreign cash kept in the drawer is
+    -- shown beside the other-currency takings, never added to expected.
+    select coalesce(jsonb_object_agg(g.currency, g.amount), '{}'::jsonb) amounts from (
+      select c.currency, round(sum(c.amount), 2) amount from held_cash_receipts c, s
+        where c.restaurant_id = p_restaurant and c.shift_id = s.id
+          and c.recognized_at between s.opened_at and s.until_at group by c.currency
+    ) g
   )
   select jsonb_build_object('opening', round(s.opening_amount, 2),
     'cashSales', round(r.amount - f.amount - h.amount, 2), 'tips', greatest(0, round(r.tip - f.tip, 2)), 'withdrawn', round(w.amount, 2),
-    'unclassifiedCash', round(u.amount, 2),
+    'unclassifiedCash', round(u.amount, 2), 'unclassifiedCashByCurrency', uc.amounts,
     'expected', round(s.opening_amount + r.amount + u.amount - f.amount - h.amount - w.amount, 2))
-    from s cross join receipts r cross join returns f cross join old_returns h cross join withdrawals w cross join unclassified u;
+    from s cross join receipts r cross join returns f cross join old_returns h cross join withdrawals w
+      cross join unclassified u cross join unclassified_currencies uc;
 $$;
 revoke all on function public.cash_shift_totals(uuid, uuid, timestamptz) from public, anon, authenticated;
 grant execute on function public.cash_shift_totals(uuid, uuid, timestamptz) to service_role;
@@ -10597,6 +10626,11 @@ begin
   perform public.lock_restaurant_money(p_restaurant);
   select * into s from cash_shifts where restaurant_id = p_restaurant and id = p_shift and closed_at is null for update;
   if not found then return null; end if;
+  -- A withdrawal that paid back a resolved held receipt is that receipt's
+  -- evidence: say so instead of letting the foreign key answer with a 500.
+  if exists(select 1 from held_sale_resolutions where restaurant_id = p_restaurant and payout_id = p_movement) then
+    return jsonb_build_object('outcome', 'linked');
+  end if;
   delete from cash_movements where restaurant_id = p_restaurant and shift_id = s.id and id = p_movement and kind = 'withdrawal'
     returning * into m;
   if not found then return null; end if;
