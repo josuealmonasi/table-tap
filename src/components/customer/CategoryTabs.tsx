@@ -27,7 +27,7 @@ export default function CategoryTabs({
   // edge now fades, and the chosen one scrolls into view (layout audit,
   // bar-cut-off, 2026-11-10).
   const strip = useRef<HTMLDivElement>(null);
-  useScrollMore(strip, activeCat);
+  useScrollMore(strip, activeCat, ".tt-cat-on");
   return (
     <div ref={strip} className="tt-cats">
       <button

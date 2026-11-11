@@ -12,7 +12,11 @@ import { useEffect, type RefObject } from "react";
  * nothing said there were six more. The stylesheet fades the edge that has
  * more; this hook is what knows which edge that is.
  */
-export function useScrollMore(ref: RefObject<HTMLElement | null>, currentKey: string): void {
+export function useScrollMore(
+  ref: RefObject<HTMLElement | null>,
+  currentKey: string,
+  currentSelector = "[aria-current='page']",
+): void {
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
@@ -25,7 +29,9 @@ export function useScrollMore(ref: RefObject<HTMLElement | null>, currentKey: st
     };
     // A section past the edge would be open with no tab lit, so the bar
     // scrolls it into view: Analíticas is the last of sixteen.
-    const current = el.querySelector<HTMLElement>("[aria-current='page']");
+    // The menu's category chips mark the chosen one with a class, not
+    // aria-current, so each caller says how its current item is marked.
+    const current = el.querySelector<HTMLElement>(currentSelector);
     if (current && el.scrollWidth > el.clientWidth) {
       const box = el.getBoundingClientRect();
       const tab = current.getBoundingClientRect();
@@ -35,9 +41,14 @@ export function useScrollMore(ref: RefObject<HTMLElement | null>, currentKey: st
     el.addEventListener("scroll", mark, { passive: true });
     const resized = new ResizeObserver(mark);
     resized.observe(el);
+    // A badge arriving or the language changing can make the strip overflow
+    // without the strip itself resizing: re-measure, never re-centre.
+    const changed = new MutationObserver(mark);
+    changed.observe(el, { childList: true, characterData: true, subtree: true });
     return () => {
       el.removeEventListener("scroll", mark);
       resized.disconnect();
+      changed.disconnect();
     };
-  }, [ref, currentKey]);
+  }, [ref, currentKey, currentSelector]);
 }
