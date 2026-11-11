@@ -7175,6 +7175,12 @@ a.tt-user-plan:hover {
 .tt-split .tt-split-ask {
   margin: 0;
 }
+/* The totals card can follow the split card directly (no tip or coupon row
+   between them when the restaurant takes no cards): the two borders met with
+   0px between them at 360px (dialogs sweep, 2026-11-11). */
+.tt-split + .tt-card {
+  margin-top: 12px;
+}
 .tt-split-ask input {
   width: 17px;
   height: 17px;
