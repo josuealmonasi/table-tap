@@ -4,6 +4,7 @@ import { useLocale, useT } from "@/lib/i18n/context";
 import { dateLocale } from "@/lib/format";
 import { useLogWords } from "@/hooks/useLogWords";
 import type { TrailLine } from "@/lib/cash-shift";
+import { SEP } from "@/lib/separator";
 
 interface ShiftTrailProps {
   trail: TrailLine[];
@@ -29,7 +30,7 @@ export default function ShiftTrail({ trail, currency, timeZone }: ShiftTrailProp
           <span className="tt-cashbox-what">
             <span>
               {new Date(line.created_at).toLocaleTimeString(dateLocale(locale), { timeZone, hour: "2-digit", minute: "2-digit" })}
-              {" · "}
+              {SEP}
               {line.actor_email ?? "—"} {describe(line)}
             </span>
             <span className="tt-muted">{specifics(line)}</span>

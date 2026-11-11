@@ -7,6 +7,7 @@ import type { QrGrid } from "@/lib/loyalty/qr-grid";
 import { nextStep } from "@/lib/loyalty/next-step";
 import { dateLocale } from "@/lib/format";
 import LadderSteps from "@/components/loyalty/LadderSteps";
+import { SEP } from "@/lib/separator";
 
 /** What /api/rewards answers: what the card itself would show, and no more. */
 export interface CardStanding {
@@ -104,7 +105,7 @@ export default function RewardsCard({ card, locale }: RewardsCardProps) {
             {card.redeemed.map((r, i) => (
               <li key={i}>
                 {dayLabel(r.day, locale)}
-                {r.reward ? ` · ${r.reward}` : ""}
+                {r.reward ? `${SEP}${r.reward}` : ""}
               </li>
             ))}
           </ul>

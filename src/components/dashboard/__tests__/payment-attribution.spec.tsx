@@ -12,7 +12,7 @@ describe("old payment with unknown currency", () => {
     const html = renderToStaticMarkup(<PaymentAttribution timeZone="UTC" receipts={[
       { id: "old", amount: 100, tip: 0, currency: null, created_at: "2026-01-01T12:00:00Z" },
     ]} />);
-    expect(html).toContain("100.00 · attribution.currencyUnknown");
+    expect(html).toContain("100.00\u00a0· attribution.currencyUnknown");
     expect(html).not.toMatch(/MX\$|USD|\$100/);
   });
 });

@@ -4,6 +4,7 @@ import { formatMoney, dateLocale } from "@/lib/format";
 import { useLocale, useT } from "@/lib/i18n/context";
 import type { Coupon } from "@/hooks/useCoupons";
 import { DeleteIcon, EditIcon } from "@/components/ui/icons";
+import { SEP } from "@/lib/separator";
 
 interface CouponRowProps {
   coupon: Coupon;
@@ -56,7 +57,7 @@ export default function CouponRow({
     } else if (c.ends_at) {
       parts.push(t("coupons.until", { to: day(c.ends_at) }));
     }
-    return parts.join(" · ");
+    return parts.join(SEP);
   }
 
   return (

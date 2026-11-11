@@ -8,6 +8,7 @@ import type { StockView } from "@/lib/costs/stock-server";
 import { useWhen } from "@/hooks/useWhen";
 import CountDialog from "./CountDialog";
 import { matchesIngredient, stockCountOrder } from "./stock-search";
+import { SEP } from "@/lib/separator";
 
 interface StockPanelProps {
   stock: StockView;
@@ -63,7 +64,7 @@ export default function StockPanel({ stock, currency, timeZone }: StockPanelProp
                 {last && (
                   <span className="tt-costs-product-meta tt-muted">
                     {t("costs.lastCount", { when: when(last.created_at), who: last.counted_by })}
-                    {" · "}
+                    {SEP}
                     {diff === null
                       ? t("costs.countFirst")
                       : Math.abs(diff) < 0.0005

@@ -7,6 +7,7 @@ import { formatMoney } from "@/lib/format";
 import { useToast } from "@/components/ui/Toast";
 import { parseCsv } from "@/lib/csv";
 import { planImport, sectionsOf, type ImportPlan, type ImportRow } from "@/lib/menu-import";
+import { SEP } from "@/lib/separator";
 
 interface ImportMenuDialogProps {
   open: boolean;
@@ -146,7 +147,7 @@ export default function ImportMenuDialog({
                   {plan.problems.map(p => (
                     <li key={p.line}>
                       {t("menuImport.line", { n: p.line })}
-                      {p.name ? ` · ${p.name}` : ""} — {t(`menuImport.reason.${p.reason}`)}
+                      {p.name ? `${SEP}${p.name}` : ""} — {t(`menuImport.reason.${p.reason}`)}
                     </li>
                   ))}
                 </ul>

@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useT } from "@/lib/i18n/context";
 import type { PendingPhone } from "@/lib/table-member-requests";
+import { SEP } from "@/lib/separator";
 
 interface PhoneRequestProps {
   restaurantId: string;
@@ -35,8 +36,8 @@ export default function PhoneRequest({ restaurantId, phone, onDecided }: PhoneRe
   return (
     <div className="tt-request-chip" style={{ flexWrap: "wrap" }}>
       <span>
-        <strong>{t("dash.tableN", { label: phone.tableLabel })}</strong>{" · "}
-        {t("join.phone", { code: phone.id.slice(0, 6).toUpperCase() })}{" · "}{t("join.ask")}
+        <strong>{t("dash.tableN", { label: phone.tableLabel })}</strong>{SEP}
+        {t("join.phone", { code: phone.id.slice(0, 6).toUpperCase() })}{SEP}{t("join.ask")}
       </span>
       <div className="tt-row" style={{ flexWrap: "wrap", gap: 8 }}>
         <button type="button" className="tt-btn tt-btn-primary tt-btn-sm" disabled={busy} onClick={approve}>{t("join.approve")}</button>

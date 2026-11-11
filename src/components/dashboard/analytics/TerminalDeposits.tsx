@@ -11,6 +11,7 @@ import type { TerminalView } from "@/lib/terminal-server";
 import { useCostsSend } from "@/hooks/useCostsSend";
 import { useDayLabel, useTimeLabel } from "@/hooks/useWhen";
 import DepositDialog from "./DepositDialog";
+import { SEP } from "@/lib/separator";
 
 interface TerminalDepositsProps {
   terminal: TerminalView;
@@ -84,13 +85,13 @@ export default function TerminalDeposits({ terminal, currency, timeZone }: Termi
                   {d.count === 0 && !d.deposit ? t("terminal.givenBackNext", { amount: money(d.givenBack) }) : (
                     <>
                       {t("terminal.taken", { n: d.count, amount: money(d.takings), tips: money(d.tips) })}
-                      {" · "}{t("terminal.fee", { amount: money(d.fee) })}
-                      {d.givenBack > 0 && ` · ${t("terminal.givenBack", { amount: money(d.givenBack) })}`}
-                      {" · "}{t("terminal.expected", { amount: money(d.expected), day: dayLabel(d.expectedOn) })}
+                      {SEP}{t("terminal.fee", { amount: money(d.fee) })}
+                      {d.givenBack > 0 && `${SEP}${t("terminal.givenBack", { amount: money(d.givenBack) })}`}
+                      {SEP}{t("terminal.expected", { amount: money(d.expected), day: dayLabel(d.expectedOn) })}
                     </>
                   )}
-                  {d.deposit && ` · ${t("terminal.received", { amount: money(Number(d.deposit.received)) })}`}
-                  {d.late > 0 && ` · ${t("terminal.late", { amount: money(d.late) })}`}
+                  {d.deposit && `${SEP}${t("terminal.received", { amount: money(Number(d.deposit.received)) })}`}
+                  {d.late > 0 && `${SEP}${t("terminal.late", { amount: money(d.late) })}`}
                   {d.deposit && d.status !== "received" && ` (${t("terminal.difference", { amount: money(Number(d.deposit.received) - d.expected - d.late) })})`}
                 </span>
               </button>
@@ -99,10 +100,10 @@ export default function TerminalDeposits({ terminal, currency, timeZone }: Termi
                   <ul className="tt-terminal-payments">
                     {(terminal.payments[d.day] ?? []).map(p => (
                       <li key={p.id}>
-                        <span>{timeLabel(p.at)}{p.code && ` · ${p.code}`}</span>
+                        <span>{timeLabel(p.at)}{p.code && `${SEP}${p.code}`}</span>
                         <span>
-                          {money(p.amount)}{p.tip > 0 && ` · ${t("terminal.tip", { amount: money(p.tip) })}`}
-                          {p.voided && ` · ${t("terminal.voided")}`}
+                          {money(p.amount)}{p.tip > 0 && `${SEP}${t("terminal.tip", { amount: money(p.tip) })}`}
+                          {p.voided && `${SEP}${t("terminal.voided")}`}
                         </span>
                         <span className="tt-muted">{p.ref ?? t("terminal.noRef")}</span>
                       </li>

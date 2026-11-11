@@ -15,6 +15,7 @@ import {
   type MenuSchedule,
   type ScheduleAccess,
 } from "@/lib/menu-schedule";
+import { SEP } from "@/lib/separator";
 
 interface MenuRowProps {
   menu: Menu;
@@ -177,7 +178,7 @@ export default function MenuRow({
           <span className="tt-menu-open">{t("menu.open")}</span>
         </button>
         {(summary || paused) && (
-          <div className="tt-menu-sched" title={summary?.join(" · ")}>
+          <div className="tt-menu-sched" title={summary?.join(SEP)}>
             <ScheduleIcon size={13} weight="bold" />
             {/* The hours alone don't say whether the menu is showing to
                 customers at this moment, which is the thing an owner is
@@ -189,7 +190,7 @@ export default function MenuRow({
                 {t(servingNow ? "sched.servingNow" : "sched.outsideHours")}
               </span>
             )}
-            <span>{paused ? t("sched.pausedSummary") : summary!.join(" · ")}</span>
+            <span>{paused ? t("sched.pausedSummary") : summary!.join(SEP)}</span>
           </div>
         )}
         <div className="tt-menu-controls">

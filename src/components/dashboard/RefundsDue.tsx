@@ -7,6 +7,7 @@ import { dateLocale, formatMoney } from "@/lib/format";
 import { useToast } from "@/components/ui/Toast";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import type { RefundDueRow } from "@/lib/refund-due";
+import { SEP } from "@/lib/separator";
 
 interface RefundsDueProps {
   refunds: RefundDueRow[];
@@ -38,8 +39,8 @@ export default function RefundsDue({ refunds, canRefund }: RefundsDueProps) {
   if (refunds.length === 0) return null;
 
   function originalAmount(row: RefundDueRow): string {
-    return row.currency ? `${formatMoney(Number(row.amount), row.currency)} · ${row.currency}`
-      : `${Number(row.amount).toFixed(2)} · ${t("refunds.currencyUnknown")}`;
+    return row.currency ? `${formatMoney(Number(row.amount), row.currency)}${SEP}${row.currency}`
+      : `${Number(row.amount).toFixed(2)}${SEP}${t("refunds.currencyUnknown")}`;
   }
 
   async function refund(row: RefundDueRow): Promise<void> {
@@ -86,11 +87,11 @@ export default function RefundsDue({ refunds, canRefund }: RefundsDueProps) {
           <div className="tt-bill-main">
             <strong className="tt-bill-name">{originalAmount(r)}</strong>
             <span className="tt-muted tt-bill-sub">
-              {r.refunded_at && <>{t("refunds.feePending")}{" · "}</>}
+              {r.refunded_at && <>{t("refunds.feePending")}{SEP}</>}
               {r.account_name
                 ? t("refunds.account", { name: r.account_name })
                 : r.table_label ? t("refunds.table", { label: r.table_label }) : t("refunds.counter")}
-              {" · "}
+              {SEP}
               {new Date(r.created_at).toLocaleString(dateLocale(locale), {
                 day: "numeric",
                 month: "short",

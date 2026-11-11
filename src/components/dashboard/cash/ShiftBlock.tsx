@@ -12,6 +12,7 @@ import type { ShiftView } from "@/lib/cash-shift";
 import CashMovementDialog from "./CashMovementDialog";
 import CloseShiftDialog from "./CloseShiftDialog";
 import ShiftRecord from "./ShiftRecord";
+import { SEP } from "@/lib/separator";
 
 interface ShiftBlockProps {
   /** Today's shifts, oldest first; the open one, if any, is last. */
@@ -128,7 +129,7 @@ export default function ShiftBlock({ shifts, currency, timeZone, restaurantName 
                     <strong>{formatMoney(w.amount, w.currency)}</strong>
                     <span className="tt-muted">
                       {time(w.created_at)} · {w.actor_email}
-                      {w.note ? ` · ${w.note}` : ""}
+                      {w.note ? `${SEP}${w.note}` : ""}
                     </span>
                   </span>
                   <button className="tt-btn tt-btn-ghost tt-btn-sm" disabled={busy === w.id} onClick={() => void strike(w)}>

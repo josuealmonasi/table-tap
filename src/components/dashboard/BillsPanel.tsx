@@ -18,6 +18,7 @@ import BillApprovals, {
 } from "./BillApprovals";
 import StampCard from "./loyalty/StampCard";
 import { useLiveOrders } from "@/hooks/useLiveOrders";
+import { SEP } from "@/lib/separator";
 
 /**
  * Open bills, searchable, with the promotion a manager may apply to one.
@@ -238,7 +239,7 @@ export default function BillsPanel({
           orderId={settling.tableId ? null : settling.orderIds[0]}
           tableLabel={
             settling.tableLabel ??
-            [settling.code, settling.customerName].filter(Boolean).join(" · ")
+            [settling.code, settling.customerName].filter(Boolean).join(SEP)
           }
           currency={settling.currency ?? currency}
           canApprove={canApprove}

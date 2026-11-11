@@ -6,6 +6,7 @@ import { useLocale, useT } from "@/lib/i18n/context";
 import { dateLocale, formatMoney } from "@/lib/format";
 import { useNotifications, type Notification } from "@/hooks/useNotifications";
 import { NotificationsIcon } from "@/components/ui/icons";
+import { SEP } from "@/lib/separator";
 
 /**
  * The bell in the nav.
@@ -73,7 +74,7 @@ export default function NotificationsMenu({ enabled }: { enabled: boolean }) {
         aria-haspopup="true"
         aria-expanded={open}
         aria-label={
-          unread > 0 ? `${t("notif.open")} · ${t("notif.unread", { count: unread })}` : t("notif.open")
+          unread > 0 ? `${t("notif.open")}${SEP}${t("notif.unread", { count: unread })}` : t("notif.open")
         }
         onClick={() => setOpen(o => !o)}
       >

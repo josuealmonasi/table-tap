@@ -3,6 +3,7 @@
 import { useLocale, useT } from "@/lib/i18n/context";
 import { formatMoney, dateLocale } from "@/lib/format";
 import type { StatementDay } from "@/lib/accounts";
+import { SEP } from "@/lib/separator";
 
 interface StatementDaysProps {
   days: (Omit<StatementDay, "charges"> & {
@@ -41,8 +42,8 @@ export default function StatementDays({ days, currency, timeZone }: StatementDay
               <div className="tt-statement-charge-head">
                 <span className="tt-muted">
                   {time(c.at)}
-                  {c.tableLabel ? ` · ${c.tableLabel}` : ""}
-                  {c.chargedBy ? ` · ${t("account.chargedBy", { who: c.chargedBy })}` : ""}
+                  {c.tableLabel ? `${SEP}${c.tableLabel}` : ""}
+                  {c.chargedBy ? `${SEP}${t("account.chargedBy", { who: c.chargedBy })}` : ""}
                 </span>
                 <span>{formatMoney(c.total, c.currency ?? d.currency ?? currency)}</span>
               </div>

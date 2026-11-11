@@ -4,6 +4,7 @@ import { useT } from "@/lib/i18n/context";
 import { formatMoney } from "@/lib/format";
 import { orderCode } from "@/lib/types";
 import { useWhen } from "@/hooks/useWhen";
+import { SEP } from "@/lib/separator";
 
 export interface OfflineSaleRow {
   id: string;
@@ -51,8 +52,8 @@ export default function OfflineSalesCard({ count, days, sales, currency, timeZon
             <span className="tt-costs-product-meta tt-muted">
               {when(s.offline_at)}
               {s.offline_drift === null
-                ? ` · ${t("offlineSales.unpriced")}`
-                : ` · ${t("offlineSales.drift", { amount: money(s.offline_drift) })}`}
+                ? `${SEP}${t("offlineSales.unpriced")}`
+                : `${SEP}${t("offlineSales.drift", { amount: money(s.offline_drift) })}`}
             </span>
           </li>
         ))}

@@ -12,6 +12,7 @@ import type { StockView } from "@/lib/costs/stock-server";
 import { useCostsSend } from "@/hooks/useCostsSend";
 import { useWhen } from "@/hooks/useWhen";
 import { DeleteIcon } from "@/components/ui/icons";
+import { SEP } from "@/lib/separator";
 
 interface WastePanelProps {
   stock: StockView;
@@ -76,7 +77,7 @@ export default function WastePanel({ stock, currency, timeZone }: WastePanelProp
                 <span className="tt-costs-margin">{e.cost === null ? t("costs.wasteNoCost") : formatMoney(e.cost, e.currency)}</span>
                 <span className="tt-costs-product-meta tt-muted">
                   {quantityOf(e)} · {t(`costs.reason.${e.reason}`)} · {e.recorded_by} · {when(e.created_at)}
-                  {e.note && ` · ${e.note}`}
+                  {e.note && `${SEP}${e.note}`}
                 </span>
                 <button type="button" className="tt-btn tt-btn-ghost tt-btn-sm tt-costs-entry-remove"
                   aria-label={t("costs.wasteRemove")} onClick={() => void remove(e.id)}>

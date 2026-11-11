@@ -11,6 +11,7 @@ import { packLabel } from "@/lib/costs/input";
 import type { Ingredient, RecipeLine } from "@/lib/costs/recipe-cost";
 import { useCostsSend } from "@/hooks/useCostsSend";
 import IngredientDialog from "./IngredientDialog";
+import { SEP } from "@/lib/separator";
 
 interface IngredientsPanelProps {
   ingredients: Ingredient[];
@@ -75,9 +76,9 @@ export default function IngredientsPanel({ ingredients, recipes, currency }: Ing
                   </span>
                   <span className="tt-costs-product-meta tt-muted">
                     {t("costs.packLine", { size: amount(pack.size), unit: t(`costs.unitShort.${pack.unit}`), price: formatMoney(i.pack_price, i.currency) })}
-                    {i.currency !== currency && <> · <span className="tt-costs-chip">{t("costs.otherCurrency", { currency: i.currency })}</span></>}
-                    {i.supplier && ` · ${i.supplier}`}
-                    {" · "}
+                    {i.currency !== currency && <>{SEP}<span className="tt-costs-chip">{t("costs.otherCurrency", { currency: i.currency })}</span></>}
+                    {i.supplier && `${SEP}${i.supplier}`}
+                    {SEP}
                     {n === 0 ? t("costs.notUsed") : n === 1 ? t("costs.usedInOne") : t("costs.usedInMany", { n })}
                   </span>
                 </button>

@@ -10,6 +10,7 @@ import { useToast } from "@/components/ui/Toast";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import type { RefundOperation } from "@/lib/refunds/operations";
 import { orderCode } from "@/lib/types";
+import { SEP } from "@/lib/separator";
 
 interface Props { refunds: RefundOperation[] }
 
@@ -49,7 +50,7 @@ export default function OrderRefunds({ refunds }: Props) {
     row.order_id ? orderCode(row.order_id) : null,
     row.table_label,
     row.kind ? t(row.kind === "cancel" ? "returns.kindCancel" : "returns.kindReturn") : null,
-  ].filter(Boolean).join(" · ");
+  ].filter(Boolean).join(SEP);
 
   return <section className="tt-section">
     <h3 className="tt-serif">{t("returns.title")}</h3>

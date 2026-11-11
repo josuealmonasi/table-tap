@@ -10,12 +10,13 @@ import { LogRowsSkeleton } from "@/components/ui/DashSkeletons";
 import { SearchIcon } from "@/components/ui/icons";
 import OrderReturn from "./OrderReturn";
 import OrderDetailDialog from "./OrderDetailDialog";
+import { SEP } from "@/lib/separator";
 
 /** What was on the order, short enough to sit on one line. */
 function summarise(order: Order): string {
   return (order.items ?? [])
     .map(i => `${i.qty}× ${i.name}`)
-    .join(" · ");
+    .join(SEP);
 }
 
 /**
@@ -100,7 +101,7 @@ export default function OrderHistory({
                 </span>
                 <span>
                   <strong>{orderCode(order.id)}</strong>
-                  {order.table_label && ` · ${t("dash.tableN", { label: order.table_label })}`}
+                  {order.table_label && `${SEP}${t("dash.tableN", { label: order.table_label })}`}
                 </span>
               </span>
               <span className="tt-log-detail">{summarise(order)}</span>

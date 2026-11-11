@@ -7,6 +7,7 @@ import type { Category, MenuItem } from "@/lib/types";
 import { DeleteIcon, EditIcon, WarningIcon } from "@/components/ui/icons";
 import { comboReachProblem } from "@/lib/combo-reach";
 import { promotionItemNames } from "@/lib/promotion-names";
+import { SEP } from "@/lib/separator";
 
 interface PromotionRowProps {
   promotion: PromotionWithItems;
@@ -45,7 +46,7 @@ export default function PromotionRow({
     }
     const tiers = (p.tiers ?? [])
       .map(tier => `${tier.qty} → ${formatMoney(tier.price, currency)}`)
-      .join(" · ");
+      .join(SEP);
     return `${names} — ${tiers}`;
   }
 

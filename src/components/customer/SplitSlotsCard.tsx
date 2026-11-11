@@ -8,6 +8,7 @@ import { useT } from "@/lib/i18n/context";
 import { formatMoney } from "@/lib/format";
 import type { SplitState } from "@/hooks/useSplit";
 import SplitSlotSelector, { freeSelection } from "@/components/split/SplitSlotSelector";
+import { SEP } from "@/lib/separator";
 
 interface Props {
   split: SplitState; outstanding: number; diner: string; busy: boolean; cardsEnabled: boolean;
@@ -31,7 +32,7 @@ export default function SplitSlotsCard({ split, outstanding, diner, busy, cardsE
     <p>{t("slots.remaining", { amount: formatMoney(outstanding, currency) })}</p>
     {split.resumptions?.map(resume => <div key={resume.slots.join(",")}>
       <p>{t("slots.resumeParts", { parts: resume.slots.map(n => n + 1).join(", "), amount: formatMoney(resume.amountCents / 100, currency) })}
-        {" · "}{t("pending.tip", { amount: formatMoney(resume.tipCents / 100, currency) })}</p>
+        {SEP}{t("pending.tip", { amount: formatMoney(resume.tipCents / 100, currency) })}</p>
       <button type="button" className="tt-btn tt-btn-primary" disabled={busy}
         onClick={() => onPay(resume.slots, resume.tipCents)}>{t("slots.resume")}</button>
     </div>)}

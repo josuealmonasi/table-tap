@@ -9,6 +9,7 @@ import { escapeHtml } from "@/lib/html";
 import { useToast } from "@/components/ui/Toast";
 import { needsExplanation, type ShiftView } from "@/lib/cash-shift";
 import ShiftTrail from "./ShiftTrail";
+import { SEP } from "@/lib/separator";
 
 interface ShiftRecordProps {
   view: ShiftView;
@@ -82,14 +83,14 @@ export default function ShiftRecord({ view, timeZone, restaurantName }: ShiftRec
     const w = window.open("", "_blank", "width=720,height=900");
     if (!w) return;
     const trailRows = trail
-      .map(l => `<li>${escapeHtml(time(l.created_at))} · ${escapeHtml(l.actor_email ?? "")} · ${escapeHtml(t(`log.${l.entity}.${l.action}`))}</li>`)
+      .map(l => `<li>${escapeHtml(time(l.created_at))}${SEP}${escapeHtml(l.actor_email ?? "")}${SEP}${escapeHtml(t(`log.${l.entity}.${l.action}`))}</li>`)
       .join("");
     w.document.write(
       `<!doctype html><title>${escapeHtml(t("shift.sheetTitle"))}</title>` +
         `<body style="font-family:system-ui,sans-serif;padding:28px;color:#111113">` +
         `<h1 style="margin:0;font-size:20px">${escapeHtml(t("shift.sheetTitle"))}</h1>` +
-        `<p style="margin:4px 0 18px;color:#70707a">${escapeHtml(restaurantName)} · ${escapeHtml(time(shift.opened_at))}–${escapeHtml(time(shift.closed_at))}</p>` +
-        `<p style="font-size:14px">${escapeHtml(t("shift.openedBy", { who: shift.opened_by }))} · ${escapeHtml(t("shift.closedBy", { who: shift.closed_by ?? "" }))}</p>` +
+        `<p style="margin:4px 0 18px;color:#70707a">${escapeHtml(restaurantName)}${SEP}${escapeHtml(time(shift.opened_at))}–${escapeHtml(time(shift.closed_at))}</p>` +
+        `<p style="font-size:14px">${escapeHtml(t("shift.openedBy", { who: shift.opened_by }))}${SEP}${escapeHtml(t("shift.closedBy", { who: shift.closed_by ?? "" }))}</p>` +
         `<table style="font-size:14px;border-collapse:collapse;margin:12px 0">` +
         row(t("corte.opening"), money(sum.opening)) +
         row(`+ ${t("corte.cashSales")}`, money(sum.cashSales)) +
@@ -119,8 +120,8 @@ export default function ShiftRecord({ view, timeZone, restaurantName }: ShiftRec
     <div className="tt-shift">
       <div className="tt-cashbox-head">
         <span>
-          <strong>{time(shift.opened_at)}–{time(shift.closed_at)}</strong>{" "}
-          <span className="tt-muted">· {t("shift.closedBy", { who: shift.closed_by ?? "" })}</span>
+          <strong>{time(shift.opened_at)}–{time(shift.closed_at)}</strong>
+          <span className="tt-muted">{SEP}{t("shift.closedBy", { who: shift.closed_by ?? "" })}</span>
         </span>
         <div className="tt-cashbox-actions">
           <button className="tt-btn tt-btn-ghost tt-btn-sm" onClick={() => setShowTrail(s => !s)} aria-expanded={showTrail}>

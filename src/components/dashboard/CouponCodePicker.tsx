@@ -5,6 +5,7 @@ import { useT } from "@/lib/i18n/context";
 import { formatMoney } from "@/lib/format";
 import { Skeleton } from "@/components/ui/Skeleton";
 import type { CouponOption } from "@/hooks/useCouponOptions";
+import { SEP } from "@/lib/separator";
 
 interface CouponCodePickerProps {
   code: string;
@@ -115,7 +116,7 @@ export default function CouponCodePicker({
                         amount: formatMoney(option.value, currency),
                       })}
                   {option.remaining !== null
-                    ? ` · ${t("dash.billCodeLeft", { n: String(option.remaining) })}`
+                    ? `${SEP}${t("dash.billCodeLeft", { n: String(option.remaining) })}`
                     : ""}
                 </span>
               </span>
