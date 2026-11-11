@@ -10,6 +10,12 @@ export interface RevenueOrder {
   tip: number;
 }
 
+/** Sales including service and IVA, before returns; staff tips stay apart. */
+export function salesRevenue(order: RevenueOrder): number {
+  return Number(order.total) + Number(order.return_components?.total ?? 0)
+    - Number(order.tip) - Number(order.return_components?.tip ?? 0);
+}
+
 /** Final food revenue, including IVA. Subtotal already includes checkout
  * discounts, but a later table discount changes only total. Subtracting the
  * stored discount again would count the checkout discount twice. */

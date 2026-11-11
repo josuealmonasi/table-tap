@@ -2327,6 +2327,10 @@ grant execute on function public.release_stock(uuid, jsonb) to service_role;
 -- when it settled one; a share of a divided bill will carry a session and no
 -- order. Nothing is deleted — a refund is its own negative-sense record, never
 -- an edit of the row that says money came in.
+-- Online writers explicitly date each receipt with clock_timestamp() after
+-- acquiring the money lock. The compatibility default remains now(); offline
+-- writers supply the historical sale time. Shift attribution uses created_at,
+-- so an online receipt must never inherit a transaction's pre-lock start.
 create table if not exists payments (
   id            uuid primary key default gen_random_uuid(),
   restaurant_id uuid not null references restaurants(id) on delete cascade,
@@ -2720,8 +2724,8 @@ begin
   end if;
 
   begin
-    insert into payments (restaurant_id, session_id, amount, tip, method, actor_email, client_ref)
-    values (p_restaurant, p_session, v_take, coalesce(p_tip, 0), p_method, p_actor, p_ref);
+    insert into payments (restaurant_id, session_id, amount, tip, method, actor_email, client_ref, created_at)
+    values (p_restaurant, p_session, v_take, coalesce(p_tip, 0), p_method, p_actor, p_ref, clock_timestamp());
   exception when unique_violation then
     -- The same collection arriving twice. The money is already in, once.
     return jsonb_build_object('taken', 0, 'tip', 0, 'outcome', 'duplicate');
@@ -2802,8 +2806,8 @@ begin
        and status <> 'cancelled'
     returning id, session_id, total
   ), written as (
-    insert into payments (restaurant_id, order_id, session_id, amount, method, actor_email)
-    select p_restaurant, s.id, s.session_id, round(s.total, 2), p_method, p_actor
+    insert into payments (restaurant_id, order_id, session_id, amount, method, actor_email, created_at)
+    select p_restaurant, s.id, s.session_id, round(s.total, 2), p_method, p_actor, clock_timestamp()
       from settled s
      where p_sittings is null and s.total > 0
     returning 1
@@ -2816,8 +2820,8 @@ begin
   end if;
 
   if p_sittings is not null then
-    insert into payments (restaurant_id, session_id, amount, method, actor_email)
-    select p_restaurant, (p->>'session_id')::uuid, round((p->>'amount')::numeric, 2), p_method, p_actor
+    insert into payments (restaurant_id, session_id, amount, method, actor_email, created_at)
+    select p_restaurant, (p->>'session_id')::uuid, round((p->>'amount')::numeric, 2), p_method, p_actor, clock_timestamp()
       from jsonb_array_elements(p_sittings) p
      where (p->>'amount')::numeric > 0;
   end if;
@@ -2932,11 +2936,11 @@ begin
        and paid = false
     returning id, session_id, total, restaurant_id
   ), written as (
-    insert into payments (restaurant_id, order_id, session_id, amount, tip, method, stripe_payment_intent)
+    insert into payments (restaurant_id, order_id, session_id, amount, tip, method, stripe_payment_intent, created_at)
     select s.restaurant_id, s.id, s.session_id,
            round(s.total + case when s.id = v_tip_on then coalesce(p_tip, 0) else 0 end, 2),
            case when s.id = v_tip_on then round(coalesce(p_tip, 0), 2) else 0 end,
-           'card', p_intent
+           'card', p_intent, clock_timestamp()
       from settled s
      where s.total + case when s.id = v_tip_on then coalesce(p_tip, 0) else 0 end > 0
     on conflict do nothing
@@ -3019,9 +3023,9 @@ begin
   get diagnostics v_claimed = row_count;
   if v_claimed = 0 then return false; end if;
 
-  insert into payments (restaurant_id, session_id, amount, tip, method, stripe_payment_intent)
+  insert into payments (restaurant_id, session_id, amount, tip, method, stripe_payment_intent, created_at)
   values (v_restaurant, v_session, round(p_amount + coalesce(p_tip, 0), 2),
-          round(coalesce(p_tip, 0), 2), 'card', p_intent);
+          round(coalesce(p_tip, 0), 2), 'card', p_intent, clock_timestamp());
 
   -- `total` and `tip` rise together, so a running balance still reads the
   -- same food as owed — the way settling a whole table and collecting in
@@ -3124,8 +3128,8 @@ begin
   end if;
 
   if v_total > 0 then
-    insert into payments (restaurant_id, order_id, amount, method, actor_email)
-    values (p_restaurant, p_order, round(v_total, 2), p_method, p_actor);
+    insert into payments (restaurant_id, order_id, amount, method, actor_email, created_at)
+    values (p_restaurant, p_order, round(v_total, 2), p_method, p_actor, clock_timestamp());
   end if;
   return true;
 end;
@@ -4024,8 +4028,8 @@ begin
   -- A gratuity is never more than what it thanks somebody for.
   v_tip := least(v_tip, v_owed);
 
-  insert into payments (restaurant_id, account_id, amount, tip, method, actor_email, client_ref)
-  values (p_restaurant, p_account, v_owed + v_tip, v_tip, p_method, p_actor, p_ref);
+  insert into payments (restaurant_id, account_id, amount, tip, method, actor_email, client_ref, created_at)
+  values (p_restaurant, p_account, v_owed + v_tip, v_tip, p_method, p_actor, p_ref, clock_timestamp());
   update orders set paid = true, pay_method = p_method where id = any(v_ids);
   -- The gratuity lands on the latest order, as a table's does on its first.
   if v_tip > 0 then
@@ -4124,8 +4128,8 @@ begin
   v_food := least(v_checkout.amount, v_still);
   v_tip := case when v_ids is null then 0 else v_checkout.tip end;
   if v_food + v_tip > 0 then
-    insert into payments (restaurant_id, account_id, amount, tip, method, stripe_payment_intent)
-    values (v_checkout.restaurant_id, v_checkout.account_id, v_food + v_tip, v_tip, 'card', p_intent);
+    insert into payments (restaurant_id, account_id, amount, tip, method, stripe_payment_intent, created_at)
+    values (v_checkout.restaurant_id, v_checkout.account_id, v_food + v_tip, v_tip, 'card', p_intent, clock_timestamp());
   end if;
   -- What the card paid for food already paid another way is the customer's
   -- money taken twice: kept as a refund due, out of the ledger, and the bell
@@ -7012,8 +7016,8 @@ begin
   v_existing_tip := least(v_room, v_existing_tip);
   v_existing_tip := least(v_existing_tip, round(greatest(v_take - coalesce(p_tip, 0), 0) * v_existing_tip / nullif(v_room, 0), 2));
   begin
-    insert into payments (restaurant_id, session_id, amount, tip, method, actor_email, client_ref)
-    values (p_restaurant, p_session, v_take, coalesce(p_tip, 0) + v_existing_tip, p_method, p_actor, p_ref);
+    insert into payments (restaurant_id, session_id, amount, tip, method, actor_email, client_ref, created_at)
+    values (p_restaurant, p_session, v_take, coalesce(p_tip, 0) + v_existing_tip, p_method, p_actor, p_ref, clock_timestamp());
   exception when unique_violation then
     -- The same collection arriving twice. The money is already in, once.
     return jsonb_build_object('taken', 0, 'tip', 0, 'outcome', 'duplicate');
@@ -7218,8 +7222,8 @@ begin
        and status <> 'cancelled'
     returning id, session_id, total
   ), written as (
-    insert into payments (restaurant_id, order_id, session_id, amount, method, actor_email)
-    select p_restaurant, s.id, s.session_id, round(s.total, 2), p_method, p_actor
+    insert into payments (restaurant_id, order_id, session_id, amount, method, actor_email, created_at)
+    select p_restaurant, s.id, s.session_id, round(s.total, 2), p_method, p_actor, clock_timestamp()
       from settled s
      where p_sittings is null and s.total > 0
     returning 1
@@ -7232,11 +7236,11 @@ begin
   end if;
 
   if p_sittings is not null then
-    insert into payments (restaurant_id, session_id, amount, tip, method, actor_email)
+    insert into payments (restaurant_id, session_id, amount, tip, method, actor_email, created_at)
     select p_restaurant, (p->>'session_id')::uuid, round((p->>'amount')::numeric, 2),
       least(round((p->>'amount')::numeric, 2), (select coalesce(sum(greatest(o.tip - coalesce(a.tip, 0), 0)), 0)
         from orders o left join lateral (select sum(tip) tip from payment_allocations where order_id = o.id) a on true
-        where o.id = any(p_orders) and o.session_id = (p->>'session_id')::uuid)), p_method, p_actor
+        where o.id = any(p_orders) and o.session_id = (p->>'session_id')::uuid)), p_method, p_actor, clock_timestamp()
       from jsonb_array_elements(p_sittings) p
      where (p->>'amount')::numeric > 0;
   end if;
@@ -7324,12 +7328,12 @@ begin
        and paid = false and not written_off and status <> 'cancelled'
     returning id, session_id, total, restaurant_id
   ), written as (
-    insert into payments (restaurant_id, order_id, session_id, amount, tip, method, stripe_payment_intent)
+    insert into payments (restaurant_id, order_id, session_id, amount, tip, method, stripe_payment_intent, created_at)
     select s.restaurant_id, s.id, s.session_id,
            round(greatest(s.total - public.retained_order_coverage(s.restaurant_id, s.id), 0) + case when s.id = v_tip_on then coalesce(p_tip, 0) else 0 end, 2),
            greatest((select o.tip from orders o where o.id = s.id) - coalesce((select sum(a.tip) from payment_allocations a where a.order_id = s.id), 0), 0)
              + case when s.id = v_tip_on then round(coalesce(p_tip, 0), 2) else 0 end,
-           'card', p_intent
+           'card', p_intent, clock_timestamp()
       from settled s
      where greatest(s.total - public.retained_order_coverage(s.restaurant_id, s.id), 0) + case when s.id = v_tip_on then coalesce(p_tip, 0) else 0 end > 0
     on conflict do nothing
@@ -7427,9 +7431,9 @@ begin
   v_existing_tip := least(v_remaining, v_existing_tip);
   v_existing_tip := case when v_remaining <= 0 then 0
     else least(v_existing_tip, round(p_amount * v_existing_tip / v_remaining, 2)) end;
-  insert into payments (restaurant_id, session_id, amount, tip, method, stripe_payment_intent)
+  insert into payments (restaurant_id, session_id, amount, tip, method, stripe_payment_intent, created_at)
   values (v_restaurant, v_session, round(p_amount + coalesce(p_tip, 0), 2),
-          round(coalesce(p_tip, 0) + v_existing_tip, 2), 'card', p_intent) returning id into v_payment;
+          round(coalesce(p_tip, 0) + v_existing_tip, 2), 'card', p_intent, clock_timestamp()) returning id into v_payment;
   update bill_split_claims set payment_id = v_payment where split_id = p_split and share_no = p_share;
 
   -- `total` and `tip` rise together, so a running balance still reads the
@@ -7491,8 +7495,8 @@ begin
   end if;
 
   if v_total > 0 then
-    insert into payments (restaurant_id, order_id, amount, method, actor_email)
-    values (p_restaurant, p_order, round(v_total, 2), p_method, p_actor);
+    insert into payments (restaurant_id, order_id, amount, method, actor_email, created_at)
+    values (p_restaurant, p_order, round(v_total, 2), p_method, p_actor, clock_timestamp());
   end if;
   return true;
 end;
@@ -7676,9 +7680,9 @@ begin
   -- A gratuity is never more than what it thanks somebody for.
   v_tip := least(v_tip, v_owed);
 
-  insert into payments (restaurant_id, account_id, amount, tip, method, actor_email, client_ref)
+  insert into payments (restaurant_id, account_id, amount, tip, method, actor_email, client_ref, created_at)
   values (p_restaurant, p_account, v_owed + v_tip,
-    v_tip + (select coalesce(sum(tip), 0) from orders where id = any(v_ids) and written_off = false), p_method, p_actor, p_ref);
+    v_tip + (select coalesce(sum(tip), 0) from orders where id = any(v_ids) and written_off = false), p_method, p_actor, p_ref, clock_timestamp());
   update orders set paid = true, pay_method = p_method where id = any(v_ids);
   -- The gratuity lands on the latest order, as a table's does on its first.
   if v_tip > 0 then
@@ -7778,9 +7782,9 @@ begin
   v_tip := case when v_ids is null then 0 else v_checkout.tip end;
   perform set_config('tabletap.allocation_scope', to_json(coalesce(v_ids, '{}'::uuid[]))::text, true);
   if v_food + v_tip > 0 then
-    insert into payments (restaurant_id, account_id, amount, tip, method, stripe_payment_intent)
+    insert into payments (restaurant_id, account_id, amount, tip, method, stripe_payment_intent, created_at)
     values (v_checkout.restaurant_id, v_checkout.account_id, v_food + v_tip,
-      v_tip + (select coalesce(sum(tip), 0) from orders where id = any(v_ids) and written_off = false), 'card', p_intent);
+      v_tip + (select coalesce(sum(tip), 0) from orders where id = any(v_ids) and written_off = false), 'card', p_intent, clock_timestamp());
   end if;
   -- What the card paid for food already paid another way is the customer's
   -- money taken twice: kept as a refund due, out of the ledger, and the bell
@@ -10309,13 +10313,18 @@ grant execute on function public.cash_shift_totals(uuid, uuid, timestamptz) to s
 
 create or replace function public.close_cash_shift(p_restaurant uuid, p_shift uuid, p_counted numeric, p_actor text)
 returns jsonb language plpgsql security definer set search_path = public as $$
-declare s cash_shifts; v_at timestamptz; v_sum jsonb; v_difference numeric;
+declare s cash_shifts; v_at timestamptz; v_sum jsonb; v_difference numeric; v_waiting int;
 begin
   perform public.lock_restaurant_money(p_restaurant);
   select * into s from cash_shifts where restaurant_id = p_restaurant and id = p_shift and closed_at is null for update;
   if not found then return null; end if;
   if p_counted is null or p_counted < 0 or p_counted > 1000000 or p_counted <> round(p_counted, 2)
     or nullif(btrim(p_actor), '') is null then raise exception 'invalid cash count'; end if;
+  -- The queue writer uses this same lock: the route's earlier read is only a
+  -- preflight. Cash queued before this close must be reviewed before signing.
+  select count(*) into v_waiting from offline_sale_queue
+    where restaurant_id = p_restaurant and approved_at is null and body->>'method' = 'cash';
+  if v_waiting > 0 then return jsonb_build_object('outcome', 'held_cash', 'waiting', v_waiting); end if;
   -- now() is the transaction's start, possibly before waiting for the lock.
   -- The count includes every earlier writer, so date it after that wait.
   v_at := clock_timestamp();
@@ -10853,6 +10862,7 @@ begin
   -- The old closer still computes and signs the count under this same lock.
   v_result := public.close_cash_shift(p_restaurant, p_shift, p_counted, p_actor);
   if v_result is null then return null; end if;
+  if v_result->>'outcome' = 'held_cash' then return v_result; end if;
   update cash_shifts set close_ref = p_ref, close_result = v_result where restaurant_id = p_restaurant and id = p_shift;
   return v_result;
 end;
@@ -10961,10 +10971,10 @@ begin
       update orders set total = total + v_tip, tip = tip + v_tip where id = (
         select id from orders where id = any(v_ids) and session_id = v_row.session_id order by created_at,id limit 1);
     end if;
-    insert into payments(restaurant_id,session_id,amount,tip,method,actor_email,client_ref)
+    insert into payments(restaurant_id,session_id,amount,tip,method,actor_email,client_ref, created_at)
       values(p_restaurant,v_row.session_id,v_take + v_tip,
         v_tip + round(v_take * least(v_row.owed,v_row.old_tip) / v_row.owed,2),p_method,p_actor,
-        p_ref || '#' || v_row.session_id::text);
+        p_ref || '#' || v_row.session_id::text, clock_timestamp());
     update bill_splits set status = 'cancelled' where restaurant_id = p_restaurant
       and session_id = v_row.session_id and status in ('proposed','locked');
     v_first := false;
@@ -11033,9 +11043,9 @@ begin
   v_tip := least(v_tip, v_owed);
 
   perform set_config('tabletap.allocation_scope',to_json(v_ids)::text,true);
-  insert into payments (restaurant_id, account_id, amount, tip, method, actor_email, client_ref)
+  insert into payments (restaurant_id, account_id, amount, tip, method, actor_email, client_ref, created_at)
   values (p_restaurant, p_account, v_owed + v_tip,
-    v_tip + (select coalesce(sum(tip), 0) from orders where id = any(v_ids) and written_off = false), p_method, p_actor, p_ref) returning tip into v_recorded_tip;
+    v_tip + (select coalesce(sum(tip), 0) from orders where id = any(v_ids) and written_off = false), p_method, p_actor, p_ref, clock_timestamp()) returning tip into v_recorded_tip;
   update orders set paid = true, pay_method = p_method where id = any(v_ids);
   -- The gratuity lands on the latest order, as a table's does on its first.
   if v_tip > 0 then
@@ -11613,9 +11623,9 @@ begin
      where id = (select id from orders where id = any(v_split.order_ids) and not paid and not written_off
        and account_id is null and status not in ('cancelled', 'pending_payment') order by created_at, id limit 1);
   end if;
-  insert into payments (restaurant_id, session_id, amount, tip, method, actor_email, client_ref)
+  insert into payments (restaurant_id, session_id, amount, tip, method, actor_email, client_ref, created_at)
   values (p_restaurant, v_split.session_id, (p_expected_cents + p_tip_cents) / 100.0,
-    round(p_tip_cents / 100.0 + v_old_tip, 2), p_method, p_actor, p_ref)
+    round(p_tip_cents / 100.0 + v_old_tip, 2), p_method, p_actor, p_ref, clock_timestamp())
   returning id into v_payment;
   perform set_config('tabletap.allocation_scope', v_scope, true);
   -- Allocated now, not at commit: the close below reads coverage, and the
@@ -11738,8 +11748,8 @@ begin
      where id = (select id from orders where id = any(v_split.order_ids) and not paid and not written_off
        and account_id is null and status not in ('cancelled', 'pending_payment') order by created_at, id limit 1);
   end if;
-  insert into payments (restaurant_id, session_id, amount, tip, method, stripe_payment_intent)
-  values (p_restaurant, v_split.session_id, p_charged_cents / 100.0, round(v_tip / 100.0 + v_old_tip, 2), 'card', p_intent)
+  insert into payments (restaurant_id, session_id, amount, tip, method, stripe_payment_intent, created_at)
+  values (p_restaurant, v_split.session_id, p_charged_cents / 100.0, round(v_tip / 100.0 + v_old_tip, 2), 'card', p_intent, clock_timestamp())
   returning id into v_payment;
   perform set_config('tabletap.allocation_scope', v_scope, true);
   perform public.allocate_receipt(v_payment);
