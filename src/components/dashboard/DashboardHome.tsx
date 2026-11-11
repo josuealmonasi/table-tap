@@ -66,7 +66,10 @@ export default function DashboardHome({ restaurant, role, schedules, setup = [] 
           <p>{t("menu.reloadFailed")}</p>
           <button type="button" className="tt-btn tt-btn-ghost tt-btn-sm" onClick={editor.reload}>{t("fallback.retry")}</button>
         </div>}
-        <fieldset disabled={editor.loadFailed} style={{ border: 0, margin: 0, padding: 0, minWidth: 0 }}>
+        {/* Only the sides are reset: the top margin is the dashboard's 16px
+            rhythm. An inline `margin: 0` here beat it, and the Menús card sat
+            flush against "Para empezar" (owner's screenshot, 2026-11-11). */}
+        <fieldset disabled={editor.loadFailed} style={{ border: 0, marginInline: 0, padding: 0, minWidth: 0 }}>
         {editor.loading ? (
           <div
             className="tt-section"

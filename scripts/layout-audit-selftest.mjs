@@ -44,6 +44,11 @@ export async function layoutAuditSelftest(browser) {
     await check('screen reader descendant', 'cramped', '<div style="display:flex"><span>First<span style="position:absolute;width:1px;height:1px;clip:rect(0,0,0,0)">Hidden</span></span><span style="padding-left:12px">Second</span></div>', false);
     await check('grid neighbours', 'cramped', '<div style="display:grid;grid-template-columns:max-content max-content;gap:4px"><span>First</span><span>Second</span></div>');
     await check('fully clipped row text', 'cramped', '<div style="display:flex;width:30px;overflow:hidden"><span style="flex:none;width:100px">First</span><span style="flex:none">Second</span><span style="flex:none">Third</span></div>', false);
+    const card = (style = '') => `<section style="border:1px solid #ccc;border-radius:12px;padding:12px;${style}">Card text</section>`;
+    await check('cards flush on the page', 'cards-touching', card() + `<fieldset style="border:0;padding:0;margin:0">${card('margin-top:2px')}</fieldset>`);
+    await check('cards with the 16px rhythm', 'cards-touching', card() + `<fieldset style="border:0;padding:0;margin:16px 0 0">${card()}</fieldset>`, false);
+    await check('cards side by side', 'cards-touching', `<div style="display:flex;gap:2px">${card('width:180px')}${card('width:180px')}</div>`, false);
+    await check('card inside a card', 'cards-touching', `<section style="border:1px solid #ccc;border-radius:12px;padding:0">${card()}</section>`, false);
     // One planted specimen for every pre-existing fault kind.
     await check('squashed', 'squashed', '<div style="width:10px;white-space:nowrap">Squashed words</div>');
     await check('overlapping', 'overlapping', '<div>PLANTED ALPHA TEXT</div><div style="margin-top:-18px;margin-left:20px">PLANTED BETA TEXT</div>');

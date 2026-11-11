@@ -155,4 +155,38 @@ export const SPACING_AUDIT = String.raw`
       }
     }
   }
+
+  // "Para empezar" and the Menús card touched: an inline margin: 0 beat the
+  // dashboard's 16px rhythm (owner's screenshot, 2026-11-11). Two rounded,
+  // fully bordered cards stacked less than 6px apart read as one broken box.
+  // Cards are compared within one layer, so a dialog never pairs with the page.
+  const stackedCards = [];
+  for (const el of all) {
+    if (!readable(el)) continue;
+    const s = getComputedStyle(el);
+    if (/^(absolute|fixed)$/.test(s.position)) continue;
+    const bordered = ['Top', 'Right', 'Bottom', 'Left'].every(side =>
+      parseFloat(s['border' + side + 'Width']) > 0 && s['border' + side + 'Style'] !== 'none' &&
+      !/^(transparent|rgba\(.*,\s*0\))$/.test(s['border' + side + 'Color']));
+    if (!bordered || parseFloat(s.borderTopLeftRadius) < 6 || parseFloat(s.borderBottomLeftRadius) < 6) continue;
+    const r = el.getBoundingClientRect();
+    if (r.width < 120 || r.height < 24) continue;
+    stackedCards.push({ el, r, layer: el.closest('dialog, [role="dialog"], [role="alertdialog"]') });
+  }
+  stackedCards.sort((a, b) => a.r.top - b.r.top);
+  const touching = new Set();
+  for (let i = 0; i < stackedCards.length; i++) {
+    const a = stackedCards[i];
+    for (let j = i + 1; j < stackedCards.length; j++) {
+      const b = stackedCards[j], gap = b.r.top - a.r.bottom;
+      if (gap >= 6) break;
+      if (gap < 0 || a.layer !== b.layer || a.el.contains(b.el) || b.el.contains(a.el)) continue;
+      const overlap = Math.min(a.r.right, b.r.right) - Math.max(a.r.left, b.r.left);
+      if (overlap < Math.min(a.r.width, b.r.width) / 2) continue;
+      const text = a.el.textContent.trim().slice(0, 28) + ' / ' + b.el.textContent.trim().slice(0, 28);
+      if (!touching.has(text)) faults.push({ kind: 'cards-touching', text, w: Math.round(gap * 10) / 10 });
+      touching.add(text);
+    }
+  }
+
 `;

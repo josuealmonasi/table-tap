@@ -105,7 +105,7 @@ export default function MenuEditor({
           <div className="container">
             {recoveryNotice}
             <ModalRecoveryContext.Provider value={{ blocked: editor.loadFailed, notice: recoveryNotice }}>
-            <fieldset disabled={editor.loadFailed} style={{ border: 0, padding: 0, margin: 0, minWidth: 0, display: "flex", flexDirection: "column", gap: 16 }}>
+            <fieldset disabled={editor.loadFailed} style={{ border: 0, padding: 0, marginInline: 0, minWidth: 0, display: "flex", flexDirection: "column", gap: 16 }}>
             <ImportMenuDialog
               open={importing !== null}
               withTemplate={importing === "template"}
