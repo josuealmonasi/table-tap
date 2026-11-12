@@ -94,6 +94,17 @@ export function orderPrintCases() {
       body: async f => ({ orderId: await anyOrderId(f), to: "receipt" }),
       expect: [200],
       check: d => (typeof d.html === "string" && d.html.length > 40) || "returned no receipt" },
+    // The 80 mm ticket (owner's request, 2026-11-11): the same receipt as a
+    // PDF, for the same people. The kitchen never gets what the customer paid.
+    { name: "POST /api/orders/print (ticket PDF)", as: "waiter", method: "POST",
+      path: "/api/orders/print",
+      body: async f => ({ orderId: await anyOrderId(f), to: "receipt", format: "pdf" }),
+      expect: [200],
+      checkText: text => text.startsWith("%PDF-") || `answered ${text.slice(0, 40)} instead of a PDF` },
+    { name: "POST /api/orders/print (kitchen cannot have the ticket PDF)", as: "kitchen", method: "POST",
+      path: "/api/orders/print",
+      body: async f => ({ orderId: await kitchenTicketId(f, f.printableOrder), to: "receipt", format: "pdf" }),
+      expect: [403] },
     { name: "POST /api/orders/print (another restaurant's order)", as: "waiter", method: "POST",
       path: "/api/orders/print",
       body: { orderId: "00000000-0000-4000-8000-000000000000", to: "receipt" },
@@ -102,5 +113,19 @@ export function orderPrintCases() {
       path: "/api/orders/print",
       body: async f => ({ orderId: await anyOrderId(f), to: "wherever" }),
       expect: [400] },
+    // The owner chooses the ticket's typeface by looking at a sample of each.
+    { name: "GET /api/settings/ticket-preview (Archivo)", as: "owner", method: "GET",
+      path: "/api/settings/ticket-preview?font=archivo", expect: [200],
+      checkText: text => text.startsWith("%PDF-") || `answered ${text.slice(0, 40)} instead of a PDF` },
+    { name: "GET /api/settings/ticket-preview (IBM Plex Mono)", as: "owner", method: "GET",
+      path: "/api/settings/ticket-preview?font=plex", expect: [200],
+      checkText: text => text.startsWith("%PDF-") || `answered ${text.slice(0, 40)} instead of a PDF` },
+    { name: "GET /api/settings/ticket-preview (Courier)", as: "owner", method: "GET",
+      path: "/api/settings/ticket-preview?font=classic", expect: [200],
+      checkText: text => text.startsWith("%PDF-") || `answered ${text.slice(0, 40)} instead of a PDF` },
+    { name: "GET /api/settings/ticket-preview (a font that is not offered)", as: "owner", method: "GET",
+      path: "/api/settings/ticket-preview?font=comic", expect: [400] },
+    { name: "GET /api/settings/ticket-preview (manager: the owner's choice)", as: "manager", method: "GET",
+      path: "/api/settings/ticket-preview?font=archivo", expect: [403] },
   ];
 }

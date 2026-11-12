@@ -11,6 +11,7 @@ import type { CartItem } from "@/hooks/useCart";
 import type { MenuItem } from "@/lib/types";
 
 interface PadOrderPanelProps {
+  onBill?: () => void;
   restaurantId: string;
   currency: string;
   tables: { id: string; label: string }[];
@@ -92,6 +93,8 @@ export default function PadOrderPanel(p: PadOrderPanelProps) {
           />}
         </div>
       </label>
+
+      {p.tableId && p.onBill && <button type="button" className="tt-btn tt-btn-outline" disabled={p.sending} onClick={p.onBill}>{t("bill.open")}</button>}
 
       {p.lines.length === 0 ? (
         <p className="tt-muted">{t("pos.empty")}</p>

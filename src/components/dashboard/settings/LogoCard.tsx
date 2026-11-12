@@ -6,7 +6,7 @@ import { useT } from "@/lib/i18n/context";
 import { useToast } from "@/components/ui/Toast";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { useSettings } from "@/hooks/useSettings";
-import { BUCKET, LOGO, SOURCE_MAX_BYTES, logoPath } from "@/lib/images";
+import { BUCKET, LOGO, SOURCE_MAX_BYTES, logoPath, ownLogoPathFromUrl } from "@/lib/images";
 import { preparePhoto } from "@/lib/image-resize";
 import RestaurantMark from "@/components/ui/RestaurantMark";
 import type { Restaurant } from "@/lib/types";
@@ -28,6 +28,23 @@ export default function LogoCard({ restaurant }: { restaurant: Restaurant }) {
   const [url, setUrl] = useState(restaurant.logo_url ?? null);
   const [busy, setBusy] = useState(false);
 
+  /**
+   * Best-effort removal of the file the logo no longer points at.
+   *
+   * Runs only after the new reference is saved: deleting first would leave the
+   * menu pointing at a missing image if the save then failed. A failure here
+   * only leaves an orphaned file, not a broken logo, so it is swallowed rather
+   * than reported as a failed upload the owner would try again.
+   */
+  async function discard(path: string | null): Promise<void> {
+    if (!path) return;
+    try {
+      await createClient().storage.from(BUCKET).remove([path]);
+    } catch {
+      // Orphaned file only; see above.
+    }
+  }
+
   async function choose(file: File): Promise<void> {
     setBusy(true);
     try {
@@ -42,6 +59,9 @@ export default function LogoCard({ restaurant }: { restaurant: Restaurant }) {
       }
 
       const path = logoPath(restaurant.id);
+      // Taken from the URL now, before it changes: an older logo may be a
+      // `logo.webp` that the new `logo.png` upload does not overwrite.
+      const previous = ownLogoPathFromUrl(restaurant.id, url);
       const supabase = createClient();
       const { error } = await supabase.storage
         .from(BUCKET)
@@ -57,7 +77,11 @@ export default function LogoCard({ restaurant }: { restaurant: Restaurant }) {
       // One logo per restaurant, so the path repeats and a replacement would
       // otherwise sit behind a cached copy.
       const busted = `${publicUrl}?v=${Date.now()}`;
-      if (await save({ logo_url: busted })) setUrl(busted);
+      if (await save({ logo_url: busted })) {
+        setUrl(busted);
+        // Same path means the upsert above already replaced it in place.
+        if (previous !== path) await discard(previous);
+      }
     } catch {
       toast(t("img.failed"), "error");
     } finally {
@@ -77,8 +101,14 @@ export default function LogoCard({ restaurant }: { restaurant: Restaurant }) {
 
     setBusy(true);
     try {
-      await createClient().storage.from(BUCKET).remove([logoPath(restaurant.id)]);
-      if (await save({ logo_url: null })) setUrl(null);
+      // The file the URL names, not the computed `logo.png`: a logo uploaded
+      // before PNG is a `logo.webp`, which would otherwise stay public after
+      // the owner removed it. Deleted only once the reference is cleared.
+      const previous = ownLogoPathFromUrl(restaurant.id, url);
+      if (await save({ logo_url: null })) {
+        setUrl(null);
+        await discard(previous);
+      }
     } finally {
       setBusy(false);
     }

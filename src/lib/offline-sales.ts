@@ -25,6 +25,7 @@ const PREFIX = "tt-offline-sale:";
 const LEGACY_KEY = "tt-offline-sales";
 
 export interface HeldSale {
+  loyaltyCode?: string;
   /** The till's reference, which becomes the sale's id: sent twice, rung once. */
   posRef: string;
   /** Server-signed original collector and currency, saved with this sale. */
@@ -140,6 +141,7 @@ export function markHeldError(posRef: string, restaurantId: string, error: strin
 /** What the server is sent for a held sale. */
 export function replayBody(sale: HeldSale): Record<string, unknown> {
   return {
+    loyaltyCode: sale.loyaltyCode,
     posRef: sale.posRef, restaurantId: sale.restaurantId, items: sale.items, method: sale.method,
     tipPct: sale.tipPct, tipAmount: sale.tipAmount, customerName: sale.customerName, note: sale.note,
     terminalRef: sale.terminalRef, currency: sale.currency, collectorContext: sale.collectorContext, noReceipt: true,
