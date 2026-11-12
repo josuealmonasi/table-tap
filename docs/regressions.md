@@ -6565,3 +6565,13 @@ logos in both browser modes alongside unchanged menu photos. `images.spec.ts`
 checks that the schema permits the uploaded format. After applying the bucket
 allowlist, upload a transparent logo in settings and check its preview and an
 80 mm ticket PDF. No existing logos need migrating.
+
+Changing the name to `logo.png` split the uploader from the files it cleans
+up: removal and replacement deleted the computed `logo.png`, so a logo stored
+before PNG as `logo.webp` stayed public after the owner removed it, and a
+replacement left it beside the new file (review of #621). `LogoCard` now
+deletes the path read from the stored URL (`ownLogoPathFromUrl`), only after
+the new reference is saved, only when it differs from the new path, and never
+outside the restaurant's own folder. `logo-card-cleanup.spec.tsx` replaces and
+removes WebP and PNG logos, a failed save, another restaurant's URL, a `..`
+path and a foreign host; six of its eight cases fail on the old card.
