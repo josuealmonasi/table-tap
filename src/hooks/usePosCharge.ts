@@ -120,8 +120,10 @@ export function usePosCharge({ collector, collectorContext, restaurant, cart, de
       { name: restaurant.name, timeZone: restaurant.timezone ?? "America/Mexico_City", locale: dateLocale(locale) }, t,
     );
     if (receiptHtml && paper) printReceipt(receiptHtml, paper);
+    // Kept even when it printed: a blocked or jammed print must still leave
+    // the cashier a way to the ticket before the sale reaches the server.
     setTicket({ code: orderCode(sale.posRef), total: sale.charge.total, handedOver: !sale.preparationPending, offline: true, answered,
-      receiptHtml: paper ? undefined : receiptHtml });
+      receiptHtml });
     rememberLastSale(restaurant.id, sale.items);
     cart.clear();
     details.reset();
@@ -276,8 +278,9 @@ export function usePosCharge({ collector, collectorContext, restaurant, cart, de
         code: data.code,
         total: data.total,
         handedOver: Boolean(data.handedOver),
-        // Not printed (paperless): the confirmation offers it instead.
-        receiptHtml: paper ? undefined : data.receiptHtml,
+        // Offered on the confirmation whether or not it printed: paperless, or
+        // a print the browser blocked, leaves one tap to the ticket.
+        receiptHtml: data.receiptHtml ?? undefined,
       });
       // Kept on this device, so the next "same again" is one tap.
       rememberLastSale(restaurant.id, cart.lines);

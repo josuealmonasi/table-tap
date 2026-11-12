@@ -172,7 +172,8 @@ it("keeps a held sale's ticket on the confirmation when paperless", async () => 
   expect(till.ticket?.receiptHtml).toContain("ORD-");
 });
 
-it("keeps a printed sale's confirmation free of a second print button", async () => {
+it("keeps the ticket on a printed sale's confirmation, for a print the browser blocked (Codex review)", async () => {
+  vi.mocked(window.open).mockReturnValue(null);
   await charge();
-  expect(till.ticket?.receiptHtml).toBeUndefined();
+  expect(till.ticket?.receiptHtml).toBe("<p>Receipt</p>");
 });
