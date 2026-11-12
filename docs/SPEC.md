@@ -2890,7 +2890,9 @@ and credit decrease it. Opening debt is a snapshot, while historical collections
 and observations have zero debt effect. Return/refund kinds remain reserved for
 later PRs. RLS still denies all client access; service_role has select/insert
 only. Immutable guards, deferred source foreign keys, source identities and
-restaurant/account/currency checks remain enforced. A zero-priced order still
+restaurant/account/currency checks remain enforced. Tip and service components
+are only non-negative, not bounded by the amount, because an approved coupon or a
+full comp lowers the total but not them. A zero-priced order still
 has a zero-cent charge when included in a charged bill.
 
 The journal is **started on activation**, and written by these transactions:

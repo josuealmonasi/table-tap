@@ -13065,7 +13065,9 @@ create table if not exists account_movements (
   refund_operation_id uuid references refund_operations(id) deferrable initially deferred,
   provenance text not null check (provenance in ('live', 'backfill')),
   charge_snapshot jsonb not null check (jsonb_typeof(charge_snapshot) = 'object'),
-  constraint account_movements_components check (tip_cents <= amount_cents and service_cents <= amount_cents - tip_cents),
+  -- Tip and service are descriptive components, not bounded by the amount:
+  -- an approved coupon or a 100% comp lowers the total but leaves them as is.
+  constraint account_movements_components check (tip_cents >= 0 and service_cents >= 0),
   constraint account_movements_added_tip check (kind <> 'added_tip' or (tip_cents = amount_cents and service_cents = 0)),
   constraint account_movements_debt check (
     (kind = 'opening' and debt_delta_cents = amount_cents and provenance = 'backfill')
@@ -13083,6 +13085,9 @@ create table if not exists account_movements (
     or (kind = 'refund_paid' and refund_operation_id is not null)),
   unique (restaurant_id, account_id, currency, kind, operation_ref)
 );
+-- A database that applied the first draft keeps its old, stricter check.
+alter table account_movements drop constraint if exists account_movements_components;
+alter table account_movements add constraint account_movements_components check (tip_cents >= 0 and service_cents >= 0);
 create unique index if not exists account_movements_opening_once on account_movements(account_id, currency) where kind = 'opening';
 create unique index if not exists account_movements_charge_once on account_movements(order_id) where kind = 'charge';
 create unique index if not exists account_movements_tip_once on account_movements(payment_id, order_id) where kind = 'added_tip';
@@ -13181,6 +13186,7 @@ begin
     end if;
     -- Unknown receipt currency cannot safely be guessed from today's account
     -- ceiling or restaurant setting. Fail atomically for manual review.
+    -- This aborts the whole activation if any account payment lacks a currency.
     if exists (select 1 from payments p where p.account_id = v_account.id and p.restaurant_id = p_restaurant
       and (p.currency is null or p.currency not in ('MXN', 'USD'))) then raise exception 'historical account payment currency unknown'; end if;
     for v_currency in

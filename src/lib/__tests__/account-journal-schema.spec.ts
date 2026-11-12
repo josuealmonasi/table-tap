@@ -12,10 +12,28 @@ it("stores integer cents, bounded components, currency, provenance and object sn
     expect(journal).toContain(`${column} bigint not null`);
   }
   for (const rule of ["currency in ('MXN', 'USD')", "amount_cents >= 0", "tip_cents >= 0", "service_cents >= 0",
-    "tip_cents <= amount_cents and service_cents <= amount_cents - tip_cents", "provenance in ('live', 'backfill')",
+    "provenance in ('live', 'backfill')",
     "jsonb_typeof(charge_snapshot) = 'object'", "operation_ref text not null check (btrim(operation_ref) <> '')"]) {
     expect(journal).toContain(rule);
   }
+});
+
+it("does not bound tip and service by the amount, so a coupon or full comp still journals", () => {
+  const components = [...journal.matchAll(/account_movements_components check \(([^)]*)\)/g)].map(match => match[1]);
+  // Inline in the table, then re-added for a database that applied the first draft.
+  expect(components).toEqual(["tip_cents >= 0 and service_cents >= 0", "tip_cents >= 0 and service_cents >= 0"]);
+  expect(journal).not.toMatch(/tip_cents <= amount_cents|service_cents <= amount_cents/);
+  const holds = (row: Record<string, number>) => components.every(rule => rule.split(" and ").every(term => {
+    const [column, operator, value] = term.split(" ");
+    expect(operator).toBe(">=");
+    return row[column] >= Number(value);
+  }));
+  // Subtotal 100 + service 10 + tip 10 = 120; an approved MX$115 coupon leaves a total of 5.
+  const total = 100 + 10 + 10 - 115;
+  expect(holds({ amount_cents: total * 100, tip_cents: 1000, service_cents: 1000 })).toBe(true);
+  // A 100% comp: nothing owed, service still on the order.
+  expect(holds({ amount_cents: 0, tip_cents: 0, service_cents: 1000 })).toBe(true);
+  expect(holds({ amount_cents: 500, tip_cents: -1, service_cents: 0 })).toBe(false);
 });
 
 it("enforces debt signs, including the explicit historical-collection exception", () => {
