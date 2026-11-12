@@ -11,6 +11,7 @@ import CardDownload from "@/components/loyalty/CardDownload";
 import type { LoyaltyOfferInfo } from "@/lib/loyalty/offer";
 import { ladderLines } from "@/lib/loyalty/ladder";
 import { rewardsPath } from "@/lib/loyalty/code";
+import CardEmailFields from "@/components/loyalty/CardEmailFields.react-component";
 import { SEP } from "@/lib/separator";
 
 interface LoyaltyOfferProps {
@@ -33,6 +34,8 @@ export default function LoyaltyOffer({ offer, asked = false }: LoyaltyOfferProps
   // flash the offer at a phone that already has a card.
   const [open, setOpen] = useState(asked);
   const [dontAsk, setDontAsk] = useState(false);
+  const [email, setEmail] = useState("");
+  const [consent, setConsent] = useState(false);
   const [busy, setBusy] = useState(false);
   const [card, setCard] = useState<{ face: CardFace; qr: QrGrid } | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -42,17 +45,19 @@ export default function LoyaltyOffer({ offer, asked = false }: LoyaltyOfferProps
   }, [offer.restaurantId, asked]);
 
   async function create(): Promise<void> {
+    if (busy || (email.trim() && !consent)) return;
     setBusy(true);
     setError(null);
     try {
       const res = await fetch("/api/loyalty/card", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ restaurantId: offer.restaurantId, pass: offer.pass }),
+        body: JSON.stringify({ restaurantId: offer.restaurantId, pass: offer.pass, ...(email.trim() ? { email: email.trim(), consent } : {}) }),
       });
       const data = await res.json();
       if (!res.ok) {
-        setError(data.error ?? t("apiErr.generic"));
+        setError(res.status === 409 && data.outcome === "taken" && typeof data.suffix === "string"
+          ? t("cardEmail.takenDiner", { suffix: data.suffix }) : data.error ?? t("apiErr.generic"));
         return;
       }
       rememberCard(offer.restaurantId, data.code);
@@ -93,8 +98,9 @@ export default function LoyaltyOffer({ offer, asked = false }: LoyaltyOfferProps
       <p className="tt-muted" style={{ margin: 0 }}>
         {t("loyaltyOffer.body", { rewards: ladderLines(offer.steps, t).join(SEP) })}
       </p>
+      <CardEmailFields email={email} consent={consent} onEmail={setEmail} onConsent={setConsent} diner optional />
       {error && <p className="tt-field-error" role="alert">{error}</p>}
-      <button type="button" className="tt-btn tt-btn-primary" disabled={busy} onClick={() => void create()}>
+      <button type="button" className="tt-btn tt-btn-primary" disabled={busy || Boolean(email.trim() && !consent)} onClick={e => { if (e.currentTarget.parentElement?.querySelector("input")?.reportValidity()) void create(); }}>
         {busy ? t("loyaltyOffer.creating") : t("loyaltyOffer.create")}
       </button>
       {!asked && (

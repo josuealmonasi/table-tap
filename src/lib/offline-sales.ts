@@ -26,6 +26,8 @@ const LEGACY_KEY = "tt-offline-sales";
 
 export interface HeldSale {
   loyaltyCode?: string;
+  /** A declined email stays declined if the sale has to be sent again. */
+  skipTicketEmail?: boolean;
   /** The till's reference, which becomes the sale's id: sent twice, rung once. */
   posRef: string;
   /** Server-signed original collector and currency, saved with this sale. */
@@ -142,6 +144,7 @@ export function markHeldError(posRef: string, restaurantId: string, error: strin
 export function replayBody(sale: HeldSale): Record<string, unknown> {
   return {
     loyaltyCode: sale.loyaltyCode,
+    skipTicketEmail: sale.skipTicketEmail,
     posRef: sale.posRef, restaurantId: sale.restaurantId, items: sale.items, method: sale.method,
     tipPct: sale.tipPct, tipAmount: sale.tipAmount, customerName: sale.customerName, note: sale.note,
     terminalRef: sale.terminalRef, currency: sale.currency, collectorContext: sale.collectorContext, noReceipt: true,
