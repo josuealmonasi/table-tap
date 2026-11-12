@@ -4910,6 +4910,28 @@ a.tt-btn {
 }
 
 /* Settings: labelled switch row (e.g. "Accepting orders") */
+/* One ticket typeface: the radio and its name, and the sample beside it.
+   The name wraps; the button keeps its width. */
+.tt-ticket-font {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid var(--tt-cream);
+  border-radius: 12px;
+}
+.tt-ticket-font-pick {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  flex: 1 1 auto;
+  min-width: 0;
+  cursor: pointer;
+  overflow-wrap: anywhere;
+}
+.tt-ticket-font-pick input { margin-top: 3px; flex-shrink: 0; }
+.tt-ticket-font > .tt-btn { flex-shrink: 0; }
 .tt-settings-toggle {
   display: flex;
   align-items: center;

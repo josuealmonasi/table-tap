@@ -42,6 +42,13 @@ describe("the text and the version cannot drift apart", () => {
       .digest("hex")
       .slice(0, 16);
 
+  // 2026-11-11, bumped from 2026-10-21: the privacy notice gained the fiscal
+  // data a restaurant may print on its tickets (legal name, tax id, tax
+  // regime, address, phone) and a visit card presented before paying, linked to
+  // the sale and stamped by the payment — a new category of data and a new
+  // handling, so every restaurant is asked again. The terms say the ticket's
+  // fiscal data is the restaurant's, the ticket is not a CFDI, and printing
+  // at the till starts off.
   // S17b keeps 2026-10-21: deletion can finish once money is resolved, while
   // a separate copy retains the accounting already covered by the privacy
   // notice. No new data category, purpose or retention period; this clarifies
@@ -58,15 +65,15 @@ describe("the text and the version cannot drift apart", () => {
   // kept the version as a clarification.)
   it("has terms that match the version in force", () => {
     expect({ version: TERMS_VERSION, text: fingerprint("terms-es") }).toEqual({
-      version: "2026-10-21",
-      text: "008919381c56e604",
+      version: "2026-11-11",
+      text: "1589820b704538f3",
     });
   });
 
   it("has a privacy notice that matches the version in force", () => {
     expect({ version: TERMS_VERSION, text: fingerprint("privacy-es") }).toEqual({
-      version: "2026-10-21",
-      text: "bd8c87568b1e745f",
+      version: "2026-11-11",
+      text: "aa3989b2ece22a5e",
     });
   });
 });

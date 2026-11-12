@@ -866,6 +866,28 @@ and scrolls:
 Each section has its own icon (`nav.spec.ts` pins both the order and that no
 two sections share an icon).
 
+### Restaurant settings
+
+Settings → “Tu restaurante” includes an owner-only “Datos fiscales y dirección”
+card, saved through the existing settings flow. Every field is optional: legal
+name, RFC, SAT tax regime, street, exterior/interior number, five-digit postal
+code, neighborhood, municipality or borough, one of Mexico’s 32 states, and
+receipt phone number. RFC is uppercased while typing and accepts the 12-character
+company and 13-character individual formats, including Ñ and &. The regime
+selector uses the 19 supported c_RegimenFiscal codes and their official Spanish
+names in either language. Postal code comes before the locality fields to leave
+room for future autofill; none is performed today.
+
+Only owners receive these private values, read server-side with the admin
+client as separate settings props. They are absent from the public restaurant
+row and anonymous grants. Managers see no fiscal card; posting any fiscal field
+returns 403 before any write. The server trims text, turns empty values into
+null, validates types and schema limits, and checks RFC, postal code, phone,
+regime and state against the shared rules. Invalid fields return a specific
+Spanish or English 400 message. Activity logs record fiscal field names without
+copying their private values into the staff feed. This card configures ticket
+identity; the ticket rendering remains a separate concern.
+
 ## Switching over
 
 A café that already keeps its menu in a spreadsheet brings it in at once.
@@ -1139,10 +1161,18 @@ count, and still trims the cart to what is left rather than only saying so.
 Charging opens one modal: the tip, a name to call them by, a special request,
 and an address for the receipt. Filled in or left blank, one button sends it;
 clicking outside closes and changes nothing, because a stray click must never
-take money. No address means the ticket prints — through the browser for now,
-with `printReceipt()` as the single seam a Bluetooth thermal driver replaces.
-An address that the mail never reached falls back to printing rather than
-leaving the cashier with nothing.
+take money.
+
+**Paperless by default** (owner's decision, 2026-11-11). The till prints only
+when Settings → Printing → "Print the ticket at the till"
+(`restaurants.print_ticket_at_till`, default off, owner or manager) is on.
+Off, the "Charged" confirmation offers "Print the ticket" for the customer who
+asks — opened inside that click, so the browser lets the window through — and
+the ticket stays available by email, as the PDF and as a reprint from Orders.
+On, no address means the ticket prints — through the browser for now, with
+`printReceipt()` as the single seam a Bluetooth thermal driver replaces — and
+an address the mail never reached falls back to printing rather than leaving
+the cashier with nothing.
 
 The tip is priced by the same `priceCart` the diner's cart runs, so an exact
 tip is capped at the subtotal by the engine rather than trusted from the till.
@@ -1318,6 +1348,37 @@ make it an ordinary order again.
 Only at the counter. The flag means "needs no preparation", and the counter is
 the one place where that also means already delivered — a bottled water ordered
 from table 6 still has to be carried to table 6, so a QR order is unchanged.
+
+### The customer's ticket as an 80 mm PDF (2026-11-11)
+
+The order dialog's "Ticket (PDF)" asks `/api/orders/print` for `format: "pdf"`
+(front of house only, the caller's restaurant, like the HTML receipt) and opens
+a PDF shaped like thermal paper: 80 mm wide, the page cut to the ticket's
+length (`src/lib/ticket-pdf.ts`), the columns laid out by the font's own
+measure. Its amounts come from
+`receiptModel`, the same calculation as the email and the reprint.
+
+- Header: the logo when it is a PNG or JPEG at an https address, the name,
+  then whatever the owner filled in of the SAT simplified-receipt data (RMF
+  2.7.1.24): razón social, address (street and number, colonia and CP,
+  municipio and estado), phone, RFC and régimen fiscal. These columns are
+  optional, owner-only and never granted to anon (`ticket-place.ts`).
+- Body: date, folio (the order code), table, four columns (quantity, item,
+  unit price, amount), the number of items, the receipt's rows, the total and
+  how it was paid.
+- The visit card when a card was presented before paying: its stamps drawn
+  as circles (the earned ones filled), the code's last four, and the next
+  reward. It is read from the receipt source — the sale's card, its sitting's,
+  or a split part's sitting — the same read as the HTML receipt
+  (`ticket-loyalty.ts`). Then the order's QR (it opens the sale on Cuentas for
+  the staff), thanks, and "this is not an invoice".
+- **The typeface is the owner's choice** (Settings → "Letra del ticket",
+  `restaurants.ticket_font`): Archivo, the app's own and the default; IBM Plex
+  Mono; or the classic Courier. Each option opens a sample ticket with the
+  restaurant's own header (`/api/settings/ticket-preview`, owner only). The
+  two embedded faces are static OFL files in `src/lib/fonts` — pdfkit cannot
+  embed the variable Archivo — traced into the routes that print by
+  `next.config.ts`.
 
 ## The customer can decline the ticket
 
@@ -1680,7 +1741,7 @@ scan-to-collect button shipped and could never open a lens. It is `(self)`.
 
 ## The visit card
 
-A loyalty card a diner keeps on their phone, stamped by staff on each visit and
+A loyalty card a diner keeps on their phone, stamped by payment or by staff, and
 worth the rewards the restaurant chooses, each at a number of visits it chooses
 — a reward ladder: 4 visits a coffee, 8 a dessert, 12 a meal. Every paid tier
 (`plan_limits.allows_loyalty`): Caja carries it, so the tiers above it must. It knows nobody: a card is a random code, a
@@ -1699,6 +1760,39 @@ email or phone.
   so a double tap, two waiters or a race add nothing. `loyalty_stamp()` locks
   the card and refuses when the program is off or the plan does not include
   loyalty, as well as the route refusing it.
+- **Presented before payment** (owner request, 2026-11-11): front-of-house
+  staff (owner, manager, cashier, waiter) may attach a scanned or typed bearer
+  code to an unpaid sale or an open sitting through `POST /api/loyalty/attach`.
+  Kitchen access is refused. An approved live table membership permits a diner
+  to attach the card whose bearer code is saved on their device, only to their
+  own sitting; legacy private-order links grant no attachment permission.
+  Attachment does not stamp. Removal is conditional on the sale still being
+  unpaid or the sitting still being open; a diner can remove only their card.
+  Caja previews the card before its sale exists and carries its code in the
+  immutable sale request and offline replay. The server resolves it within the
+  cashier's restaurant and passes `loyalty_card_id` in the transaction's order
+  payload. **Schema integration requirement:** `pos_insert_order` must persist
+  that field before settlement; the application change alone cannot make Caja
+  stamp. The schema owner supplies and verifies that writer extension.
+- **Payment stamps automatically:** `stamp_loyalty_on_payment` records the
+  restaurant-local day's visit with actor `payment` on an insert already paid
+  or a false-to-true payment transition. Cancelled sales never stamp. An order's
+  card takes precedence over its sitting's card; both must belong to the same
+  restaurant. The program and plan are checked again in SQL and the existing
+  card/day uniqueness keeps two payments on the same day at one visit.
+- **The card on the bill and ticket:** Caja, the table collection dialog reached
+  from Bills or the waiter pad, and the diner's bill offer attachment only when
+  the server confirms the program, tier and target are open. A diner sees the
+  saved-device action only with a valid saved code and a current sitting.
+  Paying controls are disabled while attachment is in flight. Paid receipts
+  (email, staff print, Caja and split payment copies) read confirmed standing,
+  name the next unredeemed ladder reward and print only the code's last four
+  characters. Earned rewards ask for handover on the next visit. Multiple orders
+  with one card print it once. Paper loyalty lines wrap at the ticket's 48
+  columns. Unpaid bill copies do not claim a visit; offline paper labels the
+  card's visit as pending confirmation, never incrementing a cached counter.
+  Replaying collected cash still works after a card is deleted or switched off;
+  SQL decides whether the replay can stamp at that time.
 - **The ladder** is one to four steps `{visits, reward}`, strictly increasing,
   2 to 50 visits and a reward of up to 80 characters each
   (`loyalty_programs.steps`). The last step's visits are the round, and are

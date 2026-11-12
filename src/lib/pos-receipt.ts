@@ -1,3 +1,5 @@
+import { withReceiptCards } from "@/lib/loyalty/receipt-source";
+import type { ReceiptCard } from "@/lib/loyalty/attachment";
 import type { createAdminClient } from "@/lib/supabase/admin";
 import { buildReceipt } from "@/lib/receipt";
 import { mailConfigured, sendMail } from "@/lib/mail";
@@ -21,7 +23,7 @@ export interface SaleReceiptInput {
   };
   restaurant: { name?: string; currency: unknown; timezone: unknown };
   method: "cash" | "card" | "account";
-  body: { email?: unknown; noReceipt?: unknown };
+  body: { email?: unknown; noReceipt?: unknown; loyaltyCode?: unknown };
 }
 
 /** The ticket for a sale rung at the till: emailed, handed back to print, or nothing. */
@@ -59,10 +61,21 @@ export async function saleReceipt({
   if (!declined) {
     const locale = await getLocale();
     const messages = messagesFor(locale);
+    let loyalty: ReceiptCard | null | undefined;
+    if (body.loyaltyCode) {
+      const { data, error } = await db.from("orders").select("id, restaurant_id, paid, session_id, loyalty_card_id")
+        .eq("id", order.id).maybeSingle();
+      if (!error && data) {
+        const [decorated] = await withReceiptCards(db, [{ ...data, items: [], subtotal: pricing.subtotal, total: pricing.total,
+          currency: restaurant.currency as string, created_at: new Date().toISOString() }]);
+        loyalty = decorated.loyalty;
+      }
+    }
     const built = buildReceipt(
       [
         {
           id: order.id as string,
+          loyalty,
           items: verified,
           subtotal: pricing.subtotal,
           service_fee: pricing.serviceFee,

@@ -226,6 +226,26 @@ alter table restaurants drop constraint if exists restaurants_service_pct_range;
 alter table restaurants add constraint restaurants_service_pct_range
   check (service_pct >= 0 and service_pct <= 30);
 
+-- The restaurant's address and fiscal data, for its tickets (SAT's simplified
+-- receipt, RMF 2.7.1.24: issuer's name, RFC, regime and the issuing location's
+-- address). All optional, set by the owner only (owner's request, 2026-11-11).
+-- Never granted to anon: only the server reads them, to print a ticket.
+alter table restaurants add column if not exists legal_name text check (legal_name is null or char_length(legal_name) <= 254);
+alter table restaurants add column if not exists rfc text check (rfc is null or rfc ~ '^[A-ZÑ&]{3,4}[0-9]{6}[A-Z0-9]{3}$');
+alter table restaurants add column if not exists tax_regime text check (tax_regime is null or tax_regime ~ '^[0-9]{3}$');
+alter table restaurants add column if not exists address_street text check (address_street is null or char_length(address_street) <= 160);
+alter table restaurants add column if not exists address_ext_number text check (address_ext_number is null or char_length(address_ext_number) <= 20);
+alter table restaurants add column if not exists address_int_number text check (address_int_number is null or char_length(address_int_number) <= 20);
+alter table restaurants add column if not exists address_colonia text check (address_colonia is null or char_length(address_colonia) <= 120);
+alter table restaurants add column if not exists address_postal_code text check (address_postal_code is null or address_postal_code ~ '^[0-9]{5}$');
+alter table restaurants add column if not exists address_municipality text check (address_municipality is null or char_length(address_municipality) <= 120);
+alter table restaurants add column if not exists address_state text check (address_state is null or char_length(address_state) <= 60);
+alter table restaurants add column if not exists ticket_phone text check (ticket_phone is null or ticket_phone ~ '^[0-9 +()-]{7,20}$');
+-- The ticket's typeface, the owner's choice: Archivo (the app's own, default),
+-- IBM Plex Mono or the classic Courier (owner's request, 2026-11-11).
+alter table restaurants add column if not exists ticket_font text not null default 'archivo'
+  check (ticket_font in ('archivo', 'plex', 'classic'));
+
 alter table restaurants drop constraint if exists restaurants_tax_pct_range;
 alter table restaurants add constraint restaurants_tax_pct_range
   check (tax_pct >= 0 and tax_pct <= 100);
@@ -3148,6 +3168,11 @@ grant execute on function public.settle_sale(uuid, uuid, text, text, text)
 -- installed on their machines, and no port forwarding — the shape that does
 -- not require us to reach into somebody else's LAN.
 alter table restaurants add column if not exists auto_print_kitchen boolean not null default false;
+-- Paperless by default (owner's decision, 2026-11-11): the till prints the
+-- customer's ticket only when the restaurant turns this on. Off, the ticket
+-- is still one tap away on the sale's confirmation, by email, as the PDF and
+-- as a reprint from Orders.
+alter table restaurants add column if not exists print_ticket_at_till boolean not null default false;
 
 -- Products that need no preparation: a bottled drink, a bag of coffee, a
 -- packaged snack. The cashier takes them off the shelf and puts them in the
@@ -3585,6 +3610,121 @@ end;
 $$;
 revoke all on function public.loyalty_unstamp(uuid, uuid, date) from public, anon, authenticated;
 grant execute on function public.loyalty_unstamp(uuid, uuid, date) to service_role;
+
+-- ============================================================================
+-- A card presented before paying is stamped by paying (owner's request,
+-- 2026-11-11). Staff scan the diner's QR at the till, on the table's bill or
+-- the diner adds their own card before paying; the card rides on the sale (an
+-- order) or on the table's bill (a sitting). When the order becomes paid —
+-- by any path: the till, a table collection, a split, a card webhook, an
+-- account — the visit is recorded, still one per card per day, so a table
+-- that pays in three orders earns one stamp, as "Sellar tarjeta" would. The
+-- ticket then shows the card's progress.
+-- ============================================================================
+alter table orders add column if not exists loyalty_card_id uuid references loyalty_cards(id) on delete set null;
+alter table table_sessions add column if not exists loyalty_card_id uuid references loyalty_cards(id) on delete set null;
+
+-- Whether this restaurant's visit card is on and its tier carries it.
+create or replace function public.loyalty_open(p_restaurant uuid)
+returns boolean language sql stable security definer set search_path = public as $$
+  select exists (select 1 from loyalty_programs p join restaurants r on r.id = p.restaurant_id
+    join plan_limits l on l.plan = r.plan
+    where p.restaurant_id = p_restaurant and p.active and l.allows_loyalty);
+$$;
+revoke all on function public.loyalty_open(uuid) from public, anon, authenticated;
+grant execute on function public.loyalty_open(uuid) to service_role;
+
+-- Attach a presented card to one unpaid sale or one open sitting. The card
+-- must be this restaurant's; answers what happened rather than raising, so a
+-- screen can say it: attached, unknown (no such card here), off (the program
+-- is off or the tier lacks it), paid (too late: that sale is settled) or gone.
+create or replace function public.attach_loyalty_card_v1(
+  p_restaurant uuid, p_code text, p_order uuid, p_session uuid, p_actor text
+) returns jsonb language plpgsql security definer set search_path = public as $$
+declare v_card loyalty_cards%rowtype; v_paid boolean; v_status text;
+begin
+  if num_nonnulls(p_order, p_session) <> 1 or nullif(btrim(coalesce(p_actor, '')), '') is null then
+    raise exception 'invalid loyalty attachment';
+  end if;
+  if not public.loyalty_open(p_restaurant) then return jsonb_build_object('outcome', 'off'); end if;
+  select * into v_card from loyalty_cards
+    where restaurant_id = p_restaurant and code = upper(replace(btrim(coalesce(p_code, '')), '-', ''));
+  if not found then return jsonb_build_object('outcome', 'unknown'); end if;
+  if p_order is not null then
+    -- Read under the lock: a cancellation that commits after the route's
+    -- own check must still answer "gone" (Codex review of #620).
+    select paid, status into v_paid, v_status from orders where id = p_order and restaurant_id = p_restaurant for update;
+    if not found or v_status = 'cancelled' then return jsonb_build_object('outcome', 'gone'); end if;
+    if v_paid then return jsonb_build_object('outcome', 'paid'); end if;
+    update orders set loyalty_card_id = v_card.id where id = p_order and restaurant_id = p_restaurant;
+  else
+    update table_sessions set loyalty_card_id = v_card.id
+      where id = p_session and restaurant_id = p_restaurant and closed_at is null;
+    if not found then return jsonb_build_object('outcome', 'gone'); end if;
+  end if;
+  return jsonb_build_object('outcome', 'attached', 'cardId', v_card.id,
+    'progress', public.loyalty_progress(v_card.id), 'goal', v_card.goal);
+end;
+$$;
+revoke all on function public.attach_loyalty_card_v1(uuid, text, uuid, uuid, text) from public, anon, authenticated;
+grant execute on function public.attach_loyalty_card_v1(uuid, text, uuid, uuid, text) to service_role;
+
+-- The moment a sale becomes paid it takes its sitting's card, if it has none
+-- of its own, and keeps it: the receipt and every reprint then name the card
+-- this payment stamped, even if the table's bill is given another card or none
+-- afterwards (Codex review of #620). Only a card of this restaurant while the
+-- program is open, so a receipt never shows a card that was not stamped.
+create or replace function public.fix_loyalty_card_on_payment()
+returns trigger language plpgsql security definer set search_path = public as $$
+begin
+  if not new.paid or new.status = 'cancelled' or (tg_op = 'UPDATE' and old.paid) then return new; end if;
+  -- Never for a customer account's order: it keeps the sitting it was
+  -- ordered at, and that sitting's card can be another diner's by the time
+  -- the account is paid (Codex review of #622).
+  if new.loyalty_card_id is null and new.session_id is not null and new.account_id is null then
+    new.loyalty_card_id := (select s.loyalty_card_id from table_sessions s
+      where s.id = new.session_id and s.restaurant_id = new.restaurant_id);
+  end if;
+  if new.loyalty_card_id is not null and (not public.loyalty_open(new.restaurant_id)
+    or not exists (select 1 from loyalty_cards c where c.id = new.loyalty_card_id and c.restaurant_id = new.restaurant_id)) then
+    new.loyalty_card_id := null;
+  end if;
+  return new;
+end;
+$$;
+revoke all on function public.fix_loyalty_card_on_payment() from public, anon, authenticated;
+drop trigger if exists fix_loyalty_card_on_payment on orders;
+create trigger fix_loyalty_card_on_payment before insert or update of paid on orders
+  for each row execute function public.fix_loyalty_card_on_payment();
+
+-- Paying stamps the card the sale carries (fixed onto it above): one visit a
+-- day, in the restaurant's zone, like "Sellar tarjeta". Never on a cancelled
+-- sale, never for another restaurant's card, never while the program is off.
+-- A sale rung offline counts on the day it was rung, not the day it reached
+-- the server: replayed two days later it must not earn a second visit, nor
+-- several offline days collapse into one (Codex review of #620).
+create or replace function public.stamp_loyalty_on_payment()
+returns trigger language plpgsql security definer set search_path = public as $$
+declare v_card uuid; v_day date;
+begin
+  if not new.paid or new.status = 'cancelled' or (tg_op = 'UPDATE' and old.paid) then return null; end if;
+  v_card := new.loyalty_card_id;
+  if v_card is null or not public.loyalty_open(new.restaurant_id)
+    or not exists (select 1 from loyalty_cards c where c.id = v_card and c.restaurant_id = new.restaurant_id) then
+    return null;
+  end if;
+  select (coalesce(new.offline_at, now()) at time zone coalesce(r.timezone, 'America/Mexico_City'))::date into v_day
+    from restaurants r where r.id = new.restaurant_id;
+  insert into loyalty_visits (card_id, restaurant_id, visit_day, actor_email)
+  values (v_card, new.restaurant_id, v_day, 'payment')
+  on conflict on constraint loyalty_visits_card_id_visit_day_key do nothing;
+  return null;
+end;
+$$;
+revoke all on function public.stamp_loyalty_on_payment() from public, anon, authenticated;
+drop trigger if exists stamp_loyalty_on_payment on orders;
+create trigger stamp_loyalty_on_payment after insert or update of paid on orders
+  for each row execute function public.stamp_loyalty_on_payment();
 
 -- Spend the card's next reward, once. Locked like the stamp, and refused —
 -- nothing returned — unless that reward is ready. The next reward is the lowest
@@ -5361,13 +5501,17 @@ begin
   end if;
   insert into orders (id, restaurant_id, pos_ref, status, paid, stock_managed, stock_reservation_id,
     subtotal, service_fee, tip, discount, total, tax_pct, platform_fee, promo_detail,
-    currency, items, note, customer_name, created_at, offline_at, offline_drift)
+    currency, items, note, customer_name, created_at, offline_at, offline_drift, loyalty_card_id)
   values (p_ref, p_restaurant, p_ref, p_status, false, p_at is null, p_reservation,
     (p_order->>'subtotal')::numeric, (p_order->>'service_fee')::numeric,
     (p_order->>'tip')::numeric, (p_order->>'discount')::numeric, (p_order->>'total')::numeric,
     (p_order->>'tax_pct')::numeric, 0, p_order->'promo_detail',
     p_order->>'currency', p_order->'items', p_order->>'note', p_order->>'customer_name',
-    coalesce(p_at, now()), p_at, (p_order->>'offline_drift')::numeric);
+    coalesce(p_at, now()), p_at, (p_order->>'offline_drift')::numeric,
+    -- The card presented at the till; only this restaurant's card is kept, so
+    -- a forged id cannot stamp another restaurant's customer.
+    (select c.id from loyalty_cards c
+      where c.restaurant_id = p_restaurant and c.id = nullif(p_order->>'loyalty_card_id', '')::uuid));
 end;
 $$;
 revoke all on function public.pos_insert_order(uuid, uuid, jsonb, text, timestamptz, uuid) from public, anon, authenticated;

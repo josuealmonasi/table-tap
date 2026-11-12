@@ -1,10 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { randomUUID } from "node:crypto";
 import { apiError } from "@/lib/api-error";
+import { isRoomLimited } from "@/lib/rate-limit";
 import { jsonBody } from "@/lib/json-body";
 import { actingStaff, actingFrontOfHouse } from "@/lib/api-guard";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { buildReceipt, type ReceiptVersion } from "@/lib/receipt";
+import { buildReceipt, receiptModel, type ReceiptVersion } from "@/lib/receipt";
+import { ticketPdf } from "@/lib/ticket-pdf";
+import { ticketPlace, ticketText } from "@/lib/ticket-place";
+import { ticketLoyalty } from "@/lib/ticket-loyalty";
 import { readOrderReceipt, readSlotReceipt, ReceiptReadError, type ReceiptSource } from "@/lib/receipt-source";
 import { DEFAULT_TIME_ZONE } from "@/lib/open-menus";
 import { DEFAULT_LOCALE, messagesFor, translate } from "@/lib/i18n";
@@ -38,6 +42,8 @@ export async function POST(req: NextRequest) {
     paymentId?: string;
     version?: ReceiptVersion;
     to?: "kitchen" | "receipt";
+    /** "pdf": the 80 mm ticket instead of the HTML receipt. */
+    format?: "html" | "pdf";
   }>(req);
   if (!body) return await apiError("apiErr.invalidRequest", 400);
   const { orderId, paymentId, version, to } = body;
@@ -115,6 +121,37 @@ export async function POST(req: NextRequest) {
 
   const locale = await getLocale();
   const messages = messagesFor(locale ?? DEFAULT_LOCALE);
+  const t = (key: string, vars?: Record<string, string | number>) => translate(messages, key, vars);
+  const where = {
+    name: place?.name ?? "TableTap",
+    timeZone: (place?.timezone as string | null) ?? DEFAULT_TIME_ZONE,
+    locale: locale === "en" ? "en-US" : "es-MX",
+  };
+  if (body.format === "pdf") {
+    // Two layouts, fonts, a QR and maybe a logo per request: throttled before
+    // any of it is drawn (Codex review of #620).
+    if (await isRoomLimited(req, "ticket-pdf", 30)) return await apiError("apiErr.tooManyRequests", 429);
+    // The same calculation as the HTML receipt, laid out as the 80 mm ticket.
+    // Its QR opens this sale for the staff (owner's choice, 2026-11-11).
+    try {
+      const model = receiptModel(source.orders, where, t, source.payment);
+      const firstOrder = source.payment ? null : source.orders[0]?.id;
+      // The production domain Vercel configured, never a Host header a client
+      // could choose; the request's own origin only off Vercel (development).
+      const site = process.env.VERCEL_PROJECT_PRODUCTION_URL ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}` : req.nextUrl.origin;
+      const qrUrl = new URL(firstOrder ? `/dashboard/bills?order=${firstOrder}` : "/dashboard/bills", site).toString();
+      // The visit card presented before paying, as this payment left it.
+      const loyalty = ticketLoyalty(source, t);
+      const pdf = await ticketPdf(model, await ticketPlace(db, actor.restaurantId, t), ticketText(t), loyalty, qrUrl);
+      return new NextResponse(new Uint8Array(pdf), { headers: {
+        "content-type": "application/pdf",
+        "content-disposition": `inline; filename="ticket-${model.code}.pdf"`,
+        "cache-control": "no-store",
+        // The copy this PDF printed, so a second one in the same dialog stays it.
+        ...(source.version ? { "x-receipt-version": encodeURIComponent(JSON.stringify(source.version)) } : {}),
+      } });
+    } catch { return await apiError("apiErr.generic", 503); }
+  }
   const receipt = buildReceipt(
     source.orders,
     {
