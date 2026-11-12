@@ -1378,12 +1378,13 @@ measure. Its amounts come from
   no tips (`bill_splits.amount = food_principal`, read as
   `parts_without_tips`); otherwise, or whenever the numbers do not add up, the
   base is unknown and the line is left off rather than printed wrong. The
-  rate is the owner's (Settings → "IVA en el ticket",
-  `restaurants.ticket_vat_rate`, 16/8/0, default 16): 16 % general, 8 % for
-  the border region's tax incentive, 0 prints no line. Server-read only, never
-  granted to anon or authenticated. The sample ticket shows the saved rate.
-  Only the PDF ticket prints the line; the email/HTML receipt does not. It is
-  independent of `tax_pct` (the menu's IVA breakdown, owner and manager).
+  rate is the order's own `orders.tax_pct`, saved when sold from Settings →
+  Impuesto. A table with orders at different saved rates prints one line per
+  rate; a split part prints a line only when every frozen order has the same
+  known rate. Zero or missing rates print no line. The sample uses the current
+  saved `restaurants.tax_pct`. There is no second tax setting or new column.
+  Costs and the ticket share `withoutIva` in `money.ts`. Only the PDF ticket
+  prints the line; the email/HTML receipt does not.
 - The visit card when a card was presented before paying: its stamps drawn
   as circles (the earned ones filled), the code's last four, and the next
   reward. It is read from the receipt source — the sale's card, its sitting's,

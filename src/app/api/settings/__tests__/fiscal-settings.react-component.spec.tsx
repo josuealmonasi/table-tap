@@ -97,16 +97,3 @@ it.each(TAX_REGIMES)("accepts supported SAT regime %s", async tax_regime => {
 it.each(MEXICAN_STATES)("accepts Mexican state %s", async address_state => {
   expect((await post({ address_state })).status).toBe(200); expect(state.written).toEqual({ address_state });
 });
-
-it.each([16, 8, 0])("owner saves the ticket's IVA rate %s", async ticket_vat_rate => {
-  expect((await post({ ticket_vat_rate })).status).toBe(200);
-  expect(state.written).toEqual({ ticket_vat_rate });
-  expect(state.eq).toHaveBeenCalledWith("id", "own-restaurant");
-});
-it.each([12, "16", 16.5, -16, null, true])("refuses a ticket IVA rate that is not offered: %s", async ticket_vat_rate => {
-  expect((await post({ ticket_vat_rate })).status).toBe(400); expect(state.written).toBeNull();
-});
-it("keeps the ticket's IVA rate the owner's", async () => {
-  state.role = "manager";
-  expect((await post({ ticket_vat_rate: 8 })).status).toBe(403); expect(state.written).toBeNull();
-});

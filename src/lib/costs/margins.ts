@@ -2,6 +2,7 @@ import { recipeChoicesOffered } from "./recipe-choices";
 import type { Modifier } from "@/lib/types";
 import { lineRevenues, type RevenueOrder } from "@/lib/report-revenue";
 import { itemSalePrice } from "@/lib/pricing";
+import { withoutIva } from "@/lib/money";
 import { defaultChoices, dishCost, type RecipeBook, type UnitCosts } from "./recipe-cost";
 
 /**
@@ -41,8 +42,6 @@ export interface UnitMargin {
   /** Of the price without IVA; null without a recipe or a price. */
   marginPct: number | null;
 }
-
-const withoutIva = (gross: number, taxPct: number) => (taxPct > 0 ? gross / (1 + taxPct / 100) : gross);
 
 /** One unit of each product, costed with its default choices. */
 export function unitMargin(item: CostedItem, book: RecipeBook, costs: UnitCosts, feeRate: number, taxPct: number): UnitMargin {

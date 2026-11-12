@@ -1856,18 +1856,6 @@ foundingLeftBody: "Subscribe now and keep this subscription price for as long as
     justNow: "just now",
     placedAt: "Ordered at {time}",
   },
-  ticketVat: {
-    title: "VAT on the ticket",
-    hint: "Your prices already include VAT (IVA). Under the total, the ticket shows how much VAT it includes, leaving out the tip.",
-    rate16: "16% (standard)",
-    rate16Hint: "The rate for most of the country.",
-    rate8: "8% (border region)",
-    rate8Hint: "If you apply the northern or southern border region tax incentive.",
-    rate0: "Don't show",
-    rate0Hint: "The ticket has no VAT line.",
-    preview: "See a sample",
-    saved: "Ticket VAT saved",
-  },
   ticketFont: {
     title: "Ticket font",
     hint: "How the ticket looks when it is printed or downloaded as a PDF. Open a sample with your details before choosing.",
@@ -2093,6 +2081,7 @@ badgesHint: "Shows how many things are waiting in each section. Applies to the w
     taxTitle: "Tax (IVA)",
     taxHint: "Already included in your menu prices",
     ivaPct: "IVA %",
+    ivaOnTicket: "It is also printed on the ticket as “VAT included”.",
     showBreakdown: "Show the tax breakdown",
     showBreakdownHint:
       "Customers see “Subtotal + IVA = total”. Off shows only the total.",

@@ -152,8 +152,6 @@ export type Restaurant = {
   auto_print_kitchen?: boolean;
   /** The ticket's typeface (ticket-font-ids.ts). */
   ticket_font?: string;
-  /** The IVA rate the ticket says its total includes (ticket-vat.ts): 16, 8 or 0 for no line. */
-  ticket_vat_rate?: number;
   /** The till prints the customer's ticket on every charge. Off by default: paperless. */
   print_ticket_at_till?: boolean;
   /** Which version of the terms this restaurant's owner accepted. */

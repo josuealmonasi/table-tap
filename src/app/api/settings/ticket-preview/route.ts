@@ -33,7 +33,7 @@ export async function GET(req: NextRequest) {
   const t = (key: string, vars?: Record<string, string | number>) => translate(messages, key, vars);
   try {
     const db = createAdminClient();
-    const { data: r, error } = await db.from("restaurants").select("currency, timezone")
+    const { data: r, error } = await db.from("restaurants").select("currency, timezone, tax_pct")
       .eq("id", actor.restaurantId).single();
     if (error || !r) return await apiError("apiErr.generic", 503);
     const cur = (r.currency as string) || "MXN";
@@ -51,7 +51,8 @@ export async function GET(req: NextRequest) {
       }),
       tableLabel: "4", cur, lines, rows: [[t("totals.tip"), formatMoney(tip, cur)]],
       // The sample's IVA line, at the owner's saved rate: the sale without the tip.
-      totalLabel: t("totals.total"), paid: subtotal + tip, payMethod: "cash", vatBase: subtotal,
+      totalLabel: t("totals.total"), paid: subtotal + tip, payMethod: "cash",
+      vatParts: r.tax_pct == null ? null : [{ rate: Number(r.tax_pct), base: subtotal }],
     };
     const place = await ticketPlace(db, actor.restaurantId, t);
     const loyalty = { last4: "0000", progress: 5, goal: 8, message: t("ticketFont.sampleLoyalty") };

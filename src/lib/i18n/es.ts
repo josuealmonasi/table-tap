@@ -1854,18 +1854,6 @@ foundingLeftBody: "Quien contrata ahora conserva este precio de suscripción mie
     justNow: "recién",
     placedAt: "Pedido a las {time}",
   },
-  ticketVat: {
-    title: "IVA en el ticket",
-    hint: "Tus precios ya incluyen IVA. Debajo del total, el ticket dice cuánto IVA trae incluido, sin contar la propina.",
-    rate16: "16 % (general)",
-    rate16Hint: "La tasa de casi todo el país.",
-    rate8: "8 % (región fronteriza)",
-    rate8Hint: "Si aplicas el estímulo fiscal de la región fronteriza norte o sur.",
-    rate0: "No mostrar",
-    rate0Hint: "El ticket no lleva la línea de IVA.",
-    preview: "Ver ejemplo",
-    saved: "IVA del ticket guardado",
-  },
   ticketFont: {
     title: "Letra del ticket",
     hint: "Así se ve el ticket que se imprime o se descarga en PDF. Abre un ejemplo con tus datos antes de elegir.",
@@ -2090,6 +2078,7 @@ badgesHint: "Muestra cuántas cosas esperan acción en cada sección. Aplica a t
     taxTitle: "Impuesto (IVA)",
     taxHint: "Ya incluido en los precios de tu menú",
     ivaPct: "% de IVA",
+    ivaOnTicket: "También se imprime en el ticket como «IVA incluido».",
     showBreakdown: "Mostrar el desglose del impuesto",
     showBreakdownHint:
       "Los clientes ven “Subtotal + IVA = total”. Desactivado muestra solo el total.",

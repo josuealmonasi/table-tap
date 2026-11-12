@@ -48,14 +48,14 @@ async function submit() { await act(async () => host.querySelector("form")!.disp
 it.each(["owner", "manager"] as const)("renders fiscal fields only for owner: %s", async role => {
   await render(role);
   expect(host.textContent?.includes("Datos fiscales y dirección")).toBe(role === "owner");
-  expect(host.querySelectorAll("[name]:not([name=ticket-font]):not([name=ticket-vat])").length).toBe(role === "owner" ? 11 : 0);
+  expect(host.querySelectorAll("[name]:not([name=ticket-font])").length).toBe(role === "owner" ? 11 : 0);
 });
 it.each(["es", "en"] as const)("shows all labels and the hint in %s", async locale => {
   await render("owner", locale);
   for (const field of FISCAL_KEYS) expect(host.textContent).toContain(translate(messagesFor(locale), `fiscal.fields.${field}`));
   expect(host.textContent).toContain(translate(messagesFor(locale), "fiscal.hint"));
   expect(host.textContent).not.toContain("fiscal.");
-  expect([...host.querySelectorAll("[name]:not([name=ticket-font]):not([name=ticket-vat])")].map(input => input.getAttribute("name")))
+  expect([...host.querySelectorAll("[name]:not([name=ticket-font])")].map(input => input.getAttribute("name")))
     .toEqual(["legal_name", "rfc", "tax_regime", "address_street", "address_ext_number", "address_int_number", "address_postal_code", "address_colonia", "address_municipality", "address_state", "ticket_phone"]);
   expect([...host.querySelectorAll<HTMLInputElement>("input")].every(input => !input.required && !input.disabled)).toBe(true);
 });
@@ -124,34 +124,9 @@ it.each(["owner", "manager"] as const)("offers the three ticket fonts, each with
   if (role !== "owner") return;
   // Archivo is the default when the restaurant never chose.
   expect(radios.find(r => r.checked)?.value).toBe("archivo");
-  const samples = [...host.querySelectorAll<HTMLAnchorElement>("#letra-ticket a[href^='/api/settings/ticket-preview']")];
+  const samples = [...host.querySelectorAll<HTMLAnchorElement>("a[href^='/api/settings/ticket-preview']")];
   expect(samples.map(a => a.getAttribute("href"))).toEqual(["archivo", "plex", "classic"].map(f => `/api/settings/ticket-preview?font=${f}`));
   expect(samples.every(a => a.target === "_blank")).toBe(true);
   await act(async () => radios[1].click());
   expect(save).toHaveBeenCalledWith({ ticket_font: "plex" });
-});
-
-it.each(["owner", "manager"] as const)("offers the ticket's IVA rate to the owner only: %s", async role => {
-  await render(role);
-  const radios = [...host.querySelectorAll<HTMLInputElement>("input[name=ticket-vat]")];
-  expect(radios.map(r => r.value)).toEqual(role === "owner" ? ["16", "8", "0"] : []);
-  if (role !== "owner") return;
-  // 16 % is the default when the restaurant never chose, as in the schema.
-  expect(radios.find(r => r.checked)?.value).toBe("16");
-  expect(host.textContent).toContain("IVA en el ticket");
-  expect(host.textContent).toContain("8 % (región fronteriza)");
-  expect(host.textContent).toContain("No mostrar");
-  const sample = host.querySelector<HTMLAnchorElement>("#iva-ticket a[href^='/api/settings/ticket-preview']");
-  expect(sample?.getAttribute("href")).toBe("/api/settings/ticket-preview?font=archivo");
-  await act(async () => radios[1].click());
-  expect(save).toHaveBeenCalledWith({ ticket_vat_rate: 8 });
-  await act(async () => radios[2].click());
-  expect(save).toHaveBeenCalledWith({ ticket_vat_rate: 0 });
-});
-
-it("shows the ticket's IVA choices in English", async () => {
-  await render("owner", "en");
-  expect(host.textContent).toContain("VAT on the ticket");
-  expect(host.textContent).toContain("8% (border region)");
-  expect(host.textContent).toContain("Don't show");
 });

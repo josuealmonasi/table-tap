@@ -34,6 +34,7 @@ and that a new party cannot see the previous party's waiting phones.
 | A duplicate refund tracks customer completion and fee completion separately (S11 I5) | A failed fee return disappeared behind an already-refunded customer payment |
 | A duplicate refund keeps its original charge currency everywhere (S11 I9) | Changing the menu currency relabelled money owed back and the approval amount |
 |---|---|
+| Printed IVA keeps each order's saved rate | A second current restaurant rate could relabel an older sale; `ticket-vat.spec.ts` and `receipt-vat-source.spec.ts` check saved rates, missing evidence and mixed-rate splits |
 | Restaurant logos use PNG bytes, content type and path, and the bucket accepts PNG | The photo encoder stored WebP logos that the ticket PDF could not print; changing only the encoder would leave a WebP path and a bucket that refused PNG. `image-resize.spec.ts` checks logos and unchanged photo encodings; `images.spec.ts` checks the bucket allowlist |
 | A new card save cannot duplicate today's ticket after a lost reply (card email UI) | The save could commit unseen and both the card outbox and the per-sale sender mailed the same ticket; `card-email-pos.spec.tsx` holds the lost reply and checks skip in the charge and held replay |
 | A new card reader does not reuse another reader's address (card email UI) | A cashier could briefly see an owner's full address from the shared SWR cache; `card-email.spec.tsx` reproduces the flash with a delayed masked reply |
@@ -6681,15 +6682,24 @@ and held replay, while charging remains available.
 ## The IVA line speaks of the total above it (2026-11-12)
 
 The ticket prints "IVA 16% incluido" under its TOTAL. The two have to agree:
-the IVA is worked out from the same values the total prints (`vatBase` on
-`receiptModel`, `saleVatBase` in `ticket-vat.ts`), less the tip that total
+the IVA is worked out from the same values the total prints (`vatParts` on
+`receiptModel`, `saleVatParts` in `ticket-vat.ts`), less the tip that total
 contains — never the receipt's tip row, which shows the tip before a return or
 a forgiveness. A split part's amount can hold tips added to the orders before
 the split, which no ticket can separate, so a part prints the line only when
 its split's frozen debt carried none; anywhere the base is not certain the
 line is left off. `ticket-vat.spec.ts` pins the amounts (16 % of 116.00,
 8 %, 0, tip, discount, charge, forgiveness, table, split part and its return,
-the ambiguous part), the column and its check, and that no browser grant or
-public menu read names it; `ticket-pdf.spec.ts` checks the line sits right
+the ambiguous part), the saved order rates, and the absence of a second
+restaurant tax setting; `ticket-pdf.spec.ts` checks the line sits right
 under the TOTAL and is absent at 0, at an unknown base and with no rate;
 `returns-receipt-source.spec.ts` checks the split read.
+
+## A ticket keeps the IVA rate its orders were sold at (2026-11-12)
+
+The saved order and the printed ticket have to agree about the tax rate.
+Reading a separate current restaurant setting could relabel an older sale.
+The ticket now groups the sale without tips by `orders.tax_pct`, using the
+same `withoutIva` calculation as Costs. Missing rates and ambiguous split
+parts leave the line off; they never stop the receipt. `ticket-vat.spec.ts`,
+`ticket-pdf.spec.ts` and `receipt-vat-source.spec.ts` cover the boundary.

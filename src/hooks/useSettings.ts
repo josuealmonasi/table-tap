@@ -33,7 +33,6 @@ export type SettingsInput = Pick<
   | "ticket_late_minutes"
   | "auto_print_kitchen"
   | "ticket_font"
-  | "ticket_vat_rate"
   | "print_ticket_at_till"
 > & FiscalSettings;
 

@@ -5,7 +5,6 @@ import { useT } from "@/lib/i18n/context";
 import type { FiscalSettings } from "@/lib/fiscal-settings";
 import FiscalCard from "./fiscal-card.react-component";
 import TicketFontCard from "./TicketFontCard";
-import TicketVatCard from "./TicketVatCard";
 import type { Restaurant } from "@/lib/types";
 import type { Role } from "@/lib/membership";
 import { useSettings } from "@/hooks/useSettings";
@@ -120,7 +119,6 @@ export default function SettingsForm({
               <RestaurantCard restaurant={restaurant} saving={saving} save={save} />
               {fiscal && <FiscalCard fiscal={fiscal} saving={saving} save={save} />}
               <TicketFontCard font={restaurant.ticket_font} saving={saving} save={save} />
-              <TicketVatCard rate={restaurant.ticket_vat_rate} font={restaurant.ticket_font} saving={saving} save={save} />
               <LogoCard restaurant={restaurant} />
               <CoverCard restaurant={restaurant} />
               <PaymentsCard />
