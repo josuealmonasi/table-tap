@@ -14,10 +14,11 @@ const canonical = (sql: string) => sql.replace(/--[^\n]*/g, "").replace(/\s+/g, 
 // a line that says which of them were tips.
 function preservesDrawerCalculation(sql: string): boolean {
   const totals = canonical(body(sql, "cash_shift_totals"));
-  const withdrawals = totals.split("withdrawals as (")[1]?.split("select jsonb_build_object")[0]?.trim() ?? "";
+  // The withdrawals CTE ends where #611's held-receipt CTE (unclassified) begins.
+  const withdrawals = totals.split("withdrawals as (")[1]?.split(", unclassified as (")[0]?.trim() ?? "";
   return withdrawals.startsWith("select coalesce(sum(m.amount), 0) amount,")
     && withdrawals.endsWith("and m.kind = 'withdrawal' and m.currency = s.currency )")
-    && totals.includes("'expected', round(s.opening_amount + r.amount - f.amount - h.amount - w.amount, 2)");
+    && totals.includes("'expected', round(s.opening_amount + r.amount + u.amount - f.amount - h.amount - w.amount, 2)");
 }
 it("adds a checked non-null purpose defaulting old movements to other", () => {
   expect(schema).toContain("add column if not exists purpose text not null default 'other'\n  check (purpose in ('tips', 'other'))");
@@ -54,7 +55,7 @@ it("reports only tip-purpose withdrawals as tips_out while preserving the full d
   const sql = body(proposal, "cash_shift_totals");
   expect(sql).toContain("coalesce(sum(m.amount) filter (where m.purpose = 'tips'), 0) tips_out");
   expect(sql).toContain("'tips_out', round(w.tips_out, 2)");
-  expect(sql).toContain("'expected', round(s.opening_amount + r.amount - f.amount - h.amount - w.amount, 2)");
+  expect(sql).toContain("'expected', round(s.opening_amount + r.amount + u.amount - f.amount - h.amount - w.amount, 2)");
   expect(preservesDrawerCalculation(proposal)).toBe(true);
 });
 it.each([

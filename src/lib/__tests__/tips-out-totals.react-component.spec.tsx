@@ -14,6 +14,7 @@ it("keeps both tip totals from the RPC without recalculating expected cash", asy
   }, error: null });
   expect(await shiftSumOf("r", shift, until)).toEqual({
     opening: 20, cashSales: 110, tips: 10, tips_out: 8.5, withdrawn: 15, expected: 115,
+    unclassifiedCash: 0, unclassifiedCashByCurrency: {},
   });
   expect(state.rpc).toHaveBeenCalledExactlyOnceWith("cash_shift_totals", {
     p_restaurant: "r", p_shift: "shift", p_until: until.toISOString(),
