@@ -2890,7 +2890,8 @@ credit, return_approved, refund_paid and historical_observation. Charge and adde
 tip raise debt; live collections and credits reduce it. Return approval, actual
 refund payout and historical observations have zero debt effect. Backfilled
 collections also have zero debt effect: the opening already includes them.
-Component bounds, required source keys, source-event uniqueness and a trigger
+Tip and service components are only non-negative, not bounded by the amount,
+because an approved coupon or a full comp lowers the total but not them. Required source keys, source-event uniqueness and a trigger
 check restaurant/account/currency agreement. RLS has no client policies; only
 service_role can select and insert. Updates and deletes are rejected even for
 privileged writers. Only deleting the restaurant cascades; other source foreign
