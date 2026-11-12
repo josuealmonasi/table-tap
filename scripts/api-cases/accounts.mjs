@@ -1,9 +1,11 @@
+import { tipBaseCase } from "./tip-base.mjs";
 import { randomUUID } from "node:crypto";
 import { MARK } from "../api-fixtures.mjs";
 
 export function accountsCases(fx) {
   const { dish } = fx;
   return [
+    tipBaseCase("account"),
     // ── Customer accounts ("cuenta abierta") ─────────────────────────────
     // In the order a real one lives: opened, its ceiling moved, a table's bill
     // put on it, a charge past the ceiling refused, a sale rung onto it at the

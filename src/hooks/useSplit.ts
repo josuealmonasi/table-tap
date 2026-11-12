@@ -18,6 +18,8 @@ export interface SplitState {
   mine: { shareNo: number; amount: number; paid: boolean } | null;
   outstanding: number;
   ownSince: number;
+  tipPrincipal?: number;
+  ownTipBase?: number;
 }
 
 /**

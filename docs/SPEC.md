@@ -429,6 +429,17 @@ dishes on a bill the restaurant has just cancelled.
   person's own" is true of the one added when a share is *paid*: clamped to the
   payable amount, recorded in `payments.tip`, and added to the oldest order on
   the sitting.
+- **Tip percentages always use dishes after discounts.** `src/lib/tip-base.ts`
+  is the shared rule for checkout, the bill, split shares and account payments,
+  including the amounts printed on the tip chips. Service, earlier tips and
+  principal already collected are excluded. A bill uses the selected unpaid
+  orders' remaining dishes, less any new coupon. A split uses its share of the
+  frozen dishes (the first share carries the odd cents), plus only that diner's
+  later orders covered by the payment. Model 2 selected slots cover frozen food
+  only; later orders stay outside that payment. Accounts use the dishes in the
+  checkout's frozen order scope, in the selected currency. The server recomputes
+  percentages with the same helper; explicit amounts retain their existing caps.
+  Fee principal and fee budgets keep their existing meaning, including service.
 - **A bill names every charge in its total.** The diner's bill lists the
   dishes, any discount, the service charge (with the percentage it was taken
   at) and any tip as their own lines, adding up to exactly what is charged.
@@ -640,11 +651,26 @@ dishes on a bill the restaurant has just cancelled.
   handed back, as the corte counts it), minus its withdrawals
   (`cash_shift_totals`, also used by the later review). Closing, withdrawal
   creation and withdrawal deletion share the restaurant money lock and check
-  the exact open shift inside the transaction that writes the change. A
+  the exact open shift inside the transaction that writes the change.
+  Online receipts are dated after their money lock, so a collection waiting
+  behind a close is dated after that close. Offline receipts retain the date
+  the cash was taken. Closing rechecks unapproved offline cash under the same
+  lock as queue submission and refuses to sign until it is reviewed. A
   difference ("Sobrante" / "Faltante") is
   explained once, by the closer or a manager. Withdrawals (`cash_movements`)
   go only into the open shift, and a manager can strike one off only while it
-  is still open. Every shift freezes its currency at opening, and each
+  is still open. Each withdrawal records its purpose: "Propinas pagadas" /
+  "Tips paid out" (`tips`) or "Otro retiro" / "Other withdrawal" (`other`,
+  the default, including historical movements). The route rejects any other
+  purpose; both withdrawal writers save it, and a retry must match its original
+  purpose. The shift block, closed record and printed handover show the tips
+  inside cash sales (`tips`) and, when positive, tips paid out (`tips_out`) below
+  that line. Payouts are already part of withdrawals: expected cash remains
+  opening + net cash sales − all withdrawals, regardless of purpose.
+  **Schema handoff:** `supabase/PROPOSAL-tips-out.sql` proposes the column and
+  RPC changes; Claude must incorporate them into `schema.sql` and `drop.sql`
+  and apply them before deploying the route's `p_purpose` argument.
+  Every shift freezes its currency at opening, and each
   movement keeps that shift's currency. Receipts and completed cash returns
   are summed only in that currency; labels and printed handovers use it too.
   Old shifts whose opening currency cannot be proven use the restaurant's
@@ -972,6 +998,10 @@ business's profit.
   (`src/lib/costs/margins.ts`). A line with any dish or extra lacking a recipe
   is left out of the totals and named apart — counted at nothing, a mostly
   uncosted menu would show a margin of nearly everything.
+  Analytics revenue, average ticket and daily bars exclude staff tips, including
+  tip components restored after returns, and retain service and IVA. Tips are
+  reported separately. The corte and expected drawer cash still include tips
+  received, less any actual cash handed back or withdrawn.
   Analytics product rows and contribution use the same final food revenue:
   `max(0, total - service_fee - tip)`, including IVA, allocated in whole cents.
   New diner, till, waiter-pad and offline sales freeze each whole line's
@@ -1125,6 +1155,14 @@ stops.
 now catches each one.
 
 ## The counter till
+
+Managers can resolve a held cash receipt without creating a sale, payment or
+stock movement. Retained cash is disclosed apart from sales in the open shift
+and its printed sheet; foreign cash is listed with other-currency takings and
+never added to the drawer's expected count. Returned cash in the drawer currency
+requires a recorded withdrawal, which cannot be removed once linked. Foreign
+returned cash takes no withdrawal or new receipt. Resolution history exposes
+copyable full cash-receipt, payment and withdrawal IDs for later duplicate links.
 
 A cashier rings a sale face to face, takes cash or a card on the restaurant's
 own terminal, and the order lands on the pass already paid for. The customer is
@@ -1746,6 +1784,26 @@ server applies it only if nothing has happened since.
   original receipt. `/dashboard/held-sales` lets a manager review it on any
   device, confirm the original collector/currency/time and enter an approval
   reason. Approval never restores permission to create new sales on that plan.
+- A manager can resolve a pending **cash** receipt without creating a sale at
+  `POST /api/pos/recover/resolve`. The session supplies the actor and restaurant;
+  the decision records a reason (8–500 characters), original collector,
+  collection time, currency and an amount with cent precision. Cash kept becomes
+  unclassified cash in the open shift, separate from sales. Cash returned also
+  requires a matching recorded withdrawal from that shift. A duplicate links
+  exactly one existing cash payment or held cash receipt. No cash collected
+  requires zero and no links. The SQL transaction preserves the raw receipt,
+  freezes the resolution and answers an identical retry with the same record.
+  Resolved receipts leave pending, cannot later be approved and appear alongside
+  approvals in history, newest decision first, labelled by disposition with the
+  resolver, reason and amount. Card receipts have no resolve action. The form
+  reads only the acting restaurant's open-shift withdrawals through the sibling
+  route's manager-only GET; SQL rechecks all links under the money lock.
+- Intake refuses non-string, non-null whole-order notes/names and money fields
+  that are not finite JavaScript numbers in cents (allowing float noise).
+  The normalized tip cannot exceed the total; the sum retains its one-cent
+  tolerance. Raw receipts remain unchanged. Manager review renders normalized
+  lines and charge fields, including legacy formatted amounts, and approval
+  drops malformed legacy whole-order notes/names from the resulting order.
 - Approved lines keep the till's original prices and combo parts, which are
   what stock gives up even after the promotion has ended. The order, money,
   stock and approval audit commit together, retaining both the collector and
@@ -1756,7 +1814,7 @@ server applies it only if nothing has happened since.
   history, printed receipt, activity log and manager queue show the original.
 - Analytics' "Ventas sin conexión" counts current-currency offline sales of the
   last 44 days and lists every one with a difference. The manager queue keeps
-  every received exception regardless of age, including approved history.
+  every received exception regardless of age, including approved and resolved history.
 - While the device holds unsent sales, it cannot close the shift or sign out:
   they are the only record of money in the drawer. One the server refuses is
   kept with the reason, never thrown away.
@@ -2556,7 +2614,8 @@ collection freezes the size permanently; food cancellation uses refunds.
 
 `/api/split/pay` retains the legacy claim path and dispatches model 2 to grouped
 slots. Its body adds `revision`, unique zero-based `slots`, `expectedCents` and
-optional `tipCents` (default zero, at most the selected parts). It creates a
+optional `tipCents` (default zero, at most the selected parts), or `tipPct`
+for a percentage of their frozen dishes. Sending both is refused. It creates a
 durable attempt, reserves every selected part, then creates Stripe Checkout.
 The amount is the parts plus the new tip. The application fee is the sum of
 their frozen fee slices, reserved through the existing monthly cap. Below the

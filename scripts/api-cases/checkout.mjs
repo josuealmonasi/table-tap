@@ -1,3 +1,4 @@
+import { tipBaseCase } from "./tip-base.mjs";
 import { MARK } from "../api-fixtures.mjs";
 
 export function checkoutCardCases(fx) {
@@ -183,6 +184,7 @@ export function billPayCases(fx) {
   const { restaurant, table } = fx;
   const r = restaurant.id;
   return [
+    tipBaseCase("bill"),
     // This case sent no orderIds, so it was refused at the body check and never
     // reached a line of the route — while `expect: [200, 400, 409]` accepted
     // that refusal, the no-card-reader one, and a success, all as a pass. It is

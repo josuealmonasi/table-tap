@@ -106,7 +106,7 @@ export async function arrangeRetry(f, state, kind) {
  */
 export async function setAsideHeldCash(f, restaurantId) {
   const held = await checked(f.admin.from("offline_sale_queue").select("pos_ref")
-    .eq("restaurant_id", restaurantId).is("approved_at", null).eq("body->>method", "cash"));
+    .eq("restaurant_id", restaurantId).is("approved_at", null).is("resolved_at", null).eq("body->>method", "cash"));
   const refs = held.map(h => h.pos_ref);
   if (refs.length) await checked(f.admin.from("offline_sale_queue").update({ approved_at: new Date().toISOString() }).in("pos_ref", refs).select("pos_ref"));
   return async () => {

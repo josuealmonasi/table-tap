@@ -1,9 +1,11 @@
+import { tipBaseCase } from "./tip-base.mjs";
 import { MARK } from "../api-fixtures.mjs";
 
 export function splitsCases(fx) {
   const { restaurant, table } = fx;
   const r = restaurant.id;
   return [
+    tipBaseCase("split"),
     // A receipt follows a paid part even after the bill closes. Its reader
     // requires the same approved phone as the bill, never the sitting id alone.
     { name: "GET  /api/receipt/payments (approved phone)", as: "diner", method: "GET",

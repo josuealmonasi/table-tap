@@ -14,7 +14,7 @@ export const runtime = "nodejs";
 
 // POST /api/cash-drawer — cash taken out of the drawer.
 //
-// { kind: "withdrawal", amount, note? }
+// { kind: "withdrawal", amount, note?, purpose?: "tips" | "other" }
 //
 // The people who run the drawer: owner, manager, cashier. It belongs to the
 // shift open now, and there has to be one: cash taken out of a drawer nobody
@@ -24,8 +24,10 @@ export async function POST(req: NextRequest) {
   const actor = await actingStaff();
   if (!actor || !HOLDS_THE_DRAWER(actor.role)) return await apiError("apiErr.forbidden", 403);
 
-  const body = await jsonBody<{ kind?: unknown; amount?: unknown; note?: unknown; ref?: unknown; shiftId?: unknown }>(req);
+  const body = await jsonBody<{ kind?: unknown; amount?: unknown; note?: unknown; purpose?: unknown; ref?: unknown; shiftId?: unknown }>(req);
   if (body?.kind !== "withdrawal") return await apiError("apiErr.invalidRequest", 400);
+  const purpose = body.purpose === undefined ? "other" : body.purpose;
+  if (purpose !== "tips" && purpose !== "other") return await apiError("apiErr.invalidRequest", 400);
   const amount = cashAmount(body?.amount, true);
   if (amount === null) return await apiError("apiErr.cashAmount", 400);
   const note = cashNote(body?.note);
@@ -39,7 +41,7 @@ export async function POST(req: NextRequest) {
   // promise that the shift will still be open when the withdrawal is written.
   const { data, error } = await createAdminClient().rpc(ref ? "create_cash_withdrawal_once" : "create_cash_withdrawal", {
     ...(ref ? { p_ref: ref } : {}),
-    p_restaurant: actor.restaurantId, p_shift: shift.id, p_amount: amount, p_note: note, p_actor: actor.email,
+    p_restaurant: actor.restaurantId, p_shift: shift.id, p_amount: amount, p_note: note, p_actor: actor.email, p_purpose: purpose,
   });
   if (error?.code === "PT409") return await apiError("apiErr.retryConflict", 409);
   if (error) return await apiError("apiErr.generic", 500);
@@ -76,6 +78,7 @@ export async function DELETE(req: NextRequest) {
   });
   if (error) return await apiError("apiErr.generic", 500);
   if (!data) return await apiError("apiErr.cashMovementNotFound", 404);
+  if (data.outcome === "linked") return await apiError("apiErr.cashWithdrawalLinked", 409);
 
   await logEvent({
     restaurantId: actor.restaurantId,

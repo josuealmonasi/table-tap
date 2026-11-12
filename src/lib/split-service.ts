@@ -1,3 +1,5 @@
+import { dinerCheckoutOrders } from "@/lib/diner-checkout-orders";
+import { frozenTipPrincipal, ordersTipBase } from "@/lib/tip-base";
 import { splitResumptions } from "@/lib/split-slots-resume";
 import { splitSlots, splitFrozen } from "@/lib/split-slots-state";
 import type { SplitSlot } from "@/lib/split-slots";
@@ -32,6 +34,8 @@ export interface SplitState {
   outstanding: number;
   /** Their own orders placed after it froze, which are theirs alone. */
   ownSince: number;
+  tipPrincipal?: number;
+  ownTipBase?: number;
 }
 
 /**
@@ -122,7 +126,7 @@ export async function currentSplit(
   const db = createAdminClient();
   const { data: split } = await db
     .from("bill_splits")
-    .select("id, shares, status, amount, proposed_by, locked_at, expires_at, model_version, revision, currency, first_payment_attempt_at")
+    .select("id, shares, status, amount, proposed_by, locked_at, expires_at, model_version, revision, currency, first_payment_attempt_at, food_principal, order_ids")
     .eq("session_id", sessionId)
     .in("status", ["proposed", "locked"])
     .maybeSingle();
@@ -135,13 +139,17 @@ export async function currentSplit(
     return null;
   }
 
+  const frozen = split.status === "locked" ? await dinerCheckoutOrders(split.order_ids ?? []) : [];
+  if (split.status === "locked" && frozen.length !== split.order_ids?.length) throw new Error("Could not read frozen food");
+  const tipPrincipal = frozenTipPrincipal(split.food_principal, frozen);
+
   if (split.model_version === 2) {
     const slots = await splitSlots(restaurantId, split.id);
     const orders = await fetchTableBill(restaurantId, tableId, "diner", sessionId, member);
     return { id: split.id, shares: split.shares, status: split.status, amount: Number(split.amount),
       proposedBy: split.proposed_by, joined: slots.filter(s => s.paid).length, mine: null,
       outstanding: tableBill(orders, []).total, ownSince: 0, modelVersion: 2, revision: split.revision,
-      currency: split.currency, frozen: splitFrozen(split.first_payment_attempt_at, slots), slots,
+      tipPrincipal, currency: split.currency, frozen: splitFrozen(split.first_payment_attempt_at, slots), slots,
       resumptions: await splitResumptions(restaurantId, split.id, split.revision, member.id) };
   }
 
@@ -165,6 +173,9 @@ export async function currentSplit(
       ? { shareNo: mine.share_no, amount: Number(mine.amount), paid: Boolean(mine.paid_at) }
       : null,
     outstanding: bill.total,
+    tipPrincipal,
+    ownTipBase: ordersTipBase(orders.filter(o => ownOrderIds.includes(o.id) && o.diner === member.id && !o.paid
+      && Date.parse(o.created_at) > Date.parse(split.locked_at ?? ""))),
     ownSince: split.locked_at
       ? ownOrdersSince(orders.filter(o => o.diner === member.id), split.locked_at as string, ownOrderIds)
       : 0,
@@ -179,7 +190,7 @@ export async function currentSplit(
  * the table divided.
  */
 function ownOrdersSince(
-  orders: { id: string; created_at: string; total: number | string; paid?: boolean }[],
+  orders: { id: string; created_at: string; total: number | string; paid?: boolean; collected?: number }[],
   lockedAt: string,
   ownOrderIds: string[],
 ): number {
@@ -192,6 +203,6 @@ function ownOrdersSince(
   return round2(
     orders
       .filter(o => mine.has(o.id) && !o.paid && Date.parse(o.created_at) > froze)
-      .reduce((sum, o) => sum + Number(o.total), 0),
+      .reduce((sum, o) => sum + Number(o.total) - Number(o.collected ?? 0), 0),
   );
 }

@@ -148,3 +148,10 @@ it("groups mixed-currency balances and last charges with linear account-id reads
     lastChargeAt: id === "a1" ? "2026-10-03T12:00:00Z" : null, payingOnline: false,
   })) });
 });
+
+it("F6 public tip bases contain only each currency's discounted dishes", async () => {
+  tables.orders = [{ ...charge("mxn"), currency: "MXN", total: 120, service_fee: 10, tip: 10 },
+    { ...charge("usd"), currency: "USD", total: 55, service_fee: 5, tip: 10 },
+    { ...charge("paid"), currency: "MXN", paid: true }];
+  expect((await statementOf(account)).tipBalances).toEqual([{ currency: "MXN", amount: 100 }, { currency: "USD", amount: 40 }]);
+});

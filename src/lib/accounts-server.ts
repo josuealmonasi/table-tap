@@ -1,3 +1,4 @@
+import { ordersTipBase } from "@/lib/tip-base";
 import { readAccountCredits, withAccountCredits } from "@/lib/account-credit-history";
 import { unresolvedAccounts } from "@/lib/account-checkout-state";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -105,6 +106,7 @@ export interface StatementPayment {
 
 /** What is owed, day by day, and what was paid before. */
 export interface Statement {
+  tipBalances?: CurrencyBalance[];
   currency?: string | null;
   balances?: CurrencyBalance[];
   owed: number;
@@ -116,6 +118,8 @@ export interface Statement {
 }
 
 interface StatementOrder {
+  service_fee?: number;
+  tip?: number;
   status: string;
   currency: string;
   id: string;
@@ -130,7 +134,7 @@ interface StatementOrder {
 /** An account's statement: its unpaid orders by the restaurant's day, and its payments. */
 export async function statementOf(account: AccountRow, timeZone?: string | null | PromiseLike<string | null | undefined>): Promise<Statement> {
   const db = createAdminClient();
-  const ordersRead = everyRow<StatementOrder>((a, b) => db.from("orders").select("id, items, total, currency, table_label, created_at, charged_at, charged_by, status")
+  const ordersRead = everyRow<StatementOrder>((a, b) => db.from("orders").select("id, items, total, currency, table_label, created_at, charged_at, charged_by, status, service_fee, tip")
     .eq("restaurant_id", account.restaurant_id).eq("account_id", account.id).eq("paid", false).eq("written_off", false).neq("status", "cancelled")
     .order("id").range(a, b), "the account's orders");
   const [orders, paymentsRes, returns, credits, resolvedTimeZone] = await Promise.all([
@@ -160,6 +164,7 @@ export async function statementOf(account: AccountRow, timeZone?: string | null 
   return {
     currency: balances.length === 1 ? balances[0].currency : null,
     balances,
+    tipBalances: balances.map(b => ({ currency: b.currency, amount: ordersTipBase(orders.filter(o => o.currency === b.currency)) })),
     owed: balances.length > 1 ? 0 : round2(charges.reduce((sum, c) => sum + c.total, 0)),
     days: byDay(await withAccountCredits(db, account.restaurant_id, account.id, charges, credits), resolvedTimeZone ?? DEFAULT_TIME_ZONE),
     payments: payments.map(p => ({ at: p.created_at, amount: Number(p.amount), tip: Number(p.tip), method: p.method, currency: p.currency })),

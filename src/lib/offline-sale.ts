@@ -30,21 +30,51 @@ export interface OfflineCharge {
   taxPct?: number;
 }
 
+/** Money as a new receipt carries it: a number of centavos-precise pesos, never text. */
+function strictMoney(raw: unknown): number | null {
+  // Receipts contain numeric cents, not the locale-formatted text of an input.
+  // Reject real sub-cent amounts before rounding; tolerate only float noise.
+  return typeof raw === "number" && Number.isFinite(raw) && Math.abs(raw * 100 - Math.round(raw * 100)) <= 1e-6
+    ? cashAmount(round2(raw), false) : null;
+}
+
+/**
+ * Money as an already-stored held receipt may carry it. Receipts queued before
+ * the numeric shape stored amounts as text ("120.50"); a manager approving one
+ * may accept those when they are plain non-negative decimals with at most 2
+ * places. Never used for new intake.
+ */
+function legacyMoney(raw: unknown): number | null {
+  return strictMoney(typeof raw === "string" && /^\d+(\.\d{1,2})?$/.test(raw.trim()) ? Number(raw.trim()) : raw);
+}
+
+/**
+ * A held receipt a manager is approving: no age limit, and legacy text
+ * amounts accepted. New receipts go through `offlineCharge`, which refuses text.
+ */
+export function heldApprovalCharge(raw: unknown, now = Date.now()): OfflineCharge | null {
+  return parseCharge(raw, now, true, legacyMoney);
+}
+
 export function offlineCharge(raw: unknown, now = Date.now(), recovery = false): OfflineCharge | null {
+  return parseCharge(raw, now, recovery, strictMoney);
+}
+
+function parseCharge(raw: unknown, now: number, recovery: boolean, money: (v: unknown) => number | null): OfflineCharge | null {
   if (!raw || typeof raw !== "object") return null;
   const r = raw as Record<string, unknown>;
   const at = typeof r.at === "string" ? Date.parse(r.at) : NaN;
   if (!Number.isFinite(at) || at > now + CLOCK_SKEW_MS || (!recovery && now - at > OFFLINE_MAX_AGE_DAYS * 86_400_000) || at < Date.UTC(2000, 0, 1)) return null;
-  const money = (v: unknown) => cashAmount(typeof v === "number" ? round2(v) : v, false);
   const subtotal = money(r.subtotal);
   const serviceFee = money(r.serviceFee);
   const tip = money(r.tip);
   const discount = money(r.discount);
   const total = money(r.total);
   if (subtotal === null || serviceFee === null || tip === null || discount === null || total === null) return null;
+  if (tip > total) return null;
   // The subtotal is already after the discounts; the service charge and the
   // tip go on top of it. A total that is not those three is not a charge.
-  if (Math.abs(round2(subtotal + serviceFee + tip) - total) > 0.01) return null;
+  if (Math.abs(Math.round(round2(subtotal + serviceFee + tip) * 100) - Math.round(total * 100)) > 1) return null;
   const taxPct = typeof r.taxPct === "number" && Number.isFinite(r.taxPct) && r.taxPct >= 0 && r.taxPct <= 100 ? r.taxPct : undefined;
   return { at: new Date(at).toISOString(), subtotal, serviceFee, tip, discount, total, ...(taxPct !== undefined ? { taxPct } : {}) };
 }

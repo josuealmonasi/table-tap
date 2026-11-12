@@ -10,6 +10,7 @@ import type { PosSaleBody } from "@/lib/pos-sale";
 import { ringOffline } from "@/lib/pos-offline";
 import { compareOfflineSale } from "@/lib/offline-comparison";
 import type { QueuedOfflineSale } from "@/lib/offline-review";
+import { heldHistory } from "@/lib/held-history";
 
 export const runtime = "nodejs";
 
@@ -37,13 +38,13 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   if (history) {
     const size = 20;
     const from = Number(page) * size;
-    const { data, error } = await query().not("approved_at", "is", null)
-      .order("approved_at", { ascending: false }).order("pos_ref").range(from, from + size);
-    if (error) return await apiError("apiErr.generic", 503);
-    return NextResponse.json({ restaurantId: actor.restaurantId, sales: (data ?? []).slice(0, size), hasMore: (data?.length ?? 0) > size });
+    try {
+      return NextResponse.json({ restaurantId: actor.restaurantId, ...await heldHistory(actor.restaurantId, from, size) });
+    } catch { return await apiError("apiErr.generic", 503); }
   }
   try {
-    const rows = await everyRow<QueuedOfflineSale>((a, b) => query().is("approved_at", null)
+    // Resolved without a sale is decided too: it no longer waits.
+    const rows = await everyRow<QueuedOfflineSale>((a, b) => query().is("approved_at", null).is("resolved_at", null)
       .order("received_at", { ascending: false }).order("pos_ref").range(a, b), "held sales");
     return NextResponse.json({ restaurantId: actor.restaurantId, sales: rows });
   } catch { return await apiError("apiErr.generic", 503); }

@@ -54,7 +54,7 @@ it("S21 a mixed bill, open-bill list and table status keep two debts instead of 
 
 it("S21 account payment, tips, history and its printed statement use saved currencies", () => {
   state.values = [{ restaurant: { id: "r", name: "Cafe", currency: "MXN" }, name: "Diner", status: "open", owed: 100,
-    currency: "USD", balances: [{ currency: "USD", amount: 100 }], days: [],
+    currency: "USD", balances: [{ currency: "USD", amount: 100 }], tipBalances: [{ currency: "USD", amount: 100 }], days: [],
     payments: [{ at: "2026-10-21T12:00:00Z", amount: 50, tip: 0, method: "cash", currency: "USD" }],
     cardsEnabled: true, payingOnline: false, canEmail: false, timeZone: "UTC" }, null, "online", 10];
   const html = renderToStaticMarkup(<AccountStatement code="account-code" paid={false} />);
@@ -63,7 +63,7 @@ it("S21 account payment, tips, history and its printed statement use saved curre
 });
 
 it("S21 a split's pay button includes the same ten-percent tip as its card charge", () => {
-  const html = renderToStaticMarkup(<SplitBillCard split={{ status: "locked", mine: { amount: 50 }, ownSince: 0, shares: 2 } as SplitState}
+  const html = renderToStaticMarkup(<SplitBillCard split={{ status: "locked", mine: { amount: 50, shareNo: 0 }, ownSince: 0, shares: 2, tipPrincipal: 100 } as SplitState}
     diner="d" busy={false} currency="MXN" outstanding={100} party={2} cardsEnabled
     propose={vi.fn()} join={vi.fn()} cancel={vi.fn()} onPay={vi.fn()} {...{ tipPct: 10 }} />);
   expect(html).toContain("MX$55.00");

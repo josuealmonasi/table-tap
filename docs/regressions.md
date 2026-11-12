@@ -6560,6 +6560,96 @@ till, waiter pad and offline receipt now freeze each line's promotion revenue.
 understatement of unrelated revenue, bill-wide stacking, extras, combo display
 savings, free food costs, exact cents, legacy fallback and offline replay.
 Reports never fetch current promotions for old sales.
+## Sweep 10, findings 4, 5 and 7a: IVA and the shift's tips (2026-11-10)
+
+- **The bill's IVA line used today's rate.** It now uses the rate saved on the orders being paid (`BillAmounts.taxPct`). Orders priced at different rates show no single "IVA n%" line (`sweep10-iva.react-component.spec.tsx`).
+- **Net and IVA were rounded separately,** so MX$0.01 at 100% showed MX$0.01 + MX$0.01. `ivaSplit` now works in whole cents, so the parts always add up to the subtotal.
+- **The shift sum did not separate tips.** It now says which part of cash sales was tips (`cash_shift_totals.tips`), without changing the expected cash.
+- **Parked, with notes in `loop/codex/parked/`:**
+  - finding 7's tips paid out, which needs withdrawals to say what they were for.
+
+## Sweep 10, finding 7b: tips paid out of the drawer (schema handoff pending)
+
+A withdrawal's free-text note could not identify tips paid to staff. The form
+now sends `purpose` (`tips` or `other`, default `other`); the route rejects
+other values with 400 and passes it to both withdrawal RPCs. A lost reply keeps
+the purpose frozen with the original request. The server reader now preserves
+both `tips` and `tips_out`; the live shift, closed record and printed sheet
+show positive payouts below the tips line in the shift's saved currency.
+Tips paid out remain inside total withdrawals and never reduce expected cash
+twice. Existing notes are not used to guess historical purposes.
+
+The five `tips-out-*.react-component.spec.tsx` files check validation on both
+route paths, form submission/default/reset/retry, numeric RPC totals, and live,
+closed and printed labels in English and Spanish. The SQL source invariant
+removes only the two reporting additions and requires the entire old totals
+calculation to remain identical. Planted variants that subtract tips twice,
+exclude tip withdrawals or count only tip withdrawals must fail this check.
+These are local specs, not evidence of applied SQL or database behavior.
+
+Claude still owns the release checks:
+
+- Fold `supabase/PROPOSAL-tips-out.sql` into `schema.sql` and `drop.sql`, with
+  the new service-only signatures, removal of old overloads, and default
+  compatibility for old clients. Apply the schema before deploying the route.
+- Probe the database: historical/default purposes, invalid-purpose constraint
+  and RPC refusals, shift/restaurant/currency scoping, both withdrawal writers,
+  same-purpose replay (also after close), and changed-purpose retry conflict.
+  A shift with opening 20, gross cash 110 including 10 tips, and withdrawals
+  8.50 tips + 6.50 other must return `tips_out=8.50`, `withdrawn=15` and
+  `expected=115`. Changing only the purposes must preserve expected cash;
+  deleting a mistaken tip withdrawal must remove its payout subtotal too.
+- Extend the live cash API cases for both purposes, omitted purpose, invalid
+  purpose and retry conflict; run the cash, authorization and money gates.
+- Run layout/dialog checks and inspect the withdrawal choice, live shift,
+  closed record and print sheet in both languages at 360, 390, 820 and 1280px,
+  including zero payouts, payouts without cash tips and a changed menu currency.
+
+## Held receipt intake and manager review (2026-11-11)
+
+Queue validation, approval and the review screen must agree on the normalized
+receipt. Intake now refuses malformed whole-order text, string money, real
+sub-cent amounts and a tip above the total. Approval drops bad legacy text
+from the order; review renders normalized lines and amounts without changing
+the raw evidence. `held-intake.spec.ts` and
+`held-review.react-component.spec.tsx` cover the refusal, recovery and display
+paths. Every new assertion was checked by planting the corresponding bug;
+`loop/codex/held-intake-mutations.md` records the results. Audited resolution
+is only a SQL proposal: existing unapprovable money rows still need Claude's
+schema integration and PostgreSQL verification before shifts can be unblocked.
+
+## Held receipts resolved without a sale (2026-11-11)
+
+A held cash receipt that could never be approved blocked every shift close in
+its restaurant, with no way out (Codex sweep). `resolve_held_sale` lets an
+owner or manager resolve it with a reason: the cash kept in the drawer becomes
+an unclassified receipt in the open shift (in `expected`, not in sales), cash
+handed back needs its recorded withdrawal, a duplicate links the payment or
+receipt that already counted it (each backs one duplicate), and "nothing
+collected" takes no amount. The raw receipt and the resolution are frozen; a
+late approval of a resolved receipt fails. The shift close, the restaurant
+delete check, the held-cash preflight, the held-sales list and `pnpm money`'s
+rebuilt close all read the resolution. `scripts/probe-held-resolve.mjs` proves
+each rule in Postgres; the manager's screen for it is the next step.
+
+## Sweep 10, finding 6 — one food-only tip base (2026-11-11)
+
+The tip chips and card routes must agree: service and a tip already on an order
+were being tipped again, and account chips sent a computed amount while the
+percentage route used the entire debt. `tip-base.ts` now owns percentage tips
+and the bill, frozen-share and account food bases. Exact tips retain their caps.
+Collected principal is excluded; grouped slots sum their own frozen food slices.
+Account percentages are saved only after the checkout freezes its order IDs.
+
+The parked `sweep10-tip-base.react-component.spec.tsx` now passes. Route tests in
+`diner-currency.spec.ts` and `split-slots-pay.spec.ts` compare the same fixture's
+preview with Stripe parameters or the saved account tip. The sabotage-tested
+`invariants/tip-base.react-component.spec.tsx` refuses local percentage formulas
+in pay routes. The API bill, legacy split, slots and account cases assert the
+shared helper's amount against saved Stripe metadata or the checkout row, even
+when the fake connected account refuses the charge. Claude must run these API
+cases and the live gates; no database, provider or browser verification was run
+for this local change. Phone/tablet chip and total screenshots still need review.
 
 ## The card-fee ceiling had no currency (sweep 11, finding 2, 2026-11-11)
 
