@@ -44,7 +44,7 @@ export default function OrderDetailDialog({
   const t = useT();
   const { locale } = useLocale();
   const toast = useToast();
-  const [busy, setBusy] = useState<"kitchen" | "receipt" | null>(null);
+  const [busy, setBusy] = useState<"kitchen" | "receipt" | "pdf" | null>(null);
   const issued = useRef<{ orderId: string; version?: ReceiptVersion }>({ orderId: order.id });
   if (issued.current.orderId !== order.id) issued.current = { orderId: order.id };
   const placed = new Date(order.created_at);
@@ -93,6 +93,31 @@ export default function OrderDetailDialog({
       toast(t(to === "receipt" ? "receiptPrint.failed" : "done.networkError"), "error");
     } finally {
       paper?.close();
+      setBusy(null);
+    }
+  }
+
+  /** The 80 mm ticket as a PDF, in a tab opened now so a pop-up blocker lets it through. */
+  async function ticketPdf(): Promise<void> {
+    if (busy || !money) return;
+    const tab = window.open("", "_blank");
+    setBusy("pdf");
+    try {
+      const res = await fetch("/api/orders/print", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ orderId: order.id, to: "receipt", format: "pdf", version: issued.current.version }),
+      });
+      if (!res.ok || res.headers.get("content-type") !== "application/pdf") throw new Error("No ticket");
+      // Keep the copy this PDF issued, as the HTML print does.
+      const version = res.headers.get("x-receipt-version");
+      if (version && issued.current.version === undefined) issued.current.version = JSON.parse(decodeURIComponent(version));
+      const url = URL.createObjectURL(await res.blob());
+      if (tab) tab.location.href = url; else window.location.href = url;
+    } catch {
+      tab?.close();
+      toast(t("receiptPrint.failed"), "error");
+    } finally {
       setBusy(null);
     }
   }
@@ -209,6 +234,14 @@ export default function OrderDetailDialog({
           onClick={() => void print("receipt")}
         >
           {busy === "receipt" ? t("common.saving") : t("orders.printReceipt")}
+        </button>}
+        {money && <button
+          type="button"
+          className="tt-btn tt-btn-ghost"
+          disabled={busy !== null}
+          onClick={() => void ticketPdf()}
+        >
+          {busy === "pdf" ? t("common.saving") : t("saleTicket.download")}
         </button>}
       </div>
     </Modal>

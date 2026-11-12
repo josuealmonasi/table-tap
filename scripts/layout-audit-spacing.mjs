@@ -310,7 +310,8 @@ export const SPACING_AUDIT = String.raw`
     const raw = item.raw;
     if (raw && (Math.abs(raw.top - r.top) > 0.5 || Math.abs(raw.bottom - r.bottom) > 0.5 ||
       Math.abs(raw.left - r.left) > 0.5 || Math.abs(raw.right - r.right) > 0.5)) return;
-    const gap = Math.min(...[r.left - b.left, b.right - r.right, r.top - b.top, b.bottom - r.bottom].filter(n => n >= 0));
+    const gap = Math.min(...[r.left - b.left, b.right - r.right, box.scrolledTop ? -1 : r.top - b.top,
+      box.scrolledBottom ? -1 : b.bottom - r.bottom].filter(n => n >= 0));
     if (gap >= 0 && gap < 6) report('content-touches-edge', item.text, gap);
   };
   const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_ELEMENT);
@@ -346,7 +347,12 @@ export const SPACING_AUDIT = String.raw`
     if (el.matches(iconControl)) context.control = el;
     if (cardBox(s, r)) {
       context.box = { background: background(el), inner: { left: r.left + parseFloat(s.borderLeftWidth), right: r.right - parseFloat(s.borderRightWidth),
-        top: r.top + parseFloat(s.borderTopWidth), bottom: r.bottom - parseFloat(s.borderBottomWidth) } };
+        top: r.top + parseFloat(s.borderTopWidth), bottom: r.bottom - parseFloat(s.borderBottomWidth) },
+        // A box scrolled part-way puts its content wherever the scroll leaves
+        // it: the bill dialog scrolled 156px read "1 de 3 partes pagadas" 4px
+        // from its top edge (dialogs sweep, 2026-11-11).
+        scrolledTop: /auto|scroll/.test(s.overflowY) && el.scrollTop > 0,
+        scrolledBottom: /auto|scroll/.test(s.overflowY) && el.scrollTop + el.clientHeight < el.scrollHeight - 1 };
       context.edgeRow = false;
     }
     if (el.matches('ul, ol, [role="list"]')) { context.list = el; context.entry = null; }

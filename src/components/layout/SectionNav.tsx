@@ -4,7 +4,7 @@ import { useRef } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { PlanFeature } from "@/lib/plan";
-import { navItemsFor, type DashboardRole } from "@/lib/nav";
+import { currentSection, navItemsFor, type DashboardRole } from "@/lib/nav";
 import { useT } from "@/lib/i18n/context";
 import { NAV_ICONS } from "@/components/ui/icons";
 import { useBadges } from "@/hooks/useBadges";
@@ -57,9 +57,7 @@ export default function SectionNav({
   // plain startsWith would light up Menús on the orders board — and a menu's
   // own page is a slug we cannot list, so it has to fall through to the
   // shortest match rather than be named.
-  const current = items
-    .filter(i => pathname === i.href || pathname.startsWith(`${i.href}/`))
-    .sort((a, b) => b.href.length - a.href.length)[0]?.href;
+  const current = currentSection(pathname, items.map(i => i.href));
 
   return (
     <nav className="tt-section-nav" aria-label={t("nav.sections")}>
