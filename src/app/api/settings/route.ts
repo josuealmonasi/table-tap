@@ -41,6 +41,7 @@ const OWNER_FIELDS = new Set([
   "low_stock_alerts_enabled",
   "low_stock_threshold",
   "auto_print_kitchen",
+  "print_ticket_at_till",
   "ticket_warn_minutes",
   "ticket_late_minutes",
 ]);
@@ -59,6 +60,8 @@ const MANAGER_FIELDS = new Set([
   "split_enabled",
   // A manager runs the floor, and the kitchen printer is floor equipment.
   "auto_print_kitchen",
+  // The till's paper is floor equipment too.
+  "print_ticket_at_till",
   // And knows how long the kitchen should take on a busy night.
   "ticket_warn_minutes",
   "ticket_late_minutes",

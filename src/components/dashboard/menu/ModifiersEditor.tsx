@@ -106,7 +106,7 @@ export default function ModifiersEditor({ value, onChange }: ModifiersEditorProp
                   patchGroup(i, { options: group.options.filter(o => o !== option) })
                 }
               >
-                {option} <CloseIcon size={11} weight="bold" />
+                {option}<CloseIcon size={11} weight="bold" style={{ marginLeft: 6 }} />
               </button>
             ))}
           </div>

@@ -324,6 +324,7 @@ export default function PosScreen({
         <PosTicketModal
           ticket={ticket}
           currency={restaurant.currency}
+          title={restaurant.name}
           onClose={() => setTicket(null)}
         />
 

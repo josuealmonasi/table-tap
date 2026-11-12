@@ -79,6 +79,8 @@ export function usePosCharge({ collector, collectorContext, restaurant, cart, de
   const [pending, setPending] = useState<"cash" | "card" | null>(null);
 
   const money = (n: number) => formatMoney(n, restaurant.currency);
+  // Paperless unless the restaurant asked for paper (off by default).
+  const printsAtTill = restaurant.print_ticket_at_till === true;
 
   /**
    * Prints the ticket when nobody asked for it by email.
@@ -99,7 +101,7 @@ export function usePosCharge({ collector, collectorContext, restaurant, cart, de
 
   /** Paper opened only if it turns out to be needed: the email fallback. */
   function reserveLate(): ReceiptPopup | undefined {
-    if (details.noTicket) return undefined;
+    if (details.noTicket || !printsAtTill) return undefined;
     let real: ReceiptPopup | null = null;
     const open = () => real ??= reserveReceiptPopup(reason => {
       toast(t(reason === "blocked" ? "pos.printBlocked" : "pos.printFailed"), "error");
@@ -114,13 +116,15 @@ export function usePosCharge({ collector, collectorContext, restaurant, cart, de
    * hand — an account's ceiling cannot be checked without the server.
    */
   function showHeld(sale: HeldSale, answered = false, paper?: ReceiptPopup): void {
-    if (!details.noTicket) {
-      printReceipt(offlineReceipt(
-        { loyaltyCode: sale.loyaltyCode, posRef: sale.posRef, at: sale.at, lines: sale.items, charge: sale.charge, method: sale.method, currency: restaurant.currency },
-        { name: restaurant.name, timeZone: restaurant.timezone ?? "America/Mexico_City", locale: dateLocale(locale) }, t,
-      ), paper);
-    }
-    setTicket({ code: orderCode(sale.posRef), total: sale.charge.total, handedOver: !sale.preparationPending, offline: true, answered });
+    const receiptHtml = details.noTicket ? undefined : offlineReceipt(
+      { loyaltyCode: sale.loyaltyCode, posRef: sale.posRef, at: sale.at, lines: sale.items, charge: sale.charge, method: sale.method, currency: restaurant.currency },
+      { name: restaurant.name, timeZone: restaurant.timezone ?? "America/Mexico_City", locale: dateLocale(locale) }, t,
+    );
+    if (receiptHtml && paper) printReceipt(receiptHtml, paper);
+    // Kept even when it printed: a blocked or jammed print must still leave
+    // the cashier a way to the ticket before the sale reaches the server.
+    setTicket({ code: orderCode(sale.posRef), total: sale.charge.total, handedOver: !sale.preparationPending, offline: true, answered,
+      receiptHtml });
     rememberLastSale(restaurant.id, sale.items);
     cart.clear();
     details.reset();
@@ -169,7 +173,7 @@ export function usePosCharge({ collector, collectorContext, restaurant, cart, de
     // every charge. If that email fails, the fallback print opens late and may
     // be blocked; the toast says so and Orders reprints it.
     const cardEmailActive = Boolean(canEmailReceipt && details.cardEmail && !details.skipTicketEmail && !details.noTicket);
-    const printsHere = !details.noTicket && !saleEmail && !cardEmailActive;
+    const printsHere = printsAtTill && !details.noTicket && !saleEmail && !cardEmailActive;
     const paper = !printsHere ? reserveLate() : reserveReceiptPopup(reason => {
       // A blocked pop-up must not look like a printed ticket.
       toast(t(reason === "blocked" ? "pos.printBlocked" : "pos.printFailed"), "error");
@@ -280,11 +284,14 @@ export function usePosCharge({ collector, collectorContext, restaurant, cart, de
       else if (data.receipt === "sent") toast(t("pos.receiptSent"));
       // No address, or an address the mail never reached: it prints.
       // A card sends its ticket automatically; printing here would make an unwanted paper copy.
-      if (data.receiptHtml && !cardEmailActive) printReceipt(data.receiptHtml, paper);
+      if (data.receiptHtml && paper && !cardEmailActive) printReceipt(data.receiptHtml, paper);
       setTicket({
         code: data.code,
         total: data.total,
         handedOver: Boolean(data.handedOver),
+        // Offered on the confirmation whether or not it printed: paperless, or
+        // a print the browser blocked, leaves one tap to the ticket.
+        receiptHtml: data.receiptHtml ?? undefined,
       });
       // Kept on this device, so the next "same again" is one tap.
       rememberLastSale(restaurant.id, cart.lines);

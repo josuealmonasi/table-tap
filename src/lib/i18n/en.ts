@@ -1982,9 +1982,11 @@ foundingLeftBody: "Subscribe now and keep this subscription price for as long as
   dash: {
     partlyPaid: "{amount} already in",
     splitting: "Splitting · {paid} of {of} paid · {amount} in",
-    printingTitle: "Kitchen printer",
+    printingTitle: "Printing",
     autoPrintLabel: "Print orders automatically",
     autoPrintHint: "Every order that reaches the pass is printed in the kitchen.",
+    tillPrintLabel: "Print the ticket at the till",
+    tillPrintHint: "Off saves paper: the ticket stays one tap away on the sale's confirmation, by email, as a PDF and as a reprint from Orders.",
     printerUrlLabel: "Printer address",
     printerUrlNone: "No address yet. Create one and enter it in the printer's CloudPRNT settings.",
     printerUrlHidden: "Already set up. Creating a new address stops the old one working.",
