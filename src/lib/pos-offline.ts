@@ -12,7 +12,7 @@ import { capName, capNote } from "@/lib/notes";
 import { stockDemand, toDemandPayload } from "@/lib/stock";
 import { orderCode } from "@/lib/types";
 import { existingTicket, terminalRef, type PosSaleBody } from "@/lib/pos-sale";
-import { offlineCharge, offlineDrift, offlineLines } from "@/lib/offline-sale";
+import { heldApprovalCharge, offlineCharge, offlineDrift, offlineLines } from "@/lib/offline-sale";
 import { readOfflineContext, contextCoveredSale } from "@/lib/offline-authority";
 import { currentOfflinePrice, sameOfflinePrice, offlineRevenueLines } from "@/lib/offline-pricing";
 
@@ -36,7 +36,11 @@ export interface OfflineApproval { reason: string; collector?: string; at?: stri
 export async function ringOffline(actor: Actor, body: PosSaleBody & { offline?: unknown }, approval?: OfflineApproval): Promise<NextResponse> {
   if (approval && !MANAGES(actor.role)) return await apiError("apiErr.forbidden", 403);
   const originalAt = (body.offline as { at?: unknown } | null)?.at;
-  const charge = offlineCharge(approval?.at ? { ...(body.offline as object), at: approval.at } : body.offline, Date.now(), Boolean(approval));
+  // A manager approving a stored receipt may accept its legacy text amounts;
+  // a receipt arriving from the till must carry numbers.
+  const charge = approval
+    ? heldApprovalCharge(approval.at ? { ...(body.offline as object), at: approval.at } : body.offline)
+    : offlineCharge(body.offline);
   if (!charge) return await apiError("apiErr.offlineSale", 400, undefined, { held: true });
   if (body.method !== "cash" && body.method !== "card") return await apiError("apiErr.offlineMethod", 400);
   const posRef = typeof body.posRef === "string" && UUID.test(body.posRef) ? body.posRef : null;
@@ -91,7 +95,7 @@ export async function ringOffline(actor: Actor, body: PosSaleBody & { offline?: 
     p_manager: approval ? actor.email : null, p_reason: approval?.reason ?? null,
     p_original_at: typeof originalAt === "string" ? originalAt.slice(0, 80) : null,
     p_authority: context ? "signed" : "manager_attested",
-    p_order: { loyalty_card_id: loyalty.cardId, preparation_pending: preparationPending,
+    p_order: { loyalty_card_id: loyalty.cardId, ticket_email_skip: body.skipTicketEmail === true, preparation_pending: preparationPending,
       subtotal: charge.subtotal, service_fee: charge.serviceFee, tip: charge.tip,
       discount: charge.discount, total: charge.total, tax_pct: charge.taxPct ?? (Number(restaurant.tax_pct) || 0),
       currency, items: lines,

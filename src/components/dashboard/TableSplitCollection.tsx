@@ -15,6 +15,9 @@ interface Props {
 export default function TableSplitCollection({ splits, ...props }: Props): JSX.Element | null {
   const t = useT();
   const [chosen, setChosen] = useState<string | null>(null);
+  // Kept above the parts screen, which remounts on every revision: a skip
+  // chosen before a resize must still hold when the part is collected.
+  const [skipTicketEmail, setSkipTicketEmail] = useState(false);
   const split = splits.find(s => s.id === chosen) ?? splits[0];
   if (!split) return null;
   return <>
@@ -24,6 +27,7 @@ export default function TableSplitCollection({ splits, ...props }: Props): JSX.E
         {t("slots.division", { n: n + 1 })} · {t("slots.progress", { paid: (s.slots ?? []).filter(p => p.paid).length, of: s.shares })}
       </button>)}
     </div>}
-    <SplitCollection key={`${split.id}:${split.revision}`} split={split} {...props} />
+    <SplitCollection key={`${split.id}:${split.revision}`} split={split} skipTicketEmail={skipTicketEmail}
+      onSkipTicketEmail={setSkipTicketEmail} {...props} />
   </>;
 }
