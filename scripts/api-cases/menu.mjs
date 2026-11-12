@@ -138,6 +138,17 @@ export function menuSettingsCases(fx) {
   return [
     { name: "POST /api/settings", as: "manager", method: "POST", path: "/api/settings",
       body: { accepting_orders: true }, expect: [200] },
+    // The ticket's typeface is the owner's (it sits with the fiscal data).
+    { name: "POST /api/settings (owner sets the ticket font)", as: "owner", method: "POST", path: "/api/settings",
+      body: { ticket_font: "archivo" }, expect: [200],
+      effect: async f => {
+        const { data } = await f.admin.from("restaurants").select("ticket_font").eq("id", f.restaurant.id).maybeSingle();
+        return data?.ticket_font === "archivo" || `ticket_font is ${data?.ticket_font}`;
+      } },
+    { name: "POST /api/settings (a ticket font that is not offered)", as: "owner", method: "POST", path: "/api/settings",
+      body: { ticket_font: "comic" }, expect: [400] },
+    { name: "POST /api/settings (manager cannot change the ticket font)", as: "manager", method: "POST", path: "/api/settings",
+      body: { ticket_font: "plex" }, expect: [403] },
     { name: "POST /api/coupons (create)", as: "manager", method: "POST", path: "/api/coupons",
       body: { code: "API-001", kind: "percent", value: 10 }, expect: [200] },
     { name: "PATCH /api/coupons (switch off)", as: "manager", method: "PATCH", path: "/api/coupons",

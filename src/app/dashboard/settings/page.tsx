@@ -1,3 +1,4 @@
+import { FISCAL_COLUMNS, type FiscalSettings } from "@/lib/fiscal-settings";
 import { unwrap } from "@/lib/ordering-data";
 import { requireManager } from "@/lib/page-guard";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -51,12 +52,25 @@ export default async function SettingsPage() {
   );
   const printerConfigured = Boolean(printer?.print_token);
 
+  // Private columns are read with the admin client only for the owner.
+  // A failed read must not become an empty form that overwrites saved data.
+  const fiscal = membership.role === "owner"
+    ? unwrap<FiscalSettings>(
+      await createAdminClient().from("restaurants").select(FISCAL_COLUMNS)
+        .eq("id", membership.restaurant.id).single(),
+      "the restaurant fiscal settings",
+    )
+    : undefined;
+
+  if (membership.role === "owner" && !fiscal) throw new Error("Missing restaurant fiscal settings");
+
   // ConfirmProvider so the coupons panel can ask before deleting a code.
   return (
     <ConfirmProvider>
       <SettingsForm
         restaurant={membership.restaurant}
         role={membership.role}
+        {...(membership.role === "owner" ? { fiscal: fiscal ?? undefined } : {})}
         deferredPayAllowed={deferredPay}
         deferredPayUnlocksWith={deferredPayUnlocksWith}
         inventoryAllowed={inventory}

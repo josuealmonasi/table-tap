@@ -1,3 +1,5 @@
+import { FISCAL_KEYS, isFiscalField, normalizeFiscalSettings } from "@/lib/fiscal-settings";
+import { isTicketFont } from "@/lib/ticket-font-ids";
 import { invalidatePublicMenu } from "@/lib/public-menu-cache";
 import { NextRequest, NextResponse } from "next/server";
 import { apiError } from "@/lib/api-error";
@@ -21,6 +23,8 @@ export const runtime = "nodejs";
 const DEPRECATED_FIELDS = new Set(["service_enabled", "service_pct"]);
 
 const OWNER_FIELDS = new Set([
+  ...FISCAL_KEYS,
+  "ticket_font",
   "name",
   "logo",
   "tagline",
@@ -39,6 +43,7 @@ const OWNER_FIELDS = new Set([
   "low_stock_alerts_enabled",
   "low_stock_threshold",
   "auto_print_kitchen",
+  "print_ticket_at_till",
   "ticket_warn_minutes",
   "ticket_late_minutes",
 ]);
@@ -57,6 +62,8 @@ const MANAGER_FIELDS = new Set([
   "split_enabled",
   // A manager runs the floor, and the kitchen printer is floor equipment.
   "auto_print_kitchen",
+  // The till's paper is floor equipment too.
+  "print_ticket_at_till",
   // And knows how long the kitchen should take on a busy night.
   "ticket_warn_minutes",
   "ticket_late_minutes",
@@ -95,6 +102,10 @@ export async function POST(req: NextRequest) {
   if (Object.keys(update).length === 0) {
     return NextResponse.json({ ok: true });
   }
+
+  const fiscalError = normalizeFiscalSettings(update);
+  if (fiscalError) return await apiError(fiscalError, 400);
+  if ("ticket_font" in update && !isTicketFont(update.ticket_font)) return await apiError("apiErr.invalidRequest", 400);
 
   // Letting the food out before it is paid for comes with the plan. Checked
   // when switching it on and not off: someone downgrading has to be able to
@@ -169,6 +180,7 @@ export async function POST(req: NextRequest) {
 
   // Named fields only: a log line reading "settings updated" answers nothing,
   // and the values themselves are what an owner comes back to check.
+  // Private fiscal values stay out of the activity feed shared with staff.
   await logEvent({
     restaurantId: actor.restaurantId,
     actor: actor.email,
@@ -180,7 +192,7 @@ export async function POST(req: NextRequest) {
           : "paused"
         : "updated",
     detail: Object.entries(update)
-      .map(([k, v]) => `${k}: ${typeof v === "string" && v.length > 30 ? "…" : v}`)
+      .map(([k, v]) => isFiscalField(k) ? k : `${k}: ${typeof v === "string" && v.length > 30 ? "…" : v}`)
       .join(", "),
   });
 

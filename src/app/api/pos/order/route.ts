@@ -1,3 +1,4 @@
+import { saleCard } from "@/lib/loyalty/sale-card";
 import { orderItemsWithRevenue } from "@/lib/order-line-revenue";
 import { invalidatePublicMenu } from "@/lib/public-menu-cache";
 import { orderRequestScope } from "@/lib/order-request";
@@ -176,12 +177,15 @@ export async function POST(req: NextRequest) {
       return await apiError("apiErr.offlineCollector", 409, undefined, { held: true });
     }
   }
+  const loyalty = await saleCard(actor.restaurantId, body.loyaltyCode);
+  if (loyalty.error) return loyalty.error;
   const common = {
     p_restaurant: actor.restaurantId, p_ref: posRef, p_actor: actor.email, p_status: finalStatus,
     p_threshold: Number(restaurant.low_stock_threshold) || 0,
     p_inventory: Boolean(plan && can(plan.limits, "inventory")),
     p_demand: toDemandPayload(stockDemand(verified)),
     p_order: {
+      loyalty_card_id: loyalty.cardId,
       ...(onAccount ? { request_scope: orderRequestScope("pos-account", body) } : {}),
       subtotal: pricing.subtotal, service_fee: pricing.serviceFee, tip: pricing.tip,
       tax_pct: Number(restaurant.tax_pct) || 0, discount: pricing.discount, total: pricing.total,

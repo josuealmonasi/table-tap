@@ -221,6 +221,9 @@ describe("a customer account's orders are never a table's", () => {
     // alone would put it on the table's bill as well: the table charged for a
     // dish somebody's account already owes. Every such reader says so.
     const exempt = new Set([
+      // A conditional attachment writer, never a debt reader. An account sale
+      // may also carry a card until its eventual payment stamps it.
+      "src/app/api/loyalty/attach/route.ts",
       // The account's own reads, which want exactly these orders.
       "src/lib/accounts-server.ts",
       // The webhook marks the orders named in Stripe's metadata; an order a
