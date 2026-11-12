@@ -1,3 +1,4 @@
+import { FISCAL_KEYS } from "@/lib/fiscal-settings";
 import { cache } from "react";
 import type { User } from "@supabase/supabase-js";
 import { currentUser } from "@/lib/current-user";
@@ -120,8 +121,10 @@ interface VerifiedMembership {
  * printer routes read the token themselves, by restaurant.
  */
 function withoutCredentials(row: Restaurant): Restaurant {
-  const restaurant: Restaurant & { print_token?: unknown } = { ...row };
+  const restaurant: Restaurant & { print_token?: unknown } & Partial<Record<(typeof FISCAL_KEYS)[number], unknown>> = { ...row };
   delete restaurant.print_token;
+  // Private ticket identity is loaded separately by owner-only server readers.
+  for (const field of FISCAL_KEYS) delete restaurant[field];
   return restaurant;
 }
 

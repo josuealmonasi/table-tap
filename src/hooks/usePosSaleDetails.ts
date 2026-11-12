@@ -1,5 +1,6 @@
 "use client";
 
+import type { SelectedCard } from "@/components/dashboard/loyalty/AttachCard.react-component";
 import { useState } from "react";
 
 /**
@@ -8,6 +9,7 @@ import { useState } from "react";
  * kitchen, a tip, and where the receipt goes, or that they want none.
  */
 export function usePosSaleDetails() {
+  const [loyaltyCard, setLoyaltyCard] = useState<SelectedCard | null>(null);
   const [customerName, setCustomerName] = useState("");
   const [email, setEmail] = useState("");
   const [note, setNote] = useState("");
@@ -22,6 +24,7 @@ export function usePosSaleDetails() {
 
   /** Ready for the next customer. */
   function reset(): void {
+    setLoyaltyCard(null);
     setCustomerName("");
     setEmail("");
     setNote("");
@@ -32,6 +35,8 @@ export function usePosSaleDetails() {
   }
 
   return {
+    loyaltyCard,
+    setLoyaltyCard,
     customerName,
     setCustomerName,
     email,

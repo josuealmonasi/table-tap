@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useT } from "@/lib/i18n/context";
 import { useLiveStock } from "@/hooks/useLiveStock";
 import ScanToCollect from "@/components/dashboard/ScanToCollect";
+import AttachCard from "@/components/dashboard/loyalty/AttachCard.react-component";
 import StampCard from "@/components/dashboard/loyalty/StampCard";
 import PosCashDrawer from "./PosCashDrawer";
 import { priceCart } from "@/lib/pricing";
@@ -111,6 +112,7 @@ export default function PosScreen({
   const details = usePosSaleDetails();
   // The connection, and the sales this device is holding until it returns.
   const offline = useOfflineSales(restaurant.id);
+  const [attachingCard, setAttachingCard] = useState(false);
   const [editing, setEditing] = useState<CartItem | null>(null);
   const [openItem, setOpenItem] = useState<MenuItem | null>(null);
   const [openCombo, setOpenCombo] = useState<Combo | null>(null);
@@ -264,12 +266,14 @@ export default function PosScreen({
               onOpenCombo={setOpenCombo}
             />
             <PosSalePanel
+              loyaltyCard={loyalty && <AttachCard active={loyalty} target={{ preview: true }} disabled={sending || !offline.online}
+                selection={details.loyaltyCard} onSelection={details.setLoyaltyCard} onBusy={setAttachingCard} />}
               lines={lines}
               items={items}
               currency={restaurant.currency}
               total={pricing.total}
               accountAmount={Math.round((pricing.total - pricing.tip) * 100) / 100}
-              locked={busy || (!accountRetry && (closedNow || lines.length === 0))}
+              locked={busy || attachingCard || (!accountRetry && (closedNow || lines.length === 0))}
               accountRetry={accountRetry}
               onDiscardAccount={discardAccount}
               onRetryAccount={() => void charge("account")}
@@ -291,7 +295,7 @@ export default function PosScreen({
             subtotal={pricing.subtotal}
             currency={restaurant.currency}
             canEmailReceipt={canEmailReceipt}
-            busy={busy}
+            busy={busy || attachingCard}
             allHandedOver={allHandedOver}
             onClose={() => setPending(null)}
             onSend={() => void charge(pending)}
@@ -320,6 +324,7 @@ export default function PosScreen({
         <PosTicketModal
           ticket={ticket}
           currency={restaurant.currency}
+          title={restaurant.name}
           onClose={() => setTicket(null)}
         />
 
