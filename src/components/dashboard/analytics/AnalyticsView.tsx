@@ -96,17 +96,18 @@ export default function AnalyticsView({
           />
         </header>
 
-        <div className="tt-board-tabs" role="tablist">
+        <nav className="tt-board-tabs" aria-label={t("nav.analytics")}>
           {PERIODS.map(p => (
             <Link
               key={p.key}
               href={`/dashboard/analytics?period=${p.key}`}
               className={`tt-board-tab ${p.key === period ? "tt-board-tab-active" : ""}`}
+              aria-current={p.key === period ? "page" : undefined}
             >
               {t(PERIOD_KEY[p.key] ?? p.label)}
             </Link>
           ))}
-        </div>
+        </nav>
 
         <div className="tt-analytics-tiles">
           <Tile label={t("analytics.revenue")} value={money(data.revenue)} accent />

@@ -260,3 +260,24 @@ export function navItemsFor(
   if (role === "manager") return allowed(NAV_ITEMS.filter(i => !OWNER_ONLY.includes(i.href) && !TEAM_ONLY.includes(i.href)));
   return allowed(NAV_ITEMS.filter(i => !TEAM_ONLY.includes(i.href)));
 }
+
+/**
+ * Every fixed page under /dashboard. Anything else there is a menu's own page
+ * (`[menu]`), which belongs to the Menús tab. Kept equal to the folders in
+ * `src/app/dashboard` by a test: a fixed page missing here lit Menús on
+ * Ajustes, Perfil and every other page that has no tab of its own.
+ */
+export const DASHBOARD_PAGES = [
+  "accounts", "admin", "analytics", "bills", "costs", "held-sales", "loyalty", "orders", "plan", "pos",
+  "profile", "promotions", "settings", "staff", "table-order", "tables", "waste",
+];
+
+/** The tab a path belongs to: the longest matching tab, a menu's page to Menús, a page without a tab to none. */
+export function currentSection(pathname: string, hrefs: string[]): string | undefined {
+  const match = hrefs
+    .filter(href => pathname === href || pathname.startsWith(`${href}/`))
+    .sort((a, b) => b.length - a.length)[0];
+  if (match !== "/dashboard" || pathname === "/dashboard") return match;
+  const page = pathname.slice("/dashboard/".length).split("/")[0];
+  return DASHBOARD_PAGES.includes(page) ? undefined : match;
+}

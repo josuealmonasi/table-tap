@@ -15,6 +15,11 @@ vi.mock("next/navigation", () => ({
 vi.mock("@/lib/i18n/context", () => ({ useT: () => (key: string) => key }));
 vi.mock("@/components/ui/Toast", () => ({ useToast: () => toast }));
 vi.mock("@/hooks/useLiveOrders", () => ({ useLiveOrders: vi.fn() }));
+// A scan that is no open bill is looked up among this restaurant's sales; none here.
+vi.mock("@/lib/supabase/client", () => ({ createClient: () => {
+  const q = { select: () => q, eq: () => q, maybeSingle: async () => ({ data: null, error: null }) };
+  return { from: () => q };
+} }));
 vi.mock("@/components/layout/Breadcrumb", () => ({ default: () => null }));
 vi.mock("../BillApprovals", () => ({ default: () => null }));
 vi.mock("../BillDiscountDialog", () => ({ default: () => <span data-promotion /> }));
