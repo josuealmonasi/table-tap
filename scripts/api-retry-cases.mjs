@@ -74,7 +74,8 @@ export function retryCases(fx) {
     return { name: `S20 K${kind === "close" ? 9 : 5}: ${path} retry leaves a newer shift alone`, as: "manager", method: "POST", path, expect: [200],
       arrange: async f => {
         const undo = await arrangeRetry(f, state, kind);
-        if (kind !== "close") return undo;
+        // Both kinds close a shift: the withdrawal case closes it directly in
+        // its check, and the close now refuses while held cash waits (#603).
         const putBack = await setAsideHeldCash(f, r).catch(async error => { await undo(); throw error; });
         return async () => { await putBack(); await undo(); };
       }, body,

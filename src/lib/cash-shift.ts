@@ -56,6 +56,8 @@ export interface ShiftSum {
   opening: number;
   /** Cash taken in the shift, net of cash handed back. */
   cashSales: number;
+  /** The staff's tips inside cashSales: shown apart, never taken out of the count. */
+  tips?: number;
   withdrawn: number;
   expected: number;
 }
