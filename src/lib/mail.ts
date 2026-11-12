@@ -17,6 +17,10 @@ export interface Mail {
   fromName?: string;
   /** One send, even when its first reply is lost on the way back. */
   idempotencyKey?: string;
+  /** Files sent with it, such as the ticket's PDF. */
+  attachments?: { filename: string; content: Buffer }[];
+  /** Extra headers, such as List-Unsubscribe. */
+  headers?: Record<string, string>;
 }
 
 export type MailResult = { sent: true } | { sent: false; reason: "unconfigured" | "failed" };
@@ -46,6 +50,10 @@ export async function sendMail(mail: Mail): Promise<MailResult> {
         subject: mail.subject,
         text: mail.text,
         html: mail.html,
+        ...(mail.attachments?.length
+          ? { attachments: mail.attachments.map(a => ({ filename: a.filename, content: a.content.toString("base64") })) }
+          : {}),
+        ...(mail.headers ? { headers: mail.headers } : {}),
       }),
     });
     if (!res.ok) {
