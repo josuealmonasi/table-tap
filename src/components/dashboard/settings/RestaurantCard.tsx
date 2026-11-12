@@ -5,7 +5,6 @@ import { ZONE_GROUPS, offsetLabel } from "@/lib/timezones";
 import type { Restaurant } from "@/lib/types";
 import type { SettingsInput } from "@/hooks/useSettings";
 import { useT } from "@/lib/i18n/context";
-import SettingsToggle from "./SettingsToggle";
 
 // Two-decimal currencies only, so checkout's Math.round(amount * 100) stays
 // correct (zero-decimal currencies like JPY would be off by 100x).
@@ -17,7 +16,7 @@ interface RestaurantCardProps {
   save: (input: Partial<SettingsInput>) => Promise<boolean>;
 }
 
-/** What the diner sees of the place: its name, mark, line, clock, currency and service charge. Owner only. */
+/** What the diner sees of the place: its name, mark, line, clock and currency. Owner only. */
 export default function RestaurantCard({
   restaurant,
   saving,
@@ -29,8 +28,6 @@ export default function RestaurantCard({
   const [tagline, setTagline] = useState(restaurant.tagline ?? "");
   const [currency, setCurrency] = useState(restaurant.currency);
   const [timezone, setTimezone] = useState(restaurant.timezone || "America/Mexico_City");
-  const [servicePct, setServicePct] = useState(String(restaurant.service_pct));
-  const [serviceEnabled, setServiceEnabled] = useState(restaurant.service_enabled);
 
   async function saveRestaurant(e: React.FormEvent): Promise<void> {
     e.preventDefault();
@@ -42,8 +39,6 @@ export default function RestaurantCard({
       tagline: tagline.trim() || null,
       currency,
       timezone,
-      service_pct: Math.min(30, Math.max(0, Number(servicePct) || 0)),
-      service_enabled: serviceEnabled,
     });
   }
 
@@ -121,29 +116,6 @@ export default function RestaurantCard({
             ))}
           </select>
         </label>
-
-        <SettingsToggle
-          title={t("dash.serviceFee")}
-          hint={t("dash.serviceFeeHint")}
-          stateLabel={t(serviceEnabled ? "dash.serviceOn" : "dash.serviceOff")}
-          checked={serviceEnabled}
-          onChange={setServiceEnabled}
-        />
-
-        {serviceEnabled && (
-          <label className="tt-field" style={{ width: 150 }}>
-            <span className="tt-mod-label">{t("dash.serviceFeePct")}</span>
-            <input
-              className="tt-input"
-              type="number"
-              step="0.5"
-              min="0"
-              max="30"
-              value={servicePct}
-              onChange={e => setServicePct(e.target.value)}
-            />
-          </label>
-        )}
 
         <div className="tt-prodform-actions">
           <button

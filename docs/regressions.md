@@ -6616,6 +6616,24 @@ the new reference is saved, only when it differs from the new path, and never
 outside the restaurant's own folder. `logo-card-cleanup.spec.tsx` replaces and
 removes WebP and PNG logos, a failed save, another restaurant's URL, a `..`
 path and a foreign host; six of its eight cases fail on the old card.
+## The service charge is gone (owner's decision, 2026-11-11)
+
+Profeco holds that nothing for service or tip may go on a bill without the
+customer's consent, and a switch that added a percentage to every bill did
+exactly that. The schema lowers every unpaid, unpromised bill to no service
+charge through `reprice_open_service(id, 0)`, switches it off everywhere and
+adds `restaurants_no_service_charge`, so it cannot come back. Settings no longer
+offer it and the route no longer accepts it. Past orders keep the charge they
+were made with, and so do unpaid bills the repricer must leave as rung: part
+paid, being split, on an account, or behind an open card checkout. Those fees
+are still charged, but not every view names them: the bill totals after a
+collection, split slots and split receipts, and account statements show them
+only inside the total. Removing the fee never takes a bill below zero: when a
+staff discount already covers part of the charge, only what the total holds
+comes off and the rest stays as charge the discount pays for. Restaurants are
+picked by the unpaid fees they still hold, not their settings, so re-running the
+block, or running it after the settings update, changes nothing more.
+
 
 ## Card email: consent belongs to the address being linked
 

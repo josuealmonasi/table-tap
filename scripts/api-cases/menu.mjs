@@ -149,19 +149,6 @@ export function menuSettingsCases(fx) {
       body: { ticket_font: "comic" }, expect: [400] },
     { name: "POST /api/settings (manager cannot change the ticket font)", as: "manager", method: "POST", path: "/api/settings",
       body: { ticket_font: "plex" }, expect: [403] },
-    // Switching the service charge off takes it off an open bill nobody has
-    // started paying. The live demo owed MX$4.40 for a MX$4.00 salad after the
-    // owner had switched it off: the charge was stored when it was ordered.
-    { name: "POST /api/settings (service off takes it off an open bill)", as: "owner", method: "POST",
-      path: "/api/settings", arrange: f => f.withServicedOrder(), body: { service_enabled: false },
-      expect: [200],
-      effect: async f => {
-        const { data } = await f.admin
-          .from("orders").select("service_fee, total").eq("id", f.servicedOrder.id).maybeSingle();
-        return Number(data?.service_fee) === 0 && Number(data?.total) === 4
-          ? true
-          : `the open bill still owes ${data?.total} with a service charge of ${data?.service_fee}`;
-      } },
     { name: "POST /api/coupons (create)", as: "manager", method: "POST", path: "/api/coupons",
       body: { code: "API-001", kind: "percent", value: 10 }, expect: [200] },
     { name: "PATCH /api/coupons (switch off)", as: "manager", method: "PATCH", path: "/api/coupons",

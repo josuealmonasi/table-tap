@@ -220,7 +220,7 @@ export async function seedMock(pg) {
     // without it the demo opened on the terms modal after every rebuild.
     `insert into restaurants (name, tagline, logo, currency, service_pct, service_enabled, accepting_orders, owner_id, plan, plan_status, allow_pay_later, print_token, auto_print_kitchen,
                               terms_version, terms_accepted_at, terms_accepted_email)
-     values ($1, 'Fresh plates, fast service', '🍽️', 'MXN', 10, true, true, $2, 'casa', 'active', true, $3, true, $4, now(), $5) returning id`,
+     values ($1, 'Fresh plates, fast service', '🍽️', 'MXN', 0, false, true, $2, 'casa', 'active', true, $3, true, $4, now(), $5) returning id`,
     [DEMO_RESTAURANT, ownerId, randomBytes(32).toString("base64url"), TERMS_VERSION, DEMO_OWNER.email],
   );
   const rid = rest.id;
@@ -900,7 +900,6 @@ export async function seedMock(pg) {
       [rid, DEMO_TEAM[1].email, "bill", "requested", `table=${asking.table.label} reason=comp`, new Date(Date.now() - 36e5).toISOString()],
       [rid, DEMO_TEAM[1].email, "discount", "requested", `code=VIP-15 amount=48.50 table=${waiting.table.label}`, new Date(Date.now() - 18e5).toISOString()],
       [rid, DEMO_OWNER.email, "discount", "discounted", "code=BIE-N10 amount=32.00 table=4", new Date(Date.now() - 2 * 864e5).toISOString()],
-      [rid, DEMO_OWNER.email, "settings", "updated", "service_pct=10", new Date(Date.now() - 20 * 864e5).toISOString()],
       [rid, DEMO_OWNER.email, "coupon", "created", "code=VIP-15", new Date(Date.now() - 12 * 864e5).toISOString()],
       [rid, DEMO_OWNER.email, "promotion", "created", "name=Comida_del_día", new Date(Date.now() - 25 * 864e5).toISOString()],
     ]);

@@ -8543,8 +8543,13 @@ begin
   perform set_config('tabletap.allocation_scope', '', true);
   perform 1 from orders where restaurant_id = p_restaurant and paid = false and service_fee > 0
    order by id for update;
+  -- A staff discount lowers the total but not the stored charge (MX$100 food +
+  -- MX$10 service - MX$105 discount = MX$5), so taking all MX$10 off would leave
+  -- -MX$5. Only as much comes off as the total holds; the rest stays as charge
+  -- the discount already covers, so subtotal + service_fee + tip - discount is
+  -- still the total and nothing goes below zero.
   with open as (
-    select o.id, round(o.subtotal * p_pct / 100, 2) wanted
+    select o.id, greatest(round(o.subtotal * p_pct / 100, 2), round(o.service_fee - o.total, 2)) wanted
       from orders o
      where o.restaurant_id = p_restaurant and o.paid = false and o.account_id is null
        and o.written_off = false and o.status not in ('cancelled', 'pending_payment')
@@ -8573,6 +8578,32 @@ begin
 end; $$;
 revoke all on function public.reprice_open_service(uuid, numeric) from public, anon, authenticated;
 grant execute on function public.reprice_open_service(uuid, numeric) to service_role;
+
+-- There is no service charge any more (owner's decision, 2026-11-11). Profeco
+-- holds that nothing for service or tip may go on a bill without the
+-- customer's consent; a switch that added a percentage to every bill did
+-- exactly that. Bills nobody has started paying lose it first, by the same
+-- rules as switching it off (only lower, never a promised total, never below
+-- zero); then it is off and cannot come back. Past orders keep the charge they
+-- were made with. Restaurants are picked by the unpaid charges they still hold,
+-- not by their settings: a restaurant already switched off can still hold one
+-- that a split or checkout protected until now, and this works whichever way
+-- the settings update below is ordered. Running it again changes nothing.
+do $$ declare r record; begin
+  for r in select distinct restaurant_id id from orders
+   where paid = false and service_fee > 0 and total > 0 order by 1 loop
+    perform public.reprice_open_service(r.id, 0);
+  end loop;
+end $$;
+-- The repricing queues the deferred money checks on orders; a later ALTER
+-- TABLE orders in this same transaction refuses to run while any are
+-- pending. Run them now (they also prove the repricing balanced), then put
+-- them back: every deferrable check in this schema is initially deferred.
+set constraints all immediate;
+set constraints all deferred;
+update restaurants set service_enabled = false, service_pct = 0 where service_enabled or service_pct <> 0;
+alter table restaurants drop constraint if exists restaurants_no_service_charge;
+alter table restaurants add constraint restaurants_no_service_charge check (not service_enabled and service_pct = 0);
 
 -- Duplicate charges need the same durable retry rule as order cancellations.
 -- Unknown/pending outcomes reuse their immutable request; only a confirmed
