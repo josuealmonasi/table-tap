@@ -1,5 +1,6 @@
 "use client";
 
+import BillTicketEmail from "@/components/loyalty/BillTicketEmail.react-component";
 import { usePaymentCheck } from "@/hooks/usePaymentCheck";
 
 import { useCallback, useEffect, useState } from "react";
@@ -33,6 +34,8 @@ type Balance = Omit<Outstanding, "orders" | "sittings">;
 
 interface TableCalculatorProps {
   open: boolean;
+  initialSkipTicketEmail?: boolean;
+  cardCode?: string | null;
   canApprove?: boolean;
   onClose: () => void;
   tableId: string;
@@ -65,6 +68,8 @@ export default function TableCalculator({
   onCollected,
   onDiscount,
   canApprove = false,
+  initialSkipTicketEmail = false,
+  cardCode,
 }: TableCalculatorProps) {
   const t = useT();
   const toast = useToast();
@@ -76,6 +81,7 @@ export default function TableCalculator({
   const [typed, setTyped] = useState("");
   const [tipPct, setTipPct] = useState(0);
   const [tipCustom, setTipCustom] = useState<number | null>(null);
+  const [skipTicketEmail, setSkipTicketEmail] = useState(false);
   const [busy, setBusy] = useState(false);
   // One reference per collection, kept across a retry and replaced once it
   // lands: the same tap must never be recorded twice.
@@ -112,6 +118,7 @@ export default function TableCalculator({
 
   useEffect(() => {
     if (!open) return;
+    setSkipTicketEmail(initialSkipTicketEmail);
     setWritingOff(null);
     setBill(null);
     setOrders([]);
@@ -123,7 +130,7 @@ export default function TableCalculator({
     void load();
     const timer = setInterval(() => void load(), SPLIT_POLL_MS);
     return () => clearInterval(timer);
-  }, [open, load]);
+  }, [open, load, initialSkipTicketEmail]);
 
   async function refreshBill(): Promise<void> {
     if (!await load()) throw new Error("Could not refresh the bill");
@@ -152,7 +159,7 @@ export default function TableCalculator({
   async function collect(method: "cash" | "card"): Promise<void> {
     if (tipTooLarge || busy) return;
     setBusy(true);
-    const request = unanswered ?? JSON.stringify({ tableId, expected: owed, currency, amount, tip, method, ref });
+    const request = unanswered ?? JSON.stringify({ tableId, expected: owed, currency, amount, tip, method, ref, skipTicketEmail });
     try {
       const res = await fetch("/api/table-payment/part", {
         method: "POST",
@@ -173,6 +180,7 @@ export default function TableCalculator({
 
       onCollected();
       setRef(newRef());
+      setSkipTicketEmail(false);
       setTipPct(0);
       setTipCustom(null);
       setTyped("");
@@ -274,6 +282,7 @@ export default function TableCalculator({
             onCustomTip={setTipCustom}
           />
           {tipTooLarge && <p className="tt-field-error" role="alert">{t("tip.tooLarge", { max: formatMoney(amount, currency) })}</p>}
+          <BillTicketEmail code={cardCode} tableId={tableId} active={open} skip={skipTicketEmail} onSkip={setSkipTicketEmail} disabled={busy || Boolean(unanswered)} />
           <CashChange amount={taken.amount} currency={currency} />
 
           <div className="tt-bill-actions">

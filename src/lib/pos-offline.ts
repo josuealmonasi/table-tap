@@ -91,7 +91,7 @@ export async function ringOffline(actor: Actor, body: PosSaleBody & { offline?: 
     p_manager: approval ? actor.email : null, p_reason: approval?.reason ?? null,
     p_original_at: typeof originalAt === "string" ? originalAt.slice(0, 80) : null,
     p_authority: context ? "signed" : "manager_attested",
-    p_order: { loyalty_card_id: loyalty.cardId, preparation_pending: preparationPending,
+    p_order: { loyalty_card_id: loyalty.cardId, ticket_email_skip: body.skipTicketEmail === true, preparation_pending: preparationPending,
       subtotal: charge.subtotal, service_fee: charge.serviceFee, tip: charge.tip,
       discount: charge.discount, total: charge.total, tax_pct: charge.taxPct ?? (Number(restaurant.tax_pct) || 0),
       currency, items: lines, note: capNote(body.note) ?? null, customer_name: capName(body.customerName) ?? null,

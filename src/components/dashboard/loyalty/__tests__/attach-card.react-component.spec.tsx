@@ -5,8 +5,8 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { messagesFor, translate } from "@/lib/i18n";
 const f = vi.hoisted(() => ({ availability: { enabled: true, card: null as object | null }, mutate: vi.fn(),
-  fetch: vi.fn(), scan: null as null | ((raw: string) => string), key: null as string | null }));
-vi.mock("swr", () => ({ default: (key: string | null) => { f.key = key; return { data: key ? f.availability : undefined, mutate: f.mutate }; } }));
+  fetch: vi.fn(), scan: null as null | ((raw: string) => string), key: null as unknown }));
+vi.mock("swr", () => ({ useSWRConfig: () => ({ mutate: f.mutate }), default: (key: unknown) => { f.key = key; return { data: key ? f.availability : undefined, mutate: f.mutate }; } }));
 vi.mock("@/lib/i18n/context", () => ({ useT: () => (key: string, vars?: Record<string, string | number>) => translate(messagesFor("es"), key, vars) }));
 vi.mock("@/components/dashboard/QrScanner", () => ({ default: ({ onRead }: { onRead: typeof f.scan }) => { f.scan = onRead; return <span data-scanner />; } }));
 import AttachCard from "../AttachCard.react-component";
@@ -30,7 +30,7 @@ it.each([false, true])("hides the selector when active=%s and the server says of
 });
 it("offers Spanish code entry and the shared camera before payment", async () => {
   await render(); expect(el.textContent).toContain("Tarjeta de visitas"); expect(el.textContent).toContain("Usar tarjeta");
-  expect(el.querySelector("[data-scanner]")).not.toBeNull(); expect(f.key).toContain("preview=true");
+  expect(el.querySelector("[data-scanner]")).not.toBeNull(); expect(String(f.key)).toContain("preview=true");
 });
 it("scans the QR bearer code and selects the returned standing", async () => {
   await render(); await act(async () => { expect(f.scan!("https://tabletap.test/rewards?c=K7QM3XW9K7P2")).toBe("taken"); });

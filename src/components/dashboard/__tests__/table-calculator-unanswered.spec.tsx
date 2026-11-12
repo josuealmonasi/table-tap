@@ -27,7 +27,7 @@ it("resends an unanswered collection unchanged, and only then starts a new one (
   vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
   vi.stubGlobal("fetch", vi.fn().mockImplementation(async (_url: string, init?: RequestInit) => {
     const owed = posts === 0 ? 100 : 30;
-    if (!init) return Response.json({ orders: [order], splits: [], outstanding: { owed, ordered: 100, collected: 100 - owed, tips: 0, currency: "MXN" } });
+    if (init?.method !== "POST") return Response.json({ orders: [order], splits: [], outstanding: { owed, ordered: 100, collected: 100 - owed, tips: 0, currency: "MXN" } });
     posts++;
     if (posts === 1) throw new TypeError("network lost after the write");
     return Response.json({ settled: false, amount: 100, tip: 0, currency: "MXN", owed: 0, ordered: 100, collected: 100, tips: 0 });
@@ -38,7 +38,7 @@ it("resends an unanswered collection unchanged, and only then starts a new one (
   await act(async () => { vi.advanceTimersByTime(60_000); });
   await act(async () => cash().click());
   await act(async () => cash().click());
-  const bodies = vi.mocked(fetch).mock.calls.filter(([, init]) => init).map(([, init]) => JSON.parse(String(init!.body)));
+  const bodies = vi.mocked(fetch).mock.calls.filter(([, init]) => init?.method === "POST").map(([, init]) => JSON.parse(String(init!.body)));
   expect(bodies).toHaveLength(3);
   expect(bodies[1]).toEqual(bodies[0]);
   expect(bodies[2].ref).not.toBe(bodies[0].ref);
