@@ -5,8 +5,8 @@ import { fileError, resultError, type ImageSpec } from "@/lib/images";
 /** A photo resized and encoded for storage, with what to tell storage about it. */
 export interface PreparedPhoto {
   blob: Blob;
-  contentType: "image/webp" | "image/jpeg";
-  ext: "webp" | "jpg";
+  contentType: "image/webp" | "image/jpeg" | "image/png";
+  ext: "webp" | "jpg" | "png";
   /** The original's width, for warning about a photo that will look soft. */
   sourceWidth: number;
 }
@@ -17,15 +17,20 @@ export interface Encodable {
 }
 
 /**
- * WebP when the browser can make it, JPEG when it can't.
+ * PNG for logos. For photos, WebP when the browser can make it, JPEG when it can't.
  *
  * Safari cannot encode WebP. Asked for it, `toBlob` hands back a PNG — which
  * was then uploaded labelled as WebP, at several times the weight. A JPEG is
  * what every browser can make and every browser can show.
  */
-export async function encodePhoto(canvas: Encodable): Promise<Pick<PreparedPhoto, "blob" | "contentType" | "ext"> | null> {
+export async function encodePhoto(canvas: Encodable, encoding?: ImageSpec["encoding"]): Promise<Pick<PreparedPhoto, "blob" | "contentType" | "ext"> | null> {
   const as = (type: string, quality: number) =>
     new Promise<Blob | null>(resolve => canvas.toBlob(resolve, type, quality));
+  if (encoding === "png") {
+    // The ticket PDF needs PNG, and a logo's transparent parts must stay clear.
+    const png = await as("image/png", 1);
+    return png?.type === "image/png" ? { blob: png, contentType: "image/png", ext: "png" } : null;
+  }
   const webp = await as("image/webp", 0.82);
   if (webp?.type === "image/webp") return { blob: webp, contentType: "image/webp", ext: "webp" };
   const jpeg = await as("image/jpeg", 0.85);
@@ -66,7 +71,7 @@ export async function preparePhoto(file: File, spec: ImageSpec): Promise<Prepare
     const h = bitmap.height * scale;
     ctx.drawImage(bitmap, (spec.width - w) / 2, (spec.height - h) / 2, w, h);
 
-    const encoded = await encodePhoto(canvas);
+    const encoded = await encodePhoto(canvas, spec.encoding);
     if (!encoded) return { error: "img.failed" };
     const tooBig = resultError(encoded.blob, spec);
     if (tooBig) return { error: tooBig };

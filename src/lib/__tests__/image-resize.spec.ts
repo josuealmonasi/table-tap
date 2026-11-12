@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { encodePhoto, preparePhoto } from "@/lib/image-resize";
-import type { ImageSpec } from "@/lib/images";
+import { COVER, DISH, LOGO, logoPath, type ImageSpec } from "@/lib/images";
 
 /**
  * Owners upload straight from a phone, and whatever is stored is what every
@@ -60,6 +60,24 @@ describe("a photo is cropped to fill, never letterboxed", () => {
 });
 
 describe("what is stored, and what storage is told", () => {
+  it.each(["webp", "safari"] as const)("stores a PNG logo with a matching upload path in %s", async encoder => {
+    stubBrowser({ width: 1000, height: 1000 }, { encoder });
+    const out = await preparePhoto(file, LOGO);
+    expect(out).toMatchObject({ contentType: "image/png", ext: "png" });
+    expect("blob" in out && out.blob.type).toBe("image/png");
+    expect(logoPath("restaurant")).toBe("restaurant/logo.png");
+  });
+
+  it.each([COVER, DISH])("keeps menu photos as WebP or JPEG ($width px)", async preset => {
+    for (const encoder of ["webp", "safari"] as const) {
+      stubBrowser({ width: 2000, height: 2000 }, { encoder });
+      const out = await preparePhoto(file, preset);
+      const contentType = encoder === "webp" ? "image/webp" : "image/jpeg";
+      expect(out).toMatchObject({ contentType, ext: encoder === "webp" ? "webp" : "jpg" });
+      expect("blob" in out && out.blob.type).toBe(contentType);
+    }
+  });
+
   it("stores WebP where the browser can make it", async () => {
     stubBrowser({ width: 1000, height: 1000 });
     expect(await preparePhoto(file, spec(500, 500))).toMatchObject({ contentType: "image/webp", ext: "webp", sourceWidth: 1000 });
