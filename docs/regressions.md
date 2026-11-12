@@ -58,6 +58,7 @@ and that a new party cannot see the previous party's waiting phones.
 | Failed loyalty reads cannot open an empty editor (E2E D7) | A read failure looked like a program that had never existed |
 | Replay waits for the online send and preserves preparation (E2E C5) | Background replay raced a live request and completed food nobody had made |
 | Processing fees keep the payment currency (E2E D4) | A dollar charge used the fixed peso processing fee |
+| An elapsed time goes through `src/lib/elapsed.ts`; no dictionary key outside `elapsed` takes a raw count of minutes, hours or days, and no screen divides by 60 000 itself (`invariants/elapsed.spec.ts`) | The Pedidos board read "hace 1741 min" for a ticket a day and five hours old |
 | Terminal bank movements keep their sign (E2E C7) | A refund-heavy day's bank debit could not be recorded |
 | New owners prove email ownership before their trial starts (E2E E4) | Signup confirmed an address nobody had verified |
 | A retried financial operation writes one activity row (Sweep 1 #8) | One saved withdrawal, shift close, waste entry or count appeared two or more times after a lost reply |
@@ -6695,3 +6696,27 @@ now suppresses automatic card mail for this sale, before the held copy is
 written. The existing sender delivers today's ticket; the saved card delivers
 future ones. The lost-save-reply spec proves the skip reaches both the request
 and held replay, while charging remains available.
+
+
+## Elapsed times read as hours and days (owner report, 2026-11-12)
+
+The Pedidos board said "hace 1741 min" on a ticket left open since the day
+before. Three screens showed how long something had waited, and each did its
+own arithmetic: the ticket's key took a raw count of minutes with no upper
+unit at all, the request chips rounded to whole hours and then whole days, and
+the bills list wrote "2h 15m" in no language in particular. Nothing made them
+agree, and nothing said a count of minutes had to stop at 59.
+
+`src/lib/elapsed.ts` is now the only place that turns a time difference into
+words: under a minute "ahora", then "hace 12 min", "hace 2 h 15 min",
+"hace 1 d 5 h", and from seven days the date ("el 3 nov"). A length with no
+"ago" (the bills list's "esperando …") uses the same units. The words come
+from the `elapsed` block of both dictionaries. The ticket's amber and red still
+count minutes against the restaurant's thresholds; only the text changed.
+`elapsed.spec.ts` checks every boundary in both languages, and
+`invariants/elapsed.spec.ts` fails on a dictionary key that takes a raw count
+of time, on a screen that divides by a minute itself, and on any of the three
+screens no longer importing the formatter. Under 24 hours the longest text is
+"hace 23 h 59 min", three characters wider than "hace 1741 min"; the
+board's header row wraps, so it drops the status pills to the next line rather
+than overflow. `pnpm layout` is the check that it still reads.
