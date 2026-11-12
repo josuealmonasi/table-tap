@@ -34,6 +34,8 @@ and that a new party cannot see the previous party's waiting phones.
 | A duplicate refund tracks customer completion and fee completion separately (S11 I5) | A failed fee return disappeared behind an already-refunded customer payment |
 | A duplicate refund keeps its original charge currency everywhere (S11 I9) | Changing the menu currency relabelled money owed back and the approval amount |
 |---|---|
+| Held receipts reuse the existing payment tenant key | The train created a second unique index on the same payment columns; `held-payment-index.spec.ts` keeps the original unique key and rejects the duplicate build |
+| Restaurant deletion archives the account journal with its source books | The restaurant cascade deleted original charge snapshots that the archive list omitted; `account-journal-archive.spec.ts` pins the journal copy, tenant lock and preserved held-receipt/dispute checks |
 | Restaurant logos use PNG bytes, content type and path, and the bucket accepts PNG | The photo encoder stored WebP logos that the ticket PDF could not print; changing only the encoder would leave a WebP path and a bucket that refused PNG. `image-resize.spec.ts` checks logos and unchanged photo encodings; `images.spec.ts` checks the bucket allowlist |
 | A new card save cannot duplicate today's ticket after a lost reply (card email UI) | The save could commit unseen and both the card outbox and the per-sale sender mailed the same ticket; `card-email-pos.spec.tsx` holds the lost reply and checks skip in the charge and held replay |
 | A new card reader does not reuse another reader's address (card email UI) | A cashier could briefly see an owner's full address from the shared SWR cache; `card-email.spec.tsx` reproduces the flash with a delayed masked reply |
@@ -6937,3 +6939,24 @@ now suppresses automatic card mail for this sale, before the held copy is
 written. The existing sender delivers today's ticket; the saved card delivers
 future ones. The lost-save-reply spec proves the skip reaches both the request
 and held replay, while charging remains available.
+
+## Restaurant deletion keeps the account journal
+
+The journal's restaurant cascade and the accounting archive list have to agree.
+Deleting a restaurant copied its orders and payments but lost the journal's
+original charge snapshots. The same locked, tenant-scoped archive loop now
+copies `account_movements` before deletion. `account-journal-archive.spec.ts`
+reproduces the missing table and keeps the held-receipt and dispute protections
+in the combined deletion function. The rolled-back dev probe checks the actual
+copy before this schema ships.
+
+## Held receipts reuse the payment tenant key
+
+The held-receipt reference and the existing payment index have to agree.
+The queue train added another unique index on `(restaurant_id, id)`, even
+though `payments_tenant_identity` already provides that key. Keep the original
+index so the tenant reference stays enforced without a second build.
+The schema does not drop the draft index: production never built it, and a dev
+database that did may have the held-receipt foreign key resting on it.
+`held-payment-index.spec.ts` reproduces the two definitions and pins the one
+unique key that both references can use.

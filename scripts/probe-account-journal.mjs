@@ -2,6 +2,7 @@
 import assert from "node:assert/strict";
 import { probeLiveJournal, debtMatches } from "./account-journal-live-probe.mjs";
 import { probeDeferredJournal } from "./account-journal-deferred-probe.mjs";
+import { probeJournalArchive } from "./account-journal-archive-probe.mjs";
 import { performance } from "node:perf_hooks";
 import { randomUUID } from "node:crypto";
 import { fileURLToPath } from "node:url";
@@ -194,6 +195,7 @@ try {
   }
   await probeLiveJournal(db, peer, restaurant, peerPid, f.owner);
   await probeDeferredJournal(db, restaurant, await account(db, restaurant));
+  await probeJournalArchive(db);
   await probeTimings();
   await db.query("delete from restaurants where id=$1", [restaurant]);
   assert.equal((await db.query("select count(*)::int n from account_movements where restaurant_id=$1", [restaurant])).rows[0].n, 0);

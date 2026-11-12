@@ -20,7 +20,13 @@ it("F1: every online payment is dated after its money lock, not at transaction s
     }
   }
   expect([...new Set(missing)], "Online writers still use the transaction-start payment date").toEqual([]);
-  expect(checked).toBe(20);
+  // The journal turned the two legacy account writers into delegates of their
+  // _v2 writers, which are counted above: 20 insert sites became 18.
+  expect(checked).toBe(18);
+  expect(body("account_settle")).toContain("return public.account_settle_v2(");
+  expect(body("account_checkout_settle")).toContain("return public.account_checkout_settle_v2(");
+  expect(body("account_settle")).not.toContain("insert into payments");
+  expect(body("account_checkout_settle")).not.toContain("insert into payments");
 });
 
 it("F1: offline receipts retain their explicit sale time; drawer totals still include gross cash", () => {

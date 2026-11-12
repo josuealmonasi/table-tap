@@ -9319,7 +9319,7 @@ grant execute on function public.record_offline_sale(uuid,uuid,jsonb,text,text,t
 --   no_cash       — nothing was collected.
 -- ============================================================================
 create unique index if not exists cash_shifts_tenant_id on cash_shifts(restaurant_id, id);
-create unique index if not exists payments_tenant_id on payments(restaurant_id, id);
+-- payments(restaurant_id, id) is already unique as payments_tenant_identity.
 create unique index if not exists cash_movements_tenant_id on cash_movements(restaurant_id, id);
 
 create table if not exists held_cash_receipts (
@@ -10160,7 +10160,7 @@ begin
     'orders', 'payments', 'payment_allocations', 'refund_operations',
     'refund_allocations', 'refund_attempts', 'order_adjustments', 'refunds_due',
     'refund_due_attempts', 'platform_fees', 'cash_shifts', 'cash_movements',
-    'terminal_deposits', 'customer_accounts', 'ingredient_purchases',
+    'terminal_deposits', 'customer_accounts', 'account_movements', 'ingredient_purchases',
     'account_checkouts', 'diner_checkouts', 'table_sessions', 'user_logs'
   ] loop
     -- Lock existing rows as they are copied too: an update must not change a

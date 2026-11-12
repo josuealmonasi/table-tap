@@ -72,7 +72,7 @@ it.each([null, "orders", "payments", "refund_operations", "order_adjustments"])(
   const names: Record<string, string> = { orders: "orders", payments: "payments", refund_operations: "returns", order_adjustments: "credits" };
   expect({ started, result }).toEqual({ started: ["order_adjustments", "orders", "payments", "refund_operations"],
     result: table ? { error: `Could not read the account's ${names[table]}: page failed` } : { statement: {
-      currency: "MXN", balances: [{ currency: "MXN", amount: 70 }], owed: 70, chargedBy: { food: "ana" },
+      currency: "MXN", balances: [{ currency: "MXN", amount: 70 }], tipBalances: [{ currency: "MXN", amount: 70 }], owed: 70, chargedBy: { food: "ana" },
       days: [{ day: "2026-10-02", currency: "MXN", total: 70, charges: [{ orderId: "food", currency: "MXN", at, tableLabel: "Patio", lines: [], total: 70, creditable: true,
         credits: [{ at, amount: 30, currency: "MXN", actor: "manager", reason: "error", note: "Duplicate dish" }] }] }],
       payments: Array.from({ length: 20 }, () => ({ at, amount: 15, tip: 2, currency: "MXN", method: "card" })),

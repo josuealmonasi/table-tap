@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { splitSlotFixture } from "../split-slots-fixture.mjs";
+import { chargeAccountFixture } from "../disposable-account-fixtures.mjs";
 import { ordersTipBase, frozenTipPrincipal, splitTipBase, tipFromPercent } from "../api-tip-helper.mjs";
 
 const checked = async query => {
@@ -28,16 +29,21 @@ export function tipBaseCase(kind) {
           const fees = attempts.map(a => a.metadata?.fee_id).filter(Boolean);
           if (fees.length) await checked(f.admin.from("platform_fees").delete().in("id", fees));
           if (accountId) {
+            // The account variant runs in the disposable account restaurant: its
+            // journal keeps the charged order, the account and the sitting
+            // until the restaurant cascade removes them all at the end of the run.
             await checked(f.admin.from("account_checkouts").delete().eq("account_id", accountId));
-            await checked(f.admin.from("orders").update({ account_id: null }).eq("id", fixture.orderId));
-            await checked(f.admin.from("customer_accounts").delete().eq("id", accountId));
+            return;
           }
           if (laterId) await checked(f.admin.from("orders").delete().eq("id", laterId));
           await fixture.cleanup();
         } finally { if (reader) await reader(); }
       };
       try {
-        reader = await f.withCardReader();
+        // The disposable account restaurant is thrown away whole, reader included.
+        if (kind === "account") await checked(f.admin.from("restaurants")
+          .update({ stripe_account_id: "acct_api_check", stripe_charges_enabled: true }).eq("id", f.restaurant.id));
+        else reader = await f.withCardReader();
         if (kind === "bill" || kind === "split") await checked(f.admin.from("table_sessions")
           .update({ opened_by: null }).eq("id", fixture.scope.sessionId));
         const food = { total: 120, service_fee: 10, tip: 10 };
@@ -69,7 +75,7 @@ export function tipBaseCase(kind) {
             name: "apicheck-tip", code, credit_limit: 1000, opened_by: "apicheck-tip",
           }).select("id").single());
           accountId = account.id;
-          await checked(f.admin.from("orders").update({ account_id: accountId }).eq("id", fixture.orderId));
+          await chargeAccountFixture(f.admin, f.restaurant.id, accountId, [fixture.orderId], 120, "apicheck-tip");
           body = { c: code, expected: 120, currency: "MXN", tipPct: 10 };
         }
         f.tipBaseCase = { body, fixture, accountId, tip: tipFromPercent(base, 10) };
