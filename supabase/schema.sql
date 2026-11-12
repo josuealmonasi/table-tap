@@ -3804,12 +3804,22 @@ declare v_claim uuid := gen_random_uuid();
 begin
   update ticket_email_outbox set finished_at = now(), outcome = 'expired'
    where finished_at is null and created_at < now() - interval '24 hours';
+  -- A batch whose key is already written is claimed whole: the limit must not
+  -- split it, or its retry would reuse the key with fewer orders.
   return query
+  with seed as (
+    select t.id, t.batch_key from ticket_email_outbox t
+     where t.finished_at is null and (t.claimed_at is null or t.claimed_at < now() - interval '5 minutes')
+     order by t.created_at limit greatest(1, least(p_limit, 50))
+     for update skip locked
+  ), mates as (
+    select t.id from ticket_email_outbox t
+     where t.finished_at is null and t.batch_key in (select s.batch_key from seed s where s.batch_key is not null)
+       and (t.claimed_at is null or t.claimed_at < now() - interval '5 minutes')
+     for update skip locked
+  )
   update ticket_email_outbox o set claimed_at = now(), claim = v_claim, attempts = o.attempts + 1
-   where o.id in (select t.id from ticket_email_outbox t
-                   where t.finished_at is null and (t.claimed_at is null or t.claimed_at < now() - interval '5 minutes')
-                   order by t.created_at limit greatest(1, least(p_limit, 50))
-                   for update skip locked)
+   where o.id in (select id from seed union select id from mates)
   returning o.*;
 end;
 $$;
