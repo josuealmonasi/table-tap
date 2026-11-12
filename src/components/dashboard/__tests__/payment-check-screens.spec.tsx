@@ -63,11 +63,11 @@ for (const locale of ["en", "es"] as const) it.each(cases)("$name checks only th
   expect(action).toBeDefined();
   await act(async () => c.name === "promotion"
     ? host.querySelector("form")!.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })) : action!.click());
-  const before = vi.mocked(fetch).mock.calls.filter(([, init]) => init);
+  const before = vi.mocked(fetch).mock.calls.filter(([, init]) => init?.method);
   expect(before.map(([url]) => url)).toEqual([c.endpoint]);
   expect(changed).not.toHaveBeenCalled();
   await press(t("paymentCheck.action"));
-  const writes = vi.mocked(fetch).mock.calls.filter(([, init]) => init);
+  const writes = vi.mocked(fetch).mock.calls.filter(([, init]) => init?.method);
   expect(writes.map(([url]) => url)).toEqual([c.endpoint, "/api/checkout/check"]);
   expect(JSON.parse(writes[1][1]!.body as string)).toEqual(c.scope);
   expect(s.toast).toHaveBeenCalledWith(t("paymentCheck.closed"));

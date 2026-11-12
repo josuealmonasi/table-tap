@@ -35,6 +35,13 @@ and that a new party cannot see the previous party's waiting phones.
 | A duplicate refund keeps its original charge currency everywhere (S11 I9) | Changing the menu currency relabelled money owed back and the approval amount |
 |---|---|
 | Restaurant logos use PNG bytes, content type and path, and the bucket accepts PNG | The photo encoder stored WebP logos that the ticket PDF could not print; changing only the encoder would leave a WebP path and a bucket that refused PNG. `image-resize.spec.ts` checks logos and unchanged photo encodings; `images.spec.ts` checks the bucket allowlist |
+| A new card save cannot duplicate today's ticket after a lost reply (card email UI) | The save could commit unseen and both the card outbox and the per-sale sender mailed the same ticket; `card-email-pos.spec.tsx` holds the lost reply and checks skip in the charge and held replay |
+| A new card reader does not reuse another reader's address (card email UI) | A cashier could briefly see an owner's full address from the shared SWR cache; `card-email.spec.tsx` reproduces the flash with a delayed masked reply |
+| Linking a card email asks for fresh consent at every door (card email UI) | Creation, the diner's card and staff editors could otherwise disagree about permission to email; `card-email-create.spec.tsx`, `card-email.spec.tsx`, `card-email-staff.spec.tsx` |
+| Card email reads preserve the audience and distinguish unread from absent (card email UI) | A masked staff address could become an editable address, or an unread card could send a second email; `card-email-rewards.spec.tsx`, `card-email.spec.tsx`, `card-email-pos.spec.tsx` |
+| A declined ticket email follows collection and retry (card email UI) | A visible choice could disappear between the charge sheet, the payment request and offline replay; `card-email-pos.spec.tsx`, `card-email-collection.spec.tsx` |
+| A ticket unsubscribe waits for the diner's button (card email UI) | A mail scanner opening a link could otherwise remove an address; `stop-ticket-email.spec.tsx` |
+
 | Layout audits measure cramped text, stranded separators, clipped numbers and undisclosed bar overflow (owner report, 2026-11-10) | iPhone tabs nearly touched and hid the last tab, setup stranded its separator, and menu hours ended in an ellipsis. Shared `AUDIT` checks painted geometry; `layout-audit-selftest.mjs` plants broken/fixed twins and every older fault before the layout gate visits pages |
 | Unpaid counter checkouts share a restaurant ceiling (production attack M1, 2026-11-10) | Rotating client addresses filled the kitchen with unpaid phone orders |
 | Cart quantities are refused before pricing (production attack L1, 2026-11-10) | Negative, fractional and enormous quantities silently became different orders |
@@ -6703,3 +6710,64 @@ the new reference is saved, only when it differs from the new path, and never
 outside the restaurant's own folder. `logo-card-cleanup.spec.tsx` replaces and
 removes WebP and PNG logos, a failed save, another restaurant's URL, a `..`
 path and a foreign host; six of its eight cases fail on the old card.
+
+## Card email: consent belongs to the address being linked
+
+The creation screen, the diner's card and every staff card editor have to
+agree with the card-email route. Typing an address never grants consent:
+each link or replacement starts with an unchecked box, and changing the
+address clears that tick. Removing an address does not ask for consent.
+The focused creation, editor, rewards and staff specs mock the route contract;
+server enforcement is checked separately by the server implementation.
+
+## Card email: the reader and the audience must agree
+
+Staff display exactly the server's role-filtered address. A masked address
+never pre-fills an input or gets sent back as a replacement. The diner uses
+their own rewards response for the full address, without calling the
+staff-only email GET. A bill that supplies only a suffix can ask staff to
+scan the card again before editing it. An unread address is never called
+"no email" and never makes the till send a stale per-sale address as well.
+The editor, rewards, staff and POS specs cover these boundaries.
+
+## Card email: one collection keeps one ticket choice
+
+The notice on the charge sheet and the payment body have to agree. The skip
+flag travels on whole-table and calculator requests and stays on held POS
+sales when they are sent again. Entering the calculator keeps the choice;
+an unanswered part-payment retry keeps its original request. A new sale or
+collection starts afresh. Saving an address on a card is optional and has a
+short timeout: failure still sends the sale with its existing per-sale ticket.
+A newly linked address uses the existing per-sale email for today's ticket
+and skips its automatic duplicate. That also holds if the save succeeded but
+its reply was lost. Future tickets use the card address automatically. Focused POS and collection specs
+cover these cases without a database or dev server.
+
+## Card email: opening a link is not a request to stop
+
+The unsubscribe page and the POST have to agree about who asked. Rendering
+the page, including a Strict Mode mount, never posts. Only the button sends
+the token, a 404 does not claim success, and a network failure keeps retry
+available. `stop-ticket-email.spec.tsx` checks each case.
+
+
+## Card email: a new reader gets a fresh role check
+
+A cached owner read and a cashier's next read had to agree about the audience.
+A code-only SWR key briefly displayed the previous reader's full address while
+the masked request was still on its way. Card email and attachment reads now
+start with a separate key per mounted reader. Saving asks other mounted
+readers to fetch their own server-filtered answers rather than broadcasting
+an address. `card-email.spec.tsx` holds the cashier's reply open and proves
+that the owner's full address never appears, then checks sibling refresh.
+
+
+## Card email: a lost save reply still chooses one sender
+
+The optional card save and the POS ticket sender have to agree about today's
+email. A timed-out save may already have linked the address, so falling back
+to a per-sale email could also queue the automatic one. A per-sale recipient
+now suppresses automatic card mail for this sale, before the held copy is
+written. The existing sender delivers today's ticket; the saved card delivers
+future ones. The lost-save-reply spec proves the skip reaches both the request
+and held replay, while charging remains available.
