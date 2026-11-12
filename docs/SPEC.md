@@ -1724,6 +1724,12 @@ server applies it only if nothing has happened since.
   original receipt. `/dashboard/held-sales` lets a manager review it on any
   device, confirm the original collector/currency/time and enter an approval
   reason. Approval never restores permission to create new sales on that plan.
+- Intake refuses non-string, non-null whole-order notes/names and money fields
+  that are not finite JavaScript numbers in cents (allowing float noise).
+  The normalized tip cannot exceed the total; the sum retains its one-cent
+  tolerance. Raw receipts remain unchanged. Manager review renders normalized
+  lines and charge fields, including legacy formatted amounts, and approval
+  drops malformed legacy whole-order notes/names from the resulting order.
 - Approved lines keep the till's original prices and combo parts, which are
   what stock gives up even after the promotion has ended. The order, money,
   stock and approval audit commit together, retaining both the collector and

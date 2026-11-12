@@ -6569,6 +6569,18 @@ Reports never fetch current promotions for old sales.
   - finding 6, the tip base, which needs the screen and three pay routes changed together;
   - finding 7's tips paid out, which needs withdrawals to say what they were for.
 
+## Held receipt intake and manager review (2026-11-11)
+
+Queue validation, approval and the review screen must agree on the normalized
+receipt. Intake now refuses malformed whole-order text, string money, real
+sub-cent amounts and a tip above the total. Approval drops bad legacy text
+from the order; review renders normalized lines and amounts without changing
+the raw evidence. `held-intake.spec.ts` and
+`held-review.react-component.spec.tsx` cover the refusal, recovery and display
+paths. Every new assertion was checked by planting the corresponding bug;
+`loop/codex/held-intake-mutations.md` records the results. Audited resolution
+is only a SQL proposal: existing unapprovable money rows still need Claude's
+schema integration and PostgreSQL verification before shifts can be unblocked.
 ## The ticket PDF says what the receipt says (2026-11-11)
 
 The 80 mm ticket and the HTML/email receipt are two forms of one sale. Both
