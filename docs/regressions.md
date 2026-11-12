@@ -34,6 +34,7 @@ and that a new party cannot see the previous party's waiting phones.
 | A duplicate refund tracks customer completion and fee completion separately (S11 I5) | A failed fee return disappeared behind an already-refunded customer payment |
 | A duplicate refund keeps its original charge currency everywhere (S11 I9) | Changing the menu currency relabelled money owed back and the approval amount |
 |---|---|
+| Restaurant logos use PNG bytes, content type and path, and the bucket accepts PNG | The photo encoder stored WebP logos that the ticket PDF could not print; changing only the encoder would leave a WebP path and a bucket that refused PNG. `image-resize.spec.ts` checks logos and unchanged photo encodings; `images.spec.ts` checks the bucket allowlist |
 | A new card save cannot duplicate today's ticket after a lost reply (card email UI) | The save could commit unseen and both the card outbox and the per-sale sender mailed the same ticket; `card-email-pos.spec.tsx` holds the lost reply and checks skip in the charge and held replay |
 | A new card reader does not reuse another reader's address (card email UI) | A cashier could briefly see an owner's full address from the shared SWR cache; `card-email.spec.tsx` reproduces the flash with a delayed masked reply |
 | Linking a card email asks for fresh consent at every door (card email UI) | Creation, the diner's card and staff editors could otherwise disagree about permission to email; `card-email-create.spec.tsx`, `card-email.spec.tsx`, `card-email-staff.spec.tsx` |
@@ -6592,6 +6593,29 @@ PostgreSQL execution, payment races, the API gate, promises, layout/screenshots
 and dialogs require the lead's integration pass; local mock and text-contract
 specs are not evidence those live gates passed.
 
+## Restaurant logos print on the ticket (2026-11-11)
+
+The logo uploader and the ticket PDF had to agree on a format. The shared photo
+encoder chose WebP in Chrome, but pdfkit accepts only PNG and JPEG. Logos now
+request PNG so their transparent parts survive, while cover and dish photos
+keep WebP with the existing JPEG fallback. The upload and removal use the same
+`logo.png` path; the content type and bytes are PNG, and the bucket permits it.
+
+`image-resize.spec.ts` reproduces the old WebP/JPEG logo output and checks PNG
+logos in both browser modes alongside unchanged menu photos. `images.spec.ts`
+checks that the schema permits the uploaded format. After applying the bucket
+allowlist, upload a transparent logo in settings and check its preview and an
+80 mm ticket PDF. No existing logos need migrating.
+
+Changing the name to `logo.png` split the uploader from the files it cleans
+up: removal and replacement deleted the computed `logo.png`, so a logo stored
+before PNG as `logo.webp` stayed public after the owner removed it, and a
+replacement left it beside the new file (review of #621). `LogoCard` now
+deletes the path read from the stored URL (`ownLogoPathFromUrl`), only after
+the new reference is saved, only when it differs from the new path, and never
+outside the restaurant's own folder. `logo-card-cleanup.spec.tsx` replaces and
+removes WebP and PNG logos, a failed save, another restaurant's URL, a `..`
+path and a foreign host; six of its eight cases fail on the old card.
 
 ## Card email: consent belongs to the address being linked
 
