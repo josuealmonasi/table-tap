@@ -8595,6 +8595,12 @@ do $$ declare r record; begin
     perform public.reprice_open_service(r.id, 0);
   end loop;
 end $$;
+-- The repricing queues the deferred money checks on orders; a later ALTER
+-- TABLE orders in this same transaction refuses to run while any are
+-- pending. Run them now (they also prove the repricing balanced), then put
+-- them back: every deferrable check in this schema is initially deferred.
+set constraints all immediate;
+set constraints all deferred;
 update restaurants set service_enabled = false, service_pct = 0 where service_enabled or service_pct <> 0;
 alter table restaurants drop constraint if exists restaurants_no_service_charge;
 alter table restaurants add constraint restaurants_no_service_charge check (not service_enabled and service_pct = 0);

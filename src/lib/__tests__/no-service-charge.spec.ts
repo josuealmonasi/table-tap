@@ -29,4 +29,13 @@ describe("the service charge is gone", () => {
     expect(block).toContain("where paid = false and service_fee > 0 and total > 0");
     expect(block).not.toMatch(/service_enabled|service_pct/);
   });
+
+  it("the migration runs its queued money checks, and restoring them to deferred restores every one", () => {
+    // A later ALTER TABLE orders fails while the repricing's deferred checks
+    // are pending (db:create, 2026-11-12). "all deferred" only restores the
+    // original state while no deferrable check starts out immediate.
+    const end = schema.indexOf("end $$;", schema.indexOf("do $$ declare r record; begin\n  for r in select distinct restaurant_id id from orders"));
+    expect(schema.slice(end, end + 600)).toMatch(/set constraints all immediate;\s*set constraints all deferred;/);
+    expect(schema).not.toMatch(/deferrable(\s+initially\s+immediate)?\s+for each row|deferrable initially immediate/i);
+  });
 });
