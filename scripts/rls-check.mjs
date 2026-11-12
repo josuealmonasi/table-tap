@@ -57,7 +57,7 @@ for (const table of [
   "coupons", "coupon_redemptions", "staff", "user_logs", "profiles",
   "platform_admins", "platform_admin_audit", "restaurant_accounting_records", "rate_limits", "restaurant_tables",
   "icon_groups", "icon_group_items",
-  "loyalty_programs", "loyalty_cards", "loyalty_visits", "loyalty_redemptions",
+  "loyalty_programs", "loyalty_cards", "loyalty_visits", "loyalty_redemptions", "ticket_email_outbox",
   // A customer's name and what they owe: read only through the routes.
   "customer_accounts", "account_checkouts", "account_movements", "diner_checkouts", "table_session_members",
   // The drawer's shifts and what was taken out of it; the restaurant's costs.
