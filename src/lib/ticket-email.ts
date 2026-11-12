@@ -109,11 +109,16 @@ export async function drainTicketEmails(limit = 20): Promise<void> {
  * collection leaves nothing suppressed (Codex review of #622).
  */
 export async function skipTicketEmails(restaurantId: string,
-  target: { tableId?: string; orderId?: string; currency?: string }): Promise<() => Promise<void>> {
+  target: { tableId?: string; orderId?: string; orderIds?: string[]; currency?: string }): Promise<() => Promise<void>> {
+  // A divided bill with no orders left to settle has nothing to mark; an empty
+  // `in` filter must never fall through to a broader write.
+  if (target.orderIds && target.orderIds.length === 0) return async () => {};
   const db = createAdminClient();
   let q = db.from("orders").select("id").eq("restaurant_id", restaurantId).eq("paid", false)
     .eq("ticket_email_skip", false).is("account_id", null);
-  if (target.orderId) q = q.eq("id", target.orderId);
+  // A divided bill names its frozen orders: only those close when its last part is paid.
+  if (target.orderIds) q = q.in("id", target.orderIds);
+  else if (target.orderId) q = q.eq("id", target.orderId);
   else {
     const sitting = await openSittingAt(restaurantId, target.tableId!);
     if (!sitting) return async () => {};
