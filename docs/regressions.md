@@ -6760,3 +6760,35 @@ screens no longer importing the formatter. Under 24 hours the longest text is
 "hace 23 h 59 min", three characters wider than "hace 1741 min"; the
 board's header row wraps, so it drops the status pills to the next line rather
 than overflow. `pnpm layout` is the check that it still reads.
+## Visit-card scanner: one gap spaces every block
+
+The staff "Tarjeta de visitas" dialog spaced hint, camera and typed code with
+a margin on each child, and two of those margins did nothing. The camera was
+an inline `<video>`, so it sat on a text line with a baseline gap under it;
+the code's label was an inline `<label class="tt-mod-label">`, which ignores
+its `margin-bottom: 10px`, so it touched the input (0.5px apart) while the
+camera-to-label gap came out at 19.5px against 13–14px everywhere else. Now
+`.tt-scan-view` is a block, the hint, camera, code entry, error and retry sit
+in `.tt-scan-stage` (a flex column with `gap: 14px`, the dialog title's own
+margin), and the code entry is a `.tt-field` (label 6px above the input, as
+on every other labelled field). `QrScanner` uses the same stage, so every
+other camera dialog (scan to collect, the accounts and waiter-pad scanners,
+the visit-card attach at the till and the bill, the diner menu's scanner)
+shares the rhythm. A browser invariant (`a scanner dialog spaces
+its blocks with one gap`) fails if a dialog renders the camera outside the
+stage or the stage stops using `gap`; `pnpm layout` now also opens "scan to
+collect" on Cuentas abiertas.
+
+Now caught: the same inline label was in eight more places. The write-off
+dialog's note label sat 2px under the reason chips and 0.5px above its
+textarea; the account dialog's limit label sat 0.5px above its input; the
+waiter calculator's amount, the bill code picker, both diner split cards, the
+diner's dish note and the dish photo field each had a label whose margin did
+nothing or did something different from every other field. Each label and
+its control is now a `.tt-field` (6px, by the field's gap), and the
+write-off's reason and note are two field groups 16px apart
+(`.tt-writeoff-fields`, the account credit dialog's rule). A second browser
+invariant (`a field label is a block`) parses every component and fails on
+any `<label>` or `<span>` with `tt-mod-label` that is neither inside a
+`.tt-field` nor given `display: block|flex|grid` by another of its classes.
+It has no allow-list.

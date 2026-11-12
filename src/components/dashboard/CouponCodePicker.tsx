@@ -51,23 +51,25 @@ export default function CouponCodePicker({
 
   return (
     <>
-      <label className="tt-mod-label" htmlFor="tt-bill-code">
-        {t("dash.billCodeLabel")}
-      </label>
-      <input
-        id="tt-bill-code"
-        className="tt-input"
-        style={{ width: "100%", marginTop: 6 }}
-        value={code}
-        placeholder={t("dash.billCodePick")}
-        role="combobox"
-        aria-expanded={shown.length > 0}
-        aria-controls="tt-bill-code-list"
-        autoComplete="off"
-        onChange={e => onCode(e.target.value.toUpperCase())}
-        onKeyDown={onKeyDown}
-        autoFocus
-      />
+      <div className="tt-field">
+        <label className="tt-mod-label" htmlFor="tt-bill-code">
+          {t("dash.billCodeLabel")}
+        </label>
+        <input
+          id="tt-bill-code"
+          className="tt-input"
+          style={{ width: "100%" }}
+          value={code}
+          placeholder={t("dash.billCodePick")}
+          role="combobox"
+          aria-expanded={shown.length > 0}
+          aria-controls="tt-bill-code-list"
+          autoComplete="off"
+          onChange={e => onCode(e.target.value.toUpperCase())}
+          onKeyDown={onKeyDown}
+          autoFocus
+        />
+      </div>
 
       {/* In flow, not floating: the modal is a scroll container, and an
           absolutely positioned menu inside one gets clipped by it — the bug we

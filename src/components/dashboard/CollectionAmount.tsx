@@ -78,7 +78,7 @@ export default function CollectionAmount({
       )}
 
       {mode === "amount" && (
-        <div style={{ marginBottom: 16 }}>
+        <div className="tt-field" style={{ marginBottom: 16 }}>
           <label className="tt-mod-label" htmlFor="tt-calc-amount">
             {t("settle.howMuch")}
           </label>

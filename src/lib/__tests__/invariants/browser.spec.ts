@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import fs from "node:fs";
+import ts from "typescript";
 import { walkAll, sources, read } from "./helpers";
 
 describe("dialogs do not stack", () => {
@@ -221,5 +222,82 @@ describe("the stylesheet parses", () => {
     }
     expect(negative, "a } with no block to close, near these lines").toEqual([]);
     expect(depth, "blocks opened and never closed").toBe(0);
+  });
+});
+
+const css = read("src/app/globals.css");
+/** The body of a top-level rule whose selector is exactly `selector`. */
+const cssRule = (selector: string): string =>
+  css.match(new RegExp(`(^|\\n)${selector.replace(/\./g, "\\.")}\\s*\\{([^}]*)\\}`))?.[2] ?? "";
+
+describe("a scanner dialog spaces its blocks with one gap", () => {
+  it("puts the camera in .tt-scan-stage", () => {
+    // The visit card scanner spaced hint, camera and typed code with margins
+    // on each child. The camera was an inline <video> with a baseline gap
+    // under it, so the gap above the code entry came out 19.5px against 14px
+    // everywhere else. Now the stage's gap spaces every block.
+    expect(cssRule(".tt-scan-view"), "the camera must be a block, not an inline box on a text line").toMatch(/display:\s*block/);
+    const stage = cssRule(".tt-scan-stage");
+    expect(stage, ".tt-scan-stage must be a flex column").toMatch(/display:\s*flex/);
+    expect(stage).toMatch(/flex-direction:\s*column/);
+    expect(stage, ".tt-scan-stage must space its blocks with gap").toMatch(/\bgap:/);
+
+    const offenders: string[] = [];
+    const scanners = sources.filter(f => f.endsWith(".tsx") && read(f).includes("tt-scan-view"));
+    for (const file of scanners) {
+      for (const block of read(file).matchAll(/<Modal\b[^>]*>([\s\S]*?)<\/Modal>/g)) {
+        if (block[1].includes("tt-scan-view") && !block[1].includes('className="tt-scan-stage"')) {
+          offenders.push(`${file}: camera outside .tt-scan-stage`);
+        }
+      }
+    }
+    expect(scanners.length, "the scan found no camera at all").toBeGreaterThan(1);
+    expect(offenders, offenders.join("\n")).toEqual([]);
+  });
+});
+
+describe("a field label is a block", () => {
+  it("never renders an inline .tt-mod-label outside a .tt-field", () => {
+    // `.tt-mod-label` spaces itself with margin-bottom, and an inline
+    // <label> or <span> ignores it. Nine fields had one: the visit card's
+    // code label touched its input (0.5px), the write-off note label sat 2px
+    // under the chips and touched its textarea, the account limit label sat
+    // on its input. A label must sit in a .tt-field (6px to its control, by
+    // the field's gap) or carry a class of its own that makes it a block.
+    // No allow-list: a new one is fixed, not excused.
+    const blockClasses = new Set(
+      [...css.matchAll(/(^|\n)\.([\w-]+)\s*\{([^}]*)\}/g)]
+        .filter(m => /display:\s*(block|flex|grid)\b/.test(m[3]))
+        .map(m => m[2]),
+    );
+    const offenders: string[] = [];
+    let seen = 0;
+    for (const file of sources.filter(f => f.endsWith(".tsx") && read(f).includes("tt-mod-label"))) {
+      const ast = ts.createSourceFile(file, read(file), ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+      const visit = (node: ts.Node, inField: boolean): void => {
+        const open = ts.isJsxElement(node) ? node.openingElement : ts.isJsxSelfClosingElement(node) ? node : null;
+        let inside = inField;
+        if (open) {
+          const className = open.attributes.properties
+            .find(p => ts.isJsxAttribute(p) && p.name.getText() === "className");
+          const classes = className && ts.isJsxAttribute(className) && className.initializer
+            ? className.initializer.getText().replace(/[`"'{}$]/g, " ").split(/\s+/) : [];
+          const tag = open.tagName.getText();
+          if (classes.includes("tt-mod-label") && (tag === "label" || tag === "span")) {
+            seen++;
+            if (!inField && !classes.some(c => blockClasses.has(c))) {
+              const line = ast.getLineAndCharacterOfPosition(open.getStart()).line + 1;
+              offenders.push(`${file}:${line} <${tag}> outside a .tt-field`);
+            }
+          }
+          if (classes.includes("tt-field")) inside = true;
+        }
+        ts.forEachChild(node, child => visit(child, inside));
+      };
+      visit(ast, false);
+    }
+    expect(cssRule(".tt-field"), ".tt-field must space its label with gap").toMatch(/\bgap:/);
+    expect(seen, "the scan found no inline field label at all").toBeGreaterThan(10);
+    expect(offenders, offenders.join("\n")).toEqual([]);
   });
 });
