@@ -1,5 +1,5 @@
 import { expect, it } from "vitest";
-import { disputeReport, minorUnits } from "../report";
+import { disputeReport, minorUnits, tenantBooks } from "../report";
 import { dispute, movement } from "./report-fixtures";
 
 const since = "2026-11-01T00:00:00.000Z", until = "2026-12-01T00:00:00.000Z";
@@ -25,4 +25,14 @@ it("uses half-open provider-date windows with zero-sales periods and actual fee 
 it("respects zero and three-decimal settlement currencies", () => {
   expect(minorUnits(123, "JPY")).toBe(123);
   expect(minorUnits(123, "KWD")).toBe(0.123);
+});
+it("a review case (no matched sale) adds nothing to the tenant's totals, exposure or outcomes", () => {
+  const review = { ...dispute, id: "review", status: "lost", reconciliation_state: "review" };
+  const open = { ...dispute, id: "review_open", status: "needs_response", reconciliation_state: "review" };
+  const reviewMoney = [{ ...movement, dispute_id: "review", stripe_balance_transaction_id: "txn_review", amount_minor: -50000, fee_minor: 1500, net_minor: -51500 },
+    { ...movement, dispute_id: "review_open", stripe_balance_transaction_id: "txn_open", currency: "USD" }];
+  const own = disputeReport([dispute], [movement], since, until, 0);
+  expect(disputeReport([dispute, review, open], [movement, ...reviewMoney], since, until, 0)).toEqual(own);
+  expect(disputeReport([review, open], reviewMoney, since, until, 0)).toEqual({ currencies: [], pending: 0, won: 0, lost: 0 });
+  expect(tenantBooks([dispute, review, open], [movement, ...reviewMoney])).toEqual({ cases: [dispute], movements: [movement] });
 });

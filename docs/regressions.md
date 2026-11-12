@@ -6570,6 +6570,16 @@ locks/leases, the deletion archive, RLS and retry races, and Stripe's separate
 fee-adjustment shapes. Sales,
 original contribution and the corte stay separate from actual chargeback net.
 Historical backfill/provider completeness is PR 3, not claimed by this gate.
+
+A dispute that matches no TableTap sale (case `review`) used to put its event
+back to `pending`: recovery re-read it from Stripe on every run, deletion
+answered `dispute` forever, and its chargeback (attributed through the account
+fallback) lowered the tenant's contribution. Now its event ends `done`, review
+cases never block `admin_delete_restaurant`, and `tenantBooks` drops them and
+their movements before any Costs/Analytics total or pending note.
+`report.spec.ts` and `read.spec.ts` cover the totals; `schema.spec.ts` only
+reads the SQL text, so the event state and the deletion guard are proved only
+by the api/money gates on a database.
 ## The ticket PDF says what the receipt says (2026-11-11)
 
 The 80 mm ticket and the HTML/email receipt are two forms of one sale. Both

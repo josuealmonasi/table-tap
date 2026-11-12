@@ -1,13 +1,13 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { everyRow } from "@/lib/paged";
-import { disputeReport } from "./report";
+import { disputeReport, tenantBooks } from "./report";
 import { disputeOwnership } from "./ownership";
 import type { DisputeCase, DisputeHistory, DisputeMovement, DisputeDb } from "./types";
 
 /** Call only after an existing manager gate. All private reads are tenant-scoped. */
 export async function readDisputes(db: DisputeDb, restaurant: string) {
   const live = /^(sk|rk)_live_/.test(process.env.STRIPE_SECRET_KEY ?? "");
-  const [cases, movements, events] = await Promise.all([
+  const [allCases, allMovements, events] = await Promise.all([
     everyRow<DisputeCase>((a, b) => db.from("stripe_disputes")
       .select("id, restaurant_id, stripe_account_id, livemode, stripe_dispute_id, stripe_payment_intent, order_id, amount_minor, currency, status, provider_created_at, reconciliation_state")
       .eq("restaurant_id", restaurant).eq("livemode", live).order("id").range(a, b), "disputes"),
@@ -18,8 +18,11 @@ export async function readDisputes(db: DisputeDb, restaurant: string) {
       .select("stripe_dispute_id, stripe_account_id, livemode").eq("restaurant_id", restaurant).eq("livemode", live).neq("state", "done")
       .order("id").range(a, b), "pending dispute events"),
   ]);
+  const { cases, movements } = tenantBooks(allCases, allMovements);
   const key = (d: { livemode: boolean; stripe_account_id: string; stripe_dispute_id: string }) => `${d.livemode}:${d.stripe_account_id}:${d.stripe_dispute_id}`;
-  const pending = new Set([...events, ...cases.filter(d => d.reconciliation_state !== "reconciled")].map(key)).size;
+  // A later notification on a review case is platform work, not the tenant's.
+  const reviewed = new Set(allCases.filter(d => d.reconciliation_state === "review").map(key));
+  const pending = new Set([...events.filter(e => !reviewed.has(key(e))), ...cases.filter(d => d.reconciliation_state !== "reconciled")].map(key)).size;
   const waiting = new Set(events.map(key));
   return { cases: cases.map(d => waiting.has(key(d)) && d.reconciliation_state === "reconciled"
     ? { ...d, reconciliation_state: "pending" } : d), movements, pending };

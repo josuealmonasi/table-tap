@@ -31,12 +31,22 @@ it("serializes case workers and fences an expired or superseded claim before wri
   const finish = sql().slice(sql().indexOf("create or replace function public.finish_stripe_dispute_event"));
   expect(finish.indexOf("e.claim_token is distinct")).toBeLessThan(finish.indexOf("insert into stripe_disputes"));
 });
-it("unmatched or won-but-uncredited cases stay pending and block restaurant deletion", () => {
-  expect(sql()).toContain("when v_restaurant is null or not (p_case->>'matched')::boolean then 'review'");
+it("won-but-uncredited cases stay pending and block restaurant deletion", () => {
   expect(sql()).toContain("p_case->>'status' = 'won' and v_waiting");
-  expect(sql()).toContain("state = case when v_state = 'reconciled' then 'done' else 'pending' end");
   expect(sql()).toContain("reconciliation_state <> 'reconciled' or status not in ('won', 'lost', 'warning_closed', 'prevented')");
   expect(sql()).toContain("return jsonb_build_object('outcome', 'dispute')");
+});
+it("an unmatched (review) case finishes its event and never blocks restaurant deletion", () => {
+  const finish = sql().slice(sql().indexOf("create or replace function public.finish_stripe_dispute_event"),
+    sql().indexOf("create or replace function public.fail_stripe_dispute_event"));
+  expect(finish).toContain("when v_restaurant is null or not (p_case->>'matched')::boolean then 'review'");
+  // Recovery re-claims anything not 'done'; a review event left pending was re-fetched from Stripe forever.
+  expect(finish).toContain("state = case when v_state in ('reconciled', 'review') then 'done' else 'pending' end");
+  expect(finish).not.toContain("when v_state = 'reconciled' then 'done' else 'pending'");
+  expect(finish).toContain("return v_state <> 'pending';");
+  const del = sql().slice(sql().indexOf("create or replace function public.admin_delete_restaurant"));
+  const guard = del.slice(0, del.indexOf("return jsonb_build_object('outcome', 'dispute')"));
+  expect(guard).toContain("and reconciliation_state <> 'review'\n      and (reconciliation_state <> 'reconciled' or status not in");
 });
 it("inbox discovery can attribute the original tenant before an unavailable provider read", () => {
   const enqueue = sql().slice(sql().indexOf("create or replace function public.enqueue_stripe_dispute_event"), sql().indexOf("create or replace function public.claim_stripe_dispute_event"));

@@ -32,3 +32,15 @@ it("an error on a later notification makes an older verified history visibly pen
   f.tables.stripe_dispute_events = [{ ...dispute, restaurant_id: "original", stripe_account_id: "acct_old", state: "error" }];
   expect((await readDisputes(f.db, "original")).cases[0].reconciliation_state).toBe("pending");
 });
+it("review cases and their money stay out of the tenant's books and pending note", async () => {
+  const f = fixture();
+  f.tables.stripe_disputes = [{ ...dispute, restaurant_id: "original", reconciliation_state: "reconciled", status: "lost" },
+    { ...dispute, id: "review", stripe_dispute_id: "dp_review", restaurant_id: "original", reconciliation_state: "review", status: "needs_response" }];
+  f.tables.stripe_dispute_movements = [{ ...movement, restaurant_id: "original" },
+    { ...movement, restaurant_id: "original", dispute_id: "review", stripe_balance_transaction_id: "txn_review" }];
+  // A later notification on the review case failed: platform work, not a tenant note.
+  f.tables.stripe_dispute_events = [{ ...dispute, stripe_dispute_id: "dp_review", restaurant_id: "original", state: "error" }];
+  const read = await readDisputes(f.db, "original");
+  expect(read).toMatchObject({ cases: [{ id: "case" }], movements: [movement], pending: 0 });
+  expect(read.cases).toHaveLength(1);
+});

@@ -9779,8 +9779,11 @@ begin
   perform 1 from restaurants where id = p_restaurant for update;
   if not found then return jsonb_build_object('outcome', 'gone'); end if;
   -- A chargeback still open, or whose money Stripe has not settled, keeps the
-  -- restaurant: its books are not finished.
+  -- restaurant: its books are not finished. A review case matched no
+  -- TableTap sale, so it is not the tenant's books and never blocks; it is
+  -- archived below with the rest for the platform to look at.
   if exists (select 1 from stripe_disputes where restaurant_id = p_restaurant
+      and reconciliation_state <> 'review'
       and (reconciliation_state <> 'reconciled' or status not in ('won', 'lost', 'warning_closed', 'prevented')))
     or exists (select 1 from stripe_dispute_events e where e.state <> 'done' and (
       e.restaurant_id = p_restaurant
@@ -11531,7 +11534,8 @@ create table if not exists stripe_dispute_movements (
 );
 create index if not exists dispute_movements_period on stripe_dispute_movements(restaurant_id, provider_created_at, id);
 create index if not exists dispute_events_claim on stripe_dispute_events(livemode, stripe_account_id, stripe_dispute_id, lease_until) where state = 'processing';
--- Null-tenant cases are retained for platform review, never shown in tenant books.
+-- Review cases (no matched sale; the tenant may be only the account fallback)
+-- are retained for platform review and never shown in tenant books.
 -- Only the fenced finish writer may insert monetary evidence; it never updates it.
 alter table stripe_disputes enable row level security;
 alter table stripe_dispute_movements enable row level security;
@@ -11651,10 +11655,13 @@ begin
       raise exception 'Conflicting immutable dispute transaction';
     end if;
   end loop;
+  -- A review case (no TableTap sale matched) is kept for the platform, but its
+  -- event is finished: re-reading Stripe cannot create the missing sale, so
+  -- recovery must not poll it forever. Only 'pending' waits for more money.
   update stripe_dispute_events set restaurant_id = v_restaurant,
-    state = case when v_state = 'reconciled' then 'done' else 'pending' end,
+    state = case when v_state in ('reconciled', 'review') then 'done' else 'pending' end,
     claim_token = null, lease_until = null, last_error = null where id = e.id;
-  return v_state = 'reconciled';
+  return v_state <> 'pending';
 end $$;
 
 create or replace function public.fail_stripe_dispute_event(p_event uuid, p_claim uuid, p_error text)

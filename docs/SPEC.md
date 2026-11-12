@@ -2899,12 +2899,18 @@ transaction identity and monetary evidence cannot be overwritten by a retry.
 RLS, service-only access, composite tenant references and Stripe identities
 unique within account and livemode. The tables and their four functions are in
 `supabase/schema.sql`; `admin_delete_restaurant` refuses deletion while a
-dispute is open or unreconciled and archives all three tables with the books.
+matched dispute is open or unreconciled and archives all three tables with the
+books.
 Historical diner checkout and payment provenance establishes ownership by
 PaymentIntent and original Stripe account. Account checkouts link through their
 saved diner checkout session. Current Connect settings provide only the tenant
-for an unmatched review case, with no linked order. Unknown accounts remain in
-the private inbox for review. Shared-charge history identifies the whole charge.
+for an unmatched review case, with no linked order. A review case finishes its
+inbox event (`done`), so recovery does not re-read it from Stripe; the case row
+keeps `review` for a platform admin (no admin UI yet). Review cases and their
+movements are not the tenant's books: Costs and Analytics leave them out of
+every total, of contribution after chargebacks and of the pending/incomplete
+notes. Unknown accounts remain in the private inbox for review. Shared-charge
+history identifies the whole charge.
 
 Costs shows **chargeback adjustments** below contribution, followed by
 **contribution after chargebacks** (existing contribution plus actual signed
@@ -2918,8 +2924,9 @@ foreign settlement is displayed in its own currency and excluded from the
 current-currency contribution with an incomplete-total notice. Reports exclude
 other Stripe modes, and failed reads fail visibly rather than displaying zero.
 
-Deletion is blocked for open, review or unreconciled disputes and pending inbox
-work, including events on historical accounts. Completed dispute books are
+Deletion is blocked for open or unreconciled matched disputes and pending inbox
+work, including events on historical accounts. Review cases never block it;
+they are archived with the books. Completed dispute books are
 archived by `admin_delete_restaurant` with the other financial records: all three
 dispute tables join its archive list. A win without reinstated principal stays
 pending; winning never invents a fee credit. No application-fee refund or
