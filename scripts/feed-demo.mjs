@@ -14,12 +14,34 @@
 // Password: DEMO_PASSWORD from the env file, if set.
 // ============================================================================
 import { createInterface } from "node:readline/promises";
+import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { parseEnv } from "node:util";
 import pg from "pg";
 
 const isProd = process.argv.includes("--prod");
 const envFile = isProd ? ".env.production.local" : ".env.development.local";
 process.loadEnvFile(join(process.cwd(), envFile));
+
+// The env file is only a claim about where it points. Production's project
+// is named by its own file: a development run must not reach it, and a
+// production run must reach nothing else (a dev file holding production
+// credentials once would have rebuilt production without asking).
+function projectRef(url) {
+  return url?.match(/([a-z0-9]{20})\.supabase\.co/)?.[1] ?? url?.match(/postgres\.([a-z0-9]{20})[:@]/)?.[1] ?? null;
+}
+let prodRef = null;
+try {
+  prodRef = projectRef(parseEnv(readFileSync(join(process.cwd(), ".env.production.local"), "utf8")).NEXT_PUBLIC_SUPABASE_URL);
+} catch { /* no production file on this machine: nothing to confuse it with */ }
+const target = process.env.DATABASE_URL ?? "";
+const reachesProd = Boolean(prodRef && (target.includes(prodRef) || projectRef(process.env.NEXT_PUBLIC_SUPABASE_URL) === prodRef));
+if (isProd ? !reachesProd : reachesProd) {
+  console.error(isProd
+    ? `refusing: ${envFile} does not point at the production project`
+    : `refusing: ${envFile} points at the production project; use pnpm feed-demo:prod`);
+  process.exit(1);
+}
 process.env.FEED_DEMO = "1";
 process.env.DEMO_PRICE_SCALE ??= "15";
 

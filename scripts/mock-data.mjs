@@ -921,8 +921,13 @@ export async function seedMock(pg) {
     ]);
 
   // ── Founder, and what Stripe charges them ─────────────────────────────
+  // The presentation copy (feed-demo, which can run on production) takes no
+  // founder slot: those are numbered seats real restaurants hold, and slot 1
+  // being taken would fail this update after the old demo was already gone.
   await pg.query(
-    "update restaurants set founding_number = coalesce(founding_number, 1), subscribed_price = 1499 where id = $1",
+    FEED_DEMO
+      ? "update restaurants set subscribed_price = 1499 where id = $1"
+      : "update restaurants set founding_number = coalesce(founding_number, 1), subscribed_price = 1499 where id = $1",
     [rid],
   );
 
