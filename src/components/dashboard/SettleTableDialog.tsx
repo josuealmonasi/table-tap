@@ -249,7 +249,11 @@ export default function SettleTableDialog({
         <>
           <SettleBillLines bill={{ ...bill, paid: tableBill(orders ?? [], []).paid }} currency={currency} />
           {loyalty && <AttachCard key={`${tableId}:${orderId}`} active target={tableId ? { tableId } : { orderId: orderId! }} disabled={busy} onBusy={setAttachingCard} />}
-          <fieldset disabled={attachingCard} style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}>
+          {/* No box of its own (display: contents): a <fieldset> here broke the
+              dialog's direct-child layout and pushed the cash amounts against
+              its edge at 360px. inert still blocks every control below while
+              a card is being attached. */}
+          <div inert={attachingCard} style={{ display: "contents" }}>
           {slotSplits.length > 0 ? <TableSplitCollection canApprove={canApprove} onWriteOff={setWritingOff} splits={slotSplits}
             remaining={bill.total} refresh={refreshBill} onCollected={onSettled} onReceipt={rememberReceipt} /> : <>
           <CashChange amount={bill.total} currency={currency} />
@@ -317,7 +321,7 @@ export default function SettleTableDialog({
             </button>}
           </div>
           </>}
-          </fieldset>
+          </div>
         </>
       )}
       </Modal>

@@ -3678,7 +3678,10 @@ create or replace function public.fix_loyalty_card_on_payment()
 returns trigger language plpgsql security definer set search_path = public as $$
 begin
   if not new.paid or new.status = 'cancelled' or (tg_op = 'UPDATE' and old.paid) then return new; end if;
-  if new.loyalty_card_id is null and new.session_id is not null then
+  -- Never for a customer account's order: it keeps the sitting it was
+  -- ordered at, and that sitting's card can be another diner's by the time
+  -- the account is paid (Codex review of #622).
+  if new.loyalty_card_id is null and new.session_id is not null and new.account_id is null then
     new.loyalty_card_id := (select s.loyalty_card_id from table_sessions s
       where s.id = new.session_id and s.restaurant_id = new.restaurant_id);
   end if;

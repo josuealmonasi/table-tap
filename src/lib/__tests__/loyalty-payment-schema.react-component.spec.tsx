@@ -8,8 +8,10 @@ const trigger = schema.slice(schema.indexOf("create or replace function public.s
 const fixer = schema.slice(schema.indexOf("create or replace function public.fix_loyalty_card_on_payment()"),
   schema.indexOf("for each row execute function public.fix_loyalty_card_on_payment();") + "for each row execute function public.fix_loyalty_card_on_payment();".length);
 const fixerContracts = [
-  { name: "a paid sale takes its sitting's card when it has none", pattern: /new\.loyalty_card_id is null and new\.session_id is not null then\s*new\.loyalty_card_id := \(select s\.loyalty_card_id from table_sessions s\s*where s\.id = new\.session_id and s\.restaurant_id = new\.restaurant_id\)/,
+  { name: "a paid sale takes its sitting's card when it has none", pattern: /new\.loyalty_card_id is null and new\.session_id is not null and new\.account_id is null then\s*new\.loyalty_card_id := \(select s\.loyalty_card_id from table_sessions s\s*where s\.id = new\.session_id and s\.restaurant_id = new\.restaurant_id\)/,
     from: "select s.loyalty_card_id from table_sessions", to: "select null from table_sessions" },
+  { name: "an account's order never takes its sitting's card", pattern: /new\.session_id is not null and new\.account_id is null then/,
+    from: " and new.account_id is null then", to: " then" },
   { name: "fixed before the row is written, on insert or on becoming paid", pattern: /create trigger fix_loyalty_card_on_payment before insert or update of paid on orders/,
     from: "before insert or update of paid", to: "after update of paid" },
   { name: "keeps no card that was not stamped (program off, another restaurant's)", pattern: /not public\.loyalty_open\(new\.restaurant_id\)[\s\S]*c\.id = new\.loyalty_card_id and c\.restaurant_id = new\.restaurant_id\)\) then\s*new\.loyalty_card_id := null/,
