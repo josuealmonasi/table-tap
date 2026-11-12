@@ -581,7 +581,11 @@ a.tt-btn {
   margin-bottom: 12px;
 }
 
+/* A block, not the inline box a <video> is by default: inline, it sat on a
+   text line and left a baseline gap under the camera that no gap or margin
+   accounted for. */
 .tt-scan-view {
+  display: block;
   width: 100%;
   aspect-ratio: 1;
   object-fit: cover;
@@ -7437,10 +7441,26 @@ a.tt-user-plan:hover {
 
 /* ── The staff scanner that stamps a visit card ────────────────────────────
    The camera on top, the typed code beneath it for a card the lens will not
-   read, then what the card says now. The field shrinks; the button does not. */
-.tt-stamp-type {
-  margin-top: 14px;
-  text-align: left;
+   read, then what the card says now. The field shrinks; the button does not.
+
+   Every block in a scanner dialog — hint, camera, typed code, error, retry —
+   is spaced by this column's gap and by nothing else: 14px, the same as the
+   dialog title's margin, so title, hint, camera and field are evenly apart.
+   The typed code is a .tt-field, so its label sits 6px above the input like
+   every other labelled field. Margins on the children used to do this job:
+   the label is an inline <label>, which ignores margin-bottom, so it touched
+   the input, and the field's top margin landed on the camera's baseline gap. */
+.tt-scan-stage {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+}
+.tt-scan-stage > p {
+  margin: 0;
+}
+.tt-scan-stage > .tt-btn {
+  align-self: flex-start;
 }
 .tt-stamp-type-row {
   display: flex;

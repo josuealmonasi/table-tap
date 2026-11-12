@@ -6695,3 +6695,28 @@ now suppresses automatic card mail for this sale, before the held copy is
 written. The existing sender delivers today's ticket; the saved card delivers
 future ones. The lost-save-reply spec proves the skip reaches both the request
 and held replay, while charging remains available.
+
+
+## Visit-card scanner: one gap spaces every block
+
+The staff "Tarjeta de visitas" dialog spaced hint, camera and typed code with
+a margin on each child, and two of those margins did nothing. The camera was
+an inline `<video>`, so it sat on a text line with a baseline gap under it;
+the code's label was an inline `<label class="tt-mod-label">`, which ignores
+its `margin-bottom: 10px`, so it touched the input (0.5px apart) while the
+camera-to-label gap came out at 19.5px against 13–14px everywhere else. Now
+`.tt-scan-view` is a block, the hint, camera, code entry, error and retry sit
+in `.tt-scan-stage` (a flex column with `gap: 14px`, the dialog title's own
+margin), and the code entry is a `.tt-field` (label 6px above the input, as
+on every other labelled field). `QrScanner` uses the same stage, so every
+other camera dialog (scan to collect, the accounts and waiter-pad scanners,
+the visit-card attach at the till and the bill, the diner menu's scanner)
+shares the rhythm. A browser invariant (`a scanner dialog spaces
+its blocks with one gap`) fails if a dialog renders the camera outside the
+stage, a labelled code entry is not a `.tt-field`, or the stage stops using
+`gap`; `pnpm layout` now also opens "scan to collect" on Cuentas abiertas.
+
+Still for a person: other `<label class="tt-mod-label">` used outside a
+`.tt-field` (CollectionAmount, CouponCodePicker, AccountDialog,
+AccountCreditDialog, SplitStart, LegacySplitBillCard, WriteOffDialog) have the
+same ignored `margin-bottom`; nothing measures a vertical label-to-input gap.

@@ -223,3 +223,39 @@ describe("the stylesheet parses", () => {
     expect(depth, "blocks opened and never closed").toBe(0);
   });
 });
+
+describe("a scanner dialog spaces its blocks with one gap", () => {
+  it("puts the camera in .tt-scan-stage and its typed code in a .tt-field", () => {
+    // The visit card scanner spaced hint, camera and typed code with margins
+    // on each child. The camera was an inline <video> with a baseline gap
+    // under it, and the code's label an inline <label> that ignores
+    // margin-bottom, so the label touched the input and the gaps above it
+    // were all different. Now the stage's gap spaces every block, and a
+    // labelled code entry is a .tt-field like every other labelled input.
+    const css = read("src/app/globals.css");
+    const rule = (selector: string): string =>
+      css.match(new RegExp(`(^|\\n)${selector.replace(/[.>]/g, m => `\\${m}`)}\\s*\\{([^}]*)\\}`))?.[2] ?? "";
+    expect(rule(".tt-scan-view"), "the camera must be a block, not an inline box on a text line").toMatch(/display:\s*block/);
+    const stage = rule(".tt-scan-stage");
+    expect(stage, ".tt-scan-stage must be a flex column").toMatch(/display:\s*flex/);
+    expect(stage).toMatch(/flex-direction:\s*column/);
+    expect(stage, ".tt-scan-stage must space its blocks with gap").toMatch(/\bgap:/);
+
+    const offenders: string[] = [];
+    const scanners = sources.filter(f => f.endsWith(".tsx") && read(f).includes("tt-scan-view"));
+    for (const file of scanners) {
+      const body = read(file);
+      for (const block of body.matchAll(/<Modal\b[^>]*>([\s\S]*?)<\/Modal>/g)) {
+        if (!block[1].includes("tt-scan-view")) continue;
+        if (!block[1].includes('className="tt-scan-stage"')) offenders.push(`${file}: camera outside .tt-scan-stage`);
+        for (const form of block[1].matchAll(/<form\b([^>]*)>([\s\S]*?)<\/form>/g)) {
+          if (/<label className="tt-mod-label"/.test(form[2]) && !/className="tt-field\b/.test(form[1])) {
+            offenders.push(`${file}: a labelled code entry that is not a .tt-field`);
+          }
+        }
+      }
+    }
+    expect(scanners.length, "the scan found no camera at all").toBeGreaterThan(1);
+    expect(offenders, offenders.join("\n")).toEqual([]);
+  });
+});
