@@ -1,3 +1,4 @@
+import { loyaltyOn } from "@/lib/loyalty/server";
 import { redirect } from "next/navigation";
 import { getMembership, TAKES_TABLE_ORDERS } from "@/lib/membership";
 import { getPlan, allPlans } from "@/lib/plan-server";
@@ -60,6 +61,7 @@ export default async function TableOrderPage() {
 
   return (
     <TableOrderScreen
+      loyalty={await loyaltyOn(membership.restaurant.id, plan.limits)}
       restaurant={data.restaurant}
       categories={data.categories}
       items={data.items}

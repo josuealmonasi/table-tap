@@ -11,6 +11,7 @@ import type { AccountListItem } from "@/hooks/useOpenAccounts";
 import PosAccountCharge from "./PosAccountCharge";
 
 interface PosSalePanelProps {
+  loyaltyCard?: React.ReactNode;
   lines: CartItem[];
   items: MenuItem[];
   currency: string;
@@ -33,6 +34,7 @@ interface PosSalePanelProps {
 
 /** The sale itself: its lines, its total, and the ways to take the money. */
 export default function PosSalePanel({
+  loyaltyCard,
   lines,
   items,
   currency,
@@ -92,6 +94,7 @@ export default function PosSalePanel({
         <strong>{formatMoney(total, currency)}</strong>
       </div>
 
+      {loyaltyCard}
       <div className="tt-pos-charge">
         <button
           type="button"

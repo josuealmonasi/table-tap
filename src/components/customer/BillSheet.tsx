@@ -1,5 +1,6 @@
 "use client";
 
+import DeviceBillCard from "./DeviceBillCard.react-component";
 import { useState } from "react";
 import { Modal } from "@/components/ui/Modal";
 import { useT } from "@/lib/i18n/context";
@@ -86,6 +87,7 @@ export default function BillSheet({
   dividing = false,
 }: BillSheetProps) {
   const t = useT();
+  const [attachingCard, setAttachingCard] = useState(false);
   const [chosenCurrency, setChosenCurrency] = useState<string | null>(null);
   const allOrders = [...allBill.mine.orders, ...allBill.others.orders, ...allBill.paid.orders];
   const currencies = [...new Set([...allBill.mine.orders, ...allBill.others.orders].map(o => o.currency))];
@@ -216,6 +218,8 @@ export default function BillSheet({
               side={paid} currency={c} photoOf={photoOf} settled collapsible />;
           })}
 
+          {open && sessionId && <DeviceBillCard restaurantId={restaurant.id} tableId={tableId} sessionId={sessionId} disabled={busy || splitBusy} onBusy={setAttachingCard} />}
+
           {coupon && <p className="tt-muted">{t(split ? "slots.couponNotIncluded" : "slots.couponFirst")}</p>}
 
           {/* Dividing it evenly is a decision about the whole bill, so it is
@@ -228,7 +232,7 @@ export default function BillSheet({
               split={split}
               diner={diner}
               tipPct={tipPct}
-              busy={splitBusy || busy}
+              busy={splitBusy || busy || attachingCard}
               currency={dinerCurrency(ordersToPay(bill, "all")) ?? currency}
               outstanding={tableBill(allOrders.filter(o => o.currency === (split?.currency ?? currency)), []).total}
               party={party}
@@ -286,7 +290,7 @@ export default function BillSheet({
 
           <BillActions
             called={called}
-            busy={busy}
+            busy={busy || attachingCard}
             alone={alone}
             reasonKey={checkingSplit ? "slots.checking" : splitLocked ? "bill.dividing" : noCard}
             onPayOnline={() =>
