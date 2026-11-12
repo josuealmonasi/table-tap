@@ -158,7 +158,7 @@ try {
   await check("foreign returned cash takes no payout or receipt", async () => {
     const ref = await held(40, "cash", "USD");
     const before = await totals();
-    const payout = (await value("select create_cash_withdrawal($1,$2,40,'returned','probe') value", [restaurant, shift])).id;
+    const payout = (await value("select create_cash_withdrawal($1,$2,40,'returned','probe','other') value", [restaurant, shift])).id;
     await refused(() => resolve(ref, owner, "returned_cash", 40, { payout }, "USD"), /foreign returned cash takes no payout/);
     // Remove the unrelated drawer payout before checking the net change.
     await value("select delete_cash_withdrawal($1,$2,$3) value", [restaurant, shift, payout]);
@@ -175,7 +175,7 @@ try {
     const otherShift = await value("select open_cash_shift($1,'probe',100) value", [other]);
     const payment = await value(`insert into payments(restaurant_id,amount,tip,method,actor_email,currency)
       values($1,30,0,'cash','probe','MXN') returning id value`, [other]);
-    const payout = (await value("select create_cash_withdrawal($1,$2,30,'returned','probe') value", [other, otherShift])).id;
+    const payout = (await value("select create_cash_withdrawal($1,$2,30,'returned','probe','other') value", [other, otherShift])).id;
     const ref = await held(30);
     await refused(() => resolve(ref, owner, "duplicate", 30, { payment }), /matching cash payment required/);
     await refused(() => resolve(ref, owner, "returned_cash", 30, { payout }), /matching recorded payout required/);
@@ -185,7 +185,7 @@ try {
     const ref = await held(40);
     await refused(() => resolve(ref, owner, "returned_cash", 40), /matching recorded payout required/);
     const before = await totals();
-    const payout = (await value("select create_cash_withdrawal($1,$2,40,'returned','probe') value", [restaurant, shift])).id;
+    const payout = (await value("select create_cash_withdrawal($1,$2,40,'returned','probe','other') value", [restaurant, shift])).id;
     const r = await resolve(ref, owner, "returned_cash", 40, { payout });
     assert.equal(r.payout_id, payout);
     const deletion = await value("select delete_cash_withdrawal($1,$2,$3) value", [restaurant, shift, payout]);
