@@ -6517,6 +6517,9 @@ The owner found these on an iPhone, on production, with every gate green. Every 
   - **The cart's "¿Tienes un cupón?".** Its icon sat a space (about 3px) from the words; it gets 4px more now.
 
   False positives fixed in the check: content cut by a card's own scroll (a dialog's chips at the fold) is not "touching" its edge, and a full-screen sheet (the diner's dish sheet and cart) is not a "bar". Bars are strips, at most 35% of the screen tall.
+- **Dialog sweep leftovers** (2026-11-11). Real: the diner's split card met the totals card with 0px between them when no tip or coupon row sat between (no card payments), and a menu option chip's remove icon sat a space (2.5px) from "Mild"/"Medium"/"Hot". Both now have room. False positive fixed in the check: a dialog scrolled part-way leaves its heading wherever the scroll puts it, so `content-touches-edge` no longer measures the top or bottom side of a box that is scrolled away from that side (the bill dialog, scrolled 156px, read "1 de 3 partes pagadas" 4px from its top). Its sides still count; both are self-test fixtures, and putting the old rule back fails the first.
+- **The phone tab bar lit "Menús" on Ajustes** (seen on production after #602 shipped). A menu's own page has a free-form address, so any dashboard page without a tab fell through to Menús: Ajustes, Equipo, Plan, Perfil, held sales. `currentSection` now lights nothing on a fixed page without a tab, and `nav-current-section.spec.ts` keeps its list of fixed pages equal to the folders in `src/app/dashboard`.
+- **Analytics' period pills and Costs' tabs were underlined.** They are links styled as pills, and `.tt-board-tab` never removed the link underline. Analytics' periods were also a `tablist` of plain links; they are a labelled `nav` with `aria-current` now, like Costs.
 - **The stock tab's last-count line** sat in the narrow left column under "Debería haber …", so its dot opened a line at 360px. A meta line with nothing beside it now takes the whole row.
 ## R8-4 part 1 — account debt and manager credits
 
@@ -6551,6 +6554,37 @@ understatement of unrelated revenue, bill-wide stacking, extras, combo display
 savings, free food costs, exact cents, legacy fallback and offline replay.
 Reports never fetch current promotions for old sales.
 
+## The ticket PDF says what the receipt says (2026-11-11)
+
+The 80 mm ticket and the HTML/email receipt are two forms of one sale. Both
+are now written from `receiptModel` (the calculation `buildReceipt` used to
+do inline), so a discount, a forgiven bill, a return or a paid split part
+reads the same on paper as on the screen. `ticket-pdf.spec.ts` checks that
+the columns fit the roll and that the PDF is cut to its own length; the
+existing receipt specs (130) prove the refactor changed no amount.
+
+
+## A card presented before payment is stamped by payment (2026-11-11)
+
+Scanning a visit card separately from taking payment left the two acts unrelated,
+and the customer ticket gave no reward progress. Attachment now names an unpaid
+sale or open sitting; payment stamps it and receipts read the confirmed ladder
+standing. The diner path requires both a live table credential and the card's
+bearer code. A printed code is masked to four characters, including offline paper.
+
+Local specs cover route outcomes, front-of-house roles, foreign/closed sittings,
+conditional removal, Spanish selector states, saved-device selection, receipt
+progress/earned rewards/privacy/width, and the trigger's insert/update/cancelled/
+sitting fallback/day uniqueness contracts. Schema bug plants operate on an
+in-memory copy, keeping `supabase/` untouched. Live API cases create private
+cards, orders, sittings and member credentials and clean them up even after
+partial setup; two payments must create one `payment` visit.
+
+The application hands Caja's transaction a server-resolved `loyalty_card_id`,
+and `pos_insert_order` keeps it only when the card is this restaurant's.
+PostgreSQL execution, payment races, the API gate, promises, layout/screenshots
+and dialogs require the lead's integration pass; local mock and text-contract
+specs are not evidence those live gates passed.
 
 ## Restaurant logos print on the ticket (2026-11-11)
 
