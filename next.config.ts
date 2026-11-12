@@ -1,6 +1,18 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  // The ticket's typefaces are read from disk by the routes that make the
+  // PDF; tracing does not see a readFileSync path, so it is named here.
+  // pdfkit reads its built-in font metrics (Helvetica.afm, loaded by every new
+  // document) from beside its own files. Bundled, it looked for them beside
+  // the chunk and every ticket PDF answered 503 in a production build while
+  // the unit tests, which do not bundle, passed. Required from node_modules
+  // instead, its data files are traced with it.
+  serverExternalPackages: ["pdfkit"],
+  outputFileTracingIncludes: {
+    "/api/orders/print": ["./src/lib/fonts/**"],
+    "/api/settings/ticket-preview": ["./src/lib/fonts/**"],
+  },
   images: {
     // Menu photography lives in Supabase Storage. Only the project host is
     // allowed, so a stored URL can't be pointed at somewhere else to make our
