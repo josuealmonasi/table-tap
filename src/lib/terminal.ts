@@ -161,7 +161,7 @@ export function depositDays(
     const reconciled = returnDeposit(r, deposits, salesDays);
     if (reconciled) {
       // Same-day reversals are already absent from takings and fees.
-      if (r.saleDay !== r.day || reconciled.sales_day !== r.day) rowOf(reconciled.sales_day).givenBack += carriedReturn(r, reconciled.fee_pct ?? feePct);
+      if (r.saleDay !== r.day || reconciled.sales_day !== r.day) rowOf(reconciled.sales_day).givenBack += carriedReturn(r, marked.get(r.saleDay)?.fee_pct ?? reconciled.fee_pct ?? feePct);
       continue;
     }
     if (r.saleDay === r.day && !marked.has(r.saleDay)) continue;

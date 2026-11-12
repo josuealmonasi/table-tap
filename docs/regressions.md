@@ -6572,6 +6572,25 @@ returned), the currency changes from the 1st of next month.
 route answers it by name (409 `currencyLockedMonth`), and Settings disables the
 currency with the date it frees up. `fee-month-currency.spec.tsx` covers all
 three, each sabotage-tested.
+
+## Sweep 11 — absent fees and terminal return rates
+
+An application fee can appear after its charge was refunded. The reconciler
+now checks the saved fee ledger and checkout before verifying zero; a positive
+fee or missing evidence keeps recovery pending. `fee-not-created.react-component.spec.tsx`
+covers delayed creation, zero-fee checkouts and failed reads. The platform's
+`application_fee.created` event also enqueues recovery before acknowledgement
+(`created-fee.react-component.spec.tsx`). Subscribe that endpoint to the event.
+
+Costs now reads terminal receipts, returns and signed rates together: MX$100
+less a same-day MX$40 return at 3.5% costs MX$2.10 and leaves MX$57.90. A later-day
+return retains the fee. `costs-terminal-returns.react-component.spec.tsx` checks
+both, historical and zero rates, local dates, rounding, voids and failed reads.
+`terminal-snapshot.spec.ts` signs the later deposit at 5% and keeps the original
+MX$96.50 carried return beside MX$200 takings, MX$10 fees and MX$93.50 expected.
+Each original bug was planted back and made its scenario fail. Provider delivery
+and database execution still require Claude's live checks.
+
 ## The ticket PDF says what the receipt says (2026-11-11)
 
 The 80 mm ticket and the HTML/email receipt are two forms of one sale. Both
