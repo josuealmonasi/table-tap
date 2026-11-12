@@ -17,7 +17,8 @@ export function loyaltyCases(fx) {
       effect: async f => {
         const { data } = await f.admin.from("loyalty_cards").select("email, email_consent_at, email_notice_version, email_unsubscribe")
           .eq("code", fx.stampableCode).maybeSingle();
-        return (data?.email === "api-gate@example.invalid" && data.email_consent_at && data.email_notice_version && data.email_unsubscribe)
+        // A boolean: the harness reads any string as the failure message.
+        return (data?.email === "api-gate@example.invalid" && Boolean(data.email_consent_at && data.email_notice_version && data.email_unsubscribe))
           || `card holds ${JSON.stringify(data)}`;
       } },
     { name: "GET /api/loyalty/card-email (cashier: masked)", as: "cashier", method: "GET",
