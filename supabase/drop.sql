@@ -92,6 +92,7 @@ drop table if exists account_checkouts   cascade;
 drop table if exists customer_accounts   cascade;
 drop table if exists loyalty_redemptions cascade;
 drop table if exists loyalty_visits      cascade;
+drop table if exists ticket_email_outbox cascade;
 drop table if exists loyalty_cards       cascade;
 drop table if exists loyalty_programs    cascade;
 drop table if exists print_jobs          cascade;
@@ -374,5 +375,7 @@ drop table if exists stripe_disputes cascade;
 -- Loyalty stamped by payment.
 drop function if exists public.stamp_loyalty_on_payment() cascade;
 drop function if exists public.fix_loyalty_card_on_payment() cascade;
+drop function if exists public.queue_ticket_email() cascade;
+drop function if exists public.claim_ticket_emails(int);
 drop function if exists public.attach_loyalty_card_v1(uuid, text, uuid, uuid, text);
 drop function if exists public.loyalty_open(uuid);
