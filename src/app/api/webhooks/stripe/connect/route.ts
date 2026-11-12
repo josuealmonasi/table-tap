@@ -1,3 +1,5 @@
+import { after } from "next/server";
+import { drainTicketEmails } from "@/lib/ticket-email";
 import { NextRequest, NextResponse } from "next/server";
 import { readStripeEvent } from "@/lib/stripe-webhook";
 import { abandonCheckout, settleCheckout } from "@/lib/checkout-settle";
@@ -26,6 +28,9 @@ export async function POST(req: NextRequest) {
     "connect",
   );
   if (refusal) return refusal;
+  // Tickets this request's payment queued for the card's email go out once it
+  // has answered; registered only once the caller and the request are valid.
+  after(() => drainTicketEmails());
 
   if (event!.type === "checkout.session.completed"
     || (event!.type === "checkout.session.async_payment_succeeded" && (event!.data.object as Stripe.Checkout.Session).metadata?.split_model === "2")) {

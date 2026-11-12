@@ -5,6 +5,7 @@ const f = vi.hoisted(() => ({ role: "waiter" as string | null, enabled: true, me
   missing: false, failed: false, rpc: vi.fn(), filters: vi.fn(), writes: vi.fn() }));
 vi.mock("@/lib/rate-limit", () => ({ isRoomLimited: async () => false, isTableLimited: async () => false }));
 vi.mock("@/lib/membership", () => ({
+  MANAGES: (r: string) => r === "owner" || r === "manager",
   getMembership: async () => f.role ? { role: f.role, restaurant: { id: "10000000-0000-4000-8000-000000000001" } } : null,
   getMembershipWithUser: async () => f.role ? { user: { email: "staff@test" },
     membership: { role: f.role, restaurant: { id: "10000000-0000-4000-8000-000000000001" } } } : null,

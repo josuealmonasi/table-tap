@@ -1,5 +1,6 @@
 "use client";
 
+import CardEmail from "@/components/loyalty/CardEmail.react-component";
 import { useT } from "@/lib/i18n/context";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { useToast } from "@/components/ui/Toast";
@@ -71,6 +72,7 @@ export default function CardLookupResult({ card, active, onChanged }: CardLookup
       </p>
       <p className="tt-muted" style={{ fontSize: 12, margin: 0 }}>{t("rewards.memberSince", { date: card.since })}</p>
       <LadderSteps standing={s} />
+      <CardEmail key={card.code} code={card.code} disabled={busy} />
       {s.ready && <p className="tt-rewards-ready">{t("loyalty.ready")}</p>}
       {/* Stamping needs the card switched on. Redeeming does not: a reward a
           diner earned is honoured after a pause — the route says so, and so

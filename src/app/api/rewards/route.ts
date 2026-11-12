@@ -1,3 +1,4 @@
+import { emailForRole } from "@/lib/loyalty/card-email";
 import { NextRequest, NextResponse } from "next/server";
 import { apiError } from "@/lib/api-error";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -30,7 +31,7 @@ export async function GET(req: NextRequest) {
   const db = createAdminClient();
   const { data: card, error } = await db
     .from("loyalty_cards")
-    .select(`${CARD_COLUMNS}, restaurant_id, created_at, ladder_at, saved_at`)
+    .select(`${CARD_COLUMNS}, restaurant_id, created_at, ladder_at, saved_at, email`)
     .eq("code", code)
     .maybeSingle<CardRow & { restaurant_id: string; created_at: string; ladder_at: string; saved_at: string }>();
   if (error) {
@@ -71,6 +72,10 @@ export async function GET(req: NextRequest) {
       : null;
 
   return NextResponse.json({
+    // The address this card's tickets go to, masked: a waiter who scanned
+    // the card holds its code too, and the floor never sees an address whole
+    // (Codex review of #622). The diner retypes it to change it.
+    email: emailForRole((card as { email?: string | null }).email ?? null, false),
     face,
     qr: qrGrid(face.qrPayload),
     restaurant: { id: card.restaurant_id, ...restaurant.data },

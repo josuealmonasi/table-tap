@@ -118,7 +118,7 @@ it("K25: refused ratings keep the sheet open and its scores", async () => {
   expect(nodes(RateDishesSheet(props)).some(p => p.role === "alert")).toBe(true);
 });
 it("K25: card removal errors render while the card is still displayed", () => {
-  state.values = ["K7QM-3XW9-TB4R", { restaurant: { id: "r" } }, "Removal failed", false, false, null];
+  state.values = ["K7QM-3XW9-TB4R", { restaurant: { id: "r" }, face: { printedCode: "K7QM-3XW9-TB4R" } }, "Removal failed", false, false, null];
   expect(nodes(RewardsLookup({})).some(p => p.role === "alert" && p.children === "Removal failed")).toBe(true);
 });
 
