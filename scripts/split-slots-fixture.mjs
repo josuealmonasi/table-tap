@@ -21,7 +21,7 @@ export async function splitSlotFixture(admin, restaurantId, { currency = "MXN", 
     // every pnpm attack left its drawer short of the corte (cash and card).
     const receipts = await checked(admin.from("payments").select("id").eq("session_id", sessionId));
     if (receipts?.length) await checked(admin.from("user_logs").delete().in("id", receipts.map(p => p.id)));
-    await checked(admin.from("payments").delete().eq("session_id", sessionId));
+    await checked(admin.from("payments").delete().is("account_id", null).eq("session_id", sessionId));
     await checked(admin.from("user_logs").delete().eq("restaurant_id", restaurantId).eq("entity", "bill")
       .in("action", ["collected", "paid"]).like("detail", `table=split-${ref.slice(0, 8)} %`));
     await checked(admin.from("orders").delete().eq("id", orderId));

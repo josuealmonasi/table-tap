@@ -23,7 +23,7 @@ export async function tableJoinScenario({ admin, base, restaurantId, dish }) {
     }
     const ids = (orders ?? []).map(o => o.id);
     if (ids.length) {
-      await admin.from("payments").delete().in("order_id", ids);
+      await admin.from("payments").delete().is("account_id", null).in("order_id", ids);
     }
     if (cards.length) await admin.from("loyalty_cards").delete().eq("restaurant_id", restaurantId).in("code", cards);
     const reservations = (orders ?? []).map(o => o.stock_reservation_id).filter(Boolean);

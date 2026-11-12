@@ -306,7 +306,7 @@ if (!signIn.error && theirs) {
     const drop = async (what, query) => { const { error } = await query; if (error) failed.push(`${what}: ${error.message}`); };
     for (const f of made) {
       if (f.session) {
-        await drop("payments", admin.from("payments").delete().eq("session_id", f.session));
+        await drop("payments", admin.from("payments").delete().is("account_id", null).eq("session_id", f.session));
         await drop("orders", admin.from("orders").delete().eq("session_id", f.session));
         await drop("sitting", admin.from("table_sessions").delete().eq("id", f.session));
       }

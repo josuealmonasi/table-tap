@@ -2,8 +2,13 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 const schema = readFileSync("supabase/schema.sql", "utf8");
-const latest = (name: string): string =>
-  [...schema.matchAll(/create or replace function public\.([a-z_0-9]+)\([\s\S]*?\$\$;/g)].filter(m => m[1] === name).at(-1)?.[0] ?? "";
+const latest = (name: string): string => {
+  const sql = [...schema.matchAll(/create or replace function public\.([a-z_0-9]+)\([\s\S]*?\$\$;/g)]
+    .filter(m => m[1] === name).at(-1)?.[0] ?? "";
+  // Compatibility signatures must retain the guard through their delegate.
+  const delegated = sql.match(/begin\s+return public\.(\w+)\(/)?.[1];
+  return delegated ? `${sql}\n${latest(delegated)}` : sql;
+};
 
 describe("an unresolved card page blocks every collection and movement of its debt, at any age", () => {
   it("no writer decides by a 35-minute window or a hold deadline any more", () => {

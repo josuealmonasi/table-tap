@@ -1,5 +1,8 @@
-// Development SQL evidence only, after schema application. Never run in PR 1 production.
+// Development SQL evidence only, after schema application. Never run in production.
 import assert from "node:assert/strict";
+import { probeLiveJournal, debtMatches } from "./account-journal-live-probe.mjs";
+import { probeDeferredJournal } from "./account-journal-deferred-probe.mjs";
+import { performance } from "node:perf_hooks";
 import { randomUUID } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
@@ -20,10 +23,44 @@ const config = { connectionString, ssl: { rejectUnauthorized: false }, statement
 const db = new pg.Client(config), peer = new pg.Client(config);
 const restaurant = randomUUID(), foreign = randomUUID();
 let pending;
+
+async function probeTimings() {
+  const owner = await account(db, restaurant);
+  const { rows: orders } = await db.query(`insert into orders(restaurant_id,status,subtotal,total,currency)
+    select $1,'completed',1,1,'MXN' from generate_series(1,500) returning id`, [restaurant]);
+  // Keep 450 settled charges as history and exactly 50 orders outstanding.
+  const charge = async ids => {
+    const { rows } = await db.query("select account_charge_v2($1,$2,$3,$4,'probe') value", [restaurant, owner, ids, ids.length]);
+    assert.equal(rows[0].value.outcome, "charged");
+  };
+  await charge(orders.slice(0, 450).map(row => row.id));
+  await settle(db, restaurant, owner, 450);
+  await charge(orders.slice(450).map(row => row.id));
+  assert.equal((await db.query("select count(*)::int n from account_movements where account_id=$1 and kind='charge'", [owner])).rows[0].n, 500);
+  assert.equal((await db.query("select count(*)::int n from orders where account_id=$1 and not paid and not written_off and status<>'cancelled'", [owner])).rows[0].n, 50);
+  await db.query("begin");
+  await settle(db, restaurant, owner, 50);
+  const commitStart = performance.now();
+  await db.query("commit");
+  console.log(`TIMING: settle 50 orders on an account with 500 charges: COMMIT ${(performance.now() - commitStart).toFixed(2)} ms`);
+  assert.equal((await db.query("select count(*)::int n from orders where account_id=$1 and paid", [owner])).rows[0].n, 500);
+  await debtMatches(db, owner);
+
+  const { rows: kitchen } = await db.query(`insert into orders(restaurant_id,status,subtotal,total,currency)
+    select $1,'preparing',1,1,'MXN' from generate_series(1,200) returning id`, [restaurant]);
+  // Each update is its own transaction, including the COMMIT in this total.
+  const statusStart = performance.now();
+  for (const row of kitchen) {
+    const result = await db.query("update orders set status='ready' where id=$1 and account_id is null", [row.id]);
+    assert.equal(result.rowCount, 1);
+  }
+  console.log(`TIMING: 200 status updates on non-account orders: total ${(performance.now() - statusStart).toFixed(2)} ms`);
+}
+
 try {
   await db.connect(); await peer.connect();
   const peerPid = (await peer.query("select pg_backend_pid() pid")).rows[0].pid;
-  await db.query("insert into restaurants(id,name,plan,plan_status,currency) values($1,'Journal probe','servicio','active','MXN'),($2,'Foreign journal probe','servicio','active','MXN')", [restaurant, foreign]);
+  await db.query("insert into restaurants(id,name,plan,plan_status,currency,account_journal_started_at) values($1,'Journal probe','servicio','active','MXN',null),($2,'Foreign journal probe','servicio','active','MXN',null)", [restaurant, foreign]);
   const f = await fixture(db, restaurant), stranger = await account(db, foreign);
   const foreignOrder = await order(db, foreign, stranger, 10);
   assert.equal((await db.query("select journal_started_at from customer_accounts where id=$1", [f.owner])).rows[0].journal_started_at, null);
@@ -78,9 +115,7 @@ try {
   await refused(db, () => movement(db, restaurant, f.owner, null, { kind: "collection",
     payment_id: history.payment_id, currency: "USD", debt_delta_cents: -1 }), /payment differs/);
   await refused(db, () => movement(db, restaurant, f.owner, null, { kind: "collection", provenance: "backfill",
-    debt_delta_cents: 0, payment_id: history.payment_id }), /account_movements_collection_once/);
-  await refused(db, () => movement(db, restaurant, f.owner, f.partial, { kind: "historical_observation",
-    provenance: "backfill", adjustment_id: partial.adjustment_id, debt_delta_cents: 0 }), /account_movements_adjustment_once/);
+    debt_delta_cents: 0, payment_id: history.payment_id }), /cannot import more history/);
   const privileges = (await db.query(`select
     has_table_privilege('service_role','account_movements','SELECT') and has_table_privilege('service_role','account_movements','INSERT') allowed,
     has_table_privilege('service_role','account_movements','UPDATE,DELETE,TRUNCATE') mutates,
@@ -155,9 +190,11 @@ try {
     assert.equal(snapshot.debt_delta_cents, winner === "settle" ? "0" : "2500");
     assert.equal((await db.query("select count(*)::int n from payments where account_id=$1", [owner])).rows[0].n, 1);
     assert.equal((await db.query("select bool_and(paid) paid from orders where account_id=$1", [owner])).rows[0].paid, true);
-    // No writers exist in PR 1; the second case intentionally leaves opening
-    // debt after collection. PR 2 must make both events atomic before activation.
+    await debtMatches(db, owner);
   }
+  await probeLiveJournal(db, peer, restaurant, peerPid, f.owner);
+  await probeDeferredJournal(db, restaurant, await account(db, restaurant));
+  await probeTimings();
   await db.query("delete from restaurants where id=$1", [restaurant]);
   assert.equal((await db.query("select count(*)::int n from account_movements where restaurant_id=$1", [restaurant])).rows[0].n, 0);
   console.log("PASS: opening per currency, evidenced history, no invented charge date, replay, guards, constraints, effective roles, tenant/currency isolation, function money lock, both settlement races, restaurant cascade");

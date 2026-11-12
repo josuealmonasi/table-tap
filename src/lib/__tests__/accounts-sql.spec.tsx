@@ -9,7 +9,8 @@ const fn = (name: string) => {
 
 describe("account money SQL guards", () => {
   it("refuses a cancellation whose paid state or account hold changed", () => {
-    const cancel = fn("cancel_order");
+    expect(fn("cancel_order")).toContain("return public.cancel_order_v2(p_restaurant, p_order, p_refund, p_legacy_demand, p_expected_paid, p_expected_account, p_expected_hold, p_expected_checkout)");
+    const cancel = fn("cancel_order_v2");
     expect(cancel).toContain("p_expected_paid");
     expect(cancel).toContain("p_expected_account");
     expect(cancel).toContain("p_expected_hold");

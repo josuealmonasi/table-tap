@@ -1,7 +1,8 @@
 import { randomUUID } from "node:crypto";
 import { MARK } from "../api-fixtures.mjs";
 
-export function accountsCases(fx) {
+export function accountsCases(root) {
+  const fx = root.accountFixture ?? root;
   const { dish } = fx;
   return [
     // ── Customer accounts ("cuenta abierta") ─────────────────────────────
@@ -16,7 +17,7 @@ export function accountsCases(fx) {
         const { data } = await f.admin.from("customer_accounts").select("opened_by, credit_limit, code")
           .eq("restaurant_id", f.restaurant.id).eq("name", `${MARK} customer`).maybeSingle();
         if (!data) return "no account was opened";
-        if (data.opened_by !== "demo-waiter@tabletap.dev") return `opened by ${data.opened_by}, not the waiter`;
+        if (data.opened_by !== fx.emails.waiter) return `opened by ${data.opened_by}, not the waiter`;
         return /^[0-9A-HJKMNP-TV-Z]{12}$/.test(data.code) || `a code the QR cannot carry: ${data.code}`;
       } },
     { name: "POST /api/accounts (no name)", as: "waiter", method: "POST", path: "/api/accounts",
@@ -34,7 +35,7 @@ export function accountsCases(fx) {
       effect: async f => {
         const { data: o } = await f.admin.from("orders").select("account_id, paid, charged_by").eq("id", fx.acctOrder).single();
         if (o.account_id !== fx.accountId || o.paid) return `the order is ${JSON.stringify(o)}`;
-        if (o.charged_by !== "demo-waiter@tabletap.dev") return `charged by ${o.charged_by}`;
+        if (o.charged_by !== fx.emails.waiter) return `charged by ${o.charged_by}`;
         const { data: s } = await f.admin.from("table_sessions").select("close_reason").eq("id", fx.acctSessionId).single();
         return s.close_reason === "account" || `the table's sitting closed as ${s.close_reason}`;
       } },
@@ -96,7 +97,7 @@ export function accountsCases(fx) {
         if ((pays ?? []).length !== 1) return `${(pays ?? []).length} payments for one collection`;
         const [p] = pays;
         if (Math.abs(Number(p.amount) - (f.accountOwed + 10)) > 0.01 || Number(p.tip) !== 10) return `paid ${p.amount} with tip ${p.tip}`;
-        if (p.actor_email !== "demo-cashier@tabletap.dev") return `the drawer is ${p.actor_email}'s`;
+        if (p.actor_email !== fx.emails.cashier) return `the drawer is ${p.actor_email}'s`;
         return (owed ?? []).length === 0 || "orders still owed after the account was paid";
       } },
     { name: "GET  /api/account (a statement)", as: "diner", method: "GET", path: `/api/account?c=${fx.accountCode}`,
@@ -117,5 +118,5 @@ export function accountsCases(fx) {
     // answer is one the route gives, and neither keeps the address.
     { name: "POST /api/account/email (the statement)", as: "diner", method: "POST", path: "/api/account/email",
       body: { c: fx.accountCode, email: "cliente@example.com", ref: randomUUID() }, expect: [200, 409, 502] },
-  ];
+  ].map(c => ({ ...c, fixture: fx }));
 }

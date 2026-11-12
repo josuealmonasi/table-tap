@@ -39,7 +39,8 @@ it("does not bound tip and service by the amount, so a coupon or full comp still
 it("enforces debt signs, including the explicit historical-collection exception", () => {
   for (const rule of [
     "kind = 'opening' and debt_delta_cents = amount_cents and provenance = 'backfill'",
-    "kind in ('charge', 'added_tip') and amount_cents > 0 and debt_delta_cents = amount_cents and provenance = 'live'",
+    "kind = 'charge' and debt_delta_cents = amount_cents and provenance = 'live'",
+    "kind = 'added_tip' and amount_cents > 0 and debt_delta_cents = amount_cents and provenance = 'live'",
     "kind in ('collection', 'credit') and amount_cents > 0 and debt_delta_cents = -amount_cents and provenance = 'live'",
     "kind = 'collection' and amount_cents > 0 and debt_delta_cents = 0 and provenance = 'backfill'",
     "kind in ('return_approved', 'refund_paid', 'historical_observation') and debt_delta_cents = 0",
@@ -135,7 +136,7 @@ it("opens current reduced debt and imports evidenced history without inventing o
   expect(backfill).not.toMatch(/coalesce\(o.charged_at|o.created_at|insert into payments|update orders/i);
 });
 
-it("ships the dormant function with drop parity and never starts an account on schema application", () => {
+it("keeps activation separate from schema application and retains PR 1 drop parity", () => {
   expect(journal).toContain("add column if not exists journal_started_at timestamptz;");
   expect(journal.match(/account_journal_backfill_v1\(/g)).toHaveLength(3); // declaration, revoke, grant
   for (const name of ["guard_account_movement()", "check_account_movement_source()", "account_journal_backfill_v1(uuid, timestamptz)"]) {

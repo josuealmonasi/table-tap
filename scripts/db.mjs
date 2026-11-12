@@ -123,6 +123,11 @@ try {
     console.log(`Returned ${returned} orphan stock reservation(s). Run pnpm ${isProd ? "money:prod" : "money"} to check for remaining work.`);
   } else if (config.custom === "mock") {
     const summary = await seedMock(client);
+    if (!isProd) {
+      await client.query("begin");
+      await client.query(await readFile(join(root, "supabase/journal-activate.sql"), "utf8"));
+      await client.query("commit");
+    }
     console.log(`\n✓ [${target}] Demo Bistro ready — ${summary.orders} orders.`);
     console.log(`  Menu: ${DEV_URL}/r/${summary.restaurantId}/t/${summary.tableId}`);
     console.log(`\n  Demo logins at /login (password: ${DEMO_PASSWORD}):`);

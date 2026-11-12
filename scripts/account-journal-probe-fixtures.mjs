@@ -9,10 +9,31 @@ export async function account(db, restaurant) {
   return id;
 }
 export async function order(db, restaurant, owner, total, currency = "MXN", charged = true, tip = 0, service = 0) {
+  assert.equal(charged, true, "Unknown history belongs only in dormantOrder");
   const id = randomUUID();
-  await db.query(`insert into orders(id,restaurant_id,account_id,status,subtotal,total,tip,service_fee,currency,charged_at)
-    values($1,$2,$3,'completed',$4-$7-$8,$4,$7,$8,$5,case when $6 then now() else null end)`,
-  [id, restaurant, owner, total, currency, charged, tip, service]);
+  await db.query(`insert into orders(id,restaurant_id,status,subtotal,total,tip,service_fee,currency)
+    values($1,$2,'completed',$3-$5-$6,$3,$5,$6,$4)`, [id, restaurant, total, currency, tip, service]);
+  const { rows } = await db.query("select account_charge_v2($1,$2,$3,$4,'probe') value", [restaurant, owner, [id], total]);
+  assert.equal(rows[0].value.outcome, "charged");
+  return id;
+}
+
+// Historical evidence only: the writer cannot invent an unknown charge date
+// or import mixed-currency debt. Never use this helper for a live fixture.
+async function dormantOrder(db, restaurant, owner, total, currency, charged) {
+  const { rows } = await db.query(`select c.journal_started_at, r.account_journal_started_at
+    from customer_accounts c join restaurants r on r.id=c.restaurant_id
+    where c.id=$1 and r.id=$2`, [owner, restaurant]);
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].journal_started_at, null);
+  assert.equal(rows[0].account_journal_started_at, null);
+  const id = randomUUID();
+  const inserted = await db.query(`insert into orders(id,restaurant_id,account_id,status,subtotal,total,currency,charged_at)
+    select $1,$2,$3,'completed',$4,$4,$5,case when $6 then now() else null end
+    from customer_accounts c join restaurants r on r.id=c.restaurant_id
+    where c.id=$3 and r.id=$2 and c.journal_started_at is null and r.account_journal_started_at is null`,
+    [id, restaurant, owner, total, currency, charged]);
+  assert.equal(inserted.rowCount, 1, "Historical import requires a dormant account and restaurant");
   return id;
 }
 export async function settle(db, restaurant, owner, total) {
@@ -31,10 +52,10 @@ export async function fixture(db, restaurant) {
       [restaurant, id, amount, randomUUID()]);
     assert.equal(rows[0].value.outcome, "credited");
   }
-  const unknown = await order(db, restaurant, owner, 30, "MXN", false);
-  await order(db, restaurant, owner, 13, "USD");
   const cancelled = await order(db, restaurant, owner, 20);
   await db.query("update orders set status='cancelled' where id=$1", [cancelled]);
+  const unknown = await dormantOrder(db, restaurant, owner, 30, "MXN", false);
+  await dormantOrder(db, restaurant, owner, 13, "USD", true);
   return { owner, partial, full, unknown };
 }
 export async function opening(db, restaurant, owner) {
