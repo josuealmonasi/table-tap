@@ -3789,10 +3789,17 @@ a.tt-btn {
 
 /* The account credit dialog: field groups 16px apart, and the two preview
    lines read as one block under them. */
-.tt-credit-form {
+.tt-credit-form,
+.tt-writeoff-fields {
   display: flex;
   flex-direction: column;
   gap: 16px;
+}
+/* The write-off's reason and note: the same field groups, 16px under the
+   amount. The note's label was an inline <label> whose margins did nothing,
+   so it sat 2px under the chips and touched its own textarea. */
+.tt-writeoff-fields {
+  margin-top: 16px;
 }
 .tt-credit-preview p {
   margin: 0 0 4px;
@@ -7239,7 +7246,6 @@ a.tt-user-plan:hover {
   display: flex;
   align-items: flex-end;
   gap: 8px;
-  margin-top: 6px;
   flex-wrap: wrap;
 }
 /* The count is a small field beside a wide button: it is one or two digits,

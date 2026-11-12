@@ -6713,10 +6713,19 @@ other camera dialog (scan to collect, the accounts and waiter-pad scanners,
 the visit-card attach at the till and the bill, the diner menu's scanner)
 shares the rhythm. A browser invariant (`a scanner dialog spaces
 its blocks with one gap`) fails if a dialog renders the camera outside the
-stage, a labelled code entry is not a `.tt-field`, or the stage stops using
-`gap`; `pnpm layout` now also opens "scan to collect" on Cuentas abiertas.
+stage or the stage stops using `gap`; `pnpm layout` now also opens "scan to
+collect" on Cuentas abiertas.
 
-Still for a person: other `<label class="tt-mod-label">` used outside a
-`.tt-field` (CollectionAmount, CouponCodePicker, AccountDialog,
-AccountCreditDialog, SplitStart, LegacySplitBillCard, WriteOffDialog) have the
-same ignored `margin-bottom`; nothing measures a vertical label-to-input gap.
+Now caught: the same inline label was in eight more places. The write-off
+dialog's note label sat 2px under the reason chips and 0.5px above its
+textarea; the account dialog's limit label sat 0.5px above its input; the
+waiter calculator's amount, the bill code picker, both diner split cards, the
+diner's dish note and the dish photo field each had a label whose margin did
+nothing or did something different from every other field. Each label and
+its control is now a `.tt-field` (6px, by the field's gap), and the
+write-off's reason and note are two field groups 16px apart
+(`.tt-writeoff-fields`, the account credit dialog's rule). A second browser
+invariant (`a field label is a block`) parses every component and fails on
+any `<label>` or `<span>` with `tt-mod-label` that is neither inside a
+`.tt-field` nor given `display: block|flex|grid` by another of its classes.
+It has no allow-list.
