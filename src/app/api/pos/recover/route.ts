@@ -16,8 +16,6 @@ export const runtime = "nodejs";
 /** Recover money already collected. Manager-only, audited, and available
  * after a tier ends; it does not reopen the till for new sales. */
 export async function GET(req: NextRequest): Promise<NextResponse> {
-  // Tickets this request's payment queued for the card's email go out once it has answered.
-  after(() => drainTicketEmails());
   const actor = await actingManager();
   if (!actor) return await apiError("apiErr.forbidden", 403);
   const posRef = req.nextUrl.searchParams.get("posRef");
@@ -71,6 +69,9 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   if ((queued.collector && a.collector && queued.collector !== a.collector) || (queued.currency && a.currency && queued.currency !== a.currency)) {
     return await apiError("apiErr.offlineRecoveryDetails", 409);
   }
+  // The held sale is rung here, not in the listing above: its ticket is drained
+  // once this answers, registered only once the caller and the request are valid.
+  after(() => drainTicketEmails());
   return await ringOffline(actor, queued.body as PosSaleBody & { offline?: unknown }, {
     reason: a.reason.trim(), collector: queued.collector ?? a.collector, at: a.at, currency: queued.currency ?? a.currency,
   });

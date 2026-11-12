@@ -22,10 +22,6 @@ interface CollectionBody extends Partial<SplitScope> {
 }
 /** Pedidos and open bills use this one writer, including their lost-reply retries. */
 export async function POST(req: NextRequest): Promise<NextResponse> {
-  // The last part closes the bill and the trigger queues its ticket; without a
-  // drain here it waited for another route's drain or the daily cron, which
-  // expires anything older than two hours unsent.
-  after(() => drainTicketEmails());
   const actor = await actingFrontOfHouse();
   if (!actor) return await apiError("apiErr.forbidden", 403);
   const body = await jsonBody<CollectionBody>(req);
@@ -38,6 +34,11 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   if (await isRoomLimited(req, "splitcollect", 30) || await isTableLimited(req, "splitcollect", body.tableId, 30)) {
     return await apiError("apiErr.tooManyAttempts", 429);
   }
+  // The last part closes the bill and the trigger queues its ticket; without a
+  // drain here it waited for another route's drain or the daily cron.
+  // Registered only once the caller and the request are valid.
+  after(() => drainTicketEmails());
+  let undoSkip: (() => Promise<void>) | null = null;
   try {
     const split = await readSlotSplit(body, body.splitId);
     if (!split) return await splitResponse({ outcome: "gone" }, []);
@@ -46,7 +47,9 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     // the writer runs, because the trigger reads the flag the moment `paid`
     // turns true; marking the whole table would also silence a later bill
     // ordered after the split froze.
-    const undoSkip = body.skipTicketEmail === true ? await skipTicketEmails(actor.restaurantId, { orderIds: split.order_ids }) : null;
+    // The latest collection's choice wins: a part collected with "send" clears
+    // a mark an earlier part left on the same orders (Codex review of #622).
+    undoSkip = await skipTicketEmails(actor.restaurantId, { orderIds: split.order_ids }, body.skipTicketEmail === true);
     const result = await splitRpc("collect_split_slots_v1", {
       p_restaurant: actor.restaurantId, p_split: split.id, p_revision: body.revision, p_slots: body.slots,
       p_expected_cents: body.expectedCents, p_currency: body.currency, p_tip_cents: body.tipCents ?? 0,
@@ -66,5 +69,9 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     // A refused collection leaves no ticket email suppressed (Codex review of #622).
     await undoSkip?.().catch(() => {});
     return await splitResponse(result, []);
-  } catch { return await apiError("apiErr.collectionFailed", 503); }
+  } catch {
+    // A collection that threw is refused too: the marks go back as they were.
+    await undoSkip?.().catch(() => {});
+    return await apiError("apiErr.collectionFailed", 503);
+  }
 }

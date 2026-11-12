@@ -1,4 +1,4 @@
-import { after } from "next/server";
+import { after as afterResponse } from "next/server";
 import { drainTicketEmails, skipTicketEmails } from "@/lib/ticket-email";
 import { PaymentAttributionRequired } from "@/lib/payment-coverage";
 import { NextResponse, type NextRequest } from "next/server";
@@ -35,8 +35,6 @@ export const runtime = "nodejs";
  * screen sitting open on the pass.
  */
 export async function POST(req: NextRequest): Promise<NextResponse> {
-  // Tickets this request's payment queued for the card's email go out once it has answered.
-  after(() => drainTicketEmails());
   // A refused collection leaves no ticket email suppressed (Codex review of #622).
   const skip: { undo?: () => Promise<void> } = {};
   try {
@@ -45,6 +43,8 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     return res;
   }
   catch (error) {
+    // A collection that threw is refused too: its mark comes back off.
+    await skip.undo?.().catch(() => {});
     if (error instanceof PaymentAttributionRequired) return await apiError("apiErr.attributionRequired", 409);
     throw error;
   }
@@ -89,6 +89,9 @@ async function collect(req: NextRequest, skip: { undo?: () => Promise<void> }): 
       !Number.isFinite(body.amount) || Number(body.amount) <= 0 || !Number.isFinite(body.tip ?? 0)) {
     return await apiError("apiErr.invalidRequest", 400);
   }
+  // Tickets this request's payment queued for the card's email go out once it
+  // has answered; registered only once the caller and the request are valid.
+  afterResponse(() => drainTicketEmails());
   if (body.skipTicketEmail === true) {
     skip.undo = await skipTicketEmails(actor.restaurantId, { tableId: body.tableId, currency: body.currency });
   }

@@ -40,8 +40,6 @@ export const runtime = "nodejs";
 // caller can choose WHICH of the table's orders to settle — that is the "pay
 // mine / pay everything" choice — but not what they cost.
 export async function POST(req: NextRequest): Promise<NextResponse> {
-  // Tickets this request's payment queued for the card's email go out once it has answered.
-  after(() => drainTicketEmails());
   if (await isRoomLimited(req, "billpay", 10)) {
     return await apiError("apiErr.tooManyAttempts", 429);
   }
@@ -73,6 +71,9 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
   const member = await ownBillAccess(req, restaurantId, tableId, body.sessionId, orderIds).catch(() => null);
   if (!member) return await apiError("apiErr.tableJoin", 403);
+  // Tickets this request's payment queued for the card's email go out once it
+  // has answered; registered only once the caller and the request are valid.
+  after(() => drainTicketEmails());
 
   // A bill a waiter opened is settled with the waiter. They are standing at
   // the table with a machine and a running balance, and a card charged here at

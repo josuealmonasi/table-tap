@@ -29,8 +29,6 @@ export const runtime = "nodejs";
 // on exactly the orders owed now and holds the account against being
 // collected at the till until Stripe answers; the webhook is what records it.
 export async function POST(req: NextRequest): Promise<NextResponse> {
-  // Tickets this request's payment queued for the card's email go out once it has answered.
-  after(() => drainTicketEmails());
   if (await isRateLimited(`account-pay:${clientKey(req)}`, 10, 60)) {
     return await apiError("apiErr.tooManyWait", 429);
   }
@@ -43,6 +41,9 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   const account = await accountByCode(code).catch(() => undefined);
   if (account === undefined) return await apiError("apiErr.generic", 500);
   if (!account) return await apiError("account.notFound", 404);
+  // Tickets this request's payment queued for the card's email go out once it
+  // has answered; registered only once the caller and the request are valid.
+  after(() => drainTicketEmails());
 
   const db = createAdminClient();
   const { data: restaurant } = await db

@@ -14,13 +14,14 @@ export const runtime = "nodejs";
 
 /** Check the refused scope. Never call the collection or decision that refused it. */
 export async function POST(req: NextRequest): Promise<NextResponse> {
-  // Tickets this request's payment queued for the card's email go out once it has answered.
-  after(() => drainTicketEmails());
   const actor = await actingFrontOfHouse();
   if (!actor) return await apiError("apiErr.forbidden", 403);
   const scope = paymentCheckScope(await jsonBody(req));
   if (!scope) return await apiError("apiErr.invalidRequest", 400);
   if (scope.kind === "approval" && !MANAGES(actor.role)) return await apiError("apiErr.forbidden", 403);
+  // Tickets this request's payment queued for the card's email go out once it
+  // has answered; registered only once the caller and the request are valid.
+  after(() => drainTicketEmails());
   try {
     const target = await paymentCheckTarget(actor.restaurantId, scope);
     if (!target) return await apiError("apiErr.notFound", 404);

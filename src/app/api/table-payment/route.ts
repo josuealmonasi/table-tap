@@ -34,8 +34,6 @@ type Settlement = "cash" | "card";
 // through us, so it must not be reachable from a customer's phone, nor from a
 // kitchen screen that everyone in the back has their hands on.
 export async function POST(req: NextRequest): Promise<NextResponse> {
-  // Tickets this request's payment queued for the card's email go out once it has answered.
-  after(() => drainTicketEmails());
   // A refused collection leaves no ticket email suppressed (Codex review of #622).
   const skip: { undo?: () => Promise<void> } = {};
   try {
@@ -44,6 +42,8 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     return res;
   }
   catch (error) {
+    // A collection that threw is refused too: its mark comes back off.
+    await skip.undo?.().catch(() => {});
     if (error instanceof PaymentAttributionRequired) return await apiError("apiErr.attributionRequired", 409);
     throw error;
   }
@@ -78,6 +78,9 @@ async function collect(req: NextRequest, skip: { undo?: () => Promise<void> }): 
   // of recorded cash never arrived (audit L, finding 1). Refusing records
   // nothing and says how to collect; the refreshed screen sends the figure.
   if (tableId && body.expected === undefined) return await apiError("apiErr.refreshToCollect", 409);
+  // Tickets this request's payment queued for the card's email go out once it
+  // has answered; registered only once the caller and the request are valid.
+  after(() => drainTicketEmails());
   if (body.skipTicketEmail === true) {
     skip.undo = await skipTicketEmails(actor.restaurantId, tableId ? { tableId, currency: body.currency } : { orderId });
   }

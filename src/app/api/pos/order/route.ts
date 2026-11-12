@@ -61,8 +61,6 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
  * than charging twice and putting a second ticket on the pass.
  */
 export async function POST(req: NextRequest) {
-  // Tickets this request's payment queued for the card's email go out once it has answered.
-  after(() => drainTicketEmails());
   const actor = await actingStaff();
   if (!actor) return await apiError("apiErr.forbidden", 403);
   if (!TAKES_COUNTER_ORDERS(actor.role)) return await apiError("apiErr.forbidden", 403);
@@ -71,6 +69,9 @@ export async function POST(req: NextRequest) {
   if (!body) return await apiError("apiErr.invalidRequest", 400);
   const elsewhere = await otherRestaurant(body, actor.restaurantId);
   if (elsewhere) return elsewhere;
+  // Tickets this request's payment queued for the card's email go out once it
+  // has answered; registered only once the caller and the request are valid.
+  after(() => drainTicketEmails());
   // Rung while the connection was gone and sent now: it already happened.
   // Receiving its money may queue a manager review after a freeze or downgrade;
   // the checks below still refuse new sales on that same plan.

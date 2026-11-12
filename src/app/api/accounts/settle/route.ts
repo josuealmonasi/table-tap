@@ -23,8 +23,6 @@ export const runtime = "nodejs";
 // Body: { accountId, expected, tip, method, ref } — `expected` is the balance
 // the cashier showed the customer; `ref` makes a second tap the same payment.
 export async function POST(req: NextRequest): Promise<NextResponse> {
-  // Tickets this request's payment queued for the card's email go out once it has answered.
-  after(() => drainTicketEmails());
   const actor = await actingFrontOfHouse();
   if (!actor) return await apiError("apiErr.forbidden", 403);
 
@@ -49,6 +47,9 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   // (sweep 8, finding 1). It refreshes instead.
   if (body.currency === undefined) return await apiError("apiErr.refreshToCollectAccount", 409);
   if (!isDinerCurrency(body.currency)) return await apiError("apiErr.invalidRequest", 400);
+  // Tickets this request's payment queued for the card's email go out once it
+  // has answered; registered only once the caller and the request are valid.
+  after(() => drainTicketEmails());
 
   const { data, error } = await checkoutPageRpc("account_settle_currency_v1", {
     p_restaurant: actor.restaurantId,

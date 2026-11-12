@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHash } from "node:crypto";
 // ============================================================================
 // Tickets emailed to the visit card's address (owner's request, 2026-11-11).
 // The `queue_ticket_email` trigger puts each paid sale whose card has an
@@ -10,7 +10,6 @@ import { randomUUID } from "node:crypto";
 // fails the payment that queued it.
 // ============================================================================
 import { createAdminClient } from "@/lib/supabase/admin";
-import { openSittingAt } from "@/lib/table-membership";
 import { buildReceipt, receiptModel } from "@/lib/receipt";
 import { readOrderReceipt } from "@/lib/receipt-source";
 import { ticketPdf } from "@/lib/ticket-pdf";
@@ -64,27 +63,75 @@ async function sendGroup(rows: OutboxRow[], key: string): Promise<Outcome> {
 }
 
 let lastDrain = 0;
+let waiting: Promise<void> | null = null;
 
 /**
  * Send what is waiting. Never throws: it runs after the response has gone.
  * At most once every few seconds per server instance: every payment route
- * calls it, and a burst of requests must not become a burst of claims.
+ * calls it, and a burst of requests must not become a burst of claims. A
+ * request inside that window is not dropped: it waits the window out and
+ * drains then, and every request waiting meanwhile shares that one drain.
  */
 export async function drainTicketEmails(limit = 20): Promise<void> {
-  if (Date.now() - lastDrain < 3000) return;
+  const wait = lastDrain + 3000 - Date.now();
+  if (wait > 0) {
+    waiting ??= new Promise<void>(done => setTimeout(done, wait)).then(() => {
+      waiting = null;
+      return drainTicketEmails(limit);
+    });
+    return waiting;
+  }
   lastDrain = Date.now();
+  await drainOnce(limit);
+}
+
+/**
+ * The daily cron: claim and send until nothing is left, so a backlog larger
+ * than one claim is not left to expire before the next run (Codex review of
+ * #622). Bounded, and it stops once a claim brings back only rows it has
+ * already tried (failed sends released for a later retry).
+ */
+export async function drainTicketEmailQueue(rounds = 20, limit = 50): Promise<void> {
+  const seen = new Set<string>();
+  for (let round = 0; round < rounds; round++) {
+    const ids = await drainOnce(limit);
+    const fresh = ids.filter(id => !seen.has(id));
+    ids.forEach(id => seen.add(id));
+    if (ids.length < limit || !fresh.length) return;
+  }
+}
+
+/** The idempotency key of a new group: the same rows always make the same key. */
+export function batchKeyFor(ids: string[]): string {
+  return `ticket-${createHash("sha256").update([...ids].sort().join(",")).digest("hex").slice(0, 32)}`;
+}
+
+/** One claim of up to `limit` rows, sent; returns the ids it claimed. */
+async function drainOnce(limit: number): Promise<string[]> {
   try {
     const db = createAdminClient();
     const { data, error } = await db.rpc("claim_ticket_emails", { p_limit: limit });
-    if (error || !data?.length) return;
+    if (error || !data?.length) return [];
     const groups = new Map<string, OutboxRow[]>();
     for (const row of data as OutboxRow[]) {
-      // A retry keeps the group it failed in; new tickets group by card and sitting.
-      const key = row.batch_key ?? `${row.card_id}:${row.session_id ?? row.order_id}`;
+      // A retry keeps the group it was first sent in; new tickets group by
+      // card, sitting and address generation, so a ticket queued for an old
+      // address never takes a current one down with it.
+      const key = row.batch_key ?? `${row.card_id}:${row.session_id ?? row.order_id}:${row.address_key}`;
       groups.set(key, [...(groups.get(key) ?? []), row]);
     }
     for (const rows of groups.values()) {
-      const batch = rows[0].batch_key ?? `ticket-${randomUUID()}`;
+      const ids = rows.map(r => r.id);
+      const batch = rows[0].batch_key ?? batchKeyFor(ids);
+      // The group's identity is written before the provider is called: a
+      // sender that dies after the email went out leaves the key behind, and
+      // the retry sends with it, so the provider answers with the same email.
+      if (!rows[0].batch_key) {
+        const { error: keyError } = await db.from("ticket_email_outbox").update({ batch_key: batch })
+          .eq("restaurant_id", rows[0].restaurant_id).is("batch_key", null).in("id", ids);
+        // Not recorded, not sent: the claim lapses and a later drain tries again.
+        if (keyError) continue;
+      }
       const outcome = await sendGroup(rows, batch).catch((err: unknown) => {
         console.error("ticket email failed", err);
         return "failed" as const;
@@ -92,48 +139,52 @@ export async function drainTicketEmails(limit = 20): Promise<void> {
       // A failure is tried again by a later drain, up to three times.
       const retry = outcome === "failed" && rows.every(r => r.attempts < 3);
       await db.from("ticket_email_outbox")
-        .update(retry ? { claimed_at: null, claim: null, batch_key: batch } : { finished_at: new Date().toISOString(), outcome })
-        .in("id", rows.map(r => r.id));
+        .update(retry ? { claimed_at: null, claim: null } : { finished_at: new Date().toISOString(), outcome })
+        .eq("restaurant_id", rows[0].restaurant_id).in("id", ids);
     }
+    return (data as OutboxRow[]).map(r => r.id);
   } catch (err) {
     console.error("ticket email drain failed", err);
+    return [];
   }
 }
 
 /**
  * The cashier's "don't send it this time" when staff collect a table or a
- * counter order: the unpaid orders this collection can settle — the table's
- * open sitting, in the collection's currency, never a customer account's —
- * are marked before the payment, so the trigger never queues their ticket.
+ * counter order: the unpaid orders this collection can settle are marked
+ * before the payment, so the trigger never queues their ticket. For a table
+ * that is exactly what the money writer settles: every outstanding order of
+ * the table in the collection's currency, older sittings included, never a
+ * customer account's (Codex review of #622). `skip` false clears the mark: a
+ * divided bill's latest collection decides for the orders it closes.
  * Returns an undo for a collection that is then refused, so a refused
- * collection leaves nothing suppressed (Codex review of #622).
+ * collection leaves the marks as they were.
  */
 export async function skipTicketEmails(restaurantId: string,
-  target: { tableId?: string; orderId?: string; orderIds?: string[]; currency?: string }): Promise<() => Promise<void>> {
+  target: { tableId?: string; orderId?: string; orderIds?: string[]; currency?: string }, skip = true): Promise<() => Promise<void>> {
   // A divided bill with no orders left to settle has nothing to mark; an empty
   // `in` filter must never fall through to a broader write.
   if (target.orderIds && target.orderIds.length === 0) return async () => {};
   const db = createAdminClient();
   let q = db.from("orders").select("id").eq("restaurant_id", restaurantId).eq("paid", false)
-    .eq("ticket_email_skip", false).is("account_id", null);
+    .eq("ticket_email_skip", !skip).is("account_id", null);
   // A divided bill names its frozen orders: only those close when its last part is paid.
   if (target.orderIds) q = q.in("id", target.orderIds);
   else if (target.orderId) q = q.eq("id", target.orderId);
   else {
-    const sitting = await openSittingAt(restaurantId, target.tableId!);
-    if (!sitting) return async () => {};
-    q = q.eq("table_id", target.tableId!).eq("session_id", sitting);
+    q = q.eq("table_id", target.tableId!).eq("written_off", false)
+      .neq("status", "pending_payment").neq("status", "cancelled");
   }
   if (target.currency) q = q.eq("currency", target.currency);
   const { data, error } = await q;
   if (error) throw new Error(`Could not skip the ticket email: ${error.message}`);
   const ids = (data ?? []).map(o => o.id as string);
   if (!ids.length) return async () => {};
-  const { error: markError } = await db.from("orders").update({ ticket_email_skip: true })
+  const { error: markError } = await db.from("orders").update({ ticket_email_skip: skip })
     .eq("restaurant_id", restaurantId).in("id", ids);
   if (markError) throw new Error(`Could not skip the ticket email: ${markError.message}`);
   return async () => {
-    await db.from("orders").update({ ticket_email_skip: false })
+    await db.from("orders").update({ ticket_email_skip: !skip })
       .eq("restaurant_id", restaurantId).eq("paid", false).is("account_id", null).in("id", ids);
   };
 }

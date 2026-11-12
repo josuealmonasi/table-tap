@@ -39,8 +39,6 @@ export const dynamic = "force-dynamic";
  * service charge, not to decide each other's generosity.
  */
 export async function POST(req: NextRequest): Promise<NextResponse> {
-  // Tickets this request's payment queued for the card's email go out once it has answered.
-  after(() => drainTicketEmails());
   if (await isRoomLimited(req, "splitpay", 10)) {
     return await apiError("apiErr.tooManyAttempts", 429);
   }
@@ -61,6 +59,9 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
   const member = await tableMember(req, restaurantId, tableId, sessionId, true).catch(() => null);
   if (!member) return await apiError("apiErr.tableJoin", 403);
+  // Tickets this request's payment queued for the card's email go out once it
+  // has answered; registered only once the caller and the request are valid.
+  after(() => drainTicketEmails());
   const diner = member.id;
 
   const db = createAdminClient();
