@@ -7,6 +7,8 @@ import { orderCode, type OrderLineItem } from "@/lib/types";
 /** What the till sends when a cashier rings a sale. */
 export interface PosSaleBody {
   loyaltyCode?: string;
+  /** The cashier chose not to email this sale's ticket to the card's address. */
+  skipTicketEmail?: boolean;
   posRef?: string;
   collectorContext?: unknown;
   /** The restaurant the till screen was opened for — the drawer the money is in. */

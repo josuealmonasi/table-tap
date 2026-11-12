@@ -3727,6 +3727,122 @@ drop trigger if exists stamp_loyalty_on_payment on orders;
 create trigger stamp_loyalty_on_payment after insert or update of paid on orders
   for each row execute function public.stamp_loyalty_on_payment();
 
+-- ============================================================================
+-- Tickets by email to the card's address (owner's request, 2026-11-11: go
+-- paperless). A diner may link an email to their visit card — when they make
+-- the card, when it is stamped or when they pay — and every ticket of a sale
+-- that card is on is then emailed with no address typed at the till. The
+-- address is used for that and nothing else: no publicity, nothing else linked
+-- to it, removed by the "stop" link in every email or by deleting the card.
+-- Consent is recorded with the notice version it was given under.
+-- ============================================================================
+alter table loyalty_cards add column if not exists email text
+  check (email is null or (email = lower(email) and char_length(email) <= 254 and email ~ '^[^@[:space:]]+@[^@[:space:]]+\.[^@[:space:]]+$'));
+alter table loyalty_cards add column if not exists email_consent_at timestamptz;
+alter table loyalty_cards add column if not exists email_notice_version text;
+-- Who linked it: 'diner', or the staff member's email.
+alter table loyalty_cards add column if not exists email_set_by text;
+-- The "stop sending me tickets" link's secret; replaced whenever the address changes.
+alter table loyalty_cards add column if not exists email_unsubscribe uuid;
+alter table loyalty_cards drop constraint if exists loyalty_cards_email_consented;
+alter table loyalty_cards add constraint loyalty_cards_email_consented check (email is null
+  or (email_consent_at is not null and email_notice_version is not null and email_unsubscribe is not null));
+-- One card per address in a restaurant: the address finds the card.
+create unique index if not exists loyalty_cards_email_once on loyalty_cards(restaurant_id, email) where email is not null;
+create unique index if not exists loyalty_cards_email_unsubscribe on loyalty_cards(email_unsubscribe) where email_unsubscribe is not null;
+
+-- The cashier's choice not to email one sale's ticket, written with it.
+alter table orders add column if not exists ticket_email_skip boolean not null default false;
+
+-- One row per paid sale whose card has an address; drained right after the
+-- request that took the payment and by the daily recovery cron. It keeps no
+-- address: the card is read when the email is sent.
+create table if not exists ticket_email_outbox (
+  id            uuid primary key default gen_random_uuid(),
+  restaurant_id uuid not null references restaurants(id) on delete cascade,
+  card_id       uuid not null references loyalty_cards(id) on delete cascade,
+  order_id      uuid not null unique references orders(id) on delete cascade,
+  session_id    uuid,
+  created_at    timestamptz not null default now(),
+  attempts      int not null default 0,
+  claimed_at    timestamptz,
+  claim         uuid,
+  finished_at   timestamptz,
+  outcome       text check (outcome in ('sent', 'failed', 'unconfigured', 'expired', 'no_email'))
+);
+-- The address this ticket was queued for, named by that address's stop
+-- secret (no copy of the address): a ticket queued for A is never sent to B
+-- after the card's address changes (Codex review of #622).
+alter table ticket_email_outbox add column if not exists address_key uuid;
+-- A failed send keeps its group and its idempotency key for the retry, so a
+-- later payment joining the group cannot turn the retry into a second email.
+alter table ticket_email_outbox add column if not exists batch_key text;
+create index if not exists ticket_email_outbox_pending on ticket_email_outbox(created_at) where finished_at is null;
+alter table ticket_email_outbox enable row level security;
+revoke all on ticket_email_outbox from anon, authenticated;
+
+create or replace function public.queue_ticket_email()
+returns trigger language plpgsql security definer set search_path = public as $$
+begin
+  if not new.paid or new.status = 'cancelled' or (tg_op = 'UPDATE' and old.paid)
+    or new.loyalty_card_id is null or new.ticket_email_skip then
+    return null;
+  end if;
+  insert into ticket_email_outbox (restaurant_id, card_id, order_id, session_id, address_key)
+  select new.restaurant_id, c.id, new.id, new.session_id, c.email_unsubscribe from loyalty_cards c
+   where c.id = new.loyalty_card_id and c.restaurant_id = new.restaurant_id and c.email is not null
+  on conflict (order_id) do nothing;
+  return null;
+end;
+$$;
+revoke all on function public.queue_ticket_email() from public, anon, authenticated;
+drop trigger if exists queue_ticket_email on orders;
+create trigger queue_ticket_email after insert or update of paid on orders
+  for each row execute function public.queue_ticket_email();
+
+-- Take up to p_limit waiting tickets for one sender. A claim older than five
+-- minutes is a sender that died and is taken again; a ticket a day old is no
+-- longer worth sending and is marked expired instead. A day, not less: the
+-- recovery cron that clears what no payment request drained runs daily.
+create or replace function public.claim_ticket_emails(p_limit int)
+returns setof ticket_email_outbox language plpgsql security definer set search_path = public as $$
+declare v_claim uuid := gen_random_uuid();
+begin
+  -- One claimer at a time: claims are rare and short, and a batch whose key is
+  -- already written must reach one sender whole, never split between two.
+  perform pg_advisory_xact_lock(hashtext('claim_ticket_emails'));
+  -- A batch expires as a unit, a day after its oldest ticket, and never while a
+  -- sender holds part of it.
+  update ticket_email_outbox o set finished_at = now(), outcome = 'expired'
+   where o.finished_at is null
+     and coalesce(o.batch_key, o.id::text) in (
+       select coalesce(t.batch_key, t.id::text) from ticket_email_outbox t
+        where t.finished_at is null
+        group by 1
+       having min(t.created_at) < now() - interval '24 hours'
+          and bool_and(t.claimed_at is null or t.claimed_at < now() - interval '5 minutes'));
+  -- A keyed batch is claimed whole: the limit must not split it, or its retry
+  -- would reuse the key with fewer orders.
+  return query
+  with seed as (
+    select t.id, t.batch_key from ticket_email_outbox t
+     where t.finished_at is null and (t.claimed_at is null or t.claimed_at < now() - interval '5 minutes')
+     order by t.created_at limit greatest(1, least(p_limit, 50))
+     for update
+  ), mates as (
+    select t.id from ticket_email_outbox t
+     where t.finished_at is null and t.batch_key in (select s.batch_key from seed s where s.batch_key is not null)
+       and (t.claimed_at is null or t.claimed_at < now() - interval '5 minutes')
+     for update
+  )
+  update ticket_email_outbox o set claimed_at = now(), claim = v_claim, attempts = o.attempts + 1
+   where o.id in (select id from seed union select id from mates)
+  returning o.*;
+end;
+$$;
+revoke all on function public.claim_ticket_emails(int) from public, anon, authenticated;
+grant execute on function public.claim_ticket_emails(int) to service_role;
+
 -- Spend the card's next reward, once. Locked like the stamp, and refused —
 -- nothing returned — unless that reward is ready. The next reward is the lowest
 -- step of the card's ladder with no redemption in the card's current round
@@ -5531,7 +5647,7 @@ begin
   end if;
   insert into orders (id, restaurant_id, pos_ref, status, paid, stock_managed, stock_reservation_id,
     subtotal, service_fee, tip, discount, total, tax_pct, platform_fee, promo_detail,
-    currency, items, note, customer_name, created_at, offline_at, offline_drift, loyalty_card_id)
+    currency, items, note, customer_name, created_at, offline_at, offline_drift, loyalty_card_id, ticket_email_skip)
   values (p_ref, p_restaurant, p_ref, p_status, false, p_at is null, p_reservation,
     (p_order->>'subtotal')::numeric, (p_order->>'service_fee')::numeric,
     (p_order->>'tip')::numeric, (p_order->>'discount')::numeric, (p_order->>'total')::numeric,
@@ -5541,7 +5657,9 @@ begin
     -- The card presented at the till; only this restaurant's card is kept, so
     -- a forged id cannot stamp another restaurant's customer.
     (select c.id from loyalty_cards c
-      where c.restaurant_id = p_restaurant and c.id = nullif(p_order->>'loyalty_card_id', '')::uuid));
+      where c.restaurant_id = p_restaurant and c.id = nullif(p_order->>'loyalty_card_id', '')::uuid),
+    -- The cashier chose not to email this sale's ticket.
+    coalesce((p_order->>'ticket_email_skip')::boolean, false));
 end;
 $$;
 revoke all on function public.pos_insert_order(uuid, uuid, jsonb, text, timestamptz, uuid) from public, anon, authenticated;

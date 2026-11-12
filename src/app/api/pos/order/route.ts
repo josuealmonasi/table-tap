@@ -1,3 +1,5 @@
+import { after } from "next/server";
+import { drainTicketEmails } from "@/lib/ticket-email";
 import { saleCard } from "@/lib/loyalty/sale-card";
 import { orderItemsWithRevenue } from "@/lib/order-line-revenue";
 import { invalidatePublicMenu } from "@/lib/public-menu-cache";
@@ -67,6 +69,9 @@ export async function POST(req: NextRequest) {
   if (!body) return await apiError("apiErr.invalidRequest", 400);
   const elsewhere = await otherRestaurant(body, actor.restaurantId);
   if (elsewhere) return elsewhere;
+  // Tickets this request's payment queued for the card's email go out once it
+  // has answered; registered only once the caller and the request are valid.
+  after(() => drainTicketEmails());
   // Rung while the connection was gone and sent now: it already happened.
   // Receiving its money may queue a manager review after a freeze or downgrade;
   // the checks below still refuse new sales on that same plan.
@@ -186,6 +191,8 @@ export async function POST(req: NextRequest) {
     p_demand: toDemandPayload(stockDemand(verified)),
     p_order: {
       loyalty_card_id: loyalty.cardId,
+      // The cashier chose not to email this sale's ticket to the card's address.
+      ticket_email_skip: body.skipTicketEmail === true,
       ...(onAccount ? { request_scope: orderRequestScope("pos-account", body) } : {}),
       subtotal: pricing.subtotal, service_fee: pricing.serviceFee, tip: pricing.tip,
       tax_pct: Number(restaurant.tax_pct) || 0, discount: pricing.discount, total: pricing.total,
