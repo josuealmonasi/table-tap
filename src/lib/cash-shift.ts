@@ -56,10 +56,25 @@ export interface ShiftSum {
   opening: number;
   /** Cash taken in the shift, net of cash handed back. */
   cashSales: number;
+  /** Resolved receipts kept in the drawer, apart from sales. */
+  unclassifiedCash?: number;
+  unclassifiedCashByCurrency?: Record<string, number>;
   /** The staff's tips inside cashSales: shown apart, never taken out of the count. */
   tips?: number;
   withdrawn: number;
   expected: number;
+}
+
+/** Retained foreign cash is disclosed with foreign takings, outside expected. */
+export function shiftOtherCurrencies(view: ShiftView): OtherCurrencyTaking[] {
+  const lines = new Map((view.otherCurrencies ?? []).map(line => [line.currency, { ...line }]));
+  for (const [currency, amount] of Object.entries(view.sum.unclassifiedCashByCurrency ?? {})) {
+    if (currency === view.shift.currency || amount <= 0) continue;
+    const line = lines.get(currency) ?? { currency, cash: 0, card: 0 };
+    line.cash = Math.round((line.cash + amount) * 100) / 100;
+    lines.set(currency, line);
+  }
+  return [...lines.values()].sort((a, b) => a.currency.localeCompare(b.currency));
 }
 
 /** Whether a closed shift still owes an explanation for its difference. */

@@ -22,7 +22,7 @@ async function readSales([, restaurantId, view, page]: [string, string, string, 
   return page_;
 }
 
-/** Pending refreshes keep the badge live; approved history reads one page on demand. */
+/** Pending refreshes keep the badge live; decided history reads one page on demand. */
 export function useHeldSales(restaurantId: string, history: boolean, page: number) {
   const pending = useSWR(["held-sales", restaurantId, "pending", 0], readSales, { refreshInterval: 30_000 });
   const approved = useSWR(history ? ["held-sales", restaurantId, "history", page] : null, readSales, {
@@ -31,12 +31,12 @@ export function useHeldSales(restaurantId: string, history: boolean, page: numbe
   const shown = history ? approved : pending;
   const signedOut = pending.error instanceof OtherRestaurant || approved.error instanceof OtherRestaurant;
   return {
-    rows: (signedOut ? [] : shown.data?.sales ?? []).filter(row => history ? Boolean(row.approved_at) : !row.approved_at),
-    pendingCount: signedOut ? undefined : pending.data?.sales.filter(row => !row.approved_at).length,
+    rows: (signedOut ? [] : shown.data?.sales ?? []).filter(row => history ? Boolean(row.approved_at || row.resolved_at) : !row.approved_at && !row.resolved_at),
+    pendingCount: signedOut ? undefined : pending.data?.sales.filter(row => !row.approved_at && !row.resolved_at).length,
     loading: shown.isLoading,
     error: Boolean(shown.error) || signedOut,
     hasMore: approved.data?.hasMore === true,
     reload: () => shown.mutate(),
-    refreshPending: () => pending.mutate(),
+    refreshPending: async () => { await Promise.all([pending.mutate(), ...(history ? [approved.mutate()] : [])]); },
   };
 }

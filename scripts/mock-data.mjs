@@ -25,7 +25,7 @@ import { TERMS_VERSION } from "./terms-version.mjs";
 import { seedLoyalty } from "./mock-loyalty.mjs";
 import { seedAccounts } from "./mock-accounts.mjs";
 import { seedCosts } from "./mock-costs.mjs";
-import { seedOffline } from "./mock-offline.mjs";
+import { seedOffline, seedResolvedOffline } from "./mock-offline.mjs";
 import { seedAllocations } from "./mock-allocations.mjs";
 import { seedTerminal } from "./mock-terminal.mjs";
 import { legacyTerminalTimes } from "./mock-terminal-times.mjs";
@@ -1051,6 +1051,7 @@ export async function seedMock(pg) {
   await pg.query("select set_config('tabletap.allocation_origin', '', false)");
   await seedAllocations(pg, rid);
   await seedOffline(pg, rid);
+  await seedResolvedOffline(pg, rid);
   // Deposits from the restaurant's own card terminal, and voucher numbers.
   // Marked last, once the books are whole: the allocation backfill turns old
   // cancelled sales from voids into adjustments, and a deposit signed before

@@ -9241,6 +9241,13 @@ alter table offline_sale_queue enable row level security;
 revoke all on offline_sale_queue from public, authenticated;
 revoke all on offline_sale_queue from anon;
 grant all on offline_sale_queue to service_role;
+-- A held receipt that can never become a sale (its saved figures cannot be
+-- settled) is resolved instead: audited, with the cash accounted for, and never
+-- by pretending it was approved. Either decision ends the wait, not both.
+alter table offline_sale_queue add column if not exists resolved_at timestamptz;
+alter table offline_sale_queue drop constraint if exists offline_queue_one_decision;
+alter table offline_sale_queue add constraint offline_queue_one_decision
+  check (approved_at is null or resolved_at is null);
 
 create or replace function public.queue_offline_sale(
   p_restaurant uuid, p_ref uuid, p_body jsonb, p_collector text,
@@ -9296,6 +9303,8 @@ begin
   if q.pos_ref is not null and (q.restaurant_id <> p_restaurant or p_manager is null) then
     raise exception 'manager approval required';
   end if;
+  -- Resolved without a sale: its cash is already in the drawer's books.
+  if q.resolved_at is not null then raise exception 'held receipt resolved without a sale'; end if;
   if p_at is null or p_at > now() + interval '5 minutes' or p_at < '2000-01-01'::timestamptz
     or p_method is null or p_method not in ('cash','card') or nullif(btrim(p_actor),'') is null
     or p_authority is null or p_authority not in ('signed','manager_attested') then raise exception 'invalid offline receipt'; end if;
@@ -9374,6 +9383,205 @@ end;
 $$;
 revoke all on function public.record_offline_sale(uuid,uuid,jsonb,text,text,timestamptz,text,jsonb,text,text,text,text) from public,anon,authenticated;
 grant execute on function public.record_offline_sale(uuid,uuid,jsonb,text,text,timestamptz,text,jsonb,text,text,text,text) to service_role;
+
+-- ============================================================================
+-- Resolving a held receipt without creating a sale
+--
+-- A held cash receipt whose saved figures can never be settled blocked every
+-- shift close in its restaurant, with no way out (Codex sweep, 2026-11-11).
+-- A manager can now resolve it: a mandatory reason, who and when, and what
+-- happened to the cash. Nothing invents an order, a payment, stock or
+-- approved_at. The raw receipt stays as it arrived.
+--   retained_cash — the cash is in the drawer: an unclassified cash receipt,
+--                   counted in the OPEN shift when resolved (never backdated
+--                   into a signed close), not as sales revenue.
+--   returned_cash — the cash went back: that receipt plus the recorded
+--                   withdrawal that paid it out, net zero in the drawer.
+--   duplicate     — already counted elsewhere: linked to that payment or
+--                   receipt, counted nowhere twice.
+--   no_cash       — nothing was collected.
+-- ============================================================================
+create unique index if not exists cash_shifts_tenant_id on cash_shifts(restaurant_id, id);
+create unique index if not exists payments_tenant_id on payments(restaurant_id, id);
+create unique index if not exists cash_movements_tenant_id on cash_movements(restaurant_id, id);
+
+create table if not exists held_cash_receipts (
+  restaurant_id uuid not null references restaurants(id) on delete cascade,
+  id            uuid not null default gen_random_uuid(),
+  pos_ref       uuid not null,
+  shift_id      uuid not null,
+  amount        numeric not null check (amount > 0 and amount <= 1000000 and amount = round(amount, 2)),
+  currency      text not null check (currency in ('MXN', 'USD')),
+  collector     text not null check (length(btrim(collector)) > 0),
+  collected_at  timestamptz not null,
+  recognized_at timestamptz not null,
+  primary key (restaurant_id, id),
+  unique (restaurant_id, pos_ref),
+  -- No action, not cascade: a receipt outlives nothing it accounts for, and a
+  -- restaurant's own delete takes these rows in the same statement.
+  foreign key (restaurant_id, pos_ref) references offline_sale_queue(restaurant_id, pos_ref),
+  foreign key (restaurant_id, shift_id) references cash_shifts(restaurant_id, id)
+);
+create table if not exists held_sale_resolutions (
+  restaurant_id   uuid not null references restaurants(id) on delete cascade,
+  pos_ref         uuid not null,
+  disposition     text not null check (disposition in ('retained_cash', 'duplicate', 'returned_cash', 'no_cash')),
+  reason          text not null check (length(btrim(reason)) between 8 and 500),
+  resolved_by     text not null,
+  resolved_at     timestamptz not null,
+  collector       text not null,
+  amount          numeric not null check (amount >= 0 and amount <= 1000000 and amount = round(amount, 2)),
+  currency        text not null check (currency in ('MXN', 'USD')),
+  collected_at    timestamptz not null,
+  payment_id      uuid,
+  cash_receipt_id uuid,
+  payout_id       uuid,
+  primary key (restaurant_id, pos_ref),
+  -- One recorded withdrawal returns one receipt.
+  unique (restaurant_id, payout_id),
+  foreign key (restaurant_id, pos_ref) references offline_sale_queue(restaurant_id, pos_ref),
+  foreign key (restaurant_id, payment_id) references payments(restaurant_id, id),
+  foreign key (restaurant_id, cash_receipt_id) references held_cash_receipts(restaurant_id, id),
+  foreign key (restaurant_id, payout_id) references cash_movements(restaurant_id, id),
+  check ((disposition = 'retained_cash' and amount > 0 and cash_receipt_id is not null and payment_id is null and payout_id is null)
+    or (disposition = 'duplicate' and amount > 0 and num_nonnulls(payment_id, cash_receipt_id) = 1 and payout_id is null)
+    -- Handed back in the drawer's currency: its receipt and the withdrawal that
+    -- paid it out. In another currency the drawer never held it in its books
+    -- (withdrawals are in the drawer's currency): neither link.
+    or (disposition = 'returned_cash' and amount > 0 and payment_id is null
+      and ((cash_receipt_id is not null and payout_id is not null) or (cash_receipt_id is null and payout_id is null)))
+    or (disposition = 'no_cash' and amount = 0 and num_nonnulls(payment_id, cash_receipt_id, payout_id) = 0))
+);
+-- Two receipts dismissed as duplicates of the same money would make one
+-- sale's cash vanish from the drawer: each payment or receipt backs one.
+create unique index if not exists held_resolution_duplicate_payment
+  on held_sale_resolutions(restaurant_id, payment_id) where disposition = 'duplicate' and payment_id is not null;
+create unique index if not exists held_resolution_duplicate_receipt
+  on held_sale_resolutions(restaurant_id, cash_receipt_id) where disposition = 'duplicate' and cash_receipt_id is not null;
+alter table held_cash_receipts enable row level security;
+alter table held_sale_resolutions enable row level security;
+revoke all on held_cash_receipts from public, authenticated;
+revoke all on held_cash_receipts from anon;
+revoke all on held_sale_resolutions from public, authenticated;
+revoke all on held_sale_resolutions from anon;
+-- Evidence: the service key reads it; only resolve_held_sale writes it.
+revoke all on held_cash_receipts, held_sale_resolutions from service_role;
+grant select on held_cash_receipts, held_sale_resolutions to service_role;
+
+-- The resolution and the raw receipt are evidence: frozen, and a late approval
+-- of a resolved receipt fails its queue update and rolls its sale back.
+create or replace function public.guard_held_resolution() returns trigger
+language plpgsql set search_path = public as $$
+begin
+  if tg_op = 'DELETE' then
+    -- The restaurant's own delete cascades here after its row is gone.
+    if old.resolved_at is not null and exists(select 1 from restaurants where id = old.restaurant_id) then
+      raise exception 'resolved receipt is immutable';
+    end if;
+    return old;
+  end if;
+  if old.resolved_at is not null and new is distinct from old then raise exception 'resolved receipt is immutable'; end if;
+  if new.body is distinct from old.body then raise exception 'held receipt is immutable'; end if;
+  if new.resolved_at is distinct from old.resolved_at and (new.approved_at is not null
+    or not exists(select 1 from held_sale_resolutions r
+      where r.restaurant_id = new.restaurant_id and r.pos_ref = new.pos_ref and r.resolved_at = new.resolved_at)) then
+    raise exception 'audited resolution required';
+  end if;
+  return new;
+end;
+$$;
+drop trigger if exists guard_held_resolution on offline_sale_queue;
+create trigger guard_held_resolution before update or delete on offline_sale_queue
+  for each row execute function public.guard_held_resolution();
+revoke all on function public.guard_held_resolution() from public, anon, authenticated;
+
+create or replace function public.resolve_held_sale(
+  p_restaurant uuid, p_ref uuid, p_actor text, p_reason text, p_disposition text,
+  p_collector text, p_amount numeric, p_currency text, p_collected_at timestamptz,
+  p_payment uuid default null, p_cash_receipt uuid default null, p_payout uuid default null
+) returns jsonb language plpgsql security definer set search_path = public as $$
+declare q offline_sale_queue%rowtype; r held_sale_resolutions%rowtype;
+  s cash_shifts%rowtype; v_at timestamptz; v_receipt uuid := p_cash_receipt;
+begin
+  perform public.lock_restaurant_money(p_restaurant);
+  -- Service-only: the route passes the signed-in email, never one from a body.
+  if not exists(select 1 from restaurants x join auth.users u on u.id = x.owner_id
+      where x.id = p_restaurant and u.email = p_actor)
+    and not exists(select 1 from staff where restaurant_id = p_restaurant and email = p_actor and role in ('owner', 'manager')) then
+    raise exception 'manager required';
+  end if;
+  if length(btrim(coalesce(p_reason, ''))) not between 8 and 500 or nullif(btrim(p_collector), '') is null
+    or p_disposition is null or p_disposition not in ('retained_cash', 'duplicate', 'returned_cash', 'no_cash')
+    or p_amount is null or p_amount < 0 or p_amount > 1000000 or p_amount <> round(p_amount, 2)
+    or p_currency is null or p_currency not in ('MXN', 'USD') or p_collected_at is null
+    or p_collected_at < '2000-01-01'::timestamptz or p_collected_at > clock_timestamp() + interval '5 minutes' then
+    raise exception 'invalid resolution';
+  end if;
+  if p_disposition <> 'duplicate' and p_cash_receipt is not null then raise exception 'unexpected receipt link'; end if;
+  select * into q from offline_sale_queue where restaurant_id = p_restaurant and pos_ref = p_ref for update;
+  if not found or q.body->>'method' is distinct from 'cash' then raise exception 'held cash receipt required'; end if;
+  select * into r from held_sale_resolutions where restaurant_id = p_restaurant and pos_ref = p_ref;
+  if found then
+    -- The same request again answers the same resolution; anything else is
+    -- another decision about a receipt already decided.
+    if (r.disposition, r.reason, r.resolved_by, r.collector, r.amount, r.currency, r.collected_at, r.payment_id, r.payout_id)
+      is distinct from (p_disposition, btrim(p_reason), p_actor, btrim(p_collector), p_amount, p_currency, p_collected_at, p_payment, p_payout)
+      or (p_disposition = 'duplicate' and r.cash_receipt_id is distinct from p_cash_receipt) then
+      raise exception 'receipt already resolved' using errcode = 'PT409';
+    end if;
+    return to_jsonb(r);
+  end if;
+  if q.approved_at is not null or q.resolved_at is not null then raise exception 'receipt already decided' using errcode = 'PT409'; end if;
+  if q.currency is not null and q.currency <> p_currency then raise exception 'collected currency changed'; end if;
+  if q.collector is not null and q.collector <> btrim(p_collector) then raise exception 'collector changed'; end if;
+  -- An order under this exact reference is already in the books: it can only
+  -- be linked as a duplicate, never counted again as unclassified cash.
+  if p_disposition <> 'duplicate' and exists(select 1 from orders where restaurant_id = p_restaurant and pos_ref = p_ref) then
+    raise exception 'existing accounting requires duplicate resolution';
+  end if;
+  if p_disposition = 'duplicate' then
+    if num_nonnulls(p_payment, p_cash_receipt) <> 1 or p_payout is not null then raise exception 'one duplicate link required'; end if;
+    if p_payment is not null and not exists(select 1 from payments where restaurant_id = p_restaurant and id = p_payment
+      and method = 'cash' and amount = p_amount and currency = p_currency and nullif(actor_email, '') is not null) then
+      raise exception 'matching cash payment required';
+    end if;
+    if p_cash_receipt is not null and not exists(select 1 from held_cash_receipts where restaurant_id = p_restaurant
+      and id = p_cash_receipt and pos_ref <> p_ref and amount = p_amount and currency = p_currency) then
+      raise exception 'matching cash receipt required';
+    end if;
+  elsif p_disposition in ('retained_cash', 'returned_cash') then
+    if p_amount <= 0 or p_payment is not null then raise exception 'new cash receipt required'; end if;
+    select * into s from cash_shifts where restaurant_id = p_restaurant and closed_at is null for update;
+    if not found then raise exception 'open shift required'; end if;
+    v_at := clock_timestamp();
+    if p_disposition = 'returned_cash' and p_currency <> s.currency then
+      -- Foreign cash handed back: no withdrawal can record it, and it never
+      -- entered this drawer's books. Recorded as returned, with no links.
+      if p_payout is not null then raise exception 'foreign returned cash takes no payout'; end if;
+    else
+      if p_disposition = 'returned_cash' then
+        if p_payout is null or not exists(select 1 from cash_movements where restaurant_id = p_restaurant and id = p_payout
+          and kind = 'withdrawal' and shift_id = s.id and currency = p_currency and amount = p_amount) then
+          raise exception 'matching recorded payout required';
+        end if;
+      elsif p_payout is not null then raise exception 'unexpected payout'; end if;
+      insert into held_cash_receipts(restaurant_id, pos_ref, shift_id, amount, currency, collector, collected_at, recognized_at)
+        values(p_restaurant, p_ref, s.id, p_amount, p_currency, btrim(p_collector), p_collected_at, v_at) returning id into v_receipt;
+    end if;
+  elsif p_amount <> 0 or num_nonnulls(p_payment, p_cash_receipt, p_payout) <> 0 then
+    raise exception 'no_cash takes no amount and no links';
+  end if;
+  v_at := coalesce(v_at, clock_timestamp());
+  insert into held_sale_resolutions(restaurant_id, pos_ref, disposition, reason, resolved_by, resolved_at,
+    collector, amount, currency, collected_at, payment_id, cash_receipt_id, payout_id)
+    values(p_restaurant, p_ref, p_disposition, btrim(p_reason), p_actor, v_at, btrim(p_collector), p_amount, p_currency,
+      p_collected_at, p_payment, v_receipt, p_payout) returning * into r;
+  update offline_sale_queue set resolved_at = v_at where restaurant_id = p_restaurant and pos_ref = p_ref;
+  return to_jsonb(r);
+end;
+$$;
+revoke all on function public.resolve_held_sale(uuid, uuid, text, text, text, text, numeric, text, timestamptz, uuid, uuid, uuid) from public, anon, authenticated;
+grant execute on function public.resolve_held_sale(uuid, uuid, text, text, text, text, numeric, text, timestamptz, uuid, uuid, uuid) to service_role;
 
 create or replace function public.guard_offline_audit()
 returns trigger language plpgsql security definer set search_path = public as $$
@@ -9972,7 +10180,7 @@ begin
     or exists (select 1 from fee_reconcile_queue where restaurant_id = p_restaurant) then
     return jsonb_build_object('outcome', 'provider');
   end if;
-  if exists (select 1 from offline_sale_queue where restaurant_id = p_restaurant and approved_at is null) then
+  if exists (select 1 from offline_sale_queue where restaurant_id = p_restaurant and approved_at is null and resolved_at is null) then
     return jsonb_build_object('outcome', 'offlineSale');
   end if;
   -- Customer completion commits before the first provider read. Unknown is
@@ -10037,6 +10245,14 @@ begin
   insert into restaurant_accounting_records (restaurant_id, source_table, source_id, row_data)
     select p_restaurant, 'offline_sale_queue', q.pos_ref, to_jsonb(q)
     from (select * from offline_sale_queue where restaurant_id = p_restaurant for update) q;
+  -- A resolved receipt's cash and its audit are books too: a closed shift
+  -- counted that cash, and only these rows say why (Codex review of #611).
+  insert into restaurant_accounting_records (restaurant_id, source_table, source_id, row_data)
+    select p_restaurant, 'held_cash_receipts', c.id, to_jsonb(c)
+    from (select * from held_cash_receipts where restaurant_id = p_restaurant for update) c;
+  insert into restaurant_accounting_records (restaurant_id, source_table, source_id, row_data)
+    select p_restaurant, 'held_sale_resolutions', r.pos_ref, to_jsonb(r)
+    from (select * from held_sale_resolutions where restaurant_id = p_restaurant for update) r;
   -- The privacy notice keeps admission decisions with the visit and orders.
   -- Members have no restaurant_id; reach them only through this restaurant's visits.
   insert into restaurant_accounting_records (restaurant_id, source_table, source_id, row_data)
@@ -10628,11 +10844,27 @@ returns jsonb language sql stable security definer set search_path = public as $
     select coalesce(sum(m.amount), 0) amount from cash_movements m, s
       where m.restaurant_id = p_restaurant and m.shift_id = s.id
         and m.kind = 'withdrawal' and m.currency = s.currency
+  ), unclassified as (
+    -- Held receipts resolved without a sale whose cash stayed in this drawer:
+    -- in the drawer, not in sales (see resolve_held_sale).
+    select coalesce(sum(c.amount), 0) amount from held_cash_receipts c, s
+      where c.restaurant_id = p_restaurant and c.shift_id = s.id and c.currency = s.currency
+        and c.recognized_at between s.opened_at and s.until_at
+  ), unclassified_currencies as (
+    -- Every currency, the drawer's included: foreign cash kept in the drawer is
+    -- shown beside the other-currency takings, never added to expected.
+    select coalesce(jsonb_object_agg(g.currency, g.amount), '{}'::jsonb) amounts from (
+      select c.currency, round(sum(c.amount), 2) amount from held_cash_receipts c, s
+        where c.restaurant_id = p_restaurant and c.shift_id = s.id
+          and c.recognized_at between s.opened_at and s.until_at group by c.currency
+    ) g
   )
   select jsonb_build_object('opening', round(s.opening_amount, 2),
     'cashSales', round(r.amount - f.amount - h.amount, 2), 'tips', greatest(0, round(r.tip - f.tip, 2)), 'withdrawn', round(w.amount, 2),
-    'expected', round(s.opening_amount + r.amount - f.amount - h.amount - w.amount, 2))
-    from s cross join receipts r cross join returns f cross join old_returns h cross join withdrawals w;
+    'unclassifiedCash', round(u.amount, 2), 'unclassifiedCashByCurrency', uc.amounts,
+    'expected', round(s.opening_amount + r.amount + u.amount - f.amount - h.amount - w.amount, 2))
+    from s cross join receipts r cross join returns f cross join old_returns h cross join withdrawals w
+      cross join unclassified u cross join unclassified_currencies uc;
 $$;
 revoke all on function public.cash_shift_totals(uuid, uuid, timestamptz) from public, anon, authenticated;
 grant execute on function public.cash_shift_totals(uuid, uuid, timestamptz) to service_role;
@@ -10649,7 +10881,7 @@ begin
   -- The queue writer uses this same lock: the route's earlier read is only a
   -- preflight. Cash queued before this close must be reviewed before signing.
   select count(*) into v_waiting from offline_sale_queue
-    where restaurant_id = p_restaurant and approved_at is null and body->>'method' = 'cash';
+    where restaurant_id = p_restaurant and approved_at is null and resolved_at is null and body->>'method' = 'cash';
   if v_waiting > 0 then return jsonb_build_object('outcome', 'held_cash', 'waiting', v_waiting); end if;
   -- now() is the transaction's start, possibly before waiting for the lock.
   -- The count includes every earlier writer, so date it after that wait.
@@ -10688,6 +10920,11 @@ begin
   perform public.lock_restaurant_money(p_restaurant);
   select * into s from cash_shifts where restaurant_id = p_restaurant and id = p_shift and closed_at is null for update;
   if not found then return null; end if;
+  -- A withdrawal that paid back a resolved held receipt is that receipt's
+  -- evidence: say so instead of letting the foreign key answer with a 500.
+  if exists(select 1 from held_sale_resolutions where restaurant_id = p_restaurant and payout_id = p_movement) then
+    return jsonb_build_object('outcome', 'linked');
+  end if;
   delete from cash_movements where restaurant_id = p_restaurant and shift_id = s.id and id = p_movement and kind = 'withdrawal'
     returning * into m;
   if not found then return null; end if;
