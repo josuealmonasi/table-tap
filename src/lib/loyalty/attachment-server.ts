@@ -1,5 +1,6 @@
 import type { NextRequest } from "next/server";
 import { actingFrontOfHouse } from "@/lib/api-guard";
+import { MANAGES } from "@/lib/membership";
 import { tableMember, openSittingAt } from "@/lib/table-membership";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { cardState, CARD_COLUMNS, programOf } from "./server";
@@ -22,18 +23,18 @@ export async function attachmentAccess(req: NextRequest, body: AttachmentTarget)
     if (body.restaurantId !== undefined && body.restaurantId !== actor.restaurantId) return null;
     if (body.preview === true) {
       if (body.orderId || body.sessionId || body.tableId) return null;
-      return { restaurantId: actor.restaurantId, actor: actor.email, staff: true, orderId: null, sessionId: null };
+      return { restaurantId: actor.restaurantId, actor: actor.email, staff: true, fullEmail: MANAGES(actor.role), orderId: null, sessionId: null };
     }
     if ([body.orderId, body.sessionId, body.tableId].filter(Boolean).length !== 1) return null;
     if (body.orderId && !uuid(body.orderId) || body.sessionId && !uuid(body.sessionId) || body.tableId && !uuid(body.tableId)) return null;
     const sessionId = body.tableId ? await openSittingAt(actor.restaurantId, body.tableId as string) : body.sessionId;
-    return { restaurantId: actor.restaurantId, actor: actor.email, staff: true,
+    return { restaurantId: actor.restaurantId, actor: actor.email, staff: true, fullEmail: MANAGES(actor.role),
       orderId: (body.orderId as string) || null, sessionId: (sessionId as string) || null };
   }
   if (body.orderId || body.preview || !uuid(body.restaurantId) || !uuid(body.tableId) || !uuid(body.sessionId)) return null;
   const member = await tableMember(req, body.restaurantId, body.tableId, body.sessionId);
   if (!member || member.closed || member.sessionId !== body.sessionId) return null;
-  return { restaurantId: member.restaurantId, actor: "diner", staff: false, orderId: null, sessionId: member.sessionId };
+  return { restaurantId: member.restaurantId, actor: "diner", staff: false, fullEmail: false, orderId: null, sessionId: member.sessionId };
 }
 
 export type AttachmentAccess = NonNullable<Awaited<ReturnType<typeof attachmentAccess>>>;

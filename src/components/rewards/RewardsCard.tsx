@@ -11,6 +11,7 @@ import { SEP } from "@/lib/separator";
 
 /** What /api/rewards answers: what the card itself would show, and no more. */
 export interface CardStanding {
+  email?: string | null;
   face: CardFace;
   qr: QrGrid;
   restaurant: { id: string; name: string; logo: string | null; logo_url: string | null };
