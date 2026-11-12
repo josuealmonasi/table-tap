@@ -9,6 +9,7 @@ import RewardsCard, { type CardStanding } from "./RewardsCard";
 import CardDownload from "@/components/loyalty/CardDownload";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { BackIcon } from "@/components/ui/icons";
+import CardEmail from "@/components/loyalty/CardEmail.react-component";
 import RewardsSkeleton from "./RewardsSkeleton";
 
 interface RewardsLookupProps {
@@ -125,6 +126,7 @@ export default function RewardsLookup({ initialCode = "", back = null }: Rewards
         ) : card ? (
           <div className="tt-login-card">
             <RewardsCard card={card} locale={locale} />
+            <CardEmail key={card.face.printedCode} diner code={normalizeCode(card.face.printedCode)!} initialEmail={card.email} />
             {error && <p className="tt-field-error" role="alert">{error}</p>}
             {saveAgain ? (
               <div style={{ marginTop: 16 }}>

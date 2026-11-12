@@ -1381,6 +1381,30 @@ measure. Its amounts come from
   embed the variable Archivo — traced into the routes that print by
   `next.config.ts`.
 
+### Tickets by email to the visit card's address (2026-11-11)
+
+Paperless without typing an address at every sale. A diner may link an email
+to their visit card — making the card, at a stamp, or when paying — by
+themselves (holding the card's code) or through staff (`/api/loyalty/card-email`),
+always with an explicit consent tick; `loyalty_cards.email` keeps the address
+with when consent was given, under which notice version, by whom, and a
+"stop" secret replaced on every change. One card per address per restaurant.
+Waiters and cashiers see it masked (`a***@dominio`); owner and manager see it
+whole. The address is used for tickets only.
+
+When a sale carrying that card becomes paid, `queue_ticket_email` puts it in
+`ticket_email_outbox` (no address stored there) unless the cashier chose "No
+enviar esta vez" (`orders.ticket_email_skip`, from the till, from table
+collection, and from a divided bill's part, where `/api/split/collect` marks
+only that split's frozen orders). Every route that takes a payment drains the outbox with `after()`
+once it has answered (`src/lib/ticket-email.ts`), and the daily recovery cron
+catches the rest; a ticket two hours old expires unsent. Orders of one card
+and one sitting claimed together are one email: the receipt, the 80 mm PDF
+attached, and the "Dejar de recibir mis tickets por correo" link
+(`/tickets/stop`, a button that POSTs — mail scanners open links — plus the
+List-Unsubscribe header). Nothing is sent without a mail provider configured
+(`RESEND_API_KEY`, `RECEIPT_FROM_EMAIL`): those rows finish as `unconfigured`.
+
 ## The customer can decline the ticket
 
 Very common on a sale handed over as it is rung up. The cashier ticks one box
@@ -2932,3 +2956,40 @@ independently evidenced credit/payment history. Dev verification is provided by
 against production during PR 1. The probe checks the function's own money lock
 without a caller lock, verifies rollback leaves an account unstarted, and tests
 effective client/service roles alongside catalog privileges.
+
+## Visit-card ticket email screens (11 November 2026)
+
+A diner can optionally link an email while making their visit card or later
+from `/rewards`. Each link or replacement asks for explicit consent and links
+to the privacy notice. There is no confirmation-link step. The diner's own
+card read supplies their full `email`; the staff-only card-email read supplies
+the server's role-filtered address (masked for waiter/cashier, full for
+owner/manager). Staff can change or remove it after scanning, stamping,
+looking up or attaching a card. A duplicate address explains which card
+already has it by its last four characters; a suffix alone cannot select it.
+A bill need not expose the full bearer code: staff can scan the card to edit.
+
+An attached card's email makes tickets automatic. The till and whole-table
+or calculator collection show the address and a one-sale skip box. A skip
+travels in the payment body and in held POS replays. With no linked address,
+the till keeps its per-sale email and can optionally save it on the card with
+fresh consent before charging. A failed optional save never prevents charging;
+offline sales do not queue address changes. When an address is entered for
+this sale, the existing per-sale email delivers its ticket and skips the
+automatic duplicate, even if a card-save reply is lost. Future sales use the
+card address automatically; existing linked cards need no extra paper copy.
+Unread card email does not prevent payment or masquerade as an absent email.
+Divided-slot collections use their separate `/api/split/collect` contract;
+the skip control here is limited to the two table-payment routes.
+
+The public `/tickets/stop?t=<uuid>` page asks before posting the token to
+`/api/tickets/stop`. Page loads do nothing, so mail scanners cannot unsubscribe
+a diner by opening a link. Missing links and failed requests have distinct
+messages. All new copy is available in Spanish and English.
+
+These client screens consume the card-email server contract implemented in
+parallel. In particular, `/api/rewards` must return the bearer's full `email`,
+and `/api/loyalty/attach` should include the role-filtered `card.email` for an
+immediate collection notice. An absent projection remains unread in the UI;
+it does not claim the card has no email. Server grants, consent enforcement
+and delivery are outside this client change.
