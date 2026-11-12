@@ -242,6 +242,21 @@ dishes on a bill the restaurant has just cancelled.
   is `card_payments` being `active` — `src/lib/stripe-connect.ts`. It once
   still asked for the `recipient` configuration a destination charge needs,
   which Stripe then refused outright, so no restaurant could connect.
+- **The catalog, as confirmed by the owner on 2026-11-11** (production's
+  `plan_limits`; founder price first, list price once the 50 founder places
+  are gone):
+
+  | | Carta | Caja | Servicio | Casa | Grupo |
+  |---|---|---|---|---|---|
+  | Month | free | MX$399 | MX$699 → 899 | MX$1,499 → 1,899 | from MX$3,499 (soon) |
+  | Per card order / monthly ceiling | MX$3 / MX$699 | — | MX$1.50 / MX$1,050 | MX$0.75 / MX$900 | — |
+  | Tables · staff · menus · dishes | 0 · 2 · 1 · 30 | 0 · 5 · 3 · ∞ | 15 · 10 · 3 · ∞ | 50 · ∞ · ∞ · ∞ | ∞ |
+
+  The per-order fee never exceeds 5% of the order. Each tier carries one
+  line on its card (`plan.desc.*`, es/en), the table count read from the row
+  through `planDescription` so a changed limit cannot leave the copy behind
+  (`plan-description.spec.ts`). The first seed in `schema.sql` still says 25
+  tables for Servicio; a later update sets the 15 production has.
 - **Plans** (`plan_limits`): `carta` free, `caja` MX$399, `servicio`, `casa`,
   `grupo`. Each row carries the ceilings (tables, staff, menus, items) and the
   feature flags: dine-in, menu schedules, deferred payment, promotions,

@@ -932,6 +932,13 @@ foundingLeftBody: "Subscribe now and keep this subscription price for as long as
       of: "{used} of {max}",
       unlimited: "{used} · unlimited",
     },
+    desc: {
+      carta: "Your QR menu for the counter and to go: customers order and pay by card from their phone.",
+      caja: "Your counter register: take cash or your own terminal, with inventory, promotions and the visit card. The menu is read on the phone and ordered at the register.",
+      servicio: "Table service: up to {tables} tables, waiters taking orders, bills paid at the end and the register included.",
+      casa: "For the whole restaurant: up to {tables} tables, unlimited staff, coupons, staff discounts, menu schedules and each product's margin.",
+      grupo: "For several locations: everything in Casa at each one. Let's talk.",
+    },
     tier: {
       deferredPayment: "Pay at the end or at the counter",
       schedules: "Menus on a schedule",
