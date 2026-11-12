@@ -32,7 +32,12 @@ export function trackData(tab) {
   // the new page commits, nothing started before it is this page's data.
   const forget = () => { active.length = 0; };
   tab.on("framenavigated", frame => { if (frame === tab.mainFrame?.()) forget(); });
-  return { get size() { return active.length; }, reset: forget };
+  return {
+    get size() { return active.length; },
+    /** What is still in flight, so a readiness failure names its culprit. */
+    get urls() { return active.map(request => `${request.method?.() ?? "GET"} ${request.url?.() ?? "(unknown)"}`); },
+    reset: forget,
+  };
 }
 
 export function contentFor(url) {
@@ -86,31 +91,47 @@ const snapshot = selector => `(() => {
  * policy it really ships with.
  *
  * @param {*} tab
- * @param {{ url?: string, pending?: { readonly size: number }, timeout?: number, expect?: string }} [options]
+ * @param {{ url?: string, pending?: { readonly size: number, readonly urls?: string[] }, timeout?: number, expect?: string }} [options]
  */
 export async function ready(tab, { url, pending = new Set(), timeout = 30000, expect } = {}) {
   let previous;
   let stableSince = Date.now();
-  await observe(tab, async () => {
-    if (url) {
-      const actual = new URL(tab.url());
-      const planned = new URL(url);
-      if (actual.origin !== planned.origin || actual.pathname !== planned.pathname || actual.search !== planned.search) {
-        throw new Error(`unexpected route ${actual.pathname}${actual.search}; expected ${planned.pathname}${planned.search}`);
+  try {
+    await observe(tab, async () => {
+      if (url) {
+        const actual = new URL(tab.url());
+        const planned = new URL(url);
+        if (actual.origin !== planned.origin || actual.pathname !== planned.pathname || actual.search !== planned.search) {
+          throw new Error(`unexpected route ${actual.pathname}${actual.search}; expected ${planned.pathname}${planned.search}`);
+        }
       }
-    }
-    // Navigation finishes before sampling. A destroyed page fails this visit
-    // rather than standing in for a settled sample.
-    const state = await tab.evaluate(snapshot(url ? contentFor(url) : undefined));
-    if (!state?.ready || pending.size || (expect && !(await tab.evaluate(text => document.body.innerText.includes(text), expect)))) {
-      previous = undefined;
-      stableSince = Date.now();
-      return false;
-    }
-    if (state.signature !== previous) stableSince = Date.now();
-    previous = state.signature;
-    return Date.now() - stableSince >= 300;
-  }, { timeout });
+      // Navigation finishes before sampling. A destroyed page fails this visit
+      // rather than standing in for a settled sample.
+      const state = await tab.evaluate(snapshot(url ? contentFor(url) : undefined));
+      if (!state?.ready || pending.size || (expect && !(await tab.evaluate(text => document.body.innerText.includes(text), expect)))) {
+        previous = undefined;
+        stableSince = Date.now();
+        return false;
+      }
+      if (state.signature !== previous) stableSince = Date.now();
+      previous = state.signature;
+      return Date.now() - stableSince >= 300;
+    }, { timeout });
+  } catch (error) {
+    // "did not become ready" said nothing about why. Pedidos failed for days
+    // because a 5 s poll kept one request in flight; name what still is.
+    throw withPending(error, pending);
+  }
+}
+
+/** A timed-out readiness names the requests still in flight; other errors pass through. */
+export function withPending(error, pending) {
+  if (!(error instanceof Error) || !/did not become ready|readiness sample timed out/.test(error.message)) return error;
+  // Only a tracker knows what is in flight; without one, say nothing.
+  if (!pending || !("urls" in pending)) return error;
+  const urls = pending.urls;
+  error.message += urls.length ? ` (in flight: ${urls.join(", ")})` : " (nothing in flight)";
+  return error;
 }
 
 export async function overlay(tab, selector = "[role=dialog]", open = true, timeout = 1500, required = true) {

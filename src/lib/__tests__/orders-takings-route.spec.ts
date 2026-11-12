@@ -6,9 +6,11 @@ const state = vi.hoisted(() => ({
 }));
 vi.mock("@/lib/membership", async importOriginal => {
   const original = await importOriginal<typeof import("@/lib/membership")>();
-  return { ...original, getMembership: async () => state.role ? {
+  const membership = () => state.role ? {
     role: state.role, restaurant: { id: "own", currency: "USD", timezone: "Asia/Tokyo" },
-  } : null };
+  } : null;
+  return { ...original, getMembership: async () => membership(),
+    getMember: async () => ({ user: { id: "user", email: "manager@example.com" }, membership: membership() }) };
 });
 vi.mock("@/lib/current-user", () => ({ currentUser: async () => ({ id: "user", email: "manager@example.com" }) }));
 vi.mock("@/lib/collected-today", () => ({ collectedToday: state.collected }));

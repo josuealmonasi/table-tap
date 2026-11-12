@@ -3,6 +3,7 @@ import { NextRequest } from "next/server";
 const state = vi.hoisted(() => ({ role: "manager" as string | null }));
 const rpc = vi.hoisted(() => vi.fn());
 vi.mock("@/lib/membership", () => ({ getMembership: async () => state.role ? { role: state.role, restaurant: { id: "restaurant" } } : null,
+  getMember: async () => ({ user: { email: "manager@test" }, membership: state.role ? { role: state.role, restaurant: { id: "restaurant" } } : null }),
   MANAGES: (r: string) => ["owner", "manager"].includes(r) }));
 vi.mock("@/lib/current-user", () => ({ currentUser: async () => ({ email: "manager@test" }) }));
 vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({ rpc }) }));

@@ -1,5 +1,6 @@
 import { FISCAL_KEYS } from "@/lib/fiscal-settings";
 import { cache } from "react";
+import type { User } from "@supabase/supabase-js";
 import { currentUser } from "@/lib/current-user";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { Restaurant } from "@/lib/types";
@@ -145,9 +146,22 @@ interface StaffRow {
  * Still runs on the user-scoped client, so RLS applies exactly as before —
  * this is a round-trip change, not a permission change.
  */
-export const getMembership = cache(async (): Promise<Membership | null> => {
+export const getMembership = cache(async (): Promise<Membership | null> => (await getMember()).membership);
+
+/**
+ * The signed-in user and their membership, from one auth round trip.
+ *
+ * React's `cache` memoises inside a server-component render only; a route
+ * handler gets no memo at all. The API guard used to call `getMembership()`
+ * and then `currentUser()` for the email, which in a route is two calls to
+ * the auth server, on every poll Pedidos makes.
+ */
+export const getMember = cache(async (): Promise<{ user: User | null; membership: Membership | null }> => {
   const user = await currentUser();
-  if (!user) return null;
+  return { user, membership: user ? await membershipOf(user) : null };
+});
+
+async function membershipOf(user: User): Promise<Membership | null> {
 
   // With the service key, and always scoped to the id that comes from the session.
   //
@@ -185,4 +199,4 @@ export const getMembership = cache(async (): Promise<Membership | null> => {
   // privileged one rather than being trusted.
   const role: Role = ROLES.includes(staff.role as Role) ? (staff.role as Role) : "kitchen";
   return { restaurant: withoutCredentials(staff.restaurant), role };
-});
+}

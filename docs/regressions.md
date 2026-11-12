@@ -6695,3 +6695,45 @@ now suppresses automatic card mail for this sale, before the held copy is
 written. The existing sender delivers today's ticket; the saved card delivers
 future ones. The lost-save-reply spec proves the skip reaches both the request
 and held replay, while charging remains available.
+
+
+## Pedidos: a fixed-interval poll slower than its interval never goes idle
+
+The floor's phone-admission poll and the speed of the database had to agree:
+`usePendingPhones` read `/api/table-membership` on a fixed 5 s `setInterval`,
+and each read was a serial chain of auth, a rate-limit write, the membership
+lookup and the phones. When the dev database ran short on I/O that chain took
+close to or more than 5 s, so a request was always in flight. The page never
+had the 300 ms of quiet the layout gate calls ready, and Pedidos timed out on
+whichever role and width the gate visited — never the kitchen, the one role
+without the poll. The failure only said "did not become ready", or "readiness
+sample timed out after 9ms", which was the same thing with the last sample's
+remaining budget.
+
+The poll now schedules its next read 5 s after the last one settles, so there
+is never more than one in flight and always 5 s of quiet between them. The
+route asks who is calling while the limiter counts the hit, and the API guard
+asks the auth server once instead of twice (React's `cache` does nothing in a
+route handler; `/api/orders/takings` asked three times). The returns panel's
+15 s read keeps at most six progress RPCs in flight and no longer schedules
+fee recovery, a write path that may call Stripe; opening Bills still does,
+and the recover cron drains the fee queue every completion enqueues. Order
+history no longer re-reads on the dashboard's 30 s clock; it re-reads when the
+live board sees an order close.
+
+What catches it:
+- `pending-phones-cadence.spec.tsx`: a read slower than the interval, with
+  fake timers — one in flight at most, the next one at least 5 s after the
+  last settled, failed or not, and nothing scheduled after unmount.
+- `invariants/polls.spec.ts`: no `setInterval` in `src/hooks` or
+  `src/components` whose callback reaches `fetch`, following same-file
+  functions. Older pollers are grandfathered by name and the list only
+  shrinks; a self-test proves the old floor poll trips it.
+- `auth-round-trips.spec.ts`: one `auth.getUser` and one membership lookup per
+  floor poll and per takings read, and a limited or refused caller still
+  refused before any phone is read.
+- `progress-reads.spec.ts` and `order-history-refresh.spec.tsx`: bounded
+  progress reads with no fee recovery from the polled list, and history that
+  does not refresh on a timer but does when an order closes.
+- `browser-ready.mjs` now names the requests still in flight when readiness
+  times out, so the next one names its culprit instead of the page.
