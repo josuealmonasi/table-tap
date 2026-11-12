@@ -1,3 +1,5 @@
+import { after } from "next/server";
+import { drainTicketEmails } from "@/lib/ticket-email";
 import { NextRequest, NextResponse } from "next/server";
 import { actingManager } from "@/lib/api-guard";
 import { apiError } from "@/lib/api-error";
@@ -67,6 +69,9 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   if ((queued.collector && a.collector && queued.collector !== a.collector) || (queued.currency && a.currency && queued.currency !== a.currency)) {
     return await apiError("apiErr.offlineRecoveryDetails", 409);
   }
+  // The held sale is rung here, not in the listing above: its ticket is drained
+  // once this answers, registered only once the caller and the request are valid.
+  after(() => drainTicketEmails());
   return await ringOffline(actor, queued.body as PosSaleBody & { offline?: unknown }, {
     reason: a.reason.trim(), collector: queued.collector ?? a.collector, at: a.at, currency: queued.currency ?? a.currency,
   });

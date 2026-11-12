@@ -1,5 +1,6 @@
 "use client";
 
+import PosCardEmail from "./PosCardEmail.react-component";
 import { useT } from "@/lib/i18n/context";
 import DetailOverlay from "@/components/customer/DetailOverlay";
 import { NAME_MAX, NOTE_MAX } from "@/lib/notes";
@@ -141,7 +142,7 @@ export default function PosAsk({
         <p className="tt-muted" style={{ fontSize: 13, margin: "0 0 4px" }}>
           {t("pos.noTicketHint")}
         </p>
-      ) : canEmailReceipt ? (
+      ) : d.loyaltyCard && d.cardEmail !== null && canEmailReceipt ? null : canEmailReceipt ? (
         <label className="tt-field">
           <span className="tt-mod-label">{t("pos.receiptEmail")}</span>
           <input
@@ -157,6 +158,8 @@ export default function PosAsk({
           {t("pos.receiptPrintOnly")}
         </p>
       )}
+
+      <PosCardEmail details={d} busy={busy} canEmailReceipt={canEmailReceipt} />
 
       {/* One way forward. Filled in or left blank, this sends the order —
           a second button offering the same thing with a different name
