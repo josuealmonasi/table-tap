@@ -640,7 +640,18 @@ dishes on a bill the restaurant has just cancelled.
   difference ("Sobrante" / "Faltante") is
   explained once, by the closer or a manager. Withdrawals (`cash_movements`)
   go only into the open shift, and a manager can strike one off only while it
-  is still open. Every shift freezes its currency at opening, and each
+  is still open. Each withdrawal records its purpose: "Propinas pagadas" /
+  "Tips paid out" (`tips`) or "Otro retiro" / "Other withdrawal" (`other`,
+  the default, including historical movements). The route rejects any other
+  purpose; both withdrawal writers save it, and a retry must match its original
+  purpose. The shift block, closed record and printed handover show the tips
+  inside cash sales (`tips`) and, when positive, tips paid out (`tips_out`) below
+  that line. Payouts are already part of withdrawals: expected cash remains
+  opening + net cash sales − all withdrawals, regardless of purpose.
+  **Schema handoff:** `supabase/PROPOSAL-tips-out.sql` proposes the column and
+  RPC changes; Claude must incorporate them into `schema.sql` and `drop.sql`
+  and apply them before deploying the route's `p_purpose` argument.
+  Every shift freezes its currency at opening, and each
   movement keeps that shift's currency. Receipts and completed cash returns
   are summed only in that currency; labels and printed handovers use it too.
   Old shifts whose opening currency cannot be proven use the restaurant's

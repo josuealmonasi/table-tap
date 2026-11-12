@@ -61,6 +61,8 @@ export interface ShiftSum {
   unclassifiedCashByCurrency?: Record<string, number>;
   /** The staff's tips inside cashSales: shown apart, never taken out of the count. */
   tips?: number;
+  /** Tips paid to staff: already included in withdrawn, never subtracted twice. */
+  tips_out?: number;
   withdrawn: number;
   expected: number;
 }

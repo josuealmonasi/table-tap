@@ -1,5 +1,6 @@
 import { MARK } from "../api-fixtures.mjs";
 import { setAsideHeldCash } from "../api-retry-fixture.mjs";
+import { tipsOutCases } from "./cash-tips-out.mjs";
 
 export function cashCases(fx) {
   const { restaurant } = fx;
@@ -99,5 +100,6 @@ export function cashCases(fx) {
       expect: [409], expectError: /ya tiene explicación|already explained/i },
     { name: "POST /api/cash-shift (a waiter cannot explain one)", as: "waiter", method: "POST",
       path: "/api/cash-shift", body: (_f, saved) => ({ action: "explain", id: saved.cashShift, note: "x" }), expect: [403] },
+    ...tipsOutCases(fx),
   ];
 }
