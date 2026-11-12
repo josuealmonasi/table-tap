@@ -30,20 +30,41 @@ export interface OfflineCharge {
   taxPct?: number;
 }
 
+/** Money as a new receipt carries it: a number of centavos-precise pesos, never text. */
+function strictMoney(raw: unknown): number | null {
+  // Receipts contain numeric cents, not the locale-formatted text of an input.
+  // Reject real sub-cent amounts before rounding; tolerate only float noise.
+  return typeof raw === "number" && Number.isFinite(raw) && Math.abs(raw * 100 - Math.round(raw * 100)) <= 1e-6
+    ? cashAmount(round2(raw), false) : null;
+}
+
+/**
+ * Money as an already-stored held receipt may carry it. Receipts queued before
+ * the numeric shape stored amounts as text ("120.50"); a manager approving one
+ * may accept those when they are plain non-negative decimals with at most 2
+ * places. Never used for new intake.
+ */
+function legacyMoney(raw: unknown): number | null {
+  return strictMoney(typeof raw === "string" && /^\d+(\.\d{1,2})?$/.test(raw.trim()) ? Number(raw.trim()) : raw);
+}
+
+/**
+ * A held receipt a manager is approving: no age limit, and legacy text
+ * amounts accepted. New receipts go through `offlineCharge`, which refuses text.
+ */
+export function heldApprovalCharge(raw: unknown, now = Date.now()): OfflineCharge | null {
+  return parseCharge(raw, now, true, legacyMoney);
+}
+
 export function offlineCharge(raw: unknown, now = Date.now(), recovery = false): OfflineCharge | null {
+  return parseCharge(raw, now, recovery, strictMoney);
+}
+
+function parseCharge(raw: unknown, now: number, recovery: boolean, money: (v: unknown) => number | null): OfflineCharge | null {
   if (!raw || typeof raw !== "object") return null;
   const r = raw as Record<string, unknown>;
   const at = typeof r.at === "string" ? Date.parse(r.at) : NaN;
   if (!Number.isFinite(at) || at > now + CLOCK_SKEW_MS || (!recovery && now - at > OFFLINE_MAX_AGE_DAYS * 86_400_000) || at < Date.UTC(2000, 0, 1)) return null;
-  // Receipts contain numeric cents, not the locale-formatted text of an input.
-  // Reject real sub-cent amounts before rounding; tolerate only float noise.
-  // Held receipts queued before this shape stored amounts as text ("120.50");
-  // accept those when they are plain non-negative decimals with at most 2 places.
-  const money = (raw: unknown) => {
-    const v = typeof raw === "string" && /^\d+(\.\d{1,2})?$/.test(raw.trim()) ? Number(raw.trim()) : raw;
-    return typeof v === "number" && Number.isFinite(v) && Math.abs(v * 100 - Math.round(v * 100)) <= 1e-6
-      ? cashAmount(round2(v), false) : null;
-  };
   const subtotal = money(r.subtotal);
   const serviceFee = money(r.serviceFee);
   const tip = money(r.tip);

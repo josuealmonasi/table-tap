@@ -12,7 +12,7 @@ import { capName, capNote } from "@/lib/notes";
 import { stockDemand, toDemandPayload } from "@/lib/stock";
 import { orderCode } from "@/lib/types";
 import { existingTicket, terminalRef, type PosSaleBody } from "@/lib/pos-sale";
-import { offlineCharge, offlineDrift, offlineLines } from "@/lib/offline-sale";
+import { heldApprovalCharge, offlineCharge, offlineDrift, offlineLines } from "@/lib/offline-sale";
 import { readOfflineContext, contextCoveredSale } from "@/lib/offline-authority";
 import { currentOfflinePrice, sameOfflinePrice, offlineRevenueLines } from "@/lib/offline-pricing";
 
@@ -36,7 +36,11 @@ export interface OfflineApproval { reason: string; collector?: string; at?: stri
 export async function ringOffline(actor: Actor, body: PosSaleBody & { offline?: unknown }, approval?: OfflineApproval): Promise<NextResponse> {
   if (approval && !MANAGES(actor.role)) return await apiError("apiErr.forbidden", 403);
   const originalAt = (body.offline as { at?: unknown } | null)?.at;
-  const charge = offlineCharge(approval?.at ? { ...(body.offline as object), at: approval.at } : body.offline, Date.now(), Boolean(approval));
+  // A manager approving a stored receipt may accept its legacy text amounts;
+  // a receipt arriving from the till must carry numbers.
+  const charge = approval
+    ? heldApprovalCharge(approval.at ? { ...(body.offline as object), at: approval.at } : body.offline)
+    : offlineCharge(body.offline);
   if (!charge) return await apiError("apiErr.offlineSale", 400, undefined, { held: true });
   if (body.method !== "cash" && body.method !== "card") return await apiError("apiErr.offlineMethod", 400);
   const posRef = typeof body.posRef === "string" && UUID.test(body.posRef) ? body.posRef : null;
