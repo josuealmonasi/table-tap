@@ -19,7 +19,7 @@ vi.mock("react", async original => ({ ...await original<typeof React>(),
   },
 }));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: state.refresh }), useSearchParams: () => new URLSearchParams() }));
-vi.mock("@/lib/i18n/context", () => ({ useT: () => (key: string) => key }));
+vi.mock("@/lib/i18n/context", () => ({ useT: () => (key: string) => key, useLocale: () => ({ locale: "en", setLocale: () => {} }) }));
 vi.mock("@/components/ui/Toast", () => ({ useToast: () => vi.fn() }));
 vi.mock("@/hooks/useLiveOrders", () => ({ useLiveOrders: vi.fn() }));
 vi.mock("@/hooks/usePendingPhones", () => ({ usePendingPhones: () => ({ pending: [] }) }));

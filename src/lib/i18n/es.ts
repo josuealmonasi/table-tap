@@ -1849,9 +1849,20 @@ foundingLeftBody: "Quien contrata ahora conserva este precio de suscripción mie
     hint: "En Pedidos, cada comanda muestra cuánto lleva esperando. Pasado el primer tiempo se pone ámbar; pasado el segundo, roja.",
     warn: "Ámbar a los (minutos)",
     late: "Roja a los (minutos)",
-    waiting: "hace {n} min",
-    justNow: "recién",
     placedAt: "Pedido a las {time}",
+  },
+  // Every elapsed time on a screen, built by src/lib/elapsed.ts — never a raw
+  // count of minutes past the hour ("hace 1741 min" was a day and five hours).
+  elapsed: {
+    justNow: "ahora",
+    ago: "hace {time}",
+    on: "el {date}",
+    underMinute: "menos de 1 min",
+    minutes: "{m} min",
+    hours: "{h} h",
+    hoursMinutes: "{h} h {m} min",
+    days: "{d} d",
+    daysHours: "{d} d {h} h",
   },
   ticketFont: {
     title: "Letra del ticket",
@@ -2242,10 +2253,6 @@ badgesHint: "Muestra cuántas cosas esperan acción en cada sección. Aplica a t
     cancelledLabel: "Cancelado",
     refunded: " · reembolsado",
     done: "Listo",
-    justNow: "justo ahora",
-    minsAgo: "hace {m} min",
-    hoursAgo: "hace {h} h",
-    daysAgo: "hace {d} d",
     wantsWaiter: "quiere un mesero",
     wantsBill: "quiere la cuenta",
     readyToCarry: "{n} listo(s) para entregar",

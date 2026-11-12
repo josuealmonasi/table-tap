@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useT } from "@/lib/i18n/context";
+import { useLocale, useT } from "@/lib/i18n/context";
+import { formatAgo } from "@/lib/elapsed";
 import { minutesWaiting, waitLevel } from "@/lib/ticket-wait";
 
 interface TicketWaitProps {
@@ -13,8 +14,9 @@ interface TicketWaitProps {
 }
 
 /**
- * The minutes a ticket has waited, amber past the restaurant's first threshold and
- * red past the second, so the cook does not have to subtract clock times.
+ * How long a ticket has waited ("hace 12 min", "hace 1 d 5 h"), amber past the
+ * restaurant's first threshold and red past the second, so the cook does not
+ * have to subtract clock times.
  *
  * Measured after mount and again every 30 seconds, like the Bills list: a
  * relative time rendered on the server is a different sentence by the time it
@@ -23,6 +25,7 @@ interface TicketWaitProps {
  */
 export default function TicketWait({ createdAt, placedAt, warnMinutes, lateMinutes }: TicketWaitProps) {
   const t = useT();
+  const { locale } = useLocale();
   const [now, setNow] = useState<number | null>(null);
   useEffect(() => {
     setNow(Date.now());
@@ -31,6 +34,8 @@ export default function TicketWait({ createdAt, placedAt, warnMinutes, lateMinut
   }, []);
 
   if (now === null) return <span className="tt-muted" style={{ fontSize: 12 }}>{placedAt}</span>;
+  // The colour still counts minutes against the thresholds; only the words
+  // change unit.
   const minutes = minutesWaiting(createdAt, now);
   const level = waitLevel(minutes, warnMinutes, lateMinutes);
   return (
@@ -38,7 +43,7 @@ export default function TicketWait({ createdAt, placedAt, warnMinutes, lateMinut
       className={`tt-ticket-wait tt-ticket-wait-${level}`}
       title={t("ticketTimes.placedAt", { time: placedAt })}
     >
-      {minutes < 1 ? t("ticketTimes.justNow") : t("ticketTimes.waiting", { n: minutes })}
+      {formatAgo(createdAt, now, locale)}
     </span>
   );
 }
