@@ -10773,7 +10773,7 @@ create or replace function public.record_terminal_deposit_v1(
   p_restaurant uuid, p_day date, p_currency text, p_received numeric, p_note text, p_actor text)
 returns jsonb language plpgsql security definer set search_path = public as $$
 declare
-  v_zone text; v_fee numeric; v_expected numeric; v_payments uuid[]; v_returns text[]; v_has_sales boolean;
+  v_zone text; v_fee numeric; v_expected numeric; v_payments uuid[]; v_returns text[]; v_has_sales boolean; v_has_returns boolean;
 begin
   perform public.lock_restaurant_money(p_restaurant);
   select coalesce(timezone, 'America/Mexico_City'), terminal_fee_pct into v_zone, v_fee
@@ -10807,7 +10807,13 @@ begin
       (select d.sales_day from marks d where r.id = any(d.return_ids)
         or (d.return_ids is null and r.at_time <= d.created_at
           and d.sales_day = (select min(s.day) from sales s where s.day >= r.day)) order by (d.return_ids is not null) desc limit 1) consumed,
-      (select min(s.day) from sales s where s.day >= r.day and not exists(select 1 from marks d where d.sales_day = s.day)) target,
+      coalesce((select min(s.day) from sales s where s.day >= r.day
+        and not exists(select 1 from marks d where d.sales_day = s.day)),
+        -- With no unsigned sales day, the return owns its day. If that day
+        -- is already signed, use the next unsigned calendar day.
+        (select min(r.day + candidate.offset_days)
+          from generate_series(0, (select count(*)::int from marks)) as candidate(offset_days)
+          where not exists(select 1 from marks d where d.sales_day = r.day + candidate.offset_days))) target,
       case when r.sale_day = r.day then r.amount - round(r.amount * coalesce(
         (select d.fee_pct from marks d where d.sales_day = r.sale_day), v_fee) / 100, 2) else r.amount end debit
     from returns r
@@ -10817,9 +10823,11 @@ begin
     coalesce((select array_agg(payment_id order by payment_id) from receipts where sale_day = p_day), '{}'::uuid[]),
     coalesce((select array_agg(id order by id) from assigned where consumed is null
       and ((same_day and sale_day = p_day) or (not same_day and target = p_day))), '{}'::text[]),
-    exists(select 1 from receipts where sale_day = p_day and net > 0)
-  into v_expected, v_payments, v_returns, v_has_sales;
-  if not v_has_sales then return jsonb_build_object('error', 'no_sales'); end if;
+    exists(select 1 from receipts where sale_day = p_day and net > 0),
+    exists(select 1 from assigned where not same_day and consumed is null and target = p_day)
+  into v_expected, v_payments, v_returns, v_has_sales, v_has_returns;
+  -- A day with no sales may still owe the bank its returns (sweep 11, finding 6).
+  if not v_has_sales and not v_has_returns then return jsonb_build_object('error', 'no_sales'); end if;
   -- Calculate and insert before releasing the settlement lock. A later receipt
   -- is outside payment_ids even if its recorded_at was set before it waited.
   insert into terminal_deposits(restaurant_id, sales_day, currency, expected, received, note, recorded_by,

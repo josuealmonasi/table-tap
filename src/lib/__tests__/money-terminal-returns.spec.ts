@@ -47,7 +47,7 @@ it("keeps an unconsumed same-day return visible after the last deposit with its 
   rows.restaurants[0] = { ...rows.restaurants[0], terminal_fee_pct: 5 };
   const h = { ...database(rows), info: vi.fn() }; await checkDrawer(h.db, h.all, h);
   expect(h.bad).not.toHaveBeenCalled();
-  expect(h.info).toHaveBeenCalledWith(expect.stringMatching(/return:return.*later deposit \(38.60 MXN\)/));
+  expect(h.info).toHaveBeenCalledWith(expect.stringMatching(/return:return.*reconciliation \(38.60 MXN\)/));
   expect(h.ok).toHaveBeenCalledWith(expect.stringMatching(/pending terminal returns.*1 checked/));
 });
 it("names a receipt included after its deposit cutoff", async () => {
