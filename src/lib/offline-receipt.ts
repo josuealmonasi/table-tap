@@ -13,6 +13,7 @@ import type { OrderLineItem } from "@/lib/types";
 export function offlineReceipt(
   sale: {
     posRef: string;
+    loyaltyCode?: string;
     at: string;
     lines: OrderLineItem[];
     charge: { subtotal: number; serviceFee: number; tip: number; discount: number; total: number };
@@ -24,6 +25,7 @@ export function offlineReceipt(
 ): string {
   return buildReceipt(
     [{
+      loyaltyPending: sale.loyaltyCode ? { suffix: sale.loyaltyCode.slice(-4) } : null,
       id: sale.posRef, items: sale.lines, subtotal: sale.charge.subtotal, service_fee: sale.charge.serviceFee,
       tip: sale.charge.tip, discount: sale.charge.discount, total: sale.charge.total, currency: sale.currency,
       created_at: sale.at, pay_method: sale.method,

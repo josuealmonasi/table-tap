@@ -1,10 +1,11 @@
+import { loyaltyReceiptLines, type ReceiptLoyalty } from "@/lib/loyalty/receipt";
 import type { ReturnComponents } from "@/lib/return-components";
 import { receiptReturnRows, type ReceiptReturn } from "@/lib/receipt-returns";
 import { receiptCents } from "@/lib/receipt-amount";
 import { formatMoney } from "@/lib/format";
 import { lineUnitPrice, orderCode, type OrderLineItem } from "@/lib/types";
 
-export interface ReceiptOrder {
+export interface ReceiptOrder extends ReceiptLoyalty {
   id: string;
   items: OrderLineItem[] | null;
   subtotal: number | string;
@@ -35,7 +36,7 @@ export interface ReceiptForgiveness {
 /** Keep the adjustments this copy included, so a later loss cannot rewrite it. */
 export interface ReceiptVersion { adjustmentIds: string[]; returnCopy?: string; slotCopy?: string }
 
-export interface SlotReceiptPayment {
+export interface SlotReceiptPayment extends ReceiptLoyalty {
   return_components?: ReturnComponents;
   returns?: ReceiptReturn[];
   id: string;
@@ -68,7 +69,23 @@ const esc = (s: string) =>
  * Nothing in it identifies the diner: they gave us an address to send it to,
  * not permission to write to them.
  */
-export function buildReceipt(
+/** One sold line, as every form of the receipt prints it. */
+export interface ReceiptLine { label: string; qty: number | null; name: string; unit: number | null; amount: number }
+
+/** What a receipt says, before it is written as text, HTML or a ticket. */
+export interface ReceiptModel {
+  code: string;
+  when: string;
+  tableLabel: string | null;
+  cur: string;
+  lines: ReceiptLine[];
+  rows: [string, string][];
+  totalLabel: string;
+  paid: number;
+  payMethod: string | null;
+}
+
+export function receiptModel(
   orders: ReceiptOrder[],
   place: {
     name: string;
@@ -79,7 +96,7 @@ export function buildReceipt(
   },
   t: (key: string, vars?: Record<string, string | number>) => string,
   payment?: SlotReceiptPayment,
-): Receipt {
+): ReceiptModel {
   // Settling a table pays for several orders at once, so a receipt covers
   // whatever was paid for — one ticket or the whole table. The code names the
   // first of them, which is the one the tip and the discount were recorded on.
@@ -111,10 +128,14 @@ export function buildReceipt(
 
   // Parts already include old gratuities. Show their principal once and the
   // receipt's full tip once; adding that tip to the frozen parts counts it twice.
-  const lines = payment ? [{ label: t("receipt.parts", { parts: payment.slots.map(n => n + 1).join(", ") }),
+  const lines: ReceiptLine[] = payment ? [{ label: t("receipt.parts", { parts: payment.slots.map(n => n + 1).join(", ") }),
+    qty: null, name: t("receipt.parts", { parts: payment.slots.map(n => n + 1).join(", ") }), unit: null,
     amount: num(payment.amount) - tip }] : orders.flatMap(o =>
     (o.items ?? []).map(item => ({
       label: `${item.qty}× ${item.name}`,
+      qty: item.qty as number | null,
+      name: item.name as string,
+      unit: lineUnitPrice(item) as number | null,
       amount: lineUnitPrice(item) * item.qty,
     })),
   );
@@ -150,6 +171,24 @@ export function buildReceipt(
     timeZone: place.timeZone,
   });
 
+  return { code, when, tableLabel: order.table_label ?? null, cur, lines, rows, totalLabel, paid, payMethod: payment ? null : orders[0]?.pay_method ?? null };
+}
+
+export function buildReceipt(
+  orders: ReceiptOrder[],
+  place: {
+    name: string;
+    /** IANA zone the restaurant keeps its clock in. */
+    timeZone: string;
+    /** The language the diner was reading the app in when they asked. */
+    locale: string;
+  },
+  t: (key: string, vars?: Record<string, string | number>) => string,
+  payment?: SlotReceiptPayment,
+): Receipt {
+  const { code, when, cur, lines, rows, totalLabel, paid } = receiptModel(orders, place, t, payment);
+  const order = { table_label: payment ? payment.table_label ?? null : orders[0]?.table_label ?? null };
+  const loyaltyLines = loyaltyReceiptLines(payment ? [payment, ...orders] : orders, t);
   const text = [
     place.name,
     t("receipt.heading", { code }),
@@ -161,6 +200,7 @@ export function buildReceipt(
     ...rows.map(([label, amount]) => `${label}  ${amount}`),
     `${totalLabel}  ${formatMoney(paid, cur)}`,
     "",
+    ...loyaltyLines,
     t("receipt.footer"),
     t("receipt.notFiscal"),
   ]
@@ -192,6 +232,7 @@ export function buildReceipt(
       <td style="padding:10px 0 0;text-align:right;font-weight:700;border-top:2px solid #16211C">${esc(formatMoney(paid, cur))}</td>
     </tr>
   </table>
+  ${loyaltyLines.map(line => `<p style="overflow-wrap:anywhere;font-size:13px">${esc(line)}</p>`).join("")}
   <p style="margin-top:24px;color:#6E7A74;font-size:12px">${esc(t("receipt.footer"))}</p>
   <p style="margin-top:8px;color:#6E7A74;font-size:12px">${esc(t("receipt.notFiscal"))}</p>
 </div>`.trim();
