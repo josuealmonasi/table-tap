@@ -6561,6 +6561,139 @@ understatement of unrelated revenue, bill-wide stacking, extras, combo display
 savings, free food costs, exact cents, legacy fallback and offline replay.
 Reports never fetch current promotions for old sales.
 
+## The card-fee ceiling had no currency (sweep 11, finding 2, 2026-11-11)
+
+`platform_fees` counts cents per month with no currency. A Carta restaurant at
+MX$698 of fees that switched to USD had US$1 left of its US$699 ceiling, and an
+old peso fee returned freed dollar room. The owner chose one ceiling, one
+currency: while this UTC month has card fees (not released, not fully
+returned), the currency changes from the 1st of next month.
+`guard_fee_month_currency` refuses the change in the database, the settings
+route answers it by name (409 `currencyLockedMonth`), and Settings disables the
+currency with the date it frees up. `fee-month-currency.spec.tsx` covers all
+three, each sabotage-tested.
+
+## Sweep 11 — absent fees and terminal return rates
+
+An application fee can appear after its charge was refunded. The reconciler
+now checks the saved fee ledger and checkout before verifying zero; a positive
+fee or missing evidence keeps recovery pending. `fee-not-created.react-component.spec.tsx`
+covers delayed creation, zero-fee checkouts and failed reads. The platform's
+`application_fee.created` event also enqueues recovery before acknowledgement
+(`created-fee.react-component.spec.tsx`). Subscribe that endpoint to the event.
+
+Costs now reads terminal receipts, returns and signed rates together: MX$100
+less a same-day MX$40 return at 3.5% costs MX$2.10 and leaves MX$57.90. A later-day
+return retains the fee. `costs-terminal-returns.react-component.spec.tsx` checks
+both, historical and zero rates, local dates, rounding, voids and failed reads.
+`terminal-snapshot.spec.ts` signs the later deposit at 5% and keeps the original
+MX$96.50 carried return beside MX$200 takings, MX$10 fees and MX$93.50 expected.
+Each original bug was planted back and made its scenario fail. Provider delivery
+and database execution still require Claude's live checks.
+
+## Sweep 11 finding 6 — a return-only bank debit can be reconciled
+
+A signed MXN sale from yesterday gets a MX$40 return today, with no terminal
+sales today. The bank debits MX$40, but the writer returned `no_sales`, the
+screen hid the mark control, and the checker had no return-only target. A
+currency switch could leave that MXN debit waiting forever.
+
+The first unsigned day with net sales still owns the return. If none exists,
+the return owns its own day; an already signed day advances to the next
+unsigned calendar day, matching the existing screen fallback. A later sales
+day appearing before marking wins. A signed return-only manifest consumes
+its return IDs so later sales never carry them again. A fully reversed,
+unsigned same-day sale alone still owns no carried debit and returns
+`no_sales`. The bank amount may be negative within the existing bounds.
+
+The schema change is `record_terminal_deposit_v1` in `supabase/schema.sql`.
+The writer preserves the settlement money lock, tenant/currency scope, saved
+rate, receipt/return membership and legacy-manifest interpretation. The screen
+now offers the existing bank-movement form and explains the return-only debit
+in both languages; its own settlement date can become due or overdue. The
+checker independently reconstructs ownership at each snapshot, detects omitted
+returns even when expected is forged to zero, and rejects a return named by
+the wrong day.
+
+Offline coverage:
+
+- `terminal-returnonly-schema.react-component.spec.tsx`: SQL source contracts
+  for signed amounts, no-sales eligibility, negative expected, own-day fallback,
+  sales-day precedence and consumed manifest IDs. This does not execute SQL.
+- `terminal-returnonly.react-component.spec.tsx`: actual `depositDays` through
+  the rendered screen and bank form, submitting `-40.00`, Spanish/English copy,
+  next-day sales before marking, marked ownership and overdue status.
+- `money-terminal-returnonly.react-component.spec.tsx`: raw allocation/receipt
+  fixtures through `checkDrawer`, including current currency USD with a signed
+  MXN debit, correct and incorrect manifests, next-day sales before marking,
+  later sales after marking and duplicate consumption.
+
+Each plant was applied individually, its focused spec executed, then the fixed
+source restored. Every run below exited 1 with assertion failures (not startup
+errors). SQL rows are source-contract failures; screen/checker rows execute
+behavior against local fixtures.
+
+| Plant | Result |
+| --- | --- |
+| SQL restores sales-only `no_sales` guard | 1 of 4 failed |
+| SQL drops own-day fallback | 2 of 4 failed |
+| SQL stops seeking later sales before fallback | 1 of 4 failed |
+| SQL ignores consumed return IDs | 1 of 4 failed |
+| SQL adds instead of subtracting the debit | 1 of 4 failed |
+| SQL saves an empty return manifest | 1 of 4 failed |
+| Screen hides mark when sales count is zero | 2 of 5 failed |
+| Screen loses return-only debit copy | 2 of 5 failed |
+| Screen keeps a negative unmarked day pending forever | 3 of 5 failed |
+| Screen keeps own-day ownership when a later sale exists | 1 of 5 failed |
+| Screen ignores signed return IDs | 1 of 5 failed |
+| Checker drops own-day fallback | 3 of 6 failed |
+| Checker prefers own day over an available sales day | 1 of 6 failed |
+| Checker ignores prior signed return IDs | 1 of 6 failed |
+| Checker accepts a return assigned to a different day | 1 of 6 failed |
+| Checker accepts a day owning neither net sales nor returns | 1 of 6 failed |
+
+Fixed-source verification: 14 focused Vitest files, 101 checks passed (exit 0)
+using `node node_modules/vitest/vitest.mjs run --configLoader runner --cache=false`
+with the three new specs plus terminal, terminal-snapshot, terminal-window,
+terminal-deposit-api, terminal-deposit-currency, terminal-bank-schema,
+terminal-snapshot-schema, money-terminal-returns, money-drawer,
+money-drawer-history and costs-terminal-returns. TypeScript passed with
+`node node_modules/typescript/bin/tsc --noEmit --incremental false` (exit 0).
+ESLint passed on every touched code file with the repository config and
+`--max-warnings=0` (exit 0). The shared dependency symlink required resolving
+peer plugins from the installed Next config through a temporary local loader;
+no dependency or repository configuration was changed.
+
+No database, network, package-manager commands, commits or live gates were used.
+PostgreSQL execution and browser layout verification remain integration work.
+
+## Disputes PR 1 — provider money and restaurant books
+
+A dispute notification is discovery, not a debit. The Connect inbox commits
+before acknowledgment; all five notification types refresh current provider
+state on the original account. Duplicate/reordered delivery cannot invent a
+second withdrawal or a credit for winning. Failed provider reads remain in the
+existing bounded recovery runner. `disputes/__tests__` covers ingestion,
+provenance, shared-charge history, currencies, provider dates and structural
+money checks; the dispute rendering specs use both real language dictionaries.
+The SQL contract specs read `supabase/schema.sql` (folded by Claude, who added
+the deletion check and archive to the live `admin_delete_restaurant` rather than
+replacing it); they do not execute PostgreSQL. Still to prove on dev: the
+locks/leases, the deletion archive, RLS and retry races, and Stripe's separate
+fee-adjustment shapes. Sales,
+original contribution and the corte stay separate from actual chargeback net.
+Historical backfill/provider completeness is PR 3, not claimed by this gate.
+
+A dispute that matches no TableTap sale (case `review`) used to put its event
+back to `pending`: recovery re-read it from Stripe on every run, deletion
+answered `dispute` forever, and its chargeback (attributed through the account
+fallback) lowered the tenant's contribution. Now its event ends `done`, review
+cases never block `admin_delete_restaurant`, and `tenantBooks` drops them and
+their movements before any Costs/Analytics total or pending note.
+`report.spec.ts` and `read.spec.ts` cover the totals; `schema.spec.ts` only
+reads the SQL text, so the event state and the deletion guard are proved only
+by the api/money gates on a database.
+
 ## The ticket PDF says what the receipt says (2026-11-11)
 
 The 80 mm ticket and the HTML/email receipt are two forms of one sale. Both

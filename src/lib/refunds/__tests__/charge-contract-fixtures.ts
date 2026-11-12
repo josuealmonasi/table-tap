@@ -22,6 +22,7 @@ export function chargeFixture(currency: string) {
   const evidence: { id: string; amount: number; currency: string; metadata: Record<string, string> }[] = [];
   const providerKeys = new Map<string, typeof evidence[number]>();
   const calls: string[] = [];
+  const feeEvidence = { ledger: [] as object[], checkouts: [{ metadata: {}, stripe_params: {} }] as object[] };
   const rpc = vi.fn(async (name: string, a: Record<string, unknown>) => {
     calls.push(name);
     if (name === "refund_fee_epoch") return { data: revision, error: null };
@@ -77,7 +78,8 @@ export function chargeFixture(currency: string) {
       then: (resolve: (value: unknown) => void) => resolve({ data: null, error: null }),
       maybeSingle: async () => table === "refunds_due" ? read() : ({ data: ["restaurants", "diner_checkouts"].includes(table) ? { id: "r", stripe_account_id: "acct" }
         : table === "fee_returns" ? requests.at(-1) ?? null : generation === null ? null : { generation }, error: null }),
-      range: async (start: number) => ({ data: start > 0 ? [] : table === "fee_reconcile_queue" && generation !== null
+      range: async (start: number) => ({ data: start > 0 ? [] : table === "platform_fees" ? feeEvidence.ledger
+        : table === "diner_checkouts" ? feeEvidence.checkouts : table === "fee_reconcile_queue" && generation !== null
         ? [{ stripe_payment_intent: "pi", generation }] : [], error: null }) };
     return q;
   });
@@ -94,6 +96,6 @@ export function chargeFixture(currency: string) {
     applicationFees: { retrieve: vi.fn(async () => ({ id: "fee", amount: 300, amount_refunded: returned, currency })),
       listRefunds: feePages, createRefund } } as unknown as Stripe;
   return { db: { rpc, from } as unknown as ReturnType<typeof createAdminClient>, client, rpc, calls, requests, refunds, evidence,
-    createRefund, feePages, seed, row, read, get generation() { return generation; }, get returned() { return returned; },
+    createRefund, feePages, seed, row, read, from, feeEvidence, get generation() { return generation; }, get returned() { return returned; },
     set returned(value: number) { returned = value; }, age(hours: number) { now += hours * 3600000; } };
 }

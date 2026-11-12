@@ -1,3 +1,4 @@
+import { disputeCases } from "./api-cases/disputes.mjs";
 import { loyaltyAttachCases } from "./api-cases/loyalty-attach.mjs";
 import { completedReturnCases } from "./api-cases/returns.mjs";
 import { splitSlotCases } from "./api-cases/split-slots.mjs";
@@ -39,6 +40,7 @@ import { recoveryCases } from "./api-cases/recovery.mjs";
 export function cases(fx) {
   return [
     ...recoveryCases(fx),
+    ...disputeCases(fx),
     ...adminOpeningCases(fx),
     ...menuCopyCases(fx),
     ...membershipCases(fx),

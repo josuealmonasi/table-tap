@@ -1,6 +1,5 @@
-import { after } from "next/server";
+import { after, NextResponse } from "next/server";
 import { drainTicketEmailQueue } from "@/lib/ticket-email";
-import { NextResponse } from "next/server";
 import { cronAuthorized } from "@/lib/cron-auth";
 import { recoveryContext } from "@/lib/recovery/context";
 import { isolateJob, type RecoveryJob, type RecoveryResult } from "@/lib/recovery/job";
@@ -8,6 +7,7 @@ import { recoverStock } from "@/lib/recovery/stock";
 import { recoverFees } from "@/lib/recovery/fees";
 import { recoverRefunds } from "@/lib/recovery/refunds";
 import { recoverSubscriptions } from "@/lib/recovery/subscriptions";
+import { recoverDisputes } from "@/lib/recovery/disputes";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -18,7 +18,7 @@ export async function GET(request: Request) {
   // Ticket emails left waiting since the last payment request drained them:
   // claimed until the queue is empty, not one claim of 50 (Codex review of #622).
   after(() => drainTicketEmailQueue());
-  const jobs: Record<string, RecoveryJob> = { stock: recoverStock, refunds: recoverRefunds, fees: recoverFees, subscriptions: recoverSubscriptions };
+  const jobs: Record<string, RecoveryJob> = { stock: recoverStock, refunds: recoverRefunds, fees: recoverFees, subscriptions: recoverSubscriptions, disputes: recoverDisputes };
   const results: Record<string, RecoveryResult> = {};
   for (const [name, job] of Object.entries(jobs)) {
     // Each job gets its own deadline even when the previous provider failed.
