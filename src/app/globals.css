@@ -3927,6 +3927,9 @@ a.tt-btn {
   gap: 8px;
 }
 .tt-board-tab {
+  /* Analytics' periods and Costs' tabs are links: without this they were
+     underlined inside their pills (production, 2026-11-11). */
+  text-decoration: none;
   border: 1px solid var(--tt-cream);
   background: var(--tt-white);
   border-radius: 999px;
@@ -7174,6 +7177,12 @@ a.tt-user-plan:hover {
 /* Inside the open card it is the heading, so it carries no margin of its own. */
 .tt-split .tt-split-ask {
   margin: 0;
+}
+/* The totals card can follow the split card directly (no tip or coupon row
+   between them when the restaurant takes no cards): the two borders met with
+   0px between them at 360px (dialogs sweep, 2026-11-11). */
+.tt-split + .tt-card {
+  margin-top: 12px;
 }
 .tt-split-ask input {
   width: 17px;
