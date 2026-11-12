@@ -2913,15 +2913,21 @@ The journal is **started on activation**, and written by these transactions:
 All legacy signatures remain and delegate to their v2 writer. Private append
 helpers have no public, anon, authenticated or service_role execute grant. Every
 writer takes the restaurant money lock, then the account, then orders in id
-order. Lazy allocation repair prelocks account parents and orders in id order
-before touching historical receipts; credit/cancel/POS enter that repair before
+order. Lazy allocation repair, only when an account receipt still awaits
+repair or manager evidence, prelocks the accounts that own orders and then only
+account orders, both in id order, before touching historical receipts; credit/cancel/POS enter that repair before
 locking their own order. Replays return before writes; unique source indexes
 reject duplicate appends rather than suppressing them. Appends are conditional
 on `customer_accounts.journal_started_at` being nonnull.
 
-`supabase/journal-activate.sql` is a transaction fragment: install the writers,
-include it, then commit the same production delta. For each restaurant in id
-order it takes `lock_restaurant_money` and calls `account_journal_backfill_v1`.
+The production delta is one transaction in three parts. It starts with
+`supabase/journal-lock.sql`, which takes every restaurant's `lock_restaurant_money`
+in id order before any schema change, so no money writer can hold a lock the
+delta waits for while waiting on the delta's table locks. Then it installs the
+schema and writers, then includes `supabase/journal-activate.sql`, then commits.
+That fragment takes the same locks again (a no-op inside the delta, and the same
+order when dev mock runs it alone), sets the column default, and then, for each
+restaurant in id order, calls `account_journal_backfill_v1`.
 The cutoff uses `clock_timestamp()` after the lock: SQL `now()` is the earlier
 transaction start and can predate a lock wait. Account charges, payments and
 adjustments likewise stamp the actual write time after acquiring the lock.

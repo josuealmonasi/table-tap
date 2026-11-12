@@ -40,8 +40,30 @@ it("locks restaurant before accounts, and accounts before ordered orders includi
     expect(sql).toMatch(/from orders[^;]*for update/);
   }
   const repair = fn("backfill_payment_allocations");
-  expect(repair.indexOf("customer_accounts where restaurant_id = v_restaurant order by id for update"))
-    .toBeLessThan(repair.indexOf("orders where restaurant_id = v_restaurant order by id for update"));
+  const trigger = repair.indexOf("payments where restaurant_id = v_restaurant and account_id is not null");
+  const accounts = repair.indexOf("customer_accounts c where c.restaurant_id = v_restaurant");
+  const orders = repair.indexOf("orders where restaurant_id = v_restaurant and account_id is not null order by id for update");
+  expect(trigger).toBeGreaterThan(repair.indexOf("lock_restaurant_money(v_restaurant)"));
+  expect(accounts).toBeGreaterThan(trigger);
+  expect(orders).toBeGreaterThan(accounts);
+  expect(repair.slice(accounts, orders)).toContain("ao.account_id = c.id");
+  expect(repair.slice(accounts, orders)).toContain("order by c.id for update");
+});
+it("prelocks for allocation repair only for account receipts, and never every order of the restaurant", () => {
+  const repair = fn("backfill_payment_allocations");
+  expect(repair).not.toMatch(/from orders where restaurant_id = v_restaurant order by id for update/);
+  expect(repair).not.toMatch(/from customer_accounts where restaurant_id = v_restaurant order by id for update/);
+  const prelock = repair.slice(repair.indexOf("if exists (select 1 from payments"), repair.indexOf("end if;"));
+  expect(prelock).toContain("account_id is not null");
+  expect(prelock).toContain("Overlap receipt needs manager evidence");
+  expect(schema).toContain("create or replace function public.backfill_payment_allocations(p_restaurant uuid default null)");
+});
+it("the delta's first fragment takes every money lock in restaurant id order, before any schema change", () => {
+  const sql = readFileSync("supabase/journal-lock.sql", "utf8");
+  const body = sql.replace(/^--.*$/gm, "").trim();
+  expect(body).toBe("do $$ declare r record; begin\n  for r in select id from restaurants order by id loop\n"
+    + "    perform public.lock_restaurant_money(r.id);\n  end loop;\nend $$;");
+  expect(sql).not.toMatch(/^(commit|begin);/im);
 });
 it("checks sources in both directions and debt at commit without repairing missing appends", () => {
   expect(schema).toContain("create constraint trigger check_account_journal");
@@ -56,6 +78,12 @@ it("checks sources in both directions and debt at commit without repairing missi
 it("activation remains a transaction fragment and dev mock runs it before gates", () => {
   const sql = readFileSync("supabase/journal-activate.sql", "utf8");
   expect(sql.indexOf("lock_restaurant_money(r.id)")).toBeLessThan(sql.indexOf("account_journal_backfill_v1(r.id, clock_timestamp())"));
+  // Every money lock, then the schema change, then activation.
+  const locks = sql.indexOf("lock_restaurant_money(r.id);\n  end loop;");
+  expect(locks).toBeGreaterThan(-1);
+  expect(locks).toBeLessThan(sql.indexOf("alter table restaurants"));
+  expect(sql.indexOf("alter table restaurants")).toBeLessThan(sql.indexOf("account_journal_backfill_v1("));
+  expect(sql.indexOf("select id from restaurants order by id")).toBeLessThan(locks);
   expect(sql).not.toMatch(/^commit;/im);
   expect(sql).toContain("set default now()");
   const runner = readFileSync("scripts/db.mjs", "utf8");

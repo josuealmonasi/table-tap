@@ -5994,13 +5994,18 @@ begin
   -- tenant so the deployment backfill never reverses their lock ordering.
   for v_restaurant in select id from restaurants where p_restaurant is null or id = p_restaurant order by id loop
     perform public.lock_restaurant_money(v_restaurant);
-    -- Allocation repair can lock account orders before the caller reaches
-    -- its own account. Prelock their parents, then orders, in the same order.
-    if exists (select 1 from payments where restaurant_id = v_restaurant
+    -- Allocation repair of an account receipt can lock account orders before
+    -- the caller reaches its own account. Only then, prelock the accounts that
+    -- own orders, then only account orders, both in id order, as every money
+    -- writer does (money lock, account, orders). Non-account receipts never
+    -- reach an account order, so they lock nothing here.
+    if exists (select 1 from payments where restaurant_id = v_restaurant and account_id is not null
       and (allocation_version = 0 or (allocation_quality = 'unresolved' and allocation_origin = 'legacy'
         and allocation_reason = 'Overlap receipt needs manager evidence'))) then
-      perform 1 from customer_accounts where restaurant_id = v_restaurant order by id for update;
-      perform 1 from orders where restaurant_id = v_restaurant order by id for update;
+      perform 1 from customer_accounts c where c.restaurant_id = v_restaurant
+        and exists (select 1 from orders ao where ao.restaurant_id = v_restaurant and ao.account_id = c.id)
+        order by c.id for update;
+      perform 1 from orders where restaurant_id = v_restaurant and account_id is not null order by id for update;
     end if;
     for p in select * from payments where restaurant_id = v_restaurant
       and (allocation_version = 0 or (allocation_quality = 'unresolved' and allocation_origin = 'legacy'
