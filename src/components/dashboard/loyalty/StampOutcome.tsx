@@ -1,5 +1,6 @@
 "use client";
 
+import CardEmail from "@/components/loyalty/CardEmail.react-component";
 import { useT } from "@/lib/i18n/context";
 import { nextStep } from "@/lib/loyalty/next-step";
 import type { Standing } from "@/lib/loyalty/standing";
@@ -48,6 +49,7 @@ export default function StampOutcome({ outcome, busy, error, onRedeem, onAnother
       <p className="tt-stamp-headline">{headline}</p>
       <p className="tt-rewards-count">{t("rewards.visitsOf", { visits: s.visits, goal: s.goal })}</p>
       <LadderSteps standing={s} />
+      <CardEmail key={outcome.code} code={outcome.code} disabled={busy} />
       {s.ready ? (
         <>
           <p className="tt-rewards-ready">{t("loyalty.ready")}</p>

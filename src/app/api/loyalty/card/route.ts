@@ -1,3 +1,4 @@
+import { normalizeEmail, setCardEmail, type SetEmailResult } from "@/lib/loyalty/card-email";
 import { openSittingAt, tableMember } from "@/lib/table-membership";
 import { NextRequest, NextResponse } from "next/server";
 import { apiError } from "@/lib/api-error";
@@ -38,7 +39,7 @@ export async function POST(req: NextRequest) {
     return await apiError("apiErr.tooManyWait", 429);
   }
 
-  const body = await jsonBody<{ restaurantId?: unknown; pass?: unknown }>(req);
+  const body = await jsonBody<{ restaurantId?: unknown; pass?: unknown; email?: unknown; consent?: unknown }>(req);
   const restaurantId = typeof body?.restaurantId === "string" && UUID.test(body.restaurantId) ? body.restaurantId : null;
   if (!restaurantId) return await apiError("apiErr.invalidRequest", 400);
   const pass = readVisitPass(restaurantId, body?.pass);
@@ -95,7 +96,13 @@ export async function POST(req: NextRequest) {
       .from("loyalty_cards").insert({ restaurant_id: restaurantId, code, goal: program.goal, steps });
     if (!error) {
       const face = cardFace(restaurant, { code, progress: 0, ladder: program.steps }, req.nextUrl.origin);
-      return NextResponse.json({ code, face, qr: qrGrid(face.qrPayload) });
+      // An address given with the new card, for its tickets (paperless): only
+      // with the consent tick. One already on another card is not linked here;
+      // the card is still made and the answer says so.
+      let emailLinked: SetEmailResult["outcome"] | undefined;
+      const email = normalizeEmail(body?.email);
+      if (email && body?.consent === true) emailLinked = (await setCardEmail(restaurantId, code, email, "diner").catch(() => null))?.outcome;
+      return NextResponse.json({ code, face, qr: qrGrid(face.qrPayload), ...(emailLinked ? { email: emailLinked } : {}) });
     }
     if (error.code !== "23505") {
       console.error("loyalty card create failed:", error.message);

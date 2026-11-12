@@ -4,7 +4,7 @@ const f = vi.hoisted(() => ({ role: "waiter" as string | null, enabled: true, me
   result: { outcome: "attached", cardId: "card", progress: 5, goal: 8 }, paid: false, closed: false,
   missing: false, failed: false, rpc: vi.fn(), filters: vi.fn(), writes: vi.fn() }));
 vi.mock("@/lib/rate-limit", () => ({ isRoomLimited: async () => false, isTableLimited: async () => false }));
-vi.mock("@/lib/membership", () => ({ getMembership: async () => f.role ? { role: f.role, restaurant: { id: "10000000-0000-4000-8000-000000000001" } } : null }));
+vi.mock("@/lib/membership", () => ({ MANAGES: (r: string) => r === "owner" || r === "manager", getMembership: async () => f.role ? { role: f.role, restaurant: { id: "10000000-0000-4000-8000-000000000001" } } : null }));
 vi.mock("@/lib/current-user", () => ({ currentUser: async () => ({ email: "staff@test" }) }));
 vi.mock("@/lib/plan-server", () => ({ getPlan: async () => ({ limits: {} }) }));
 vi.mock("@/lib/loyalty/server", () => ({ loyaltyOn: async () => f.enabled, CARD_COLUMNS: "id, goal, steps, round_no",

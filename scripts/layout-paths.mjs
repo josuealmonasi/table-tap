@@ -90,6 +90,8 @@ export const PUBLIC = [
   "/reset-password",
   "/terminos",
   "/privacidad",
+  // The "stop emailing my tickets" page a ticket email links to.
+  "/tickets/stop",
   "/rewards",
 ];
 
