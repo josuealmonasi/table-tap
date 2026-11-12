@@ -13327,3 +13327,196 @@ create or replace trigger stamp_checkout_discount
   for each row execute function public.stamp_checkout_discount_v1();
 revoke all on function public.stamp_checkout_discount_v1() from public, anon, authenticated;
 grant execute on function public.stamp_checkout_discount_v1() to service_role;
+
+-- R8-7 / journal PR 1: dormant until PR 2 installs every writer and calls the
+-- backfill in the same deployment, under the restaurant money lock.
+alter table customer_accounts add column if not exists journal_started_at timestamptz;
+create table if not exists account_movements (
+  id uuid primary key default gen_random_uuid(),
+  restaurant_id uuid not null references restaurants(id) on delete cascade,
+  account_id uuid not null references customer_accounts(id) deferrable initially deferred,
+  currency text not null check (currency in ('MXN', 'USD')),
+  kind text not null check (kind in ('opening', 'charge', 'added_tip', 'collection', 'credit',
+    'return_approved', 'refund_paid', 'historical_observation')),
+  amount_cents bigint not null check (amount_cents >= 0),
+  tip_cents bigint not null default 0 check (tip_cents >= 0),
+  service_cents bigint not null default 0 check (service_cents >= 0),
+  debt_delta_cents bigint not null,
+  occurred_at timestamptz not null,
+  recorded_at timestamptz not null default clock_timestamp(),
+  actor text,
+  reason text,
+  operation_ref text not null check (btrim(operation_ref) <> ''),
+  order_id uuid references orders(id) deferrable initially deferred,
+  payment_id uuid references payments(id) deferrable initially deferred,
+  adjustment_id uuid references order_adjustments(id) deferrable initially deferred,
+  refund_operation_id uuid references refund_operations(id) deferrable initially deferred,
+  provenance text not null check (provenance in ('live', 'backfill')),
+  charge_snapshot jsonb not null check (jsonb_typeof(charge_snapshot) = 'object'),
+  -- Tip and service are descriptive components, not bounded by the amount:
+  -- an approved coupon or a 100% comp lowers the total but leaves them as is.
+  constraint account_movements_components check (tip_cents >= 0 and service_cents >= 0),
+  constraint account_movements_added_tip check (kind <> 'added_tip' or (tip_cents = amount_cents and service_cents = 0)),
+  constraint account_movements_debt check (
+    (kind = 'opening' and debt_delta_cents = amount_cents and provenance = 'backfill')
+    or (kind in ('charge', 'added_tip') and amount_cents > 0 and debt_delta_cents = amount_cents and provenance = 'live')
+    or (kind in ('collection', 'credit') and amount_cents > 0 and debt_delta_cents = -amount_cents and provenance = 'live')
+    or (kind = 'collection' and amount_cents > 0 and debt_delta_cents = 0 and provenance = 'backfill')
+    or (kind in ('return_approved', 'refund_paid', 'historical_observation') and debt_delta_cents = 0)),
+  constraint account_movements_source check (
+    (kind = 'opening' and order_id is null and payment_id is null and adjustment_id is null and refund_operation_id is null)
+    or (kind = 'charge' and order_id is not null)
+    or (kind = 'added_tip' and order_id is not null and payment_id is not null)
+    or (kind = 'collection' and payment_id is not null)
+    or (kind in ('credit', 'return_approved', 'historical_observation') and adjustment_id is not null)
+    or (kind = 'refund_paid' and refund_operation_id is not null)),
+  unique (restaurant_id, account_id, currency, kind, operation_ref)
+);
+-- A database that applied the first draft keeps its old, stricter check.
+alter table account_movements drop constraint if exists account_movements_components;
+alter table account_movements add constraint account_movements_components check (tip_cents >= 0 and service_cents >= 0);
+create unique index if not exists account_movements_opening_once on account_movements(account_id, currency) where kind = 'opening';
+create unique index if not exists account_movements_charge_once on account_movements(order_id) where kind = 'charge';
+create unique index if not exists account_movements_tip_once on account_movements(payment_id, order_id) where kind = 'added_tip';
+create unique index if not exists account_movements_collection_once on account_movements(payment_id) where kind = 'collection';
+create unique index if not exists account_movements_adjustment_once on account_movements(adjustment_id, kind)
+  where kind in ('credit', 'return_approved', 'historical_observation');
+-- One refund operation may have several independently evidenced payout fragments.
+create unique index if not exists account_movements_refund_once on account_movements(refund_operation_id, operation_ref) where kind = 'refund_paid';
+create index if not exists account_movements_statement_idx on account_movements(restaurant_id, account_id, currency, occurred_at, id);
+alter table account_movements enable row level security;
+revoke all on account_movements from anon;
+revoke all on account_movements from public, authenticated, service_role;
+grant select, insert on account_movements to service_role;
+
+create or replace function public.guard_account_movement()
+returns trigger language plpgsql security definer set search_path = public as $$
+begin
+  if tg_op = 'DELETE' and pg_trigger_depth() > 1
+    and not exists (select 1 from restaurants where id = old.restaurant_id) then return old; end if;
+  raise exception 'an account movement is immutable';
+end $$;
+revoke all on function public.guard_account_movement() from public, anon, authenticated, service_role;
+drop trigger if exists guard_account_movement on account_movements;
+create trigger guard_account_movement before update or delete on account_movements
+  for each row execute function public.guard_account_movement();
+
+create or replace function public.check_account_movement_source()
+returns trigger language plpgsql security definer set search_path = public as $$
+declare o orders; p payments; a order_adjustments; r refund_operations;
+begin
+  if not exists (select 1 from customer_accounts c where c.id = new.account_id and c.restaurant_id = new.restaurant_id) then
+    raise exception 'account movement account differs';
+  end if;
+  if new.order_id is not null then
+    select * into o from orders where id = new.order_id;
+    if o.id is null or o.restaurant_id is distinct from new.restaurant_id or o.account_id is distinct from new.account_id
+      or o.currency is distinct from new.currency then raise exception 'account movement order differs'; end if;
+  end if;
+  if new.payment_id is not null then
+    select * into p from payments where id = new.payment_id;
+    if p.id is null or p.restaurant_id is distinct from new.restaurant_id or p.account_id is distinct from new.account_id
+      or p.currency is distinct from new.currency then raise exception 'account movement payment differs'; end if;
+  end if;
+  if new.adjustment_id is not null then
+    select * into a from order_adjustments where id = new.adjustment_id;
+    select * into o from orders where id = a.order_id;
+    if a.id is null or a.restaurant_id is distinct from new.restaurant_id or o.restaurant_id is distinct from new.restaurant_id
+      or o.account_id is distinct from new.account_id or o.currency is distinct from new.currency
+      or a.currency is distinct from new.currency or (new.order_id is not null and new.order_id <> a.order_id)
+      or (new.kind = 'historical_observation' and a.kind <> 'account_credit')
+      or (new.kind = 'credit' and a.kind not in ('account_credit', 'cancel', 'forgive'))
+      or (new.kind = 'return_approved' and a.kind <> 'return') then raise exception 'account movement adjustment differs'; end if;
+  end if;
+  if new.refund_operation_id is not null then
+    select * into r from refund_operations where id = new.refund_operation_id;
+    select * into a from order_adjustments where id = r.adjustment_id;
+    select * into o from orders where id = a.order_id;
+    if r.id is null or r.restaurant_id is distinct from new.restaurant_id or a.restaurant_id is distinct from new.restaurant_id
+      or o.restaurant_id is distinct from new.restaurant_id or o.account_id is distinct from new.account_id
+      or r.currency is distinct from new.currency or a.currency is distinct from new.currency or o.currency is distinct from new.currency
+      or (new.adjustment_id is not null and new.adjustment_id <> a.id)
+      or (new.order_id is not null and new.order_id <> o.id) then raise exception 'account movement refund differs'; end if;
+  end if;
+  return new;
+end $$;
+revoke all on function public.check_account_movement_source() from public, anon, authenticated, service_role;
+drop trigger if exists check_account_movement_source on account_movements;
+create trigger check_account_movement_source before insert on account_movements
+  for each row execute function public.check_account_movement_source();
+
+-- This is a snapshot of current debt under locks, not a time-travel query.
+-- PR 2 must acquire the money lock, choose its cutoff, then call this function
+-- in the same transaction that enables writers. Do not call it in PR 1.
+create or replace function public.account_journal_backfill_v1(p_restaurant uuid, p_cutoff timestamptz)
+returns table (account_id uuid, currency text, opening_count bigint, observation_count bigint,
+  collection_count bigint, opening_debt_cents bigint)
+language plpgsql security definer set search_path = public as $$
+declare v_account customer_accounts; v_currency text; v_debt bigint; v_tip bigint; v_service bigint; v_snapshot jsonb;
+begin
+  if p_restaurant is null or p_cutoff is null or not isfinite(p_cutoff) or p_cutoff > clock_timestamp() then
+    raise exception 'a restaurant and finite, nonfuture cutoff are required';
+  end if;
+  perform public.lock_restaurant_money(p_restaurant);
+  if not exists (select 1 from restaurants where id = p_restaurant) then raise exception 'restaurant missing'; end if;
+  perform 1 from customer_accounts c where c.restaurant_id = p_restaurant order by c.id for update;
+  perform 1 from orders o where o.restaurant_id = p_restaurant and o.account_id is not null order by o.id for update;
+  for v_account in select c.* from customer_accounts c
+    where c.restaurant_id = p_restaurant and c.journal_started_at is null order by c.id loop
+    if p_cutoff < transaction_timestamp() then raise exception 'new journal cutoff must be in the current transaction'; end if;
+    if exists (select 1 from account_movements m where m.account_id = v_account.id) then
+      raise exception 'unstarted account already has journal movements';
+    end if;
+    -- Unknown receipt currency cannot safely be guessed from today's account
+    -- ceiling or restaurant setting. Fail atomically for manual review.
+    -- This aborts the whole activation if any account payment lacks a currency.
+    if exists (select 1 from payments p where p.account_id = v_account.id and p.restaurant_id = p_restaurant
+      and (p.currency is null or p.currency not in ('MXN', 'USD'))) then raise exception 'historical account payment currency unknown'; end if;
+    for v_currency in
+      select o.currency from orders o where o.account_id = v_account.id and o.restaurant_id = p_restaurant
+      union select p.currency from payments p where p.account_id = v_account.id and p.restaurant_id = p_restaurant
+      union select coalesce(v_account.credit_currency, r.currency) from restaurants r where r.id = p_restaurant
+    loop
+      select coalesce(sum(round(o.total * 100)), 0)::bigint, coalesce(sum(round(o.tip * 100)), 0)::bigint,
+        coalesce(sum(round(o.service_fee * 100)), 0)::bigint,
+        jsonb_build_object('coverage', 'opening_current_debt', 'original_charge', null, 'orders',
+          coalesce(jsonb_agg(jsonb_build_object('order_id', o.id, 'charged_at', o.charged_at,
+            'charge_date_known', o.charged_at is not null, 'current_total', o.total, 'current_tip', o.tip,
+            'current_service', o.service_fee, 'original_total', null, 'original_components', null) order by o.id), '[]'::jsonb))
+      into v_debt, v_tip, v_service, v_snapshot from orders o where o.restaurant_id = p_restaurant and o.account_id = v_account.id
+        and o.currency = v_currency and o.paid = false and o.written_off = false and o.status <> 'cancelled';
+      insert into account_movements (restaurant_id, account_id, currency, kind, amount_cents, tip_cents, service_cents, debt_delta_cents,
+        occurred_at, actor, reason, operation_ref, provenance, charge_snapshot)
+      values (p_restaurant, v_account.id, v_currency, 'opening', v_debt, v_tip, v_service, v_debt, p_cutoff, null,
+        'Opening debt; historical coverage incomplete', 'backfill:v1:opening', 'backfill', v_snapshot);
+    end loop;
+    insert into account_movements (restaurant_id, account_id, currency, kind, amount_cents, tip_cents, service_cents, debt_delta_cents,
+      occurred_at, actor, reason, operation_ref, order_id, adjustment_id, provenance, charge_snapshot)
+    select p_restaurant, v_account.id, a.currency, 'historical_observation', a.amount_cents,
+      round((a.previous_tip - a.resulting_tip) * 100)::bigint,
+      round((a.previous_service_fee - a.resulting_service_fee) * 100)::bigint, 0,
+      a.created_at, a.actor, 'Historical account credit; already reflected in opening', a.request_id::text,
+      a.order_id, a.id, 'backfill', jsonb_build_object('coverage', 'historical_credit', 'adjustment', to_jsonb(a),
+        'charged_at', o.charged_at, 'original_total', null, 'original_components', null)
+    from order_adjustments a join orders o on o.id = a.order_id and o.restaurant_id = a.restaurant_id
+    where a.restaurant_id = p_restaurant and o.account_id = v_account.id and a.kind = 'account_credit';
+    insert into account_movements (restaurant_id, account_id, currency, kind, amount_cents, tip_cents, debt_delta_cents,
+      occurred_at, actor, reason, operation_ref, payment_id, provenance, charge_snapshot)
+    select p_restaurant, v_account.id, p.currency, 'collection', round(p.amount * 100)::bigint, round(p.tip * 100)::bigint, 0,
+      p.created_at, p.actor_email, 'Historical collection; already reflected in opening', p.id::text, p.id, 'backfill',
+      jsonb_build_object('coverage', 'historical_collection', 'payment', to_jsonb(p), 'original_charge', null,
+        'original_total', null, 'original_components', null)
+    from payments p where p.restaurant_id = p_restaurant and p.account_id = v_account.id;
+    update customer_accounts c set journal_started_at = p_cutoff where c.id = v_account.id;
+    return query select m.account_id, m.currency, count(*) filter (where m.kind = 'opening'),
+      count(*) filter (where m.kind = 'historical_observation'), count(*) filter (where m.kind = 'collection'),
+      sum(m.debt_delta_cents)::bigint from account_movements m where m.account_id = v_account.id and m.restaurant_id = p_restaurant
+      group by m.account_id, m.currency order by m.currency;
+  end loop;
+end $$;
+revoke all on function public.account_journal_backfill_v1(uuid, timestamptz) from public, anon, authenticated, service_role;
+grant execute on function public.account_journal_backfill_v1(uuid, timestamptz) to service_role;
+
+-- RLS does not guard TRUNCATE: the blanket revoke must run after the last
+-- table is created, and account_movements is now the last one.
+revoke truncate, references, trigger on all tables in schema public from authenticated;

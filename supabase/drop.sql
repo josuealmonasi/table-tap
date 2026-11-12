@@ -1,3 +1,7 @@
+drop table if exists account_movements cascade;
+drop function if exists public.account_journal_backfill_v1(uuid, timestamptz);
+drop function if exists public.guard_account_movement();
+drop function if exists public.check_account_movement_source();
 drop table if exists restaurant_accounting_records cascade;
 drop table if exists platform_admin_audit cascade;
 drop function if exists public.account_credit_v1(uuid, uuid, numeric, numeric, text, text, text, uuid);

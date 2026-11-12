@@ -2906,6 +2906,56 @@ codes when reducing sales for table forgiveness: every reason lowers the live
 paid total and appears as a write-off. Account credits follow that existing
 behavior; reason-specific sales/loss reporting is not changed by this feature.
 
+## Account journal foundation (R8-7, PR 1 of 5)
+
+`account_movements` is an immutable, private journal of integer cents per account
+and saved MXN/USD currency. Its kinds are opening, charge, added_tip, collection,
+credit, return_approved, refund_paid and historical_observation. Charge and added
+tip raise debt; live collections and credits reduce it. Return approval, actual
+refund payout and historical observations have zero debt effect. Backfilled
+collections also have zero debt effect: the opening already includes them.
+Tip and service components are only non-negative, not bounded by the amount,
+because an approved coupon or a full comp lowers the total but not them. Required source keys, source-event uniqueness and a trigger
+check restaurant/account/currency agreement. RLS has no client policies; only
+service_role can select and insert. Updates and deletes are rejected even for
+privileged writers. Only deleting the restaurant cascades; other source foreign
+keys are deferred, without cascading deletion.
+
+**The journal is not started yet.** `customer_accounts.journal_started_at` is
+nullable with no default. Schema application never calls the service-only
+`account_journal_backfill_v1(restaurant, cutoff)` function. No application writer
+or reader uses the journal. Starting it before all writers exist would lose
+charges and collections between deployments. Existing order/payment readers and
+money reconciliation continue unchanged.
+
+PR 2 must install every writer and run the backfill in the same production
+delta/transaction, under the restaurant money lock. The caller acquires that
+lock before choosing its cutoff; the function reacquires it, locks every account
+in id order, then all their orders in id order. It snapshots current debt under
+these locks, not an arbitrary historical balance. For each unstarted account it
+opens each observed currency (plus its ceiling currency, or the restaurant
+currency if unknown), including zero balances. The opening sums current reduced
+totals of unpaid, not written-off, not cancelled orders. It imports every
+account_credit adjustment with its immutable before/after snapshot as a zero-debt
+historical observation, and every account payment as a zero-debt historical
+collection. Unknown payment currency fails the transaction for review instead
+of guessing. It never infers charged_at from created_at or rebuilds original
+charges from current totals: unavailable original values remain JSON null.
+Newly started accounts require a cutoff within the calling transaction and no
+preexisting journal movements. This rejects an earlier transaction's cutoff;
+the caller must still choose it after acquiring the money lock, because a
+timestamp from before a wait in the same transaction passes this check.
+Finally it stamps the cutoff and returns per-account/currency opening debt and
+counts by imported kind. Started accounts are skipped on every later call,
+including replay with the original cutoff.
+
+Pre-cutoff event coverage is explicitly incomplete. The opening contains only
+current outstanding-order snapshots; collected orders are represented only by
+independently evidenced credit/payment history. Dev verification is provided by
+`scripts/probe-account-journal.mjs`, which refuses production. It must not be run
+against production during PR 1. The probe checks the function's own money lock
+without a caller lock, verifies rollback leaves an account unstarted, and tests
+effective client/service roles alongside catalog privileges.
 
 ## Visit-card ticket email screens (11 November 2026)
 

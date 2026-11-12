@@ -41,6 +41,9 @@ const NOT_DEMO_DATA = new Set([
   "kitchen_tickets", // filled by the trigger on the seeder's orders
   "kitchen_requests", // filled by the trigger on the seeder's service requests
   "account_checkouts", // an online payment in progress; only the pay route opens one
+  // Dormant in journal PR 1: nothing writes it until PR 2 installs the writers
+  // and runs the backfill. The spec below fails once PR 2's journal check exists.
+  "account_movements",
   "restaurant_billing_operations", // an in-flight billing claim; seeding one would block checkout
   "refunds_due", // money taken twice; only the webhook finds one, and a demo with one teaches that it happens
   "refund_failures", // Stripe failing a refund it reported succeeded; only its webhook writes one
@@ -85,4 +88,10 @@ describe("the demo shows the whole app", () => {
       `the demo seeder never fills: ${missing.join(", ")} — add them to scripts/mock-data.mjs`,
     ).toEqual([]);
   });
+});
+
+it("seeds the account journal once journal PR 2 starts writing it", () => {
+  // PR 2 installs the journal check that every writer then has to satisfy.
+  const started = fs.readFileSync("supabase/schema.sql", "utf8").includes("public.check_account_journal_v1()");
+  if (started) expect(NOT_DEMO_DATA.has("account_movements"), "journal is live: seed account_movements and drop the PR 1 exclusion").toBe(false);
 });
