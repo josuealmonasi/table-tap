@@ -1,6 +1,7 @@
 "use client";
 
 import AttachCard from "./loyalty/AttachCard.react-component";
+import BillTicketEmail from "@/components/loyalty/BillTicketEmail.react-component";
 import { usePaymentCheck } from "@/hooks/usePaymentCheck";
 
 import { useEffect, useState } from "react";
@@ -88,6 +89,8 @@ export default function SettleTableDialog({
   const [unread, setUnread] = useState(false);
   const [attempt, setAttempt] = useState(0);
   const [attachingCard, setAttachingCard] = useState(false);
+  const [cardCode, setCardCode] = useState<string | null>(null);
+  const [skipTicketEmail, setSkipTicketEmail] = useState(false);
   const [busy, setBusy] = useState(false);
   const [asking, setAsking] = useState(false);
   // The calculator, for a table paying a bit at a time.
@@ -99,7 +102,7 @@ export default function SettleTableDialog({
 
   const { receipts, rememberReceipt } = useStaffSlotReceipts(`${open}:${restaurantId}:${tableId}:${orderId}`);
 
-  useEffect(() => { setOrders(null); setSplits([]); setUnread(false); setWritingOff(null); }, [open, restaurantId, tableId, orderId]);
+  useEffect(() => { setCardCode(null); setSkipTicketEmail(false); setOrders(null); setSplits([]); setUnread(false); setWritingOff(null); }, [open, restaurantId, tableId, orderId]);
 
   useEffect(() => {
     if (!open) return;
@@ -178,7 +181,7 @@ export default function SettleTableDialog({
       const res = await fetch("/api/table-payment", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(tableId ? { tableId, settlement, expected: bill?.total, currency, ref } : { orderId, settlement, expected: bill?.total, currency }),
+        body: JSON.stringify({ skipTicketEmail, ...(tableId ? { tableId, settlement, expected: bill?.total, currency, ref } : { orderId, settlement, expected: bill?.total, currency }) }),
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
@@ -248,7 +251,8 @@ export default function SettleTableDialog({
       ) : (
         <>
           <SettleBillLines bill={{ ...bill, paid: tableBill(orders ?? [], []).paid }} currency={currency} />
-          {loyalty && <AttachCard key={`${tableId}:${orderId}`} active target={tableId ? { tableId } : { orderId: orderId! }} disabled={busy} onBusy={setAttachingCard} />}
+          {loyalty && <AttachCard key={`${tableId}:${orderId}`} active target={tableId ? { tableId } : { orderId: orderId! }} disabled={busy} onBusy={setAttachingCard} onCardCode={setCardCode} />}
+          {slotSplits.length === 0 && <BillTicketEmail code={cardCode} tableId={tableId} orderId={orderId} active={open} skip={skipTicketEmail} onSkip={setSkipTicketEmail} disabled={busy} />}
           {/* No box of its own (display: contents): a <fieldset> here broke the
               dialog's direct-child layout and pushed the cash amounts against
               its edge at 360px. inert still blocks every control below while
@@ -331,6 +335,8 @@ export default function SettleTableDialog({
       {tableId && (
         <TableCalculator
           canApprove={canApprove}
+          initialSkipTicketEmail={skipTicketEmail}
+          cardCode={cardCode}
           open={inParts}
           onClose={() => {
             setInParts(false);

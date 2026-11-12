@@ -1,6 +1,7 @@
 "use client";
 
 import type { SelectedCard } from "@/components/dashboard/loyalty/AttachCard.react-component";
+import { useCardEmail } from "./useCardEmail";
 import { useState } from "react";
 
 /**
@@ -9,9 +10,13 @@ import { useState } from "react";
  * kitchen, a tip, and where the receipt goes, or that they want none.
  */
 export function usePosSaleDetails() {
-  const [loyaltyCard, setLoyaltyCard] = useState<SelectedCard | null>(null);
+  const [loyaltyCard, selectCard] = useState<SelectedCard | null>(null);
   const [customerName, setCustomerName] = useState("");
-  const [email, setEmail] = useState("");
+  const [skipTicketEmail, setSkipTicketEmail] = useState(false);
+  const [saveCardEmail, setSaveCardEmail] = useState(false);
+  const [emailConsent, setEmailConsent] = useState(false);
+  const contact = useCardEmail(loyaltyCard?.code);
+  const [email, changeEmail] = useState("");
   const [note, setNote] = useState("");
   // The customer waved the ticket away. Very common on a sale that is handed
   // over as it is rung up — a bottle of water does not need paperwork — and
@@ -21,6 +26,13 @@ export function usePosSaleDetails() {
   const [tipCustom, setTipCustom] = useState<number | null>(null);
   // The terminal voucher's reference, on a card sale. Optional.
   const [terminalRef, setTerminalRef] = useState("");
+
+  function setLoyaltyCard(card: SelectedCard | null): void {
+    selectCard(card); setSkipTicketEmail(false); setSaveCardEmail(false); setEmailConsent(false);
+  }
+  function setEmail(value: string): void {
+    changeEmail(value); setEmailConsent(false);
+  }
 
   /** Ready for the next customer. */
   function reset(): void {
@@ -35,6 +47,11 @@ export function usePosSaleDetails() {
   }
 
   return {
+    cardEmail: contact.data?.email,
+    cardEmailError: Boolean(contact.error),
+    skipTicketEmail, setSkipTicketEmail,
+    saveCardEmail, setSaveCardEmail,
+    emailConsent, setEmailConsent,
     loyaltyCard,
     setLoyaltyCard,
     customerName,
