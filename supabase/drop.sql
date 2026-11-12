@@ -375,3 +375,8 @@ drop function if exists public.sale_line_costs(uuid, jsonb);
 drop function if exists public.counter_pay_later_full(uuid) cascade;
 
 drop function if exists public.stamp_checkout_discount_v1();
+-- Loyalty stamped by payment.
+drop function if exists public.stamp_loyalty_on_payment() cascade;
+drop function if exists public.fix_loyalty_card_on_payment() cascade;
+drop function if exists public.attach_loyalty_card_v1(uuid, text, uuid, uuid, text);
+drop function if exists public.loyalty_open(uuid);

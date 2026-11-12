@@ -78,6 +78,8 @@ export function usePosCharge({ collector, collectorContext, restaurant, cart, de
   const [pending, setPending] = useState<"cash" | "card" | null>(null);
 
   const money = (n: number) => formatMoney(n, restaurant.currency);
+  // Paperless unless the restaurant asked for paper (off by default).
+  const printsAtTill = restaurant.print_ticket_at_till === true;
 
   /**
    * Prints the ticket when nobody asked for it by email.
@@ -98,7 +100,7 @@ export function usePosCharge({ collector, collectorContext, restaurant, cart, de
 
   /** Paper opened only if it turns out to be needed: the email fallback. */
   function reserveLate(): ReceiptPopup | undefined {
-    if (details.noTicket) return undefined;
+    if (details.noTicket || !printsAtTill) return undefined;
     let real: ReceiptPopup | null = null;
     const open = () => real ??= reserveReceiptPopup(reason => {
       toast(t(reason === "blocked" ? "pos.printBlocked" : "pos.printFailed"), "error");
@@ -113,13 +115,15 @@ export function usePosCharge({ collector, collectorContext, restaurant, cart, de
    * hand — an account's ceiling cannot be checked without the server.
    */
   function showHeld(sale: HeldSale, answered = false, paper?: ReceiptPopup): void {
-    if (!details.noTicket) {
-      printReceipt(offlineReceipt(
-        { posRef: sale.posRef, at: sale.at, lines: sale.items, charge: sale.charge, method: sale.method, currency: restaurant.currency },
-        { name: restaurant.name, timeZone: restaurant.timezone ?? "America/Mexico_City", locale: dateLocale(locale) }, t,
-      ), paper);
-    }
-    setTicket({ code: orderCode(sale.posRef), total: sale.charge.total, handedOver: !sale.preparationPending, offline: true, answered });
+    const receiptHtml = details.noTicket ? undefined : offlineReceipt(
+      { loyaltyCode: sale.loyaltyCode, posRef: sale.posRef, at: sale.at, lines: sale.items, charge: sale.charge, method: sale.method, currency: restaurant.currency },
+      { name: restaurant.name, timeZone: restaurant.timezone ?? "America/Mexico_City", locale: dateLocale(locale) }, t,
+    );
+    if (receiptHtml && paper) printReceipt(receiptHtml, paper);
+    // Kept even when it printed: a blocked or jammed print must still leave
+    // the cashier a way to the ticket before the sale reaches the server.
+    setTicket({ code: orderCode(sale.posRef), total: sale.charge.total, handedOver: !sale.preparationPending, offline: true, answered,
+      receiptHtml });
     rememberLastSale(restaurant.id, sale.items);
     cart.clear();
     details.reset();
@@ -140,6 +144,7 @@ export function usePosCharge({ collector, collectorContext, restaurant, cart, de
     const retriedAccount = accountRequest.current !== null;
     accountResent.current = retriedAccount;
     const sale: HeldSale | null = method === "account" ? null : {
+      loyaltyCode: details.loyaltyCard?.code,
       preparationPending: navigator.onLine,
       posRef, collector, collectorContext, restaurantId: restaurant.id, at: new Date().toISOString(), method, items: orderItemsWithRevenue(lines, pricing),
       // The tax rate it was sold under travels with it: replayed tomorrow, a
@@ -161,7 +166,7 @@ export function usePosCharge({ collector, collectorContext, restaurant, cart, de
     // email would otherwise flash an empty window (a new tab on an iPad) on
     // every charge. If that email fails, the fallback print opens late and may
     // be blocked; the toast says so and Orders reprints it.
-    const printsHere = !details.noTicket && !(canEmailReceipt && details.email.trim());
+    const printsHere = printsAtTill && !details.noTicket && !(canEmailReceipt && details.email.trim());
     const paper = !printsHere ? reserveLate() : reserveReceiptPopup(reason => {
       // A blocked pop-up must not look like a printed ticket.
       toast(t(reason === "blocked" ? "pos.printBlocked" : "pos.printFailed"), "error");
@@ -182,6 +187,7 @@ export function usePosCharge({ collector, collectorContext, restaurant, cart, de
       try {
         const request = JSON.stringify({
           posRef,
+          loyaltyCode: details.loyaltyCard?.code,
           collectorContext,
           currency: restaurant.currency,
           restaurantId: restaurant.id,
@@ -267,11 +273,14 @@ export function usePosCharge({ collector, collectorContext, restaurant, cart, de
       if (data.receipt === "failed") toast(t("pos.receiptFailed"), "error");
       else if (data.receipt === "sent") toast(t("pos.receiptSent"));
       // No address, or an address the mail never reached: it prints.
-      if (data.receiptHtml) printReceipt(data.receiptHtml, paper);
+      if (data.receiptHtml && paper) printReceipt(data.receiptHtml, paper);
       setTicket({
         code: data.code,
         total: data.total,
         handedOver: Boolean(data.handedOver),
+        // Offered on the confirmation whether or not it printed: paperless, or
+        // a print the browser blocked, leaves one tap to the ticket.
+        receiptHtml: data.receiptHtml ?? undefined,
       });
       // Kept on this device, so the next "same again" is one tap.
       rememberLastSale(restaurant.id, cart.lines);
