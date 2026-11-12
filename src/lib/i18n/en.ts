@@ -1029,6 +1029,7 @@ foundingLeftBody: "Subscribe now and keep this subscription price for as long as
     paidCash: "Paid in cash",
     paidCard: "Paid by card",
     paidOther: "Paid",
+    vatIncluded: "Includes {rate}% VAT",
     regime: "Tax regime: {code} {name}",
     loyaltyTitle: "VISIT CARD",
     loyaltyLine: "Card ···· {last4}: {progress} of {goal}",
@@ -2166,6 +2167,7 @@ badgesHint: "Shows how many things are waiting in each section. Applies to the w
     taxTitle: "Tax (IVA)",
     taxHint: "Already included in your menu prices",
     ivaPct: "IVA %",
+    ivaOnTicket: "It is also printed on the ticket as “VAT included”.",
     showBreakdown: "Show the tax breakdown",
     showBreakdownHint:
       "Customers see “Subtotal + IVA = total”. Off shows only the total.",

@@ -5,6 +5,7 @@ import { readCancelReturns, readReceiptReturns } from "@/lib/receipt-return-sour
 import { slotReceiptReturns } from "@/lib/slot-receipt-returns";
 import { sealSlotVersion, openSlotVersion, sealReceiptVersion, openReceiptVersion } from "@/lib/receipt-version";
 import { receiptCents as cents } from "@/lib/receipt-amount";
+import { splitVatRate } from "@/lib/receipt-vat-source";
 import type { createAdminClient } from "@/lib/supabase/admin";
 import type { ReceiptForgiveness, ReceiptOrder, ReceiptVersion, SlotReceiptPayment } from "@/lib/receipt";
 
@@ -82,7 +83,7 @@ export async function readOrderReceipt(db: Database, ids: string[], complete: bo
   const { data: found, error: readError } = await db
     .from("orders")
     .select(
-      "id, restaurant_id, table_id, items, subtotal, discount, service_fee, tip, total, currency, table_label, created_at, pay_method, paid, loyalty_card_id, session_id",
+      "id, restaurant_id, table_id, items, subtotal, discount, service_fee, tip, total, tax_pct, currency, table_label, created_at, pay_method, paid, loyalty_card_id, session_id",
     )
     .in("id", ids)
     .order("created_at", { ascending: true });
@@ -127,7 +128,7 @@ export async function readSlotReceipt(db: Database, id: string, restaurantId?: s
   if (slotError) throw new ReceiptReadError(503);
   if (!slots?.length) throw new ReceiptReadError(404);
   const { data: split, error: splitError } = await db.from("bill_splits")
-    .select("id, restaurant_id, session_id, model_version, currency")
+    .select("id, restaurant_id, session_id, model_version, currency, amount, food_principal, order_ids")
     .eq("id", slots[0].split_id).eq("restaurant_id", payment.restaurant_id).maybeSingle();
   if (splitError) throw new ReceiptReadError(503);
   // The table is the sitting's: bill_splits has no table column of its own.
@@ -151,6 +152,11 @@ export async function readSlotReceipt(db: Database, id: string, restaurantId?: s
     receipt = saved;
   } else if (version === undefined) receipt = await slotReceiptReturns(db, payment.restaurant_id, receipt);
   else if (version.returnCopy || !Array.isArray(version.adjustmentIds) || version.adjustmentIds.length) throw new ReceiptReadError(404);
+  // The debt was frozen with the split: when it carried no tips, every part is
+  // all sale and its ticket can say the IVA inside it (ticket-vat.ts).
+  receipt.parts_without_tips = split.food_principal != null && split.amount != null
+    && cents(split.amount) === cents(split.food_principal);
+  receipt.tax_pct = receipt.parts_without_tips ? await splitVatRate(db, payment.restaurant_id, split.order_ids) : null;
   // Optional: a card that cannot be read is left off, the receipt still issues.
   if (sitting?.loyalty_card_id) receipt.loyalty = await receiptCard(payment.restaurant_id, sitting.loyalty_card_id).catch(() => null);
   const issued = version ?? { adjustmentIds: [], ...(receipt.returns?.length ? { slotCopy: sealSlotVersion(payment.restaurant_id, receipt) } : {}) };

@@ -35,3 +35,12 @@ export function ivaSplit(subtotal: number, taxPct: number): { net: number; iva: 
 export function round2(n: number): number {
   return Math.round(n * 100) / 100;
 }
+
+/**
+ * An IVA-inclusive amount without its IVA, at the order's own rate. Costs
+ * takes it off revenue and the ticket prints what it took off ("IVA 16%
+ * incluido"); one function, so the two never disagree about the same sale.
+ */
+export function withoutIva(gross: number, taxPct: number): number {
+  return taxPct > 0 ? gross / (1 + taxPct / 100) : gross;
+}

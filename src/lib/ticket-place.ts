@@ -78,6 +78,7 @@ export function ticketText(t: T): TicketText {
     payMethod: m => t(m === "cash" ? "saleTicket.paidCash" : m === "card" || m === "terminal" ? "saleTicket.paidCard" : "saleTicket.paidOther"),
     loyaltyTitle: t("saleTicket.loyaltyTitle"),
     loyaltyLine: l => t("saleTicket.loyaltyLine", { last4: l.last4, progress: l.progress, goal: l.goal }),
+    vatIncluded: rate => t("saleTicket.vatIncluded", { rate }),
     qrHint: t("saleTicket.qrHint"), thanks: t("saleTicket.thanks"), notFiscal: t("receipt.notFiscal"),
   };
 }

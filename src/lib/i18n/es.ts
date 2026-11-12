@@ -1029,6 +1029,7 @@ foundingLeftBody: "Quien contrata ahora conserva este precio de suscripción mie
     paidCash: "Pagado en efectivo",
     paidCard: "Pagado con tarjeta",
     paidOther: "Pagado",
+    vatIncluded: "IVA {rate}% incluido",
     regime: "Régimen fiscal: {code} {name}",
     loyaltyTitle: "TARJETA DE VISITAS",
     loyaltyLine: "Tarjeta ···· {last4}: {progress} de {goal}",
@@ -2165,6 +2166,7 @@ badgesHint: "Muestra cuántas cosas esperan acción en cada sección. Aplica a t
     taxTitle: "Impuesto (IVA)",
     taxHint: "Ya incluido en los precios de tu menú",
     ivaPct: "% de IVA",
+    ivaOnTicket: "También se imprime en el ticket como «IVA incluido».",
     showBreakdown: "Mostrar el desglose del impuesto",
     showBreakdownHint:
       "Los clientes ven “Subtotal + IVA = total”. Desactivado muestra solo el total.",
