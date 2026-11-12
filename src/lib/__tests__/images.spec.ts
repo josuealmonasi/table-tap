@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import {
   COVER,
@@ -67,5 +68,14 @@ describe("specs", () => {
   it("gives a CSS ratio so the band can reserve its space before the photo loads", () => {
     expect(ratio(COVER)).toBe("1600 / 600");
     expect(ratio(DISH)).toBe("800 / 800");
+  });
+});
+
+
+describe("logo storage", () => {
+  it("allows the PNG that the logo preset uploads", () => {
+    const schema = readFileSync("supabase/schema.sql", "utf8");
+    const allowed = schema.match(/allowed_mime_types = array\[([^\]]+)\]/)?.[1];
+    expect(allowed).toContain("'image/png'");
   });
 });

@@ -19,6 +19,9 @@ import BillApprovals, {
 import StampCard from "./loyalty/StampCard";
 import { useLiveOrders } from "@/hooks/useLiveOrders";
 import { SEP } from "@/lib/separator";
+import { createClient } from "@/lib/supabase/client";
+import OrderDetailDialog from "./OrderDetailDialog";
+import type { BoardOrder } from "@/lib/kitchen-ticket";
 
 /**
  * Open bills, searchable, with the promotion a manager may apply to one.
@@ -99,13 +102,25 @@ export default function BillsPanel({
    * another venue's code finds nothing here — and says so, rather than opening
    * silently onto the wrong thing or appearing to do nothing at all.
    */
+  // A ticket's QR points here too, and a ticket is usually for a sale already
+  // paid, which is no open bill. That sale opens in its detail (reprint, the
+  // ticket PDF, a return). Read with the signed-in client, so row security
+  // keeps it to this restaurant's orders like the history does.
+  const [scannedOrder, setScannedOrder] = useState<BoardOrder | null>(null);
   const openScanned = useCallback(
     (orderId: string) => {
       const found = bills.find(b => b.orderIds.includes(orderId));
-      if (found) setSettling(found);
-      else toast(t("scan.notHere"), "error");
+      if (found) { setSettling(found); return; }
+      const lookup = createClient().from("orders").select("*").eq("restaurant_id", restaurantId).eq("id", orderId).maybeSingle();
+      lookup.then(({ data, error }) => {
+          // A failed read is not "not here": that would send the cashier
+          // hunting for a sale that exists.
+          if (error) toast(t("done.networkError"), "error");
+          else if (data) setScannedOrder(data as BoardOrder);
+          else toast(t("scan.notHere"), "error");
+        });
     },
-    [bills, toast, t],
+    [bills, toast, t, restaurantId],
   );
 
   const consumedScan = useRef<string | null>(null);
@@ -229,8 +244,18 @@ export default function BillsPanel({
         {children}
       </div>
 
+      {scannedOrder && (
+        <OrderDetailDialog
+          order={scannedOrder}
+          currency={(scannedOrder as { currency?: string }).currency ?? currency}
+          open
+          onClose={() => setScannedOrder(null)}
+        />
+      )}
+
       {settling && (
         <SettleTableDialog
+          loyalty={loyalty}
           open
           restaurantId={restaurantId}
           tableId={settling.tableId}

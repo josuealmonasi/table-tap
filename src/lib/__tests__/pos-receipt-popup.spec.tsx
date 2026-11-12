@@ -19,16 +19,18 @@ let host: HTMLDivElement, root: Root, till: ReturnType<typeof usePosCharge>;
 const popup = { document: { write: vi.fn(), close: vi.fn() }, close: vi.fn(), focus: vi.fn(), closed: false };
 const cart = { lines: [{ itemId: "dish", name: "Soup", price: 100, qty: 1 }], clear: vi.fn() };
 const details = { tipPct: 0, tipCustom: null, noTicket: false, customerName: "", note: "", email: "", terminalRef: "", reset: vi.fn() };
+// The till prints only when the restaurant turned paper on (off by default: paperless).
+const paper = { on: true };
 const offline = { hold: vi.fn(() => true), acknowledge: vi.fn(() => true), discard: vi.fn(), setOnline: vi.fn() };
 function Till() {
-  till = usePosCharge({ collector: "cashier", collectorContext: "signed", restaurant: { id: "r", name: "Place", currency: "MXN" },
+  till = usePosCharge({ collector: "cashier", collectorContext: "signed", restaurant: { id: "r", name: "Place", currency: "MXN", print_ticket_at_till: paper.on },
     cart, details, offline, canEmailReceipt: true, pricing: { subtotal: 100, serviceFee: 0, tip: 0, discount: 0, total: 100, lines: [{ itemId: "dish", qty: 1, gross: 100, unit: 100 }], promoSavings: {} },
   } as unknown as Parameters<typeof usePosCharge>[0]);
   return null;
 }
 const success = (extra = {}) => Response.json({ code: "ORD-TEST", total: 100, settled: true, receiptHtml: "<p>Receipt</p>", ...extra });
 beforeEach(async () => {
-  vi.clearAllMocks(); state.locale = "en"; details.noTicket = false; details.email = ""; popup.closed = false;
+  vi.clearAllMocks(); paper.on = true; state.locale = "en"; details.noTicket = false; details.email = ""; popup.closed = false;
   offline.hold.mockReturnValue(true); offline.acknowledge.mockReturnValue(true);
   vi.stubGlobal("React", React); vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   vi.stubGlobal("navigator", { onLine: true });
@@ -129,4 +131,49 @@ it("still shows the held sale if its offline paper cannot open", async () => {
   expect(offline.hold).toHaveBeenCalledTimes(1);
   expect(cart.clear).toHaveBeenCalledTimes(1);
   expect(till.ticket).toMatchObject({ offline: true });
+});
+
+async function paperless(): Promise<void> {
+  paper.on = false;
+  await act(async () => root.render(<Till />));
+}
+
+it("prints nothing by default and offers the ticket on the confirmation instead", async () => {
+  await paperless();
+  await charge();
+  expect(window.open).not.toHaveBeenCalled();
+  expectSale();
+  expect(till.ticket?.receiptHtml).toBe("<p>Receipt</p>");
+});
+
+it("prints nothing by default when an emailed receipt fails either", async () => {
+  await paperless();
+  details.email = "guest@example.com";
+  vi.mocked(fetch).mockResolvedValue(success({ receipt: "failed" }));
+  await charge();
+  expect(window.open).not.toHaveBeenCalled();
+  expect(till.ticket?.receiptHtml).toBe("<p>Receipt</p>");
+});
+
+it("offers no ticket on the confirmation when the customer declined one", async () => {
+  await paperless();
+  details.noTicket = true;
+  vi.mocked(fetch).mockResolvedValue(success({ receiptHtml: null }));
+  await charge();
+  expect(till.ticket?.receiptHtml).toBeFalsy();
+});
+
+it("keeps a held sale's ticket on the confirmation when paperless", async () => {
+  await paperless();
+  vi.stubGlobal("navigator", { onLine: false });
+  await charge();
+  expect(window.open).not.toHaveBeenCalled();
+  expect(till.ticket).toMatchObject({ offline: true });
+  expect(till.ticket?.receiptHtml).toContain("ORD-");
+});
+
+it("keeps the ticket on a printed sale's confirmation, for a print the browser blocked (Codex review)", async () => {
+  vi.mocked(window.open).mockReturnValue(null);
+  await charge();
+  expect(till.ticket?.receiptHtml).toBe("<p>Receipt</p>");
 });
