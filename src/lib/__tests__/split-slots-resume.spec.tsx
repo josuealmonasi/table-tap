@@ -12,6 +12,7 @@ const s = vi.hoisted(() => ({
   creates: [] as unknown[][], retrieves: 0, fees: 0, locale: "es" as "es" | "en",
 }));
 vi.mock("@/lib/i18n/context", () => ({ useT: () => (key: string, vars?: Record<string, string | number>) => translate(messagesFor(s.locale), key, vars) }));
+vi.mock("@/lib/diner-checkout-orders", () => ({ dinerCheckoutOrders: async () => [{ id: "o", total: 150, tip: 0, service_fee: 0 }] }));
 vi.mock("@/lib/bill-data", () => ({ fetchTableBill: async () => [] }));
 vi.mock("@/lib/plan-server", () => ({ getPlan: async () => ({ limits: {} }) }));
 vi.mock("@/lib/site-origin", () => ({ siteOrigin: () => "http://localhost" }));

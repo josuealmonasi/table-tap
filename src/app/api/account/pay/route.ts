@@ -1,5 +1,6 @@
 import { after } from "next/server";
 import { drainTicketEmails } from "@/lib/ticket-email";
+import { ordersTipBase, tipFromPercent } from "@/lib/tip-base";
 import { checkoutPageRpc } from "@/lib/checkout-page-rpc";
 import { dinerCheckoutOrders } from "@/lib/diner-checkout-orders";
 import { dinerCurrency, isDinerCurrency } from "@/lib/diner-currency";
@@ -63,18 +64,14 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     if (prior) return NextResponse.json({ url: prior.url });
   } catch { return await apiError("apiErr.checkoutFailed", 502); }
 
-  // The same gratuity rule as a table's bill: a percentage or an amount, and
-  // never more than the food it thanks somebody for.
-  const pct = Math.min(100, Math.max(0, Number(body?.tipPct) || 0));
-  const asked = body?.tipAmount != null ? Number(body.tipAmount) : (expected * pct) / 100;
-  const tip = Math.min(Math.max(0, round2(Number.isFinite(asked) ? asked : 0)), expected);
-
+  const exact = Number(body?.tipAmount);
+  const exactTip = Math.min(Math.max(0, round2(Number.isFinite(exact) ? exact : 0)), expected);
   const refused = async (key: string, status: number) => await apiError(key, status);
   const { data: opened, error: openError } = await checkoutPageRpc(body?.currency ? "account_checkout_currency_v1" : "account_checkout_open_v2", {
     p_restaurant: restaurant.id,
     p_account: account.id,
     p_expected: expected,
-    p_tip: tip,
+    p_tip: body?.tipAmount != null ? exactTip : 0,
     p_fee: 0,
     ...(body?.currency ? { p_currency: body.currency } : {}),
   });
@@ -94,6 +91,19 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     return await refused(!orders ? "apiErr.verifyOrders" : "apiErr.mixedCurrencies", !orders ? 503 : 409);
   }
 
+  // The checkout freezes its order scope before we price the percentage.
+  // Exact tips keep the amount and cap already accepted by the atomic opener.
+  let tip = Number(r.tip);
+  if (body?.tipAmount == null) {
+    tip = Math.min(tipFromPercent(ordersTipBase(orders), Number(body?.tipPct)), Number(r.amount));
+    const { data: savedTip, error: tipError } = await db.from("account_checkouts").update({ tip })
+      .eq("id", r.checkout).eq("restaurant_id", restaurant.id).eq("status", "open").select("id").single();
+    if (tipError || !savedTip) {
+      await releaseAccountCheckout(r.checkout);
+      return await refused("apiErr.checkoutFailed", 502);
+    }
+  }
+
   const plan = await getPlan(restaurant.id);
   const foodPrincipal = remainingPrincipal(orders);
   let fee = NO_FEE;
@@ -108,7 +118,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   // capped against the food and not the tip, reserved under the month's ceiling.
   // Every failure before Stripe gives it back; an unknown Stripe answer keeps it.
   const origin = siteOrigin(req);
-  const cents = Math.round(round2(Number(r.amount) + Number(r.tip)) * 100);
+  const cents = Math.round(round2(Number(r.amount) + tip) * 100);
   try {
     const session = await openDinerAttempt(stripe,
       {

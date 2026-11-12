@@ -1,4 +1,4 @@
-import { round2 } from "@/lib/money";
+import { round2 } from "./money";
 
 /**
  * Dividing a bill evenly, and who eats the odd cent.

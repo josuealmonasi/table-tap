@@ -1,3 +1,5 @@
+import { dinerCheckoutOrders } from "@/lib/diner-checkout-orders";
+import { frozenTipPrincipal, splitTipBase, tipFromPercent } from "@/lib/tip-base";
 import { resolveSelectedSplitPages } from "@/lib/split-page-recovery";
 import Stripe from "stripe";
 import { type NextRequest, NextResponse } from "next/server";
@@ -20,7 +22,8 @@ export interface SlotPayBody extends SplitScope {
 }
 export async function paySplitSlots(req: NextRequest, body: SlotPayBody, member: TableMember): Promise<NextResponse> {
   if (!splitRevision(body.revision) || !splitSelection(body.slots) || !splitCents(body.expectedCents)
-    || (body.tipCents !== undefined && !splitCents(body.tipCents)) || body.couponCode || body.tipAmount !== undefined || body.tipPct !== undefined) {
+    || (body.tipCents !== undefined && !splitCents(body.tipCents)) || body.couponCode || body.tipAmount !== undefined
+    || (body.tipPct !== undefined && (typeof body.tipPct !== "number" || !Number.isFinite(body.tipPct) || body.tipCents !== undefined))) {
     return await apiError("apiErr.invalidRequest", 400);
   }
   try {
@@ -55,7 +58,13 @@ export async function paySplitSlots(req: NextRequest, body: SlotPayBody, member:
     if (amount < (split.currency === "USD" ? 50 : 1000)) return await splitResponse({ outcome: "below_minimum", amount_cents: amount }, []);
     // Never silently reduce a tip the diner chose. Tips are outside both the
     // frozen debt and its fee budget, and may be at most the parts being paid.
-    const tip = body.tipCents ?? 0;
+    let tip = body.tipCents ?? 0;
+    if (body.tipPct !== undefined) {
+      const orders = await dinerCheckoutOrders(split.order_ids);
+      if (orders.length !== split.order_ids.length) throw new Error("Could not read frozen food");
+      const base = splitTipBase(frozenTipPrincipal(split.food_principal, orders), split.shares, slots);
+      tip = Math.round(tipFromPercent(base, body.tipPct) * 100);
+    }
     if (tip > amount || !splitCents(amount + tip)) return await apiError("apiErr.invalidRequest", 400);
     const plan = await getPlan(body.restaurantId);
     const slice = selected.reduce((sum, s) => sum + s.fee_slice_cents, 0);

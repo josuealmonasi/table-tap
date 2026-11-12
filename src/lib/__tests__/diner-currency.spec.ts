@@ -1,8 +1,14 @@
+import { billAmounts } from "@/lib/bill-amounts";
+import { ordersTipBase, splitTipBase, tipFromPercent } from "@/lib/tip-base";
+import type { Order } from "@/lib/types";
 import { beforeEach, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
 const state = vi.hoisted(() => ({
-  orders: [{ id: "o1", tip: 0, total: 100, currency: "MXN", diner: "d1", paid: false, created_at: "2026-10-20T10:00:00Z", items: [] }],
+  orders: [{ id: "o1", tip: 0, total: 100, service_fee: 0, collected: 0, collected_tip: 0, currency: "MXN", diner: "d1", paid: false, created_at: "2026-10-20T10:00:00Z", items: [] }],
   principal: 100,
+  savedTip: 0,
+  tipSaveFails: false,
+  accountAmount: 100,
   orderFee: 0.75,
   shareNo: 1,
   prior: null as { url: string } | null,
@@ -20,7 +26,7 @@ vi.mock("@/lib/plan-server", () => ({ getPlan: async () => ({ limits: { order_fe
 vi.mock("@/lib/platform-fee", () => ({ NO_FEE: { id: null, cents: 0 }, reserveFee: state.reserve, reserveFeeCents: state.reserve, feeMetadata: () => ({}), releaseFee: async () => {}, stripeRefusedOutright: () => false, attachFeeSession: async () => {}, feeRefOpen: async () => false }));
 vi.mock("@/lib/payment-coverage", () => ({ PaymentAttributionRequired: class extends Error {}, paymentCoverage: async () => new Map(), paymentCoverageDetails: async () => new Map() }));
 vi.mock("@/lib/bill-data", () => ({ fetchTableBill: async () => state.orders }));
-vi.mock("@/lib/table-bill", () => ({ billWindowStart: () => new Date("2026-10-20T04:00:00Z"), MAX_BILL_ORDERS: 200, tableBill: () => ({ total: 100 }) }));
+vi.mock("@/lib/table-bill", async original => ({ ...await original<typeof import("@/lib/table-bill")>(), billWindowStart: () => new Date("2026-10-20T04:00:00Z"), MAX_BILL_ORDERS: 200, tableBill: () => ({ total: 100 }) }));
 vi.mock("@/lib/diner-attempt", () => ({
   DinerAttemptRejected: class extends Error {},
   resumeDinerAttempt: async () => state.prior,
@@ -33,29 +39,31 @@ vi.mock("@/lib/diner-attempt", () => ({
 vi.mock("@/lib/diner-checkout", () => ({ recordDinerCheckout: state.record }));
 vi.mock("@/lib/accounts", () => ({ normalizeCode: () => "account-code" }));
 vi.mock("@/lib/accounts-server", () => ({ accountByCode: async () => ({ id: "a1", restaurant_id: "r1", name: "Diner" }) }));
-vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({ rpc: async () => ({ data: { outcome: "open", checkout: "ac1", amount: 100, tip: 0 }, error: null }), from: (table: string) => {
+vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({ rpc: async (_name: string, args: { p_tip?: number }) => ({ data: { outcome: "open", checkout: "ac1", amount: state.accountAmount, tip: args.p_tip ?? 0 }, error: null }), from: (table: string) => {
   const b: Record<string, unknown> = {};
   let offset = 0;
+  let updating = false;
   let cutoff = "";
   b.gte = (_field: string, value: string) => { cutoff = value; return b; };
   b.range = (from: number) => { offset = from; return b; };
   b.order = () => b;
   let ids: string[] | null = null;
   b.in = (_field: string, values: string[]) => { ids = values; return b; };
-  for (const m of ["select", "eq", "lte", "is", "neq", "update"]) b[m] = () => b;
+  b.update = (value: { tip?: number }) => { updating = true; if (table === "account_checkouts" && value.tip !== undefined) state.savedTip = value.tip; return b; };
+  for (const m of ["select", "eq", "lte", "is", "neq"]) b[m] = () => b;
   const data = () => table === "restaurants" ? { id: "r1", currency: "USD", stripe_account_id: "acct_1", stripe_charges_enabled: true }
     : table === "bill_splits" ? { id: "s1", order_ids: state.orders.filter(o => o.created_at <= "2026-10-20T11:00:00Z").map(o => o.id), restaurant_id: "r1", session_id: "t1", status: "locked", locked_at: "2026-10-20T11:00:00Z", shares: 2, amount: 100, food_principal: state.principal }
     : table === "account_checkouts" ? { order_ids: state.orders.map(o => o.id) }
     : table === "bill_split_claims" ? { share_no: state.shareNo, amount: 50, paid_at: null }
     : table === "table_sessions" ? { id: "t1" } : offset > 0 ? [] : state.orders.filter(o => (!ids || ids.includes(o.id)) && (!cutoff || o.created_at >= cutoff));
-  b.single = b.maybeSingle = async () => ({ data: data(), error: null });
+  b.single = b.maybeSingle = async () => ({ data: data(), error: table === "account_checkouts" && updating && state.tipSaveFails ? { message: "save failed" } : null });
   b.then = (resolve: (r: unknown) => void) => Promise.resolve({ data: data(), error: null }).then(resolve);
   return b;
 } }) }));
 const bill = await import("@/app/api/bill/pay/route");
 const split = await import("@/app/api/split/pay/route");
 const account = await import("@/app/api/account/pay/route");
-beforeEach(() => { state.prior = null; state.orderFee = 0.75; state.shareNo = 1; state.principal = 100; state.reserve.mockClear(); state.create.mockClear(); state.record.mockReset().mockResolvedValue(undefined); state.orders = [{ id: "o1", tip: 0, total: 100, currency: "MXN", diner: "d1", paid: false, created_at: "2026-10-20T10:00:00Z", items: [] }]; });
+beforeEach(() => { state.savedTip = 0; state.tipSaveFails = false; state.accountAmount = 100; state.prior = null; state.orderFee = 0.75; state.shareNo = 1; state.principal = 100; state.reserve.mockClear(); state.create.mockClear(); state.record.mockReset().mockResolvedValue(undefined); state.orders = [{ id: "o1", tip: 0, total: 100, service_fee: 0, collected: 0, collected_tip: 0, currency: "MXN", diner: "d1", paid: false, created_at: "2026-10-20T10:00:00Z", items: [] }]; });
 const request = () => new NextRequest("http://localhost/pay", { method: "POST", body: JSON.stringify({
   c: "account-code", expected: 100, restaurantId: "r1", tableId: "t1", orderIds: state.orders.map(o => o.id), splitId: "s1", sessionId: "t1", diner: "d1", ownOrderIds: ["o1", "o2"],
 }) });
@@ -146,3 +154,62 @@ it("E8 a zero-fee split still opens the shared durable attempt", async () => {
   expect(state.record).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ scopeKey: "split:s1:1", foodPrincipal: 100 }), expect.anything());
   expect(state.reserve).not.toHaveBeenCalled();
 });
+
+it.each([0, 10, 15, 100])("F6 bill preview and charged tip agree at %s percent with service, old tips and collections", async pct => {
+  state.orders = [{ ...state.orders[0], total: 120, service_fee: 10, tip: 10, collected: 35, collected_tip: 5 }];
+  const { tableBill } = await vi.importActual<typeof import("@/lib/table-bill")>("@/lib/table-bill");
+  const preview = billAmounts(tableBill(state.orders as unknown as Order[], []), "all", null, pct, null);
+  // MX$110 of food and service with MX$30 of it paid: MX$100 × 80/110 of food.
+  expect(preview.tipBase).toBe(72.73);
+  expect((await bill.POST(new NextRequest("http://localhost/pay", { method: "POST", body: JSON.stringify({
+    restaurantId: "r1", tableId: "t1", orderIds: ["o1"], tipPct: pct,
+  }) }))).status).toBe(200);
+  expect(state.create).toHaveBeenCalledWith(expect.objectContaining({
+    metadata: expect.objectContaining({ settle_tip: String(preview.tip) }),
+    line_items: [expect.objectContaining({ price_data: expect.objectContaining({ unit_amount: Math.round(preview.total * 100) }) })],
+  }), expect.anything());
+});
+
+it("F6 a split tips its frozen food slice and only this diner's later dishes", async () => {
+  state.principal = 110;
+  state.orders = [{ ...state.orders[0], total: 120, service_fee: 10, tip: 10 },
+    { ...state.orders[0], id: "o2", total: 25, service_fee: 2, tip: 3, created_at: "2026-10-20T12:00:00Z" }];
+  const preview = tipFromPercent(splitTipBase(100, 2, [1], ordersTipBase([state.orders[1]])), 10);
+  expect(preview).toBe(7);
+  expect((await split.POST(new NextRequest("http://localhost/pay", { method: "POST", body: JSON.stringify({
+    restaurantId: "r1", tableId: "t1", sessionId: "t1", splitId: "s1", ownOrderIds: ["o2"], tipPct: 10,
+  }) }))).status).toBe(200);
+  expect(state.create).toHaveBeenCalledWith(expect.objectContaining({ metadata: expect.objectContaining({ settle_tip: String(preview) }) }), expect.anything());
+});
+
+it("F6 an account saves and charges the preview tip on its checkout's food", async () => {
+  state.orders = [{ ...state.orders[0], total: 120, service_fee: 10, tip: 10 }];
+  state.accountAmount = 120;
+  const preview = tipFromPercent(ordersTipBase(state.orders), 15);
+  expect(preview).toBe(15);
+  expect((await account.POST(new NextRequest("http://localhost/pay", { method: "POST", body: JSON.stringify({
+    c: "account-code", expected: 120, tipPct: 15,
+  }) }))).status).toBe(200);
+  expect(state.savedTip).toBe(preview);
+  expect(state.create).toHaveBeenCalledWith(expect.objectContaining({ line_items: [expect.objectContaining({
+    price_data: expect.objectContaining({ unit_amount: 13500 }),
+  })] }), expect.anything());
+});
+
+it("F6 an account never opens Stripe when its calculated tip cannot be saved", async () => {
+  state.tipSaveFails = true;
+  expect((await account.POST(request())).status).toBe(502);
+  expect(state.create).not.toHaveBeenCalled();
+});
+
+it.each([["bill", bill.POST, 120], ["split", split.POST, 50], ["account", account.POST, 120]] as const)(
+  "F6 %s keeps exact tips capped at payable debt, even when that exceeds its food base", async (_name, post, cap) => {
+    state.orders = [{ ...state.orders[0], total: 120, service_fee: 10, tip: 10 }];
+    state.principal = 110; state.accountAmount = 120;
+    expect((await post(new NextRequest("http://localhost/pay", { method: "POST", body: JSON.stringify({
+      c: "account-code", expected: 120, restaurantId: "r1", tableId: "t1", orderIds: ["o1"],
+      splitId: "s1", sessionId: "t1", tipAmount: 500, tipPct: 15,
+    }) }))).status).toBe(200);
+    const params = (state.create.mock.calls as unknown[][])[0][0] as { line_items: { price_data: { unit_amount: number } }[] };
+    expect(params.line_items[0].price_data.unit_amount).toBe(cap * 200);
+  });

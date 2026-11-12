@@ -1,3 +1,4 @@
+import { tipBaseCase } from "./tip-base.mjs";
 import { splitSlotFixture } from "../split-slots-fixture.mjs";
 
 export function splitSlotCases(fx) {
@@ -14,6 +15,7 @@ export function splitSlotCases(fx) {
     busy: /ya hay una divisi|already dividing/i, conflict: /otras partes|different parts/i,
   };
   return [
+    tipBaseCase("slots"),
     { name: "POST /api/split/start (four parts with one phone on a staff-opened table)", as: "diner", method: "POST", path: "/api/split/start",
       arrange: arrange({ start: false, shares: 4 }), body: f => f.slotCase.startBody, expect: [200],
       check: async (d, f) => {

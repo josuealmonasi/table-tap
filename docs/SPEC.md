@@ -414,6 +414,17 @@ dishes on a bill the restaurant has just cancelled.
   person's own" is true of the one added when a share is *paid*: clamped to the
   payable amount, recorded in `payments.tip`, and added to the oldest order on
   the sitting.
+- **Tip percentages always use dishes after discounts.** `src/lib/tip-base.ts`
+  is the shared rule for checkout, the bill, split shares and account payments,
+  including the amounts printed on the tip chips. Service, earlier tips and
+  principal already collected are excluded. A bill uses the selected unpaid
+  orders' remaining dishes, less any new coupon. A split uses its share of the
+  frozen dishes (the first share carries the odd cents), plus only that diner's
+  later orders covered by the payment. Model 2 selected slots cover frozen food
+  only; later orders stay outside that payment. Accounts use the dishes in the
+  checkout's frozen order scope, in the selected currency. The server recomputes
+  percentages with the same helper; explicit amounts retain their existing caps.
+  Fee principal and fee budgets keep their existing meaning, including service.
 - **A bill names every charge in its total.** The diner's bill lists the
   dishes, any discount, the service charge (with the percentage it was taken
   at) and any tip as their own lines, adding up to exactly what is charged.
@@ -2562,7 +2573,8 @@ collection freezes the size permanently; food cancellation uses refunds.
 
 `/api/split/pay` retains the legacy claim path and dispatches model 2 to grouped
 slots. Its body adds `revision`, unique zero-based `slots`, `expectedCents` and
-optional `tipCents` (default zero, at most the selected parts). It creates a
+optional `tipCents` (default zero, at most the selected parts), or `tipPct`
+for a percentage of their frozen dishes. Sending both is refused. It creates a
 durable attempt, reserves every selected part, then creates Stripe Checkout.
 The amount is the parts plus the new tip. The application fee is the sum of
 their frozen fee slices, reserved through the existing monthly cap. Below the

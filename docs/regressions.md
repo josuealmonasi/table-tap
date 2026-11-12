@@ -6566,7 +6566,6 @@ Reports never fetch current promotions for old sales.
 - **Net and IVA were rounded separately,** so MX$0.01 at 100% showed MX$0.01 + MX$0.01. `ivaSplit` now works in whole cents, so the parts always add up to the subtotal.
 - **The shift sum did not separate tips.** It now says which part of cash sales was tips (`cash_shift_totals.tips`), without changing the expected cash.
 - **Parked, with notes in `loop/codex/parked/`:**
-  - finding 6, the tip base, which needs the screen and three pay routes changed together;
   - finding 7's tips paid out, which needs withdrawals to say what they were for.
 
 ## Held receipt intake and manager review (2026-11-11)
@@ -6595,6 +6594,26 @@ late approval of a resolved receipt fails. The shift close, the restaurant
 delete check, the held-cash preflight, the held-sales list and `pnpm money`'s
 rebuilt close all read the resolution. `scripts/probe-held-resolve.mjs` proves
 each rule in Postgres; the manager's screen for it is the next step.
+
+## Sweep 10, finding 6 — one food-only tip base (2026-11-11)
+
+The tip chips and card routes must agree: service and a tip already on an order
+were being tipped again, and account chips sent a computed amount while the
+percentage route used the entire debt. `tip-base.ts` now owns percentage tips
+and the bill, frozen-share and account food bases. Exact tips retain their caps.
+Collected principal is excluded; grouped slots sum their own frozen food slices.
+Account percentages are saved only after the checkout freezes its order IDs.
+
+The parked `sweep10-tip-base.react-component.spec.tsx` now passes. Route tests in
+`diner-currency.spec.ts` and `split-slots-pay.spec.ts` compare the same fixture's
+preview with Stripe parameters or the saved account tip. The sabotage-tested
+`invariants/tip-base.react-component.spec.tsx` refuses local percentage formulas
+in pay routes. The API bill, legacy split, slots and account cases assert the
+shared helper's amount against saved Stripe metadata or the checkout row, even
+when the fake connected account refuses the charge. Claude must run these API
+cases and the live gates; no database, provider or browser verification was run
+for this local change. Phone/tablet chip and total screenshots still need review.
+
 ## The ticket PDF says what the receipt says (2026-11-11)
 
 The 80 mm ticket and the HTML/email receipt are two forms of one sale. Both

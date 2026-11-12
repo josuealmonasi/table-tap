@@ -1,3 +1,4 @@
+import { tipFromPercent } from "@/lib/tip-base";
 import type { OrderLineItem } from "@/lib/types";
 import { nextPromoStep, promoCost, type QuantityPromo } from "@/lib/promo-math";
 import { round2 } from "@/lib/money";
@@ -114,21 +115,7 @@ export interface PricedCart {
  * all. One formula and one base — the discounted subtotal — for the preview and
  * for the charge.
  */
-export function tipFor(subtotal: number, pct: number): number {
-  // Clamped here rather than at each caller, because one caller did not.
-  //
-  // The diner's checkout only ever accepts 0/10/15/20 from an allow-list, so
-  // it was safe. The till passed whatever the request carried, and a NEGATIVE
-  // percentage came straight through as a negative tip — charging less than
-  // the food costs. That is a cashier undercharging a friend, and the drawer
-  // still reconciles afterwards, because the order's own total was computed
-  // with the same negative number. Nothing downstream would ever notice.
-  //
-  // A tip is a gratuity: never below nothing, and never more than the food it
-  // is thanking somebody for. NaN and Infinity fall through to zero.
-  const safe = Number.isFinite(pct) ? Math.min(100, Math.max(0, pct)) : 0;
-  return round2(subtotal * (safe / 100));
-}
+export const tipFor = tipFromPercent;
 
 const extrasTotal = (line: OrderLineItem): number =>
   line.extras?.reduce((sum, e) => sum + e.price, 0) ?? 0;
