@@ -37,9 +37,13 @@ export function offlineCharge(raw: unknown, now = Date.now(), recovery = false):
   if (!Number.isFinite(at) || at > now + CLOCK_SKEW_MS || (!recovery && now - at > OFFLINE_MAX_AGE_DAYS * 86_400_000) || at < Date.UTC(2000, 0, 1)) return null;
   // Receipts contain numeric cents, not the locale-formatted text of an input.
   // Reject real sub-cent amounts before rounding; tolerate only float noise.
-  const money = (v: unknown) => typeof v === "number" && Number.isFinite(v)
-    && Math.abs(v * 100 - Math.round(v * 100)) <= 1e-6
-    ? cashAmount(round2(v), false) : null;
+  // Held receipts queued before this shape stored amounts as text ("120.50");
+  // accept those when they are plain non-negative decimals with at most 2 places.
+  const money = (raw: unknown) => {
+    const v = typeof raw === "string" && /^\d+(\.\d{1,2})?$/.test(raw.trim()) ? Number(raw.trim()) : raw;
+    return typeof v === "number" && Number.isFinite(v) && Math.abs(v * 100 - Math.round(v * 100)) <= 1e-6
+      ? cashAmount(round2(v), false) : null;
+  };
   const subtotal = money(r.subtotal);
   const serviceFee = money(r.serviceFee);
   const tip = money(r.tip);

@@ -117,3 +117,17 @@ describe("the tax rate a held sale was rung under (C6, end-to-end review)", () =
     expect(offlineCharge(base)).not.toHaveProperty("taxPct");
   });
 });
+
+describe("held receipts that stored their amounts as text", () => {
+  const text = (o: Record<string, unknown> = {}) => ({ at: "2026-10-15T17:30:00Z", subtotal: "120.50", serviceFee: "0", tip: "0", discount: "0", total: "120.50", ...o });
+  it("accepts plain decimals with at most 2 places and returns numbers", () => {
+    const c = offlineCharge(text(), NOW);
+    expect(c?.subtotal).toBe(120.5);
+    expect(c?.total).toBe(120.5);
+  });
+  it("still rejects 3 decimals and non-numbers", () => {
+    expect(offlineCharge(text({ subtotal: "12.345", total: "12.345" }), NOW)).toBeNull();
+    expect(offlineCharge(text({ subtotal: "abc" }), NOW)).toBeNull();
+    expect(offlineCharge(text({ tip: "-1" }), NOW)).toBeNull();
+  });
+});
