@@ -78,7 +78,9 @@ export default async function PosPage() {
   const collector = (await currentUser())?.email ?? "staff";
   return (
     <PosScreen
-      restaurant={data.restaurant}
+      // The public column list above never carries the till's own settings:
+      // without this the "print at the till" switch could never turn printing on.
+      restaurant={{ ...data.restaurant, print_ticket_at_till: membership.restaurant.print_ticket_at_till === true }}
       collectorContext={dashboardFrozen(plan.status) ? "" : issueOfflineContext(membership.restaurant.id, collector, data.restaurant.currency)}
       collector={collector}
       canRecover={MANAGES(membership.role)}

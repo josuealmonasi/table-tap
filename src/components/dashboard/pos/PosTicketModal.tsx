@@ -4,6 +4,8 @@ import { useT } from "@/lib/i18n/context";
 import { formatMoney } from "@/lib/format";
 import { CheckIcon } from "@/components/ui/icons";
 import { Modal } from "@/components/ui/Modal";
+import { useToast } from "@/components/ui/Toast";
+import { reserveReceiptPopup } from "@/lib/receipt-popup";
 
 export interface PosTicket {
   code: string;
@@ -14,11 +16,15 @@ export interface PosTicket {
   offline?: boolean;
   /** Kept on the device although the server answered: no "no connection". */
   answered?: boolean;
+  /** The ticket the till did not print (paperless), for a customer who asks for it. */
+  receiptHtml?: string;
 }
 
 interface PosTicketModalProps {
   ticket: PosTicket | null;
   currency: string;
+  /** The restaurant's name: the printed window's title. */
+  title: string;
   onClose: () => void;
 }
 
@@ -34,9 +40,17 @@ interface PosTicketModalProps {
 export default function PosTicketModal({
   ticket,
   currency,
+  title,
   onClose,
 }: PosTicketModalProps) {
   const t = useT();
+  const toast = useToast();
+  // Opened inside the click, so the browser lets the window through.
+  function printTicket(html: string): void {
+    reserveReceiptPopup(reason => {
+      toast(t(reason === "blocked" ? "pos.printBlocked" : "pos.printFailed"), "error");
+    }).print(html, title);
+  }
   return (
     <Modal
       open={Boolean(ticket)}
@@ -58,6 +72,11 @@ export default function PosTicketModal({
           <p className="tt-muted tt-pos-ticket-hint">
             {ticket.offline ? t(ticket.answered ? "pos.heldAnswered" : "pos.offlineHeld") : ticket.handedOver ? t("pos.handedOver") : t("pos.calledOut")}
           </p>
+          {ticket.receiptHtml && (
+            <button type="button" className="tt-btn tt-btn-ghost" onClick={() => printTicket(ticket.receiptHtml!)}>
+              {t("orders.printReceipt")}
+            </button>
+          )}
           <button type="button" className="tt-btn tt-btn-primary" onClick={onClose}>
             {t("pos.newSale")}
           </button>
