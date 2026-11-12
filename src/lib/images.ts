@@ -16,8 +16,8 @@ export function coverPath(restaurantId: string, ext = "webp"): string {
 }
 
 /** The restaurant's own mark. One per restaurant, so it overwrites. */
-export function logoPath(restaurantId: string, ext = "webp"): string {
-  return `${restaurantId}/logo.${ext}`;
+export function logoPath(restaurantId: string): string {
+  return `${restaurantId}/logo.png`;
 }
 
 /**
@@ -43,6 +43,29 @@ export function pathFromUrl(url: string): string | null {
 }
 
 /**
+ * The object a restaurant's CURRENT logo URL points at, for deleting it when
+ * the logo is removed or replaced. Null when there is nothing of this
+ * restaurant's to delete.
+ *
+ * Read from the stored URL rather than rebuilt with `logoPath()`, because the
+ * name has changed over time: logos uploaded before PNG live at `logo.webp`,
+ * and deleting the computed `logo.png` would leave that public file behind
+ * forever. Anything outside the restaurant's own folder is refused here, so a
+ * stray or tampered URL can never make one restaurant delete another's file —
+ * the storage policy should refuse that too, but cleanup is not where we want
+ * to find out.
+ */
+export function ownLogoPathFromUrl(restaurantId: string, url: string | null): string | null {
+  if (!url || !restaurantId) return null;
+  const path = pathFromUrl(url);
+  if (!path || !path.startsWith(`${restaurantId}/`)) return null;
+  // `r1/../r2/logo.png` starts with `r1/` but names another folder.
+  const segments = path.split("/");
+  if (segments.some(s => s === "" || s === "." || s === ".." || s.includes("\\"))) return null;
+  return path;
+}
+
+/**
  * What we ask owners for, and what we resize to before upload.
  *
  * The cover is wide because it sits in a short full-width band above the
@@ -53,6 +76,7 @@ export function pathFromUrl(url: string): string | null {
  * we warn rather than refuse, since a slightly small photo still beats none.
  */
 export interface ImageSpec {
+  encoding?: "png";
   width: number;
   height: number;
   minWidth: number;
@@ -79,6 +103,7 @@ export const DISH: ImageSpec = {
  * sharp on a 3x screen and survives a future larger placement.
  */
 export const LOGO: ImageSpec = {
+  encoding: "png",
   width: 256,
   height: 256,
   minWidth: 128,
