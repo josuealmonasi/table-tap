@@ -6617,4 +6617,12 @@ exactly that. The schema lowers every unpaid, unpromised bill to no service
 charge through `reprice_open_service(id, 0)`, switches it off everywhere and
 adds `restaurants_no_service_charge`, so it cannot come back. Settings no longer
 offer it and the route no longer accepts it. Past orders keep the charge they
-were made with, and every screen still shows it on them.
+were made with, and so do unpaid bills the repricer must leave as rung: part
+paid, being split, on an account, or behind an open card checkout. Those fees
+are still charged, but not every view names them: the bill totals after a
+collection, split slots and split receipts, and account statements show them
+only inside the total. Removing the fee never takes a bill below zero: when a
+staff discount already covers part of the charge, only what the total holds
+comes off and the rest stays as charge the discount pays for. Restaurants are
+picked by the unpaid fees they still hold, not their settings, so re-running the
+block, or running it after the settings update, changes nothing more.
