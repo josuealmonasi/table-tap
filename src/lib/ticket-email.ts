@@ -89,11 +89,16 @@ export async function drainTicketEmails(limit = 20): Promise<void> {
  * unpaid orders about to be collected are marked before the payment, so the
  * trigger never queues their ticket. Scoped to the staff member's restaurant.
  */
-export async function skipTicketEmails(restaurantId: string, target: { tableId?: string; orderId?: string }): Promise<void> {
+export async function skipTicketEmails(restaurantId: string,
+  target: { tableId?: string; orderId?: string; orderIds?: string[] }): Promise<void> {
+  // A divided bill with no orders left to settle has nothing to mark; an empty
+  // `in` filter must never fall through to a broader write.
+  if (target.orderIds && target.orderIds.length === 0) return;
   let q = createAdminClient().from("orders").update({ ticket_email_skip: true })
     // A customer account's orders are never the table's (they are paid on the account).
     .eq("restaurant_id", restaurantId).eq("paid", false).is("account_id", null);
-  q = target.orderId ? q.eq("id", target.orderId) : q.eq("table_id", target.tableId!);
+  // A divided bill names its frozen orders: only those close when its last part is paid.
+  q = target.orderIds ? q.in("id", target.orderIds) : target.orderId ? q.eq("id", target.orderId) : q.eq("table_id", target.tableId!);
   const { error } = await q;
   if (error) throw new Error(`Could not skip the ticket email: ${error.message}`);
 }

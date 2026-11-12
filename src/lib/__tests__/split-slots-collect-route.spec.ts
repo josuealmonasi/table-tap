@@ -1,6 +1,8 @@
 import { beforeEach, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
 const s = vi.hoisted(() => ({ outcome: "collected", actor: true, foreign: false, left: 55, receiptTip: 5, balanceError: false, logError: false, receiptActor: "waiter", reads: [] as Record<string, unknown>[], logs: [] as Record<string, unknown>[], args: null as Record<string, unknown> | null }));
+// `after()` throws outside a request; the ticket-email drain has its own spec.
+vi.mock("next/server", async importOriginal => ({ ...await importOriginal<typeof import("next/server")>(), after: () => {} }));
 vi.mock("@/lib/table-outstanding", () => ({ tableOutstanding: async () => { if (s.balanceError && s.args) throw new Error("balance unavailable"); return { owed: s.left, orders: [{ table_label: "Table 1" }], balances: [] }; } }));
 vi.mock("@/lib/activity-log", () => ({ logEvent: async (event: Record<string, unknown>) => { s.logs.push(event); } }));
 const r = "00000000-0000-0000-0000-000000000001";

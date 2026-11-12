@@ -1385,8 +1385,9 @@ whole. The address is used for tickets only.
 
 When a sale carrying that card becomes paid, `queue_ticket_email` puts it in
 `ticket_email_outbox` (no address stored there) unless the cashier chose "No
-enviar esta vez" (`orders.ticket_email_skip`, from the till and from table
-collection). Every route that takes a payment drains the outbox with `after()`
+enviar esta vez" (`orders.ticket_email_skip`, from the till, from table
+collection, and from a divided bill's part, where `/api/split/collect` marks
+only that split's frozen orders). Every route that takes a payment drains the outbox with `after()`
 once it has answered (`src/lib/ticket-email.ts`), and the daily recovery cron
 catches the rest; a ticket two hours old expires unsent. Orders of one card
 and one sitting claimed together are one email: the receipt, the 80 mm PDF
