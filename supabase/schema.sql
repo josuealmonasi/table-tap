@@ -2185,6 +2185,13 @@ create table if not exists notifications (
 -- this that is a scan of every notification on the platform.
 create index if not exists notifications_recent_idx
   on notifications(restaurant_id, created_at desc);
+-- The bell reads unread first, then history, newest first with id as the
+-- tie-break, and counts the unread on every poll. With only the index above a
+-- restaurant with few unread rows walked its whole history to find them.
+create index if not exists notifications_unread_page_idx
+  on notifications(restaurant_id, created_at desc, id desc) where read_at is null;
+create index if not exists notifications_read_page_idx
+  on notifications(restaurant_id, created_at desc, id desc) where read_at is not null;
 
 alter table notifications enable row level security;
 
@@ -4043,6 +4050,11 @@ alter table orders add column if not exists account_id uuid references customer_
 alter table orders add column if not exists charged_by text;
 alter table orders add column if not exists charged_at timestamptz;
 create index if not exists orders_account_idx on orders(account_id) where account_id is not null;
+-- What every account still owes, for the accounts list: unpaid, not written
+-- off, not cancelled, in id order. The indexes above find a restaurant's orders
+-- or one account's, but this list wants all accounts' debt and nothing else.
+create index if not exists orders_account_debt_idx on orders(restaurant_id, id)
+  where account_id is not null and paid = false and written_off = false and status <> 'cancelled';
 
 alter table payments add column if not exists account_id uuid references customer_accounts(id) on delete set null;
 create index if not exists payments_account_idx on payments(account_id) where account_id is not null;
@@ -4071,6 +4083,11 @@ create table if not exists account_checkouts (
 );
 alter table account_checkouts enable row level security;
 revoke all on account_checkouts from anon, authenticated;
+-- The accounts list asks which of a restaurant's accounts still have a card
+-- payment in flight, by account and in id order. There was no index past the
+-- primary key, so every page read every checkout ever made.
+create index if not exists account_checkouts_account_idx
+  on account_checkouts(restaurant_id, account_id, id);
 
 -- A Stripe signature names its sender, not who was meant to receive the food.
 -- Only sessions we created can reach the diner ledger; metadata is a snapshot,
@@ -4106,6 +4123,10 @@ alter table diner_checkouts add column if not exists order_discounts jsonb not n
 alter table diner_checkouts add column if not exists discount_applied boolean not null default false;
 alter table diner_checkouts add column if not exists food_principal numeric not null default 0 check (food_principal >= 0);
 create unique index if not exists diner_checkout_open_scope on diner_checkouts(restaurant_id, scope_key) where status = 'open';
+-- An open diner card attempt that pays an account checkout, found by that
+-- checkout's id (the accounts list). Only open attempts are ever asked for.
+create index if not exists diner_checkouts_open_account_idx
+  on diner_checkouts(restaurant_id, (metadata->>'account_checkout'), id) where status = 'open';
 alter table coupon_redemptions add column if not exists checkout_attempt_id uuid references diner_checkouts(id);
 create index if not exists coupon_checkout_attempt on coupon_redemptions(checkout_attempt_id);
 alter table bill_splits add column if not exists food_principal numeric;

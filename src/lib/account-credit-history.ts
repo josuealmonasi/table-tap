@@ -15,14 +15,20 @@ interface CreditRow {
   orders: { id: string; items: unknown; charged_at: string | null; created_at: string; table_label: string | null };
 }
 
-/** Keep credited orders visible after full relief or later collection. Their
- * history has zero debt; only the independently filtered unpaid read owes. */
-export async function withAccountCredits(db: ReturnType<typeof createAdminClient>, restaurantId: string,
-  accountId: string, charges: StatementCharge[]): Promise<StatementCharge[]> {
-  const rows = await everyRow<CreditRow>((a, b) => db.from("order_adjustments")
+/** Read independently of the unpaid orders, then reconcile the two snapshots. */
+export async function readAccountCredits(db: ReturnType<typeof createAdminClient>, restaurantId: string,
+  accountId: string): Promise<CreditRow[]> {
+  return await everyRow<CreditRow>((a, b) => db.from("order_adjustments")
     .select("order_id, resulting_total, created_at, forgiven, currency, actor, reason, note, orders!inner(id, items, charged_at, created_at, table_label, account_id)")
     .eq("restaurant_id", restaurantId).eq("kind", "account_credit").eq("orders.account_id", accountId)
     .order("created_at").order("id").range(a, b).returns<CreditRow[]>(), "the account's credits");
+}
+
+/** Keep credited orders visible after full relief or later collection. Their
+ * history has zero debt; only the independently filtered unpaid read owes. */
+export async function withAccountCredits(db: ReturnType<typeof createAdminClient>, restaurantId: string,
+  accountId: string, charges: StatementCharge[], history?: CreditRow[]): Promise<StatementCharge[]> {
+  const rows = history ?? await readAccountCredits(db, restaurantId, accountId);
   const result = new Map(charges.map(c => [c.orderId, { ...c, credits: [] as AccountCreditLine[] }]));
   for (const row of rows) {
     let charge = result.get(row.order_id);

@@ -1,5 +1,4 @@
-import { currentUser } from "@/lib/current-user";
-import { getMembership, MANAGES, type Role } from "@/lib/membership";
+import { getMembershipWithUser, MANAGES, type Role } from "@/lib/membership";
 
 /**
  * Who is calling a route, and which restaurant they are confined to.
@@ -19,9 +18,9 @@ export interface Actor {
 }
 
 async function resolve(): Promise<Actor | null> {
-  const membership = await getMembership();
-  if (!membership) return null;
-  const user = await currentUser();
+  const verified = await getMembershipWithUser();
+  if (!verified) return null;
+  const { membership, user } = verified;
   return {
     restaurantId: membership.restaurant.id,
     role: membership.role,

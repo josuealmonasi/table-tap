@@ -8,6 +8,9 @@ vi.mock("@/lib/membership", async importOriginal => {
   const original = await importOriginal<typeof import("@/lib/membership")>();
   return { ...original, getMembership: async () => state.role ? {
     role: state.role, restaurant: { id: "own", currency: "USD", timezone: "Asia/Tokyo" },
+  } : null, getMembershipWithUser: async () => state.role ? {
+    membership: { role: state.role, restaurant: { id: "own", currency: "USD", timezone: "Asia/Tokyo" } },
+    user: { id: "user", email: "manager@example.com" },
   } : null };
 });
 vi.mock("@/lib/current-user", () => ({ currentUser: async () => ({ id: "user", email: "manager@example.com" }) }));

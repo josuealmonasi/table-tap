@@ -3,6 +3,7 @@ import { apiError } from "@/lib/api-error";
 import { actingStaff } from "@/lib/api-guard";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { badgesFor } from "@/lib/badges";
+import { MANAGES, SERVES } from "@/lib/membership";
 
 export const dynamic = "force-dynamic";
 
@@ -30,31 +31,32 @@ export async function GET(): Promise<NextResponse> {
     return NextResponse.json({ badges: {} });
   }
 
-  // Counted apart, because the two halves of the board belong to different
-  // people: `badgesFor` decides which of them this person is answerable for.
+  // Only count work this role can act on; keep the same zero defaults for the rest.
+  const manages = MANAGES(actor.role);
+  const unused = { count: 0, error: null };
   const [cooking, ready, discounts, writeOffs] = await Promise.all([
-    db
+    manages || actor.role === "kitchen" ? db
       .from("orders")
       .select("id", { count: "exact", head: true })
       .eq("restaurant_id", actor.restaurantId)
       .eq("written_off", false)
-      .in("status", ["received", "preparing"]),
-    db
+      .in("status", ["received", "preparing"]) : unused,
+    manages || SERVES(actor.role) ? db
       .from("orders")
       .select("id", { count: "exact", head: true })
       .eq("restaurant_id", actor.restaurantId)
       .eq("written_off", false)
-      .eq("status", "ready"),
-    db
+      .eq("status", "ready") : unused,
+    manages ? db
       .from("discount_requests")
       .select("id", { count: "exact", head: true })
       .eq("restaurant_id", actor.restaurantId)
-      .eq("status", "pending"),
-    db
+      .eq("status", "pending") : unused,
+    manages ? db
       .from("write_off_requests")
       .select("id", { count: "exact", head: true })
       .eq("restaurant_id", actor.restaurantId)
-      .eq("status", "pending"),
+      .eq("status", "pending") : unused,
   ]);
   if ([cooking, ready, discounts, writeOffs].some(result => result.error)) {
     return await apiError("apiErr.generic", 503);
