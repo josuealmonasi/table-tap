@@ -1,3 +1,4 @@
+import { apiAccountFixtures } from "./api-account-fixtures.mjs";
 // ============================================================================
 // The data and identities `pnpm api` needs.
 //
@@ -147,7 +148,7 @@ export async function setup(env, base) {
         .from("orders").select("id").eq("restaurant_id", restaurant.id).eq("note", `${MARK} caja`);
       const ids = (sales ?? []).map(o => o.id);
       if (ids.length) {
-        await admin.from("payments").delete().in("order_id", ids);
+        await admin.from("payments").delete().is("account_id", null).in("order_id", ids);
         await admin.from("orders").delete().in("id", ids);
       }
     };
@@ -539,26 +540,6 @@ export async function setup(env, base) {
     emoji: comboRow.emoji, price: Number(comboRow.combo_price), qty: 1, mods: {},
   };
 
-  // ── A customer account of the gate's own ─────────────────────────────
-  // Named with the mark, with a table bill to put on it — an unpaid order on
-  // a table of its own with an open sitting, so charging it closes the sitting
-  // the way a real table's would — and a counter order for the ceiling case.
-  const acctCode = () => Array.from({ length: 12 }, () => "0123456789ABCDEFGHJKMNPQRSTVWXYZ"[Math.floor(Math.random() * 32)]).join("");
-  const { data: account } = await admin.from("customer_accounts").insert({
-    restaurant_id: restaurant.id, name: `${MARK} account`, code: acctCode(),
-    credit_limit: 1000, opened_by: "demo@tabletap.dev",
-  }).select("id, code").single();
-  const { data: acctTable } = await admin
-    .from("restaurant_tables").insert({ restaurant_id: restaurant.id, label: `${MARK}-acct` })
-    .select("id, label").single();
-  const { data: acctSession } = await admin
-    .from("table_sessions").insert({ restaurant_id: restaurant.id, table_id: acctTable.id })
-    .select("id").single();
-  const acctOrder = await make({
-    paid: false, table_id: acctTable.id, table_label: acctTable.label, session_id: acctSession.id,
-  });
-  const acctOrder2 = await make({ paid: false });
-
   // A ticket of our own for the printer to collect, so the cases below do not
   // race the seed's or swallow one a real screen queued. Queued by the trigger
   // on `status = 'received'`, not inserted here — inserting it collides with
@@ -600,11 +581,7 @@ export async function setup(env, base) {
     onCaja,
     onCarta,
     phoneMembers,
-    accountId: account.id,
-    accountCode: account.code,
-    acctOrder,
-    acctOrder2,
-    acctSessionId: acctSession.id,
+    accountFixture: await apiAccountFixtures(admin, env, base),
     lineTotal: line.price,
     withCardSavedBefore,
     withProgramRewardRenamed,
@@ -689,6 +666,7 @@ export async function setup(env, base) {
 
 /** Everything marked goes, whatever happened to the tests. */
 export async function teardown(fx) {
+  await fx.accountFixture?.cleanup();
   await fx.phoneMembers?.cleanup();
   const { admin, restaurant } = fx;
   await admin.from("offline_sale_queue").delete().eq("restaurant_id", restaurant.id).like("body->>note", `${MARK} offline%`);
@@ -712,7 +690,7 @@ export async function teardown(fx) {
     .eq("restaurant_id", restaurant.id).like("note", `${MARK} offline%`);
   const offlineIds = (offlineSales ?? []).map(o => o.id);
   if (offlineIds.length) {
-    await admin.from("payments").delete().in("order_id", offlineIds);
+    await admin.from("payments").delete().is("account_id", null).in("order_id", offlineIds);
     await admin.from("orders").delete().in("id", offlineIds);
   }
   // A terminal deposit a case marked and did not get to take back.
@@ -725,17 +703,6 @@ export async function teardown(fx) {
   }
   if (fx.parkedShift) {
     await admin.from("cash_shifts").update({ closed_by: null, closed_at: null, counted_cash: null }).eq("id", fx.parkedShift);
-  }
-  // The gate's customer accounts and everything on them, first: an order still
-  // pointing at an account keeps the account from going. The money first of all.
-  const { data: ourAccounts } = await admin.from("customer_accounts").select("id")
-    .eq("restaurant_id", restaurant.id).like("name", `${MARK}%`);
-  const accountIds = (ourAccounts ?? []).map(a => a.id);
-  if (accountIds.length) {
-    await admin.from("payments").delete().in("account_id", accountIds);
-    await admin.from("orders").delete().in("account_id", accountIds);
-    await admin.from("account_checkouts").delete().in("account_id", accountIds);
-    await admin.from("customer_accounts").delete().in("id", accountIds);
   }
   // The visits and the redemption the loyalty cases made, and the goals the
   // redemption moved, back to what the demo had. Its log lines go with the
@@ -783,7 +750,7 @@ export async function teardown(fx) {
   // from the demo restaurant. Nothing else is touched: every other payment the
   // suite makes keeps both of its records, exactly as it always has.
   await admin.from("payments")
-    .delete().eq("restaurant_id", restaurant.id).like("client_ref", `${MARK}%`);
+    .delete().is("account_id", null).eq("restaurant_id", restaurant.id).like("client_ref", `${MARK}%`);
   // And the ones written with no reference of their own. Settling a table by
   // card or cash records against the ORDER and names no collection, so the
   // filter above never saw them — the order was then deleted below,
@@ -795,7 +762,7 @@ export async function teardown(fx) {
   const settledHere = [
     fx.paidOrder, fx.unpaidOrder, fx.tableOrder, fx.walkoutOrder, fx.cashPaidOrder,
   ].filter(Boolean);
-  if (settledHere.length) await admin.from("payments").delete().in("order_id", settledHere);
+  if (settledHere.length) await admin.from("payments").delete().is("account_id", null).in("order_id", settledHere);
   await admin.from("user_logs").delete()
     .eq("restaurant_id", restaurant.id).eq("entity", "bill").eq("action", "collected")
     .like("detail", `%amount=${PART_TOTAL} method=cash%`);

@@ -1,3 +1,4 @@
+import { checked, chargeAccountFixture } from "../disposable-account-fixtures.mjs";
 import { MARK } from "../api-fixtures.mjs";
 import { returnFor } from "./helpers.mjs";
 
@@ -99,26 +100,18 @@ export function orderRefundCases(fx) {
     // paid for anyway. Refused until the payment lands or runs out.
     { name: "POST /api/orders/cancel (an account being paid online)", as: "owner", method: "POST",
       path: "/api/orders/cancel",
+      fixture: fx.accountFixture,
       arrange: async f => {
-        await f.admin.from("orders").update({ account_id: fx.accountId }).eq("id", fx.acctOrder2);
-        // Paying online is an open account checkout, as the app opens one: its
-        // row and the account's hold together (#578). The hold alone was never
-        // a state the app writes.
-        const { data: page } = await f.admin.from("account_checkouts").insert({
-          restaurant_id: fx.restaurant.id, account_id: fx.accountId, order_ids: [fx.acctOrder2], amount: 1,
-        }).select("id").single();
-        await f.admin.from("customer_accounts").update({
-          checkout_until: new Date(Date.now() + 10 * 60_000).toISOString(), checkout_id: page?.id ?? null,
-        }).eq("id", fx.accountId);
-        return async () => {
-          await f.admin.from("customer_accounts").update({ checkout_until: null, checkout_id: null }).eq("id", fx.accountId);
-          if (page?.id) await f.admin.from("account_checkouts").delete().eq("id", page.id);
-          await f.admin.from("orders").update({ account_id: null }).eq("id", fx.acctOrder2);
-        };
+        await chargeAccountFixture(f.admin, f.restaurant.id, f.accountId, [f.acctOrder2], f.lineTotal, f.emails.waiter);
+        const page = await checked(f.admin.rpc("account_checkout_currency_v1", {
+          p_restaurant: f.restaurant.id, p_account: f.accountId, p_expected: f.lineTotal, p_tip: 0, p_fee: 0, p_currency: "MXN",
+        }));
+        if (page?.outcome !== "open") throw new Error(`Account checkout fixture: ${page?.outcome}`);
+        return async () => { await checked(f.admin.rpc("account_checkout_release", { p_checkout: page.checkout })); };
       },
-      body: { id: fx.acctOrder2 }, expect: [409], expectError: /pago en línea|online payment/i,
+      body: f => ({ id: f.acctOrder2 }), expect: [409], expectError: /pago en línea|online payment/i,
       effect: async f => {
-        const { data } = await f.admin.from("orders").select("status").eq("id", fx.acctOrder2).single();
+        const data = await checked(f.admin.from("orders").select("status").eq("id", f.acctOrder2).single());
         return data.status !== "cancelled" || "the order was cancelled while its account was being paid";
       } },
     // Cash is not a card that has not settled yet. Treating it as one made a

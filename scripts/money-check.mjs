@@ -11,6 +11,7 @@ import { checkSplitSlots } from "./money-split-slots.mjs";
 // Reads only. Add `--prod` to ask production the same question.
 // ============================================================================
 import { checkDisputes } from "./money-disputes.mjs";
+import { checkAccountJournal } from "./money-account-journal.mjs";
 import { checkAllocations } from "./money-allocations.mjs";
 import { checkStockReturns } from "./money-stock.mjs";
 import { checkDrawer } from "./money-drawer.mjs";
@@ -403,6 +404,7 @@ const REFUND_ERA = "2026-09-22T00:00:00Z";
   }
 }
 
+await checkAccountJournal(db, all, { ok, bad });
 await checkSplitSlots(db, { ok, bad });
 await checkStockReturns(db, { ok, bad });
 await checkDisputes(db, all, { ok, bad });

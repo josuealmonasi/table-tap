@@ -1,9 +1,11 @@
 import { randomUUID } from "node:crypto";
 
-export async function attackAccountCredit({ admin, post, who, home, neighbour, ok, bad, account, order }) {
+export async function attackAccountCredit({ admin, post, who, home, neighbour, ok, bad, account, order, charge }) {
   const own = await account(home.id, 1000), other = await account(neighbour.id, 1000);
-  const mine = await order(home.id, 50, { account_id: own, status: "completed" });
-  const theirs = await order(neighbour.id, 50, { account_id: other, status: "completed" });
+  const mine = await order(home.id, 50, { status: "completed" });
+  await charge(home.id, own, mine, 50);
+  const theirs = await order(neighbour.id, 50, { status: "completed" });
+  await charge(neighbour.id, other, theirs, 50);
   const body = id => ({ orderId: id, amountCents: 1000, expectedCents: 5000, reason: "error", note: "attack-account-credit", requestId: randomUUID() });
   const state = async (restaurant, id) => {
     const results = await Promise.all([
@@ -34,7 +36,7 @@ export async function attackAccountCredit({ admin, post, who, home, neighbour, o
       && !after.order.paid && !after.order.written_off && after.adjustments.length === 1 && after.payments.length === 0
       ? ok("retrying an account credit reduces debt once and creates no receipt") : bad("account credit replay did not preserve exactly one reduction");
   } finally {
-    // The caller deletes these orders/accounts and cascades immutable rows.
+    // The caller deletes both disposable restaurants, including retained sources.
     for (const [restaurant, id] of [[home.id, mine], [neighbour.id, theirs]]) {
       const { error } = await admin.from("user_logs").delete().eq("restaurant_id", restaurant).eq("entity", "bill").like("detail", `%order=${id}%`);
       if (error) throw error;

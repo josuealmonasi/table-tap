@@ -6784,6 +6784,25 @@ their movements before any Costs/Analytics total or pending note.
 reads the SQL text, so the event state and the deletion guard are proved only
 by the api/money gates on a database.
 
+## R8-7 — dormant account journal and historical debt
+
+An opening balance and imported history must not count the same debt twice.
+PR 1 creates the schema and service-only backfill function without starting any
+account. PR 2 must activate all writers and the backfill together under the money
+lock, choosing the cutoff after it holds the lock. An opening stores current
+reduced debt; historical credits and collections have zero debt effect. Missing
+charge dates and original components remain unknown.
+
+| Regression | Automatic check | Live verification still required |
+| --- | --- | --- |
+| R8-7: premature journal activation loses intervening events; replay or imported history could double debt; mutable or cross-tenant records could corrupt the journal | account-journal-schema.spec.ts; invariants/account-journal-dormant.spec.ts (including activation-marker sabotage) | After applying schema on dev, run probe-account-journal.mjs for per-currency debt, partial/full credit and collection history, replay, privileged update/delete guards, bad signs/missing sources, tenant/currency isolation, effective roles and grants, restaurant cascade, the function's own money lock and rollback, and both two-connection settlement races; run the existing money gate. No production backfill in PR 1. |
+
+
+## R8-7 — atomic account journal writers and activation
+
+| Regression | Automated check | Database evidence before release |
+| --- | --- | --- |
+| A money writer can omit or duplicate an append, a tip can be counted twice, an orphan can balance missing debt, or a credit/collection race can lose money | account-journal-writers.spec.ts; account-journal-money.spec.ts (missing/duplicate/orphan/component/currency sabotage); invariants/account-journal-dormant.spec.ts writer allow-list; paginated money-account-journal.mjs source and per-currency debt checks | Apply journal-lock.sql (before any DDL), writers and journal-activate.sql in one transaction; run probe-account-journal.mjs on dev for activation, birth, charge, staff/online new tips, credit, both cancellation paths, replay, both credit/settle races and commit-time forgotten/orphan refusal; first adapt the older API/attack account fixtures to real charge writers and disposable restaurants (their direct attach/detach/delete paths are now refused), then Claude runs the full gates. Staff partial collection means a whole currency while another remains owed. No reader migration in this PR. |
 ## The ticket PDF says what the receipt says (2026-11-11)
 
 The 80 mm ticket and the HTML/email receipt are two forms of one sale. Both

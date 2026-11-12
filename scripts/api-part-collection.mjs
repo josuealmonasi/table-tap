@@ -25,7 +25,7 @@ export function twoSittingCollection() {
       const clean = async () => {
         // Payments cascade their allocations; remove them before the orders.
         // The case's own label also finds its close/log and print side effects.
-        await checked(db.from("payments").delete().eq("restaurant_id", r).in("session_id", sessions));
+        await checked(db.from("payments").delete().is("account_id", null).eq("restaurant_id", r).in("session_id", sessions));
         await checked(db.from("user_logs").delete().eq("restaurant_id", r).like("detail", `%${label}%`));
         await checked(db.from("print_jobs").delete().in("order_id", orders));
         await checked(db.from("orders").delete().eq("restaurant_id", r).in("id", orders));

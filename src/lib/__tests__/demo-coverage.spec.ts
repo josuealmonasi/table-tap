@@ -89,3 +89,9 @@ describe("the demo shows the whole app", () => {
     ).toEqual([]);
   });
 });
+
+it("seeds the account journal once journal PR 2 starts writing it", () => {
+  // PR 2 installs the journal check that every writer then has to satisfy.
+  const started = fs.readFileSync("supabase/schema.sql", "utf8").includes("public.check_account_journal_v1()");
+  if (started) expect(NOT_DEMO_DATA.has("account_movements"), "journal is live: seed account_movements and drop the PR 1 exclusion").toBe(false);
+});

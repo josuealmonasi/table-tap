@@ -72,7 +72,7 @@ export function posSaleCases(fx) {
           .eq("restaurant_id", f.restaurant.id).eq("note", `${MARK} terminal`);
         const ids = (sales ?? []).map(o => o.id);
         if (ids.length) {
-          await f.admin.from("payments").delete().in("order_id", ids);
+          await f.admin.from("payments").delete().is("account_id", null).in("order_id", ids);
           await f.admin.from("orders").delete().in("id", ids);
         }
       },

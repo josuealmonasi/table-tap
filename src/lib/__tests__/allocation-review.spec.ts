@@ -4,7 +4,8 @@ import { createHash } from "node:crypto";
 import legacyWriters from "./fixtures/legacy-payment-writers.json";
 
 const schema = readFileSync("supabase/schema.sql", "utf8");
-// Fingerprints pin the deployed d7a0729 writers without needing Git history in CI.
+// Fingerprints pin deployed writers and the four reviewed journal compatibility
+// delegates, without needing Git history in CI.
 function definition(source: string, name: string): string {
   return [...source.matchAll(/create or replace function public\.([a-z_0-9]+)\([\s\S]*?\$\$;/g)]
     .find(m => m[1] === name)?.[0] ?? "";
@@ -12,13 +13,15 @@ function definition(source: string, name: string): string {
 const writers = Object.keys(legacyWriters) as (keyof typeof legacyWriters)[];
 
 describe("PR1 schema review regressions", () => {
-  it("preserves deployed money writes, apart from locks, insert timestamps and unproven stock returns", () => {
+  it("preserves deployed money writes, apart from reviewed journal delegates, overlap locks, insert timestamps and unproven stock returns", () => {
     for (const name of writers) {
       const normalize = (s: string) => s.replace(/  perform public\.lock_restaurant_money\([^\n]+\);\n/g, "")
         // Sweep 10 dates online receipts after the lock. Keep every other
         // money line pinned to the original fingerprint, including offline dates.
         .replace(/insert into payments\s*\([^;]+;/g, insert => insert.includes(", clock_timestamp()")
           ? insert.replace(", created_at)", ")").replace(", clock_timestamp()", "") : insert)
+        // Journal POS repairs historical allocations before taking order locks.
+        .replace(name === "ring_pos_account" ? "  perform public.backfill_payment_allocations(p_restaurant);\n" : "__no_replacement__", "")
         // S13 changes only the unproven stock credit; pin every money line as before.
         .replace("  -- The order trigger returns proven reservations and logs unknown legacy stock.",
           "  if not v_order.stock_managed and v_order.stock_reservation_id is null then\n" +

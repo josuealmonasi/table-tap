@@ -3054,6 +3054,122 @@ cannot detect a dispute never ingested. PostgreSQL lease/race/RLS probes,
 Stripe sandbox transaction-shape checks, layout and full live gates remain
 Claude's integration work; offline specs do not claim those results.
 
+## Account journal (R8-7, PR 2 of 5)
+
+`account_movements` is an immutable, private journal of integer cents per account
+and saved MXN/USD currency. Charge and added_tip increase debt; live collection
+and credit decrease it. Opening debt is a snapshot, while historical collections
+and observations have zero debt effect. Return/refund kinds remain reserved for
+later PRs. RLS still denies all client access; service_role has select/insert
+only. Immutable guards, deferred source foreign keys, source identities and
+restaurant/account/currency checks remain enforced. Tip and service components
+are only non-negative, not bounded by the amount, because an approved coupon or a
+full comp lowers the total but not them. A zero-priced order still
+has a zero-cent charge when included in a charged bill.
+
+The journal is **started on activation**, and written by these transactions:
+
+- `account_charge_v2`: one charge per order, with its immutable original snapshot.
+  Both POS account writers delegate to it.
+- `account_settle_v2`, `account_settle_currency_v1` and
+  `account_checkout_settle_v2`: one collection per payment and an added_tip for
+  the new tip only. The payment freezes `account_added_tip_cents` and
+  `account_tip_order_id`; its existing tip field also includes earlier tips.
+- `account_credit_v1`: one credit keyed by its immutable account_credit adjustment.
+- `prepare_order_refund` and direct `cancel_order_v2`: an unpaid, not written-off
+  account cancellation reverses the remaining debt with a credit keyed by its
+  unique cancel adjustment. The current cancellation plan already creates that
+  adjustment. The legacy direct cancel path did not; it now creates one, using
+  charged_by (or system) because that signature has no actor argument.
+
+All legacy signatures remain and delegate to their v2 writer. Private append
+helpers have no public, anon, authenticated or service_role execute grant. Every
+writer takes the restaurant money lock, then the account, then orders in id
+order. Lazy allocation repair, only when an account receipt still awaits
+repair or manager evidence, prelocks the accounts that own orders and then only
+account orders, both in id order, before touching historical receipts; credit/cancel/POS enter that repair before
+locking their own order. Replays return before writes; unique source indexes
+reject duplicate appends rather than suppressing them. Appends are conditional
+on `customer_accounts.journal_started_at` being nonnull.
+
+The production delta is one transaction in three parts. It starts with
+`supabase/journal-lock.sql`, which takes every restaurant's `lock_restaurant_money`
+in id order before any schema change, so no money writer can hold a lock the
+delta waits for while waiting on the delta's table locks. Then it installs the
+schema and writers, then includes `supabase/journal-activate.sql`, then commits.
+That fragment takes the same locks again (a no-op inside the delta, and the same
+order when dev mock runs it alone), sets the column default, and then, for each
+restaurant in id order, calls `account_journal_backfill_v1`.
+The cutoff uses `clock_timestamp()` after the lock: SQL `now()` is the earlier
+transaction start and can predate a lock wait. Account charges, payments and
+adjustments likewise stamp the actual write time after acquiring the lock.
+The backfill locks accounts and orders in id order, opens current reduced unpaid,
+not written-off, not cancelled debt per currency (including zero), imports
+independently evidenced credits/collections without counting debt twice, then
+stamps the cutoff. Unknown historical receipt currency aborts for review.
+Unknown original amounts/components/charge dates remain JSON null; charged_at
+is never inferred from created_at. Started accounts are skipped on replay.
+Pre-cutoff coverage is explicitly incomplete.
+
+Activation stamps `restaurants.account_journal_started_at`, including empty
+restaurants, and sets its default for future restaurants. Opening an account
+holds the same money lock and stamps `journal_started_at = now()` when its
+restaurant is activated. Such accounts start from birth without an opening
+backfill. Both activation markers and new-tip source metadata are immutable.
+No additional historical movements can be imported into a started account.
+
+Deferred constraint triggers on orders, payments, adjustments, accounts and
+movements inspect the final transaction state. Each account is reconciled once
+per transaction, tracked in the transaction-local `tabletap.journal_checked`
+set; later row events skip that account-wide assert. Missing charge, added-tip
+and collection append checks still run per row before consulting the set.
+Order updates queue no journal work when neither version belongs to an account
+or when account/restaurant identity, currency, charge date, paid/write-off state,
+total, tip, service fee and cancellation state are unchanged. Ordinary kitchen
+status moves (such as preparing to ready) therefore queue nothing; entering or
+leaving cancellation still checks the account. Every live source must have one
+matching movement, every live movement must have a source, components and
+currency must agree, and journal debt must equal outstanding order debt per
+currency. Original charge/opening components are reconciled against subsequent
+reductions and added tips, including orders charged before activation. Detaching
+or redating a started charge, a forgotten append, or an orphan append fails at
+commit. These checks never repair a missing append themselves.
+
+The money gate paginates all sources and movements, performs independent
+bidirectional source checks and exact per-account/currency debt reconciliation,
+and retains existing receipt/allocation/drawer checks. Dev `db:mock` runs
+activation after seeding; mock account charges use the real writer so repeated
+seeds also work after activation. The dev-only `scripts/probe-account-journal.mjs`
+refuses production and covers activation, writers, replays, rollback on missing
+and orphan appends, and both credit-versus-settle serializations. Staff settlement
+still collects a whole currency balance; its partial-account probe collects MXN
+while USD remains owed. A rolled-back planted second-call failure verifies the
+account cache, including a control with its guard removed.
+It also plants a trigger-entry failure to prove kitchen and note updates queue
+no journal work, with cancellation as the positive control. The probe prints
+COMMIT time for settling 50 outstanding orders among 500 charges and total time
+for 200 non-account kitchen status updates. Database execution remains a
+required release gate.
+
+Statements, analytics and corte continue reading orders/payments until PR 3.
+
+Release verification still needs fixture isolation in the older API/attack gates:
+`api-cases/refunds.mjs` attaches and detaches an order directly;
+`attack-accounts.mjs` and `attack-account-credit.mjs` seed direct account orders;
+`api-fixtures.mjs` and `attack-accounts.mjs` delete account source rows individually.
+Started journals intentionally reject those operations. These cases must use real
+charge writers and disposable parent restaurants for cleanup before the full
+gates can be reported green. `allocations-check.mjs` and the older
+`probe-account-credit.mjs` likewise contain direct account-order seed paths.
+The new journal probe already uses disposable restaurants and cascade cleanup.
+Pre-cutoff event coverage is explicitly incomplete. The opening contains only
+current outstanding-order snapshots; collected orders are represented only by
+independently evidenced credit/payment history. Dev verification is provided by
+`scripts/probe-account-journal.mjs`, which refuses production. It must not be run
+against production during PR 1. The probe checks the function's own money lock
+without a caller lock, verifies rollback leaves an account unstarted, and tests
+effective client/service roles alongside catalog privileges.
+
 ## Visit-card ticket email screens (11 November 2026)
 
 A diner can optionally link an email while making their visit card or later
