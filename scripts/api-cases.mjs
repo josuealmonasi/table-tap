@@ -1,3 +1,4 @@
+import { loyaltyAttachCases } from "./api-cases/loyalty-attach.mjs";
 import { completedReturnCases } from "./api-cases/returns.mjs";
 import { splitSlotCases } from "./api-cases/split-slots.mjs";
 // ============================================================================
@@ -47,6 +48,7 @@ export function cases(fx) {
     ...dinerCases(fx),
     ...couponValidationCases(fx),
     ...loyaltyCases(fx),
+    ...loyaltyAttachCases(),
     ...splitsCases(fx),
     ...splitSlotCases(fx),
     ...checkoutCardCases(fx),
