@@ -6986,3 +6986,6 @@ The ticket now groups the sale without tips by `orders.tax_pct`, using the
 same `withoutIva` calculation as Costs. Missing rates and ambiguous split
 parts leave the line off; they never stop the receipt. `ticket-vat.spec.ts`,
 `ticket-pdf.spec.ts` and `receipt-vat-source.spec.ts` cover the boundary.
+
+### Split payment answered a Stripe refusal with "Algo salió mal" (2026-11-12)
+Bill and account payments answer a checkout Stripe refused with `apiErr.checkoutFailed` ("El pago falló"); split payment alone used the generic error, so a diner paying their share was told nothing about what failed. The api gate's food-only tip case caught it on the whole-queue train. Now: all three pay routes answer `checkoutFailed`; the gate's tip-base account case restores the shared account restaurant's card settings, so the later "no card reader" case is judged on its own.

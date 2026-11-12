@@ -19,7 +19,7 @@ export function tipBaseCase(kind) {
     as: "diner", method: "POST", path: paths[kind],
     arrange: async f => {
       const fixture = await splitSlotFixture(f.admin, f.restaurant.id, { totalCents: 12000, start: false });
-      let reader, accountId, laterId;
+      let reader, accountId, laterId, cardsBefore;
       const cleanup = async () => {
         try {
           const attempts = await checked(f.admin.from("diner_checkouts").select("id, metadata")
@@ -33,6 +33,9 @@ export function tipBaseCase(kind) {
             // journal keeps the charged order, the account and the sitting
             // until the restaurant cascade removes them all at the end of the run.
             await checked(f.admin.from("account_checkouts").delete().eq("account_id", accountId));
+            // Every later account case shares this restaurant: "no card
+            // reader" must find it without one again.
+            await checked(f.admin.from("restaurants").update(cardsBefore).eq("id", f.restaurant.id));
             return;
           }
           if (laterId) await checked(f.admin.from("orders").delete().eq("id", laterId));
@@ -41,6 +44,8 @@ export function tipBaseCase(kind) {
       };
       try {
         // The disposable account restaurant is thrown away whole, reader included.
+        if (kind === "account") cardsBefore = await checked(f.admin.from("restaurants")
+          .select("stripe_account_id, stripe_charges_enabled").eq("id", f.restaurant.id).single());
         if (kind === "account") await checked(f.admin.from("restaurants")
           .update({ stripe_account_id: "acct_api_check", stripe_charges_enabled: true }).eq("id", f.restaurant.id));
         else reader = await f.withCardReader();

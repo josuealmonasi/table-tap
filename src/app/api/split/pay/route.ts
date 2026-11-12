@@ -169,7 +169,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       fee = await reserveFeeCents(restaurantId, feePlan.limits, slice, "split");
     }
   } catch {
-    return await apiError("apiErr.generic", 502);
+    return await apiError("apiErr.checkoutFailed", 502);
   }
   const appFee = fee.cents;
 
@@ -241,12 +241,12 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     );
 
     // A session with no page is still a session: its fee waits for expiry.
-    if (!session.url) return await apiError("apiErr.generic", 502);
+    if (!session.url) return await apiError("apiErr.checkoutFailed", 502);
     return NextResponse.json({ url: session.url });
   } catch {
     // Released only when Stripe refused outright: an answer that never
     // arrived may still be a session, which Stripe's expiry releases.
     // `openDinerAttempt` releases only the reservation it knows was refused.
-    return await apiError("apiErr.generic", 502);
+    return await apiError("apiErr.checkoutFailed", 502);
   }
 }
