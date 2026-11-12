@@ -75,6 +75,20 @@ export function splitSlotCases(fx) {
         return receipts.length === expected || `expected ${expected} receipts, found ${receipts.length}`;
       },
     })),
+    // "No enviar esta vez" on the last part: the frozen order closes paid with
+    // its skip already set, so the trigger never queues its ticket. Without the
+    // flag the same collection leaves it unset.
+    ...[true, false].map(skip => ({
+      name: `POST /api/split/collect (last part, skipTicketEmail ${skip})`, as: "waiter", method: "POST", path: "/api/split/collect",
+      arrange: arrange(),
+      // Both parts in one collection: the split closes and its order turns paid.
+      body: f => ({ ...f.slotCase.body([0, 1]), ...(skip ? { skipTicketEmail: true } : {}) }), expect: [200],
+      effect: async f => {
+        const { data, error: readError } = await f.admin.from("orders").select("paid, ticket_email_skip").eq("id", f.slotCase.orderId).single();
+        if (readError) return readError.message;
+        return data.paid && data.ticket_email_skip === skip || `expected paid with ticket_email_skip=${skip}, found ${JSON.stringify(data)}`;
+      },
+    })),
     ...["taken", "paid", "stale", "below_minimum"].map(outcome => ({
       name: `POST /api/split/pay (model 2 ${outcome})`, as: "diner", method: "POST", path: "/api/split/pay",
       arrange: async f => {

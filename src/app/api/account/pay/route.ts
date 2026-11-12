@@ -1,3 +1,5 @@
+import { after } from "next/server";
+import { drainTicketEmails } from "@/lib/ticket-email";
 import { ordersTipBase, tipFromPercent } from "@/lib/tip-base";
 import { checkoutPageRpc } from "@/lib/checkout-page-rpc";
 import { dinerCheckoutOrders } from "@/lib/diner-checkout-orders";
@@ -40,6 +42,9 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   const account = await accountByCode(code).catch(() => undefined);
   if (account === undefined) return await apiError("apiErr.generic", 500);
   if (!account) return await apiError("account.notFound", 404);
+  // Tickets this request's payment queued for the card's email go out once it
+  // has answered; registered only once the caller and the request are valid.
+  after(() => drainTicketEmails());
 
   const db = createAdminClient();
   const { data: restaurant } = await db

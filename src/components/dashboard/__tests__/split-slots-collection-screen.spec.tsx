@@ -24,7 +24,8 @@ const collected = vi.fn();
 beforeEach(() => {
   vi.stubGlobal("React", React); vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   vi.clearAllMocks(); state.locale = "en"; reply = { ok: true, settled: false, outcome: "collected", amount_cents: 5000, tip_cents: 0, owed: 0 };
-  vi.stubGlobal("fetch", vi.fn().mockImplementation(async (_url, init) => init
+  // A write is a request with a body: the card-email read is a GET that also passes `init` (its timeout signal).
+  vi.stubGlobal("fetch", vi.fn().mockImplementation(async (_url, init) => init?.body
     ? { ok: reply.ok, json: async () => reply }
     : { ok: true, json: async () => ({ orders: [order], outstanding: { owed: 50, ordered: 100, collected: 50, tips: 0, currency: "MXN" }, splits: [split] }) }));
   el = document.createElement("div"); root = createRoot(el);
@@ -44,7 +45,7 @@ it.each([false, true])("offers the same free-slot selector instead of whole-bill
   expect(cash.disabled).toBe(true);
   await act(async () => el.querySelectorAll<HTMLInputElement>("input[type=checkbox]")[1].click());
   await act(async () => cash.click());
-  const writes = vi.mocked(fetch).mock.calls.filter(([, init]) => init);
+  const writes = vi.mocked(fetch).mock.calls.filter(([, init]) => init?.body);
   expect(writes).toHaveLength(1); expect(writes[0][0]).toBe("/api/split/collect");
   expect(JSON.parse(writes[0][1]!.body as string)).toMatchObject({ splitId: "split", revision: 4, slots: [1], expectedCents: 5000, method: "cash" });
 });
@@ -62,7 +63,7 @@ it.each(["taken", "paid", "reserved", "below_minimum", "stale", "frozen", "split
   await act(async () => el.querySelectorAll<HTMLInputElement>("input[type=checkbox]")[1].click());
   await act(async () => [...el.querySelectorAll("button")].find(b => /Paid cash/.test(b.textContent ?? ""))!.click());
   expect(el.textContent).toContain(reply.error);
-  expect(vi.mocked(fetch).mock.calls.filter(([, init]) => !init).length).toBeGreaterThan(1);
+  expect(vi.mocked(fetch).mock.calls.filter(([, init]) => !init?.body).length).toBeGreaterThan(1);
   expect(collected).not.toHaveBeenCalled();
 });
 
@@ -79,7 +80,7 @@ it("retries lost collection replies with the same reference", async () => {
   vi.mocked(fetch).mockRejectedValueOnce(new Error("lost reply"));
   await act(async () => [...el.querySelectorAll("button")].find(b => /Paid cash/.test(b.textContent ?? ""))!.click());
   await act(async () => [...el.querySelectorAll("button")].find(b => /Paid cash/.test(b.textContent ?? ""))!.click());
-  const bodies = vi.mocked(fetch).mock.calls.filter(([, init]) => init).map(([, init]) => JSON.parse(init!.body as string));
+  const bodies = vi.mocked(fetch).mock.calls.filter(([, init]) => init?.body).map(([, init]) => JSON.parse(init!.body as string));
   expect(bodies).toHaveLength(2); expect(bodies[0]).toEqual(bodies[1]);
 });
 it("shows the frozen explanation instead of offering cancellation after an attempt", async () => {
@@ -91,7 +92,7 @@ it("shows the frozen explanation instead of offering cancellation after an attem
 it.each([false, true])("switches to parts immediately when the whole-bill writer answers split (calculator=%s)", async calculator => {
   let divided = false;
   vi.mocked(fetch).mockImplementation(async (_url, init) => {
-    if (init) { divided = true; return { ok: false, json: async () => ({ code: "split", error: "Choose the parts." }) } as Response; }
+    if (init?.body) { divided = true; return { ok: false, json: async () => ({ code: "split", error: "Choose the parts." }) } as Response; }
     return { ok: true, json: async () => ({ orders: [order], outstanding: { ordered: 100, owed: 50, collected: 50, tips: 0, currency: "MXN" }, splits: divided ? [split] : [] }) } as Response;
   });
   await render(calculator);
@@ -106,7 +107,7 @@ it.each([[false, "en"], [true, "en"], [false, "es"], [true, "es"]] as const)("pr
   reply = { ...reply, payment: "part-payment" };
   await render(calculator);
   await act(async () => el.querySelectorAll<HTMLInputElement>("input[type=checkbox]")[1].click());
-  vi.mocked(fetch).mockImplementation(async (_url, init) => init
+  vi.mocked(fetch).mockImplementation(async (_url, init) => init?.body
     ? { ok: true, json: async () => reply } as Response
     : { ok: true, json: async () => ({ orders: [], splits: [], outstanding: { owed: 0, currency: "MXN" } }) } as Response);
   await act(async () => [...el.querySelectorAll("button")].find(b => (b.textContent ?? "").includes(translate(messagesFor(locale), "settle.cash")))!.click());
@@ -141,7 +142,7 @@ it.each([false, true])("offers a status check for the exact refused parts (calcu
   await act(async () => el.querySelectorAll<HTMLInputElement>("input[type=checkbox]")[1].click());
   vi.mocked(fetch).mockResolvedValue(Response.json({ outcome: "closed" }));
   await act(async () => check!.click());
-  const calls = vi.mocked(fetch).mock.calls.filter(([, init]) => init);
+  const calls = vi.mocked(fetch).mock.calls.filter(([, init]) => init?.body);
   expect(calls.map(([url]) => url)).toEqual(["/api/split/collect", "/api/checkout/check"]);
   expect(JSON.parse(calls[1][1]!.body as string)).toEqual({ kind: "split", splitId: "split", slots: [1] });
   expect(collected).not.toHaveBeenCalled();
@@ -155,7 +156,7 @@ it.each([false, true])("checking a refused split cancellation never repeats it (
     ? Response.json({ outcome: "unverified" })
     : Response.json({ orders: [order], splits: [split], outstanding: { owed: 50, currency: "MXN" } }));
   await act(async () => [...el.querySelectorAll("button")].find(b => b.textContent === "Check payment")!.click());
-  const calls = vi.mocked(fetch).mock.calls.filter(([, init]) => init);
+  const calls = vi.mocked(fetch).mock.calls.filter(([, init]) => init?.body);
   expect(calls.map(([url]) => url)).toEqual(["/api/split/cancel", "/api/checkout/check"]);
   expect(JSON.parse(calls[1][1]!.body as string)).toEqual({ kind: "split", splitId: "split" });
   expect(collected).not.toHaveBeenCalled();

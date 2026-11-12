@@ -1,3 +1,5 @@
+import { after } from "next/server";
+import { drainTicketEmails } from "@/lib/ticket-email";
 import { checkoutPageRpc } from "@/lib/checkout-page-rpc";
 import { NextResponse, type NextRequest } from "next/server";
 import { apiError } from "@/lib/api-error";
@@ -45,6 +47,9 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   // (sweep 8, finding 1). It refreshes instead.
   if (body.currency === undefined) return await apiError("apiErr.refreshToCollectAccount", 409);
   if (!isDinerCurrency(body.currency)) return await apiError("apiErr.invalidRequest", 400);
+  // Tickets this request's payment queued for the card's email go out once it
+  // has answered; registered only once the caller and the request are valid.
+  after(() => drainTicketEmails());
 
   const { data, error } = await checkoutPageRpc("account_settle_currency_v1", {
     p_restaurant: actor.restaurantId,

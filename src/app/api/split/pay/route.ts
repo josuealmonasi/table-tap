@@ -1,3 +1,5 @@
+import { after } from "next/server";
+import { drainTicketEmails } from "@/lib/ticket-email";
 import { frozenTipPrincipal, ordersTipBase, splitTipBase, tipFromPercent } from "@/lib/tip-base";
 import { paySplitSlots } from "@/lib/split-slots-pay";
 import { tableMember } from "@/lib/table-membership";
@@ -61,6 +63,9 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
   const member = await tableMember(req, restaurantId, tableId, sessionId, true).catch(() => null);
   if (!member) return await apiError("apiErr.tableJoin", 403);
+  // Tickets this request's payment queued for the card's email go out once it
+  // has answered; registered only once the caller and the request are valid.
+  after(() => drainTicketEmails());
   const diner = member.id;
 
   const db = createAdminClient();

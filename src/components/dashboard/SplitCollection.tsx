@@ -7,6 +7,7 @@ import { useRef, useState } from "react";
 import SplitSlotSelector, { freeSelection } from "@/components/split/SplitSlotSelector";
 import CashChange from "./CashChange";
 import TipPicker from "@/components/customer/TipPicker";
+import BillTicketEmail from "@/components/loyalty/BillTicketEmail.react-component";
 import { formatMoney } from "@/lib/format";
 import { useT } from "@/lib/i18n/context";
 import { tipFor } from "@/lib/pricing";
@@ -14,9 +15,9 @@ import { newRef } from "@/lib/collection-ref";
 import type { CollectedSlotReceipt } from "@/hooks/useStaffSlotReceipts";
 import type { StaffSlotSplit } from "@/lib/split-slots-staff";
 
-interface Props { canApprove: boolean; onWriteOff: (split: StaffSlotSplit) => void; split: StaffSlotSplit; remaining: number; refresh: () => Promise<void>; onCollected: () => void; onReceipt: (receipt: CollectedSlotReceipt) => void }
+interface Props { skipTicketEmail: boolean; onSkipTicketEmail: (skip: boolean) => void; canApprove: boolean; onWriteOff: (split: StaffSlotSplit) => void; split: StaffSlotSplit; remaining: number; refresh: () => Promise<void>; onCollected: () => void; onReceipt: (receipt: CollectedSlotReceipt) => void }
 /** Both staff doors choose the same parts and send the same reviewed cents. */
-export default function SplitCollection({ split, remaining, refresh, onCollected, onReceipt, canApprove, onWriteOff }: Props): JSX.Element {
+export default function SplitCollection({ split, skipTicketEmail, onSkipTicketEmail, remaining, refresh, onCollected, onReceipt, canApprove, onWriteOff }: Props): JSX.Element {
   const t = useT();
   const [selected, setSelected] = useState<number[]>([]);
   const [tipPct, setTipPct] = useState(0);
@@ -50,7 +51,9 @@ export default function SplitCollection({ split, remaining, refresh, onCollected
       if (request.current?.body !== body) request.current = { body, ref: newRef() };
       const res = await fetch(`/api/split/${cancel ? "cancel" : "collect"}`, {
         method: "POST", headers: { "content-type": "application/json" },
-        body: JSON.stringify({ ...reviewed, ...(!cancel && { ref: request.current.ref }) }),
+        // The email choice rides outside the reviewed body: it moves no money,
+        // so changing it before a retry must not mint a new collection ref.
+        body: JSON.stringify({ ...reviewed, ...(!cancel && { ref: request.current.ref, skipTicketEmail }) }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
@@ -62,6 +65,8 @@ export default function SplitCollection({ split, remaining, refresh, onCollected
         if (!cancel && typeof data.payment === "string") onReceipt({ paymentId: data.payment,
           amountCents: Number(data.amount_cents ?? cents + Math.round(tip * 100)), currency });
         setSelected([]); setTipPct(0); setTipCustom(null); request.current = null;
+        // "Esta vez" is one collection; the next part asks again, as the calculator does.
+        if (!cancel) onSkipTicketEmail(false);
         onCollected();
       }
       // Taken, paid, reserved and stale all mean the list may have changed.
@@ -78,6 +83,7 @@ export default function SplitCollection({ split, remaining, refresh, onCollected
     <TipPicker currency={currency} tipPct={tipPct} tipCustom={tipCustom} maxTip={amount}
       onPresetTip={pct => { setTipPct(pct); setTipCustom(null); }} onCustomTip={setTipCustom} />
     {tooMuch && <p role="alert">{t("tip.tooLarge", { max: formatMoney(amount, currency) })}</p>}
+    <BillTicketEmail tableId={split.tableId} active skip={skipTicketEmail} onSkip={onSkipTicketEmail} disabled={busy} />
     <CashChange amount={amount + (tooMuch ? 0 : tip)} currency={currency} />
     <div className="tt-bill-actions">
       <button type="button" className="tt-btn tt-btn-primary" disabled={busy || cents <= 0 || tooMuch} onClick={() => send(false, "cash")}>

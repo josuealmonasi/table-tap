@@ -1,3 +1,5 @@
+import { after } from "next/server";
+import { drainTicketEmails } from "@/lib/ticket-email";
 import { ordersTipBase, tipFromPercent } from "@/lib/tip-base";
 import { ownBillAccess } from "@/lib/legacy-bill-access";
 import { dinerCurrency } from "@/lib/diner-currency";
@@ -70,6 +72,9 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
   const member = await ownBillAccess(req, restaurantId, tableId, body.sessionId, orderIds).catch(() => null);
   if (!member) return await apiError("apiErr.tableJoin", 403);
+  // Tickets this request's payment queued for the card's email go out once it
+  // has answered; registered only once the caller and the request are valid.
+  after(() => drainTicketEmails());
 
   // A bill a waiter opened is settled with the waiter. They are standing at
   // the table with a machine and a running balance, and a card charged here at
