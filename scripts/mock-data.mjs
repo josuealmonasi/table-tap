@@ -21,6 +21,7 @@
 import { randomBytes } from "node:crypto";
 import { createClient } from "@supabase/supabase-js";
 import { populateMenu } from "./menu-catalog.mjs";
+import { FEED_DEMO, PRICE_SCALE, menuPrice } from "./demo-prices.mjs";
 import { TERMS_VERSION } from "./terms-version.mjs";
 import { seedLoyalty } from "./mock-loyalty.mjs";
 import { seedAccounts } from "./mock-accounts.mjs";
@@ -33,6 +34,9 @@ import { finalizeMockCashShift } from "./mock-cash-shift.mjs";
 import { bulkInsert, randInt, sample } from "./menu-catalog.mjs";
 
 export const DEMO_RESTAURANT = "Demo Bistro";
+// Read when the seeder runs, after its caller loaded the env file: production's
+// demo logins can carry a password of their own (feed-demo).
+export const demoPassword = () => process.env.DEMO_PASSWORD || "demo123";
 export const DEMO_PASSWORD = "demo123";
 export const DEMO_OWNER = { email: "demo@tabletap.dev", name: "Diego Owner" };
 export const DEMO_TEAM = [
@@ -58,7 +62,7 @@ async function ensureUser(pg, admin, email, name) {
   if (!userId) {
     const { data, error } = await admin.auth.admin.createUser({
       email,
-      password: DEMO_PASSWORD,
+      password: demoPassword(),
       email_confirm: true,
     });
     if (error) throw new Error(`${email}: ${error.message}`);
@@ -166,6 +170,9 @@ function buildLines(products) {
       qty: randInt(1, 3),
       mods,
       extras: extras.map(e => ({ id: e.id, name: e.name, emoji: e.emoji, price: Number(e.price) })),
+      // As the app writes it: a line carries its section's station, or the
+      // bar never saw a seeded drink (owner's question, 2026-11-11).
+      ...(p.station === "bar" ? { station: "bar" } : {}),
     };
   });
 }
@@ -327,16 +334,17 @@ export async function seedMock(pg) {
 
   // ── Orders: menu with extras + modifiers for realistic line items ──
   const { rows: products } = await pg.query(
-    `select p.id, p.name, p.emoji, p.price, p.modifiers,
+    `select p.id, p.name, p.emoji, p.price, p.modifiers, c.station,
        coalesce(
          json_agg(json_build_object('id', a.id, 'name', a.name, 'emoji', a.emoji, 'price', a.price))
            filter (where a.id is not null), '[]'
        ) as extras
      from menu_items p
+     left join categories c on c.id = p.category_id
      left join item_addons ia on ia.product_id = p.id
      left join menu_items a on a.id = ia.addon_id
      where p.restaurant_id = $1 and not p.is_addon and p.available
-     group by p.id`,
+     group by p.id, c.station`,
     [rid],
   );
 
@@ -375,7 +383,9 @@ export async function seedMock(pg) {
     );
     const serviceFee = round2(subtotal * 0.1);
     const tip = pickTip(subtotal);
-    const cancelled = Math.random() < 0.07;
+    // The presentation restaurant cancels like a real one (about 1.5%), so its
+    // refunds-to-confirm list is a handful, not thirty.
+    const cancelled = Math.random() < (FEED_DEMO ? 0.015 : 0.07);
     const t = tables[randInt(0, tables.length - 1)];
     const when = randomOrderDate(HISTORY_DAYS);
     // Two in three pay by card; of those, one in five asks for the receipt by
@@ -739,7 +749,12 @@ export async function seedMock(pg) {
   } = await pg.query(
     `insert into promotions (restaurant_id, kind, name, emoji, description, tiers, sort_order)
      values ($1,'tiered','Más postres, mejor precio','🍰','Para compartir',$2,2) returning id`,
-    [rid, JSON.stringify([{ qty: 2, price: 95 }, { qty: 3, price: 130 }])],
+    // The presentation restaurant prices the deal off the dessert itself: 15%
+    // off two, 20% off three. The gates' seed keeps its fixed figures.
+    [rid, JSON.stringify(FEED_DEMO
+      ? [{ qty: 2, price: menuPrice(Number(forPromo[4].price) * 2 * 0.85 / PRICE_SCALE) },
+        { qty: 3, price: menuPrice(Number(forPromo[4].price) * 3 * 0.8 / PRICE_SCALE) }]
+      : [{ qty: 2, price: 95 }, { qty: 3, price: 130 }])],
   );
   await bulkInsert(pg, "promotion_items", ["promotion_id", "item_id", "qty"],
     [[tiered.id, forPromo[4].id, 1]]);
@@ -905,8 +920,13 @@ export async function seedMock(pg) {
     ]);
 
   // ── Founder, and what Stripe charges them ─────────────────────────────
+  // The presentation copy (feed-demo, which can run on production) takes no
+  // founder slot: those are numbered seats real restaurants hold, and slot 1
+  // being taken would fail this update after the old demo was already gone.
   await pg.query(
-    "update restaurants set founding_number = coalesce(founding_number, 1), subscribed_price = 1499 where id = $1",
+    FEED_DEMO
+      ? "update restaurants set subscribed_price = 1499 where id = $1"
+      : "update restaurants set founding_number = coalesce(founding_number, 1), subscribed_price = 1499 where id = $1",
     [rid],
   );
 

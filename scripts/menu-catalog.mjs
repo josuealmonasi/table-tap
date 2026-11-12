@@ -3,6 +3,8 @@
 // flags, a few "unavailable" items, and random product↔extra links — so the
 // dashboard and customer menu have realistic, varied data to work with.
 
+import { menuPrice } from "./demo-prices.mjs";
+
 /** Dish pool (grouped by section). populateMenu() samples from this. */
 const DISHES = [
   // Starters
@@ -328,7 +330,7 @@ export async function populateMenu(pg, restaurantId, menuId) {
       null,
       e.name,
       null,
-      e.price,
+      menuPrice(e.price),
       e.emoji,
       false,
       true,
@@ -355,7 +357,7 @@ export async function populateMenu(pg, restaurantId, menuId) {
         catId[d.c],
         d.name,
         d.desc,
-        d.price,
+        menuPrice(d.price),
         d.emoji,
         popular,
         available,
