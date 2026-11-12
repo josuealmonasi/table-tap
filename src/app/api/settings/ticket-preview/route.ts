@@ -50,7 +50,8 @@ export async function GET(req: NextRequest) {
         dateStyle: "medium", timeStyle: "short", timeZone: (r.timezone as string | null) ?? DEFAULT_TIME_ZONE,
       }),
       tableLabel: "4", cur, lines, rows: [[t("totals.tip"), formatMoney(tip, cur)]],
-      totalLabel: t("totals.total"), paid: subtotal + tip, payMethod: "cash",
+      // The sample's IVA line, at the owner's saved rate: the sale without the tip.
+      totalLabel: t("totals.total"), paid: subtotal + tip, payMethod: "cash", vatBase: subtotal,
     };
     const place = await ticketPlace(db, actor.restaurantId, t);
     const loyalty = { last4: "0000", progress: 5, goal: 8, message: t("ticketFont.sampleLoyalty") };

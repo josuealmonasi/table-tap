@@ -6677,3 +6677,19 @@ now suppresses automatic card mail for this sale, before the held copy is
 written. The existing sender delivers today's ticket; the saved card delivers
 future ones. The lost-save-reply spec proves the skip reaches both the request
 and held replay, while charging remains available.
+
+## The IVA line speaks of the total above it (2026-11-12)
+
+The ticket prints "IVA 16% incluido" under its TOTAL. The two have to agree:
+the IVA is worked out from the same values the total prints (`vatBase` on
+`receiptModel`, `saleVatBase` in `ticket-vat.ts`), less the tip that total
+contains — never the receipt's tip row, which shows the tip before a return or
+a forgiveness. A split part's amount can hold tips added to the orders before
+the split, which no ticket can separate, so a part prints the line only when
+its split's frozen debt carried none; anywhere the base is not certain the
+line is left off. `ticket-vat.spec.ts` pins the amounts (16 % of 116.00,
+8 %, 0, tip, discount, charge, forgiveness, table, split part and its return,
+the ambiguous part), the column and its check, and that no browser grant or
+public menu read names it; `ticket-pdf.spec.ts` checks the line sits right
+under the TOTAL and is absent at 0, at an unknown base and with no rate;
+`returns-receipt-source.spec.ts` checks the split read.

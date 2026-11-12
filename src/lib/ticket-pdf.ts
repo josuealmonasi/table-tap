@@ -14,6 +14,7 @@ import QRCode from "qrcode";
 import { formatMoney } from "@/lib/format";
 import type { ReceiptModel } from "@/lib/receipt";
 import { printable as printText, ticketFace } from "@/lib/ticket-fonts";
+import { includedVat } from "@/lib/ticket-vat";
 
 /** 80 mm in points. */
 export const TICKET_WIDTH = 226.77;
@@ -39,6 +40,8 @@ export interface TicketPlace {
   logo?: Buffer | null;
   /** The owner's typeface (ticket-font-ids.ts); Archivo when unset. */
   font?: string | null;
+  /** The IVA rate the owner prints under the total (ticket-vat.ts); 0 or unset prints no line. */
+  vatRate?: number | null;
 }
 
 export interface TicketLoyalty {
@@ -56,6 +59,8 @@ export interface TicketText {
   header: { qty: string; item: string; price: string; amount: string };
   articles: (n: number) => string;
   payMethod: (method: string) => string;
+  /** "IVA 16% incluido". */
+  vatIncluded: (rate: number) => string;
   loyaltyTitle: string;
   loyaltyLine: (t: TicketLoyalty) => string;
   qrHint: string;
@@ -182,6 +187,10 @@ async function draw(doc: PDFKit.PDFDocument, model: ReceiptModel, place: TicketP
   for (const [label, amount] of model.rows) row(label, amount);
   gap(2);
   row(model.totalLabel.toUpperCase(), money(model.paid), 12, true);
+  // The IVA inside that total, as a Mexican till's ticket prints it.
+  const vatRate = place.vatRate ?? 0;
+  const vat = includedVat(model.vatBase, vatRate);
+  if (vat !== null) row(text.vatIncluded(vatRate), money(vat), SMALL);
   if (model.payMethod) row(text.payMethod(model.payMethod), "", SMALL);
 
   if (loyalty) {

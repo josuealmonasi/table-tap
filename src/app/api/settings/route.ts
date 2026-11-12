@@ -1,5 +1,6 @@
 import { FISCAL_KEYS, isFiscalField, normalizeFiscalSettings } from "@/lib/fiscal-settings";
 import { isTicketFont } from "@/lib/ticket-font-ids";
+import { isTicketVatRate } from "@/lib/ticket-vat";
 import { invalidatePublicMenu } from "@/lib/public-menu-cache";
 import { NextRequest, NextResponse } from "next/server";
 import { apiError } from "@/lib/api-error";
@@ -21,6 +22,7 @@ export const runtime = "nodejs";
 const OWNER_FIELDS = new Set([
   ...FISCAL_KEYS,
   "ticket_font",
+  "ticket_vat_rate",
   "name",
   "logo",
   "tagline",
@@ -100,6 +102,7 @@ export async function POST(req: NextRequest) {
   const fiscalError = normalizeFiscalSettings(update);
   if (fiscalError) return await apiError(fiscalError, 400);
   if ("ticket_font" in update && !isTicketFont(update.ticket_font)) return await apiError("apiErr.invalidRequest", 400);
+  if ("ticket_vat_rate" in update && !isTicketVatRate(update.ticket_vat_rate)) return await apiError("apiErr.invalidRequest", 400);
 
   // Letting the food out before it is paid for comes with the plan. Checked
   // when switching it on and not off: someone downgrading has to be able to

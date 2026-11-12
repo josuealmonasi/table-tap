@@ -9,6 +9,7 @@ interface FiscalRow {
   address_street: string | null; address_ext_number: string | null; address_int_number: string | null;
   address_colonia: string | null; address_postal_code: string | null; address_municipality: string | null;
   address_state: string | null; ticket_phone: string | null; ticket_font: string | null;
+  ticket_vat_rate: number | null;
 }
 
 /** The address as a ticket prints it: street and number, colonia and CP, municipio and estado. */
@@ -58,7 +59,7 @@ async function logoBytes(url: string | null): Promise<Buffer | null> {
 export async function ticketPlace(db: Db, restaurantId: string, t: T): Promise<TicketPlace> {
   const { data, error } = await db.from("restaurants").select(
     "name, logo_url, legal_name, rfc, tax_regime, address_street, address_ext_number, address_int_number, "
-    + "address_colonia, address_postal_code, address_municipality, address_state, ticket_phone, ticket_font",
+    + "address_colonia, address_postal_code, address_municipality, address_state, ticket_phone, ticket_font, ticket_vat_rate",
   ).eq("id", restaurantId).single();
   if (error || !data) throw new Error(`Could not read the ticket's restaurant: ${error?.message ?? "missing"}`);
   const r = data as unknown as FiscalRow;
@@ -66,6 +67,7 @@ export async function ticketPlace(db: Db, restaurantId: string, t: T): Promise<T
     name: r.name, legalName: r.legal_name, rfc: r.rfc,
     regime: r.tax_regime ? t("saleTicket.regime", { code: r.tax_regime, name: t(`fiscal.regimes.${r.tax_regime}`) }) : null,
     addressLines: ticketAddress(r), phone: r.ticket_phone, logo: await logoBytes(r.logo_url), font: r.ticket_font,
+    vatRate: r.ticket_vat_rate,
   };
 }
 
@@ -78,6 +80,7 @@ export function ticketText(t: T): TicketText {
     payMethod: m => t(m === "cash" ? "saleTicket.paidCash" : m === "card" || m === "terminal" ? "saleTicket.paidCard" : "saleTicket.paidOther"),
     loyaltyTitle: t("saleTicket.loyaltyTitle"),
     loyaltyLine: l => t("saleTicket.loyaltyLine", { last4: l.last4, progress: l.progress, goal: l.goal }),
+    vatIncluded: rate => t("saleTicket.vatIncluded", { rate }),
     qrHint: t("saleTicket.qrHint"), thanks: t("saleTicket.thanks"), notFiscal: t("receipt.notFiscal"),
   };
 }

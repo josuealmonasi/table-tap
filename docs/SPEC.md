@@ -1365,8 +1365,25 @@ measure. Its amounts come from
   municipio and estado), phone, RFC and régimen fiscal. These columns are
   optional, owner-only and never granted to anon (`ticket-place.ts`).
 - Body: date, folio (the order code), table, four columns (quantity, item,
-  unit price, amount), the number of items, the receipt's rows, the total and
-  how it was paid.
+  unit price, amount), the number of items, the receipt's rows, the total,
+  the IVA it includes, and how it was paid.
+- **"IVA 16% incluido" under the total** (owner's decision, 2026-11-12: "do
+  as a Mexican ticket does"). Menu prices to the general public are
+  IVA-inclusive, so the ticket prints the total and then the IVA inside it:
+  `round2(base − base / (1 + rate/100))` (`ticket-vat.ts`). The base is the
+  sale as charged — food and charges after every discount, after a
+  forgiveness or a return, never the tip, which carries no IVA. A table's
+  orders sum each order's total less its own tip; a paid split part is its
+  own amount less its own tip, and only when the split's frozen debt carried
+  no tips (`bill_splits.amount = food_principal`, read as
+  `parts_without_tips`); otherwise, or whenever the numbers do not add up, the
+  base is unknown and the line is left off rather than printed wrong. The
+  rate is the owner's (Settings → "IVA en el ticket",
+  `restaurants.ticket_vat_rate`, 16/8/0, default 16): 16 % general, 8 % for
+  the border region's tax incentive, 0 prints no line. Server-read only, never
+  granted to anon or authenticated. The sample ticket shows the saved rate.
+  Only the PDF ticket prints the line; the email/HTML receipt does not. It is
+  independent of `tax_pct` (the menu's IVA breakdown, owner and manager).
 - The visit card when a card was presented before paying: its stamps drawn
   as circles (the earned ones filled), the code's last four, and the next
   reward. It is read from the receipt source — the sale's card, its sitting's,

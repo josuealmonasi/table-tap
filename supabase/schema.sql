@@ -245,6 +245,12 @@ alter table restaurants add column if not exists ticket_phone text check (ticket
 -- IBM Plex Mono or the classic Courier (owner's request, 2026-11-11).
 alter table restaurants add column if not exists ticket_font text not null default 'archivo'
   check (ticket_font in ('archivo', 'plex', 'classic'));
+-- The IVA the ticket says its total includes, printed under the TOTAL row as a
+-- Mexican till's ticket does (owner's decision, 2026-11-12): 16 (general, the
+-- default), 8 (the border region's tax incentive) or 0, no line. The owner's;
+-- never granted to anon or authenticated, read by the server to print.
+alter table restaurants add column if not exists ticket_vat_rate smallint not null default 16
+  check (ticket_vat_rate in (0, 8, 16));
 
 alter table restaurants drop constraint if exists restaurants_tax_pct_range;
 alter table restaurants add constraint restaurants_tax_pct_range

@@ -149,6 +149,18 @@ export function menuSettingsCases(fx) {
       body: { ticket_font: "comic" }, expect: [400] },
     { name: "POST /api/settings (manager cannot change the ticket font)", as: "manager", method: "POST", path: "/api/settings",
       body: { ticket_font: "plex" }, expect: [403] },
+    // The IVA line under the ticket's total is the owner's too (2026-11-12).
+    // 16 is the column's default, so the demo is left as the seed made it.
+    { name: "POST /api/settings (owner sets the ticket's IVA rate)", as: "owner", method: "POST", path: "/api/settings",
+      body: { ticket_vat_rate: 16 }, expect: [200],
+      effect: async f => {
+        const { data } = await f.admin.from("restaurants").select("ticket_vat_rate").eq("id", f.restaurant.id).maybeSingle();
+        return data?.ticket_vat_rate === 16 || `ticket_vat_rate is ${data?.ticket_vat_rate}`;
+      } },
+    { name: "POST /api/settings (a ticket IVA rate that is not offered)", as: "owner", method: "POST", path: "/api/settings",
+      body: { ticket_vat_rate: 12 }, expect: [400] },
+    { name: "POST /api/settings (manager cannot change the ticket's IVA rate)", as: "manager", method: "POST", path: "/api/settings",
+      body: { ticket_vat_rate: 8 }, expect: [403] },
     // Switching the service charge off takes it off an open bill nobody has
     // started paying. The live demo owed MX$4.40 for a MX$4.00 salad after the
     // owner had switched it off: the charge was stored when it was ordered.

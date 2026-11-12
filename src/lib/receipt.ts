@@ -3,6 +3,7 @@ import type { ReturnComponents } from "@/lib/return-components";
 import { receiptReturnRows, type ReceiptReturn } from "@/lib/receipt-returns";
 import { receiptCents } from "@/lib/receipt-amount";
 import { formatMoney } from "@/lib/format";
+import { saleVatBase } from "@/lib/ticket-vat";
 import { lineUnitPrice, orderCode, type OrderLineItem } from "@/lib/types";
 
 export interface ReceiptOrder extends ReceiptLoyalty {
@@ -46,6 +47,8 @@ export interface SlotReceiptPayment extends ReceiptLoyalty {
   created_at: string;
   slots: number[];
   table_label?: string | null;
+  /** The split's frozen debt carried no tips, so every part is all sale (read from the split). */
+  parts_without_tips?: boolean;
 }
 
 export interface Receipt {
@@ -83,6 +86,8 @@ export interface ReceiptModel {
   totalLabel: string;
   paid: number;
   payMethod: string | null;
+  /** What `paid` holds that IVA is part of — the sale, never the tip; null when not known for certain (ticket-vat.ts). */
+  vatBase: number | null;
 }
 
 export function receiptModel(
@@ -171,7 +176,8 @@ export function receiptModel(
     timeZone: place.timeZone,
   });
 
-  return { code, when, tableLabel: order.table_label ?? null, cur, lines, rows, totalLabel, paid, payMethod: payment ? null : orders[0]?.pay_method ?? null };
+  return { code, when, tableLabel: order.table_label ?? null, cur, lines, rows, totalLabel, paid,
+    payMethod: payment ? null : orders[0]?.pay_method ?? null, vatBase: saleVatBase(orders, payment) };
 }
 
 export function buildReceipt(
