@@ -26,9 +26,12 @@ vi.mock("@/lib/ticket-loyalty", () => ({ ticketLoyalty: () => null }));
 
 const { drainTicketEmails } = await import("@/lib/ticket-email");
 const { maskEmail, normalizeEmail, emailForRole } = await import("@/lib/loyalty/card-email");
-const row = (id: string, order: string, session: string | null) => ({ id, restaurant_id: "r", card_id: "c", order_id: order, session_id: session, attempts: 1 });
+const KEY = "11111111-1111-4111-8111-111111111111";
+const row = (id: string, order: string, session: string | null, extra: Record<string, unknown> = {}) =>
+  ({ id, restaurant_id: "r", card_id: "c", order_id: order, session_id: session, attempts: 1, address_key: KEY, batch_key: null, ...extra });
+const drain = async () => { vi.advanceTimersByTime(5000); await drainTicketEmails(); };
 
-beforeEach(() => { state.claimed = []; state.updates = []; state.sent = []; });
+beforeEach(() => { vi.useFakeTimers({ toFake: ["Date"] }); state.claimed = []; state.updates = []; state.sent = []; });
 
 it("normalizes and masks the card's address", () => {
   expect(normalizeEmail("  Ana@Example.Invalid ")).toBe("ana@example.invalid");
@@ -40,7 +43,7 @@ it("normalizes and masks the card's address", () => {
 
 it("sends a table's orders paid together as one email, with the PDF and the stop link", async () => {
   state.claimed = [row("1", "o1", "s"), row("2", "o2", "s")];
-  await drainTicketEmails();
+  await drain();
   expect(state.sent).toHaveLength(1);
   const mail = state.sent[0] as { to: string; attachments: { filename: string }[]; headers: Record<string, string>; html: string };
   expect(mail.to).toBe("ana@example.invalid");
@@ -52,8 +55,21 @@ it("sends a table's orders paid together as one email, with the PDF and the stop
 it("finishes as no_email when the address was removed before sending", async () => {
   state.card = { email: null, email_unsubscribe: null };
   state.claimed = [row("1", "o1", null)];
-  await drainTicketEmails();
+  await drain();
   expect(state.sent).toHaveLength(0);
   expect(state.updates).toEqual([{ patch: expect.objectContaining({ outcome: "no_email" }), ids: ["1"] }]);
   state.card = { email: "ana@example.invalid", email_unsubscribe: "11111111-1111-4111-8111-111111111111" };
+});
+
+it("never sends a ticket queued for one address to the card's new address (Codex review of #622)", async () => {
+  state.claimed = [row("1", "o1", null, { address_key: "22222222-2222-4222-8222-222222222222" })];
+  await drain();
+  expect(state.sent).toHaveLength(0);
+  expect(state.updates).toEqual([{ patch: expect.objectContaining({ outcome: "no_email" }), ids: ["1"] }]);
+});
+
+it("retries a failed group with the same idempotency key (Codex review of #622)", async () => {
+  state.claimed = [row("1", "o1", "s", { batch_key: "ticket-fixed" })];
+  await drain();
+  expect((state.sent[0] as { idempotencyKey: string }).idempotencyKey).toBe("ticket-fixed");
 });

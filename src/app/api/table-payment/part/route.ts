@@ -37,14 +37,20 @@ export const runtime = "nodejs";
 export async function POST(req: NextRequest): Promise<NextResponse> {
   // Tickets this request's payment queued for the card's email go out once it has answered.
   after(() => drainTicketEmails());
-  try { return await collect(req); }
+  // A refused collection leaves no ticket email suppressed (Codex review of #622).
+  const skip: { undo?: () => Promise<void> } = {};
+  try {
+    const res = await collect(req, skip);
+    if (!res.ok) await skip.undo?.().catch(() => {});
+    return res;
+  }
   catch (error) {
     if (error instanceof PaymentAttributionRequired) return await apiError("apiErr.attributionRequired", 409);
     throw error;
   }
 }
 
-async function collect(req: NextRequest): Promise<NextResponse> {
+async function collect(req: NextRequest, skip: { undo?: () => Promise<void> }): Promise<NextResponse> {
   const actor = await actingFrontOfHouse();
   if (!actor) return await apiError("apiErr.forbidden", 403);
 
@@ -83,7 +89,9 @@ async function collect(req: NextRequest): Promise<NextResponse> {
       !Number.isFinite(body.amount) || Number(body.amount) <= 0 || !Number.isFinite(body.tip ?? 0)) {
     return await apiError("apiErr.invalidRequest", 400);
   }
-  if (body.skipTicketEmail === true) await skipTicketEmails(actor.restaurantId, { tableId: body.tableId });
+  if (body.skipTicketEmail === true) {
+    skip.undo = await skipTicketEmails(actor.restaurantId, { tableId: body.tableId, currency: body.currency });
+  }
 
   const before = await tableOutstanding(actor.restaurantId, body.tableId, body.currency);
 

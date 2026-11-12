@@ -3,7 +3,7 @@ import { apiError } from "@/lib/api-error";
 import { jsonBody } from "@/lib/json-body";
 import { actingFrontOfHouse } from "@/lib/api-guard";
 import { MANAGES } from "@/lib/membership";
-import { isRoomLimited } from "@/lib/rate-limit";
+import { isRateLimited, isRoomLimited } from "@/lib/rate-limit";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { normalizeCode } from "@/lib/loyalty/code";
 import { emailForRole, normalizeEmail, setCardEmail } from "@/lib/loyalty/card-email";
@@ -48,9 +48,14 @@ export async function POST(req: NextRequest) {
       restaurantId = data?.restaurant_id as string | undefined;
     }
     if (!restaurantId) return await apiError("apiErr.loyaltyNotHere", 404);
+    // A diner may change their card's address a few times a day, not probe
+    // addresses with it: each "taken" answers whether an address is in use here.
+    if (!actor && await isRateLimited(`card-email:${code}`, 5, 3600)) return await apiError("apiErr.tooManyRequests", 429);
     const result = await setCardEmail(restaurantId, code, email, actor?.email ?? "diner");
     if (result.outcome === "unknown") return await apiError("apiErr.loyaltyNotHere", 404);
-    if (result.outcome === "taken") return NextResponse.json(result, { status: 409 });
+    // Only staff learn which card holds the address; a diner is told only
+    // that it is in use (Codex review of #622).
+    if (result.outcome === "taken") return NextResponse.json(actor ? result : { outcome: "taken" }, { status: 409 });
     if (result.outcome === "saved") {
       return NextResponse.json({ outcome: "saved", email: actor ? emailForRole(result.email, MANAGES(actor.role)) : result.email });
     }

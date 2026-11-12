@@ -1,3 +1,5 @@
+import { after } from "next/server";
+import { drainTicketEmails } from "@/lib/ticket-email";
 import { checkoutPageRpc } from "@/lib/checkout-page-rpc";
 import { NextResponse, type NextRequest } from "next/server";
 import { apiError } from "@/lib/api-error";
@@ -21,6 +23,8 @@ export const runtime = "nodejs";
 // Body: { accountId, expected, tip, method, ref } — `expected` is the balance
 // the cashier showed the customer; `ref` makes a second tap the same payment.
 export async function POST(req: NextRequest): Promise<NextResponse> {
+  // Tickets this request's payment queued for the card's email go out once it has answered.
+  after(() => drainTicketEmails());
   const actor = await actingFrontOfHouse();
   if (!actor) return await apiError("apiErr.forbidden", 403);
 

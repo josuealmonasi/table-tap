@@ -76,7 +76,7 @@ describe("the text and the version cannot drift apart", () => {
   it("has a privacy notice that matches the version in force", () => {
     expect({ version: TERMS_VERSION, text: fingerprint("privacy-es") }).toEqual({
       version: "2026-11-12",
-      text: "d089c21b18ac11e7",
+      text: "0922b8bc438bfb34",
     });
   });
 });

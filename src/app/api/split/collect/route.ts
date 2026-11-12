@@ -1,3 +1,5 @@
+import { after } from "next/server";
+import { drainTicketEmails } from "@/lib/ticket-email";
 import { tableOutstanding } from "@/lib/table-outstanding";
 import { logSlotReceipt } from "@/lib/split-slots-activity";
 import { type NextRequest, NextResponse } from "next/server";
@@ -18,6 +20,8 @@ interface CollectionBody extends Partial<SplitScope> {
 }
 /** Pedidos and open bills use this one writer, including their lost-reply retries. */
 export async function POST(req: NextRequest): Promise<NextResponse> {
+  // Tickets this request's payment queued for the card's email go out once it has answered.
+  after(() => drainTicketEmails());
   const actor = await actingFrontOfHouse();
   if (!actor) return await apiError("apiErr.forbidden", 403);
   const body = await jsonBody<CollectionBody>(req);

@@ -3764,6 +3764,13 @@ create table if not exists ticket_email_outbox (
   finished_at   timestamptz,
   outcome       text check (outcome in ('sent', 'failed', 'unconfigured', 'expired', 'no_email'))
 );
+-- The address this ticket was queued for, named by that address's stop
+-- secret (no copy of the address): a ticket queued for A is never sent to B
+-- after the card's address changes (Codex review of #622).
+alter table ticket_email_outbox add column if not exists address_key uuid;
+-- A failed send keeps its group and its idempotency key for the retry, so a
+-- later payment joining the group cannot turn the retry into a second email.
+alter table ticket_email_outbox add column if not exists batch_key text;
 create index if not exists ticket_email_outbox_pending on ticket_email_outbox(created_at) where finished_at is null;
 alter table ticket_email_outbox enable row level security;
 revoke all on ticket_email_outbox from anon, authenticated;
@@ -3775,8 +3782,8 @@ begin
     or new.loyalty_card_id is null or new.ticket_email_skip then
     return null;
   end if;
-  insert into ticket_email_outbox (restaurant_id, card_id, order_id, session_id)
-  select new.restaurant_id, c.id, new.id, new.session_id from loyalty_cards c
+  insert into ticket_email_outbox (restaurant_id, card_id, order_id, session_id, address_key)
+  select new.restaurant_id, c.id, new.id, new.session_id, c.email_unsubscribe from loyalty_cards c
    where c.id = new.loyalty_card_id and c.restaurant_id = new.restaurant_id and c.email is not null
   on conflict (order_id) do nothing;
   return null;
@@ -3788,14 +3795,15 @@ create trigger queue_ticket_email after insert or update of paid on orders
   for each row execute function public.queue_ticket_email();
 
 -- Take up to p_limit waiting tickets for one sender. A claim older than five
--- minutes is a sender that died and is taken again; a ticket two hours old is
--- no longer worth sending and is marked expired instead.
+-- minutes is a sender that died and is taken again; a ticket a day old is no
+-- longer worth sending and is marked expired instead. A day, not less: the
+-- recovery cron that clears what no payment request drained runs daily.
 create or replace function public.claim_ticket_emails(p_limit int)
 returns setof ticket_email_outbox language plpgsql security definer set search_path = public as $$
 declare v_claim uuid := gen_random_uuid();
 begin
   update ticket_email_outbox set finished_at = now(), outcome = 'expired'
-   where finished_at is null and created_at < now() - interval '2 hours';
+   where finished_at is null and created_at < now() - interval '24 hours';
   return query
   update ticket_email_outbox o set claimed_at = now(), claim = v_claim, attempts = o.attempts + 1
    where o.id in (select t.id from ticket_email_outbox t

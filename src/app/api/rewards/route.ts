@@ -1,3 +1,4 @@
+import { emailForRole } from "@/lib/loyalty/card-email";
 import { NextRequest, NextResponse } from "next/server";
 import { apiError } from "@/lib/api-error";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -71,9 +72,10 @@ export async function GET(req: NextRequest) {
       : null;
 
   return NextResponse.json({
-    // The address this card's tickets go to: shown whole to whoever holds the
-    // code, which is the card itself.
-    email: (card as { email?: string | null }).email ?? null,
+    // The address this card's tickets go to, masked: a waiter who scanned
+    // the card holds its code too, and the floor never sees an address whole
+    // (Codex review of #622). The diner retypes it to change it.
+    email: emailForRole((card as { email?: string | null }).email ?? null, false),
     face,
     qr: qrGrid(face.qrPayload),
     restaurant: { id: card.restaurant_id, ...restaurant.data },
