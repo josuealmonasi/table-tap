@@ -5,7 +5,7 @@ import { FISCAL_COLUMNS, FISCAL_KEYS, type FiscalSettings } from "@/lib/fiscal-s
 const state = vi.hoisted(() => ({ role: "owner", columns: [] as string[], ids: [] as string[], error: false, missing: false }));
 const fiscal = Object.fromEntries(FISCAL_KEYS.map(field => [field, `private ${field}`])) as FiscalSettings;
 vi.mock("@/lib/page-guard", () => ({ requireManager: async () => ({ role: state.role, restaurant: { id: "own-r", name: "Cafe" } }) }));
-vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({ from: () => ({ select: (columns: string) => {
+vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({ rpc: async () => ({ data: null, error: null }), from: () => ({ select: (columns: string) => {
   state.columns.push(columns);
   return { eq: (_key: string, id: string) => {
     state.ids.push(id);

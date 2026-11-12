@@ -6561,6 +6561,17 @@ understatement of unrelated revenue, bill-wide stacking, extras, combo display
 savings, free food costs, exact cents, legacy fallback and offline replay.
 Reports never fetch current promotions for old sales.
 
+## The card-fee ceiling had no currency (sweep 11, finding 2, 2026-11-11)
+
+`platform_fees` counts cents per month with no currency. A Carta restaurant at
+MX$698 of fees that switched to USD had US$1 left of its US$699 ceiling, and an
+old peso fee returned freed dollar room. The owner chose one ceiling, one
+currency: while this UTC month has card fees (not released, not fully
+returned), the currency changes from the 1st of next month.
+`guard_fee_month_currency` refuses the change in the database, the settings
+route answers it by name (409 `currencyLockedMonth`), and Settings disables the
+currency with the date it frees up. `fee-month-currency.spec.tsx` covers all
+three, each sabotage-tested.
 ## The ticket PDF says what the receipt says (2026-11-11)
 
 The 80 mm ticket and the HTML/email receipt are two forms of one sale. Both

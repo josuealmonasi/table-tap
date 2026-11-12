@@ -52,6 +52,12 @@ export default async function SettingsPage() {
   );
   const printerConfigured = Boolean(printer?.print_token);
 
+  // Card fees this month were counted in this currency, and the ceiling has
+  // none: the currency changes from the 1st (the database refuses it before).
+  const locked = await createAdminClient().rpc("currency_locked_until", { p_restaurant: membership.restaurant.id });
+  if (locked.error) throw new Error(`Could not read the currency lock: ${locked.error.message}`);
+  const currencyLockedUntil = typeof locked.data === "string" ? locked.data : null;
+
   // Private columns are read with the admin client only for the owner.
   // A failed read must not become an empty form that overwrites saved data.
   const fiscal = membership.role === "owner"
@@ -76,6 +82,7 @@ export default async function SettingsPage() {
         inventoryAllowed={inventory}
         cardsEnabled={cardsEnabled}
         printerConfigured={printerConfigured}
+        currencyLockedUntil={currencyLockedUntil}
       />
     </ConfirmProvider>
   );

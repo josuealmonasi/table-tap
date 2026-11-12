@@ -5399,6 +5399,35 @@ $$;
 revoke all on function public.reserve_platform_fee(uuid, integer, integer, text, text) from public, anon, authenticated;
 grant execute on function public.reserve_platform_fee(uuid, integer, integer, text, text) to service_role;
 
+-- The monthly fee ceiling counts cents with no currency: pesos taken this
+-- month read as dollars after a switch (Carta at MX$698 had US$1 left of a
+-- US$699 ceiling; sweep 11). A restaurant with card fees this month changes
+-- currency from the 1st of next month instead (owner's decision, 2026-11-11).
+-- Returns that day, or null when nothing locks the currency.
+create or replace function public.currency_locked_until(p_restaurant uuid)
+returns date language sql stable security definer set search_path = public as $$
+  select (date_trunc('month', now() at time zone 'utc') + interval '1 month')::date
+  where exists(select 1 from platform_fees f where f.restaurant_id = p_restaurant
+    and f.period = date_trunc('month', now() at time zone 'utc')::date
+    and f.status <> 'released' and f.cents > f.refunded_cents);
+$$;
+revoke all on function public.currency_locked_until(uuid) from public, anon, authenticated;
+grant execute on function public.currency_locked_until(uuid) to service_role;
+
+create or replace function public.guard_fee_month_currency() returns trigger
+language plpgsql security definer set search_path = public as $$
+begin
+  if new.currency is distinct from old.currency and public.currency_locked_until(new.id) is not null then
+    raise exception 'currency locked until next month' using errcode = 'PT409';
+  end if;
+  return new;
+end;
+$$;
+revoke all on function public.guard_fee_month_currency() from public, anon, authenticated;
+drop trigger if exists guard_fee_month_currency on restaurants;
+create trigger guard_fee_month_currency before update of currency on restaurants
+  for each row execute function public.guard_fee_month_currency();
+
 -- The money landed: the fee is ours. Whatever it was before — a late
 -- completion after an expiry still means Stripe took the fee.
 create or replace function public.take_platform_fee(
