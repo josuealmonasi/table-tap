@@ -3,6 +3,33 @@ import type { Messages } from "./en";
 // Spanish (Mexico) UI strings. Typed as Messages so a missing or extra key is a
 // compile error.
 export const es: Messages = {
+  disputes: {
+    loading: "Cargando contracargos…",
+    title: "Contracargos",
+    help: "Ajustes reales del saldo de Stripe, en la fecha de cada movimiento. Las ventas y el corte se muestran por separado.",
+    withdrawn: "Capital retirado",
+    reinstated: "Capital restituido",
+    fees: "Comisiones de Stripe por contracargos (netas)",
+    adjustments: "Ajustes por contracargos",
+    after: "Contribución después de contracargos",
+    exposure: "Importe actualmente disputado",
+    outcomes: "Resultados actuales: {won} ganados · {lost} perdidos",
+    pending: "{count} contracargo(s) pendientes de conciliación o revisión. Ganar no confirma la restitución.",
+    incomplete: "Total incompleto: se excluyen los movimientos pendientes o en otra moneda de liquidación. Cada importe conserva su moneda.",
+    empty: "Sin movimientos por contracargos en este periodo.",
+    history: "{date} · Contracargo de {amount} · {status}",
+    shared: "Este cobro cubre varios pedidos. Los importes corresponden al cobro completo, no a cada pedido.",
+    unavailable: "No se pudo cargar el historial de contracargos. Actualiza para intentar de nuevo.",
+    deleteBlocked: "Este restaurante tiene contracargos pendientes de conciliación o de un resultado final.",
+    needs_response: "Requiere respuesta",
+    under_review: "En revisión",
+    won: "Ganado",
+    lost: "Perdido",
+    warning_needs_response: "Consulta: requiere respuesta",
+    warning_under_review: "Consulta en revisión",
+    warning_closed: "Consulta cerrada",
+    prevented: "Prevenido",
+  },
   cardEmail: {
     ownReadFailed: "No pudimos consultar el correo de tu tarjeta. Puedes escribir uno nuevo.",
     takenDiner: "Ese correo ya está en la tarjeta ···· {suffix}. Usa esa tarjeta.",

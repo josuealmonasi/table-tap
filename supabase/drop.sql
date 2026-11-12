@@ -44,7 +44,7 @@ drop table if exists refund_allocations cascade;
 drop table if exists refund_operations cascade;
 drop table if exists order_adjustments cascade;
 drop table if exists payment_allocations cascade;
--- ============================================================================
+-- =====================================================================
 -- TableTap — DROP everything (DESTRUCTIVE)
 -- Removes the tables, their data, policies, and indexes entirely.
 -- Run via: pnpm db:drop   (or paste into the Supabase SQL Editor)
@@ -366,6 +366,14 @@ drop function if exists public.sale_line_costs(uuid, jsonb);
 drop function if exists public.counter_pay_later_full(uuid) cascade;
 
 drop function if exists public.stamp_checkout_discount_v1();
+-- Disputes (chargebacks).
+drop function if exists public.fail_stripe_dispute_event(uuid, uuid, text);
+drop function if exists public.finish_stripe_dispute_event(uuid, uuid, jsonb, jsonb);
+drop function if exists public.claim_stripe_dispute_event(uuid);
+drop function if exists public.enqueue_stripe_dispute_event(text, boolean, text, text, text, text, timestamptz);
+drop table if exists stripe_dispute_movements cascade;
+drop table if exists stripe_dispute_events cascade;
+drop table if exists stripe_disputes cascade;
 -- Loyalty stamped by payment.
 drop function if exists public.stamp_loyalty_on_payment() cascade;
 drop function if exists public.fix_loyalty_card_on_payment() cascade;

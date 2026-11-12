@@ -38,6 +38,9 @@ const NOT_DEMO_DATA = new Set([
   "stock_reservations", // internal checkout recovery records, not a demo feature
   "table_session_members", // server-issued credentials; demo bills must never seed usable phone access
   "diner_checkouts", // genuine Stripe session provenance; demo rows must never authorize money
+  "stripe_disputes", // genuine chargeback evidence; a fabricated one would teach the owner one happened
+  "stripe_dispute_movements", // Stripe balance transactions, recorded only from Stripe
+  "stripe_dispute_events", // the webhook inbox
   "kitchen_tickets", // filled by the trigger on the seeder's orders
   "kitchen_requests", // filled by the trigger on the seeder's service requests
   "account_checkouts", // an online payment in progress; only the pay route opens one

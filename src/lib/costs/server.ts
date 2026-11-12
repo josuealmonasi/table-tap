@@ -1,3 +1,5 @@
+import { readDisputeReport } from "@/lib/disputes/read";
+import type { DisputeReport } from "@/lib/disputes/types";
 import { withSavedCosts } from "./saved-costs";
 import { readContributionReturns } from "./returns";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -20,6 +22,7 @@ export interface CostedProduct extends CostedItem {
 }
 
 export interface CostsView {
+  disputes: DisputeReport;
   ingredients: Ingredient[];
   recipes: RecipeLine[];
   products: CostedProduct[];
@@ -93,6 +96,7 @@ export async function readCosts(restaurantId: string, now = new Date()): Promise
   const returns = await readContributionReturns(db, restaurantId, restaurant.data.currency, since, now.toISOString());
 
   return {
+    disputes: await readDisputeReport(restaurantId, since, now.toISOString()),
     ingredients: typed.sort((a, b) => a.name.localeCompare(b.name)),
     recipes: lines,
     products,

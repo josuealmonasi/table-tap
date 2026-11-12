@@ -22,7 +22,7 @@ export function recoveryCases() {
         return async () => { delete fx.recoveryBefore; };
       },
       check: async (answer, fx) => {
-        for (const name of ["stock", "refunds", "fees", "subscriptions"]) {
+        for (const name of ["stock", "refunds", "fees", "subscriptions", "disputes"]) {
           const job = answer.jobs?.[name];
           if (!job || !Number.isInteger(job.done) || !Number.isInteger(job.pending) || job.failed !== 0
             || !(job.oldest_pending_age_seconds === null || Number.isFinite(job.oldest_pending_age_seconds))) {

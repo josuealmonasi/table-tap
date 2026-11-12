@@ -2855,7 +2855,7 @@ Each job has ten seconds, with bounded network requests and no Stripe network
 retries. Each source reads at most ten items per batch (refunds have two
 sources sharing one budget). A rotating page prevents a full batch of pending
 items from permanently hiding later restaurants. Work stops before the budget
-to leave time for observation; four jobs fit within the route's 60-second limit.
+to leave time for observation; five jobs fit within the route's 60-second limit.
 An item or job failure does not prevent subsequent items or jobs from running.
 
 The JSON response and logs report each job's completed items, remaining
@@ -2936,6 +2936,64 @@ codes when reducing sales for table forgiveness: every reason lowers the live
 paid total and appears as a write-off. Account credits follow that existing
 behavior; reason-specific sales/loss reporting is not changed by this feature.
 
+### Disputes — PR 1 (proposal awaiting Claude's schema fold)
+
+Connect receives `charge.dispute.created`, `updated`, `closed`, `funds_withdrawn`
+and `funds_reinstated`. Each verified notification commits a durable
+`stripe_dispute_events` inbox row before acknowledgment. Provider read failures
+stay retryable through the existing `/api/cron/recover` runner's dispute job;
+there is no additional scheduler. A per-case lease fences expired workers.
+Refresh always retrieves the current dispute and its balance transactions on
+the original connected account; out-of-order event payloads never establish
+status or money. Each provider balance transaction is recorded once, with its
+signed principal, fee, net, currency, fee details and provider date. Provider
+transaction identity and monetary evidence cannot be overwritten by a retry.
+
+`stripe_disputes`, `stripe_dispute_movements` and `stripe_dispute_events` have
+RLS, service-only access, composite tenant references and Stripe identities
+unique within account and livemode. The tables and their four functions are in
+`supabase/schema.sql`; `admin_delete_restaurant` refuses deletion while a
+matched dispute is open or unreconciled and archives all three tables with the
+books.
+Historical diner checkout and payment provenance establishes ownership by
+PaymentIntent and original Stripe account. Account checkouts link through their
+saved diner checkout session. Current Connect settings provide only the tenant
+for an unmatched review case, with no linked order. A review case finishes its
+inbox event (`done`), so recovery does not re-read it from Stripe; the case row
+keeps `review` for a platform admin (no admin UI yet). Review cases and their
+movements are not the tenant's books: Costs and Analytics leave them out of
+every total, of contribution after chargebacks and of the pending/incomplete
+notes. Unknown accounts remain in the private inbox for review. Shared-charge
+history identifies the whole charge.
+
+Costs shows **chargeback adjustments** below contribution, followed by
+**contribution after chargebacks** (existing contribution plus actual signed
+balance-transaction net). Movements use provider dates even for older sales or
+a period with no sales. Analytics has a separate section for withdrawals,
+reinstatements, actual net fees, current exposure and current won/lost counts.
+Manager order/bill history appends dated chargeback status and actual movements.
+Sales, product revenue, tips, payments, allocations, receipts and the corte
+retain their original facts. Charge and settlement currencies remain separate;
+foreign settlement is displayed in its own currency and excluded from the
+current-currency contribution with an incomplete-total notice. Reports exclude
+other Stripe modes, and failed reads fail visibly rather than displaying zero.
+
+Deletion is blocked for open or unreconciled matched disputes and pending inbox
+work, including events on historical accounts. Review cases never block it;
+they are archived with the books. Completed dispute books are
+archived by `admin_delete_restaurant` with the other financial records: all three
+dispute tables join its archive list. A win without reinstated principal stays
+pending; winning never invents a fee credit. No application-fee refund or
+finding-7 resolution UI is included. Historical discovery/backfill and an
+independent provider-completeness probe are deferred to PR 3.
+
+The money gate checks integer `amount_minor - fee_minor = net_minor`, scoped
+transaction uniqueness, tenant/account/mode attribution and per-case ID set
+equality with the last verified provider snapshot. It reports pending work and
+explicitly says **provider completeness unverified**. These structural checks
+cannot detect a dispute never ingested. PostgreSQL lease/race/RLS probes,
+Stripe sandbox transaction-shape checks, layout and full live gates remain
+Claude's integration work; offline specs do not claim those results.
 
 ## Visit-card ticket email screens (11 November 2026)
 
