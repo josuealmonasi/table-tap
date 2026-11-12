@@ -22,14 +22,28 @@ vi.mock("@/lib/supabase/admin", () => ({
       q.single = async () => ({ data: { name: "Demo Bistro", timezone: "America/Mexico_City" }, error: null });
       q.update = (patch: Record<string, unknown>) => {
         const w: Record<string, unknown> = {};
-        w.eq = () => w;
+        const filters: Record<string, unknown> = {};
+        w.eq = (col: string, value: unknown) => { filters[col] = value; return w; };
         w.is = () => w;
-        w.in = async (_c: string, ids: string[]) => {
-          if (state.crashAfterSend && "finished_at" in patch) throw new Error("process died");
-          state.steps.push("batch_key" in patch ? "persist" : "finish");
-          state.updates.push({ patch, ids });
-          for (const r of state.claimed) if (ids.includes(r.id)) Object.assign(r, patch);
-          return { error: null };
+        // Awaited directly or through .select("id"); runs once either way. A
+        // row whose claim moved on to another sender is not touched.
+        w.in = (_c: string, ids: string[]) => {
+          let done: Promise<string[]> | undefined;
+          const run = () => done ??= (async () => {
+            if (state.crashAfterSend && "finished_at" in patch) throw new Error("process died");
+            const owned = ids.filter(id => {
+              const r = state.claimed.find(x => x.id === id);
+              return !r || !("claim" in filters) || r.claim === filters.claim;
+            });
+            state.steps.push("batch_key" in patch ? "persist" : "finish");
+            state.updates.push({ patch, ids: owned });
+            for (const r of state.claimed) if (owned.includes(r.id)) Object.assign(r, patch);
+            return owned;
+          })();
+          return {
+            then: (ok: (v: unknown) => unknown, fail: (e: unknown) => unknown) => run().then(() => ({ error: null })).then(ok, fail),
+            select: async () => ({ data: (await run()).map(id => ({ id })), error: null }),
+          };
         };
         return w;
       };
@@ -55,7 +69,7 @@ const { drainTicketEmails, drainTicketEmailQueue, batchKeyFor } = await import("
 const { maskEmail, normalizeEmail, emailForRole } = await import("@/lib/loyalty/card-email");
 const KEY = "11111111-1111-4111-8111-111111111111";
 const row = (id: string, order: string, session: string | null, extra: Record<string, unknown> = {}) =>
-  ({ id, restaurant_id: "r", card_id: "c", order_id: order, session_id: session, attempts: 1, address_key: KEY, batch_key: null, ...extra });
+  ({ id, restaurant_id: "r", card_id: "c", order_id: order, session_id: session, attempts: 1, address_key: KEY, batch_key: null, claim: "claim-1", ...extra });
 const drain = async () => { vi.advanceTimersByTime(5000); await drainTicketEmails(); };
 
 beforeEach(() => {
@@ -180,4 +194,14 @@ it("the cron stops when a claim brings back only rows it already tried", async (
   state.mail = "failed";
   await drainTicketEmailQueue();
   expect(state.claims).toBe(2);
+});
+
+it("a sender whose lease another sender took sends nothing and finishes nothing", async () => {
+  // This sender claimed a and b, then stalled past the lease; another sender
+  // has since claimed b. Keying only a would split the group under one key.
+  state.batches = [[row("a", "o1", "s1"), row("b", "o2", "s1")]];
+  state.claimed = [row("a", "o1", "s1"), row("b", "o2", "s1", { claim: "claim-2" })];
+  await drainTicketEmailQueue(1);
+  expect(state.sent).toHaveLength(0);
+  expect(finished()).toHaveLength(0);
 });

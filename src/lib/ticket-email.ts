@@ -19,7 +19,7 @@ import { sendMail, mailConfigured } from "@/lib/mail";
 import { DEFAULT_TIME_ZONE } from "@/lib/open-menus";
 import { DEFAULT_LOCALE, messagesFor, translate } from "@/lib/i18n";
 
-interface OutboxRow { id: string; restaurant_id: string; card_id: string; order_id: string; session_id: string | null; attempts: number; address_key: string | null; batch_key: string | null }
+interface OutboxRow { id: string; restaurant_id: string; card_id: string; order_id: string; session_id: string | null; attempts: number; address_key: string | null; batch_key: string | null; claim: string }
 type Outcome = "sent" | "failed" | "unconfigured" | "no_email";
 
 function siteOrigin(): string {
@@ -127,10 +127,13 @@ async function drainOnce(limit: number): Promise<string[]> {
       // sender that dies after the email went out leaves the key behind, and
       // the retry sends with it, so the provider answers with the same email.
       if (!rows[0].batch_key) {
-        const { error: keyError } = await db.from("ticket_email_outbox").update({ batch_key: batch })
-          .eq("restaurant_id", rows[0].restaurant_id).is("batch_key", null).in("id", ids);
-        // Not recorded, not sent: the claim lapses and a later drain tries again.
-        if (keyError) continue;
+        const { data: keyed, error: keyError } = await db.from("ticket_email_outbox").update({ batch_key: batch })
+          .eq("restaurant_id", rows[0].restaurant_id).eq("claim", rows[0].claim).is("batch_key", null).in("id", ids)
+          .select("id");
+        // Not recorded on every row this sender still owns, not sent: a lease
+        // that lapsed belongs to whoever claimed it since, and a later drain
+        // sends the group whole (Codex review of the delta, 2026-11-12).
+        if (keyError || keyed?.length !== ids.length) continue;
       }
       const outcome = await sendGroup(rows, batch).catch((err: unknown) => {
         console.error("ticket email failed", err);
@@ -140,7 +143,7 @@ async function drainOnce(limit: number): Promise<string[]> {
       const retry = outcome === "failed" && rows.every(r => r.attempts < 3);
       await db.from("ticket_email_outbox")
         .update(retry ? { claimed_at: null, claim: null } : { finished_at: new Date().toISOString(), outcome })
-        .eq("restaurant_id", rows[0].restaurant_id).in("id", ids);
+        .eq("restaurant_id", rows[0].restaurant_id).eq("claim", rows[0].claim).in("id", ids);
     }
     return (data as OutboxRow[]).map(r => r.id);
   } catch (err) {
