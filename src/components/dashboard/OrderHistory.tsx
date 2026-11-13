@@ -32,15 +32,18 @@ export default function OrderHistory({
   restaurantId,
   currency,
   canReturn = false,
+  closedOnBoard = "",
 }: {
   restaurantId: string;
   currency: string;
   canReturn?: boolean;
+  /** Changes when the live board sees an order close; history re-reads then. */
+  closedOnBoard?: string;
 }) {
   const t = useT();
   const { locale } = useLocale();
   const { orders, loading, error, retry, page, pages, total, setPage, query, setQuery } =
-    useOrderHistory(restaurantId);
+    useOrderHistory(restaurantId, closedOnBoard);
   const [open, setOpen] = useState<Order | null>(null);
 
   return (

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { liveUpdatesEnabled } from "@/lib/supabase/live-updates";
 import { useT } from "@/lib/i18n/context";
 import { useToast } from "@/components/ui/Toast";
 import { readyToDeliver, type ReadyTable } from "@/lib/ready-tables";
@@ -31,6 +32,8 @@ export function useCounterPickup(restaurantId: string, initial: Order[]): {
       const { data: { session } } = await supabase.auth.getSession();
       if (cancelled) return;
       if (session) supabase.realtime.setAuth(session.access_token);
+      // Off only in the gate build: see liveUpdatesEnabled.
+      if (!liveUpdatesEnabled()) return;
       channel = supabase
         .channel(`till-pickup-${restaurantId}`)
         .on(

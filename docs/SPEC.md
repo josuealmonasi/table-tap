@@ -2205,6 +2205,16 @@ is counted before and after with the secret key. A write RLS filters to zero
 rows returns no error at all, and reading that as "allowed" once reported four
 tables as wide open that were all fine.
 
+The dev database is a small Supabase project with a disk I/O budget, and the
+gates are what spends it. Two things keep them inside it. The build the gate
+runner serves sets `NEXT_PUBLIC_GATE_LIVE_UPDATES=off`, so its screens do not
+subscribe to realtime (`src/lib/supabase/live-updates.ts`): realtime's poll of
+the change stream for the gate browsers was the database's largest consumer,
+no browser gate waits for a live update, and `pnpm rls` asks the socket its
+questions directly. `next.config.ts` refuses that setting on Vercel, so a
+deployed build always subscribes. And `pnpm db:mock` writes the demo's ~300
+closed sittings in two statements rather than two per sitting.
+
 Every check plants what it needs rather than depending on what the demo data
 happens to hold, and removes it afterwards. A check that finds nothing to
 attack passes without asking anything — the RLS sweep did exactly that on twelve
@@ -2413,7 +2423,8 @@ original amounts; money checks report that exception separately.
 Customer refund completion commits before fee reconciliation. The customer's
 completion time is unchanged by later fee recovery. `fee_reconciled_at` is set
 only by a verified cumulative provider fee read; until then the month's ceiling
-conservatively counts the fee as retained. Bills reads schedule completed-order fee recovery after the response,
+conservatively counts the fee as retained. Opening Bills schedules completed-order fee recovery after the response
+(the returns list Pedidos polls every 15 s does not; the recover cron drains the fee queue),
 so provider delays cannot block collection. Duplicate-charge refunds use immutable numbered
 `refund_due_attempts`, preserving unknown outcomes and separately keying only
 confirmed terminal failures. Managers can keep returning money while fee work

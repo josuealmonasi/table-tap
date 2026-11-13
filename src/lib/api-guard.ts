@@ -1,4 +1,5 @@
-import { getMembershipWithUser, MANAGES, type Role } from "@/lib/membership";
+import { getMember, MANAGES, type Role } from "@/lib/membership";
+import type { Restaurant } from "@/lib/types";
 
 /**
  * Who is calling a route, and which restaurant they are confined to.
@@ -17,15 +18,18 @@ export interface Actor {
   email: string;
 }
 
-async function resolve(): Promise<Actor | null> {
-  const verified = await getMembershipWithUser();
-  if (!verified) return null;
-  const { membership, user } = verified;
+/** One auth round trip: a route handler gets no `cache` memo, so asking twice paid twice. */
+async function member(): Promise<{ actor: Actor; restaurant: Restaurant } | null> {
+  const { user, membership } = await getMember();
+  if (!membership) return null;
   return {
-    restaurantId: membership.restaurant.id,
-    role: membership.role,
-    email: user?.email ?? "staff",
+    actor: { restaurantId: membership.restaurant.id, role: membership.role, email: user?.email ?? "staff" },
+    restaurant: membership.restaurant,
   };
+}
+
+async function resolve(): Promise<Actor | null> {
+  return (await member())?.actor ?? null;
 }
 
 /** Any member of a restaurant — the floor and the kitchen included. */
@@ -50,6 +54,12 @@ export async function actingFrontOfHouse(): Promise<Actor | null> {
 export async function actingManager(): Promise<Actor | null> {
   const actor = await resolve();
   return actor && MANAGES(actor.role) ? actor : null;
+}
+
+/** A manager and their own restaurant's row, from the same single lookup. */
+export async function actingManagerWithRestaurant(): Promise<{ actor: Actor; restaurant: Restaurant } | null> {
+  const found = await member();
+  return found && MANAGES(found.actor.role) ? found : null;
 }
 
 /**

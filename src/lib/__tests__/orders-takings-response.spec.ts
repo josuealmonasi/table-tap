@@ -1,6 +1,6 @@
 import { expect, it, vi } from "vitest";
-vi.mock("@/lib/api-guard", () => ({ actingManager: async () => ({ restaurantId: "own" }) }));
-vi.mock("@/lib/membership", () => ({ getMembership: async () => ({
+vi.mock("@/lib/api-guard", () => ({ actingManagerWithRestaurant: async () => ({
+  actor: { restaurantId: "own" },
   restaurant: { id: "own", currency: "USD", timezone: "Asia/Tokyo" },
 }) }));
 vi.mock("@/lib/collected-today", () => ({ collectedToday: async () => 123.45 }));

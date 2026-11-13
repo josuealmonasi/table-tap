@@ -18,7 +18,7 @@
 // Reused by scripts/db.mjs for `pnpm db:mock` and `pnpm db:dropmock`.
 // ============================================================================
 
-import { randomBytes } from "node:crypto";
+import { randomBytes, randomUUID } from "node:crypto";
 import { createClient } from "@supabase/supabase-js";
 import { populateMenu } from "./menu-catalog.mjs";
 import { FEED_DEMO, PRICE_SCALE, menuPrice } from "./demo-prices.mjs";
@@ -531,24 +531,34 @@ export async function seedMock(pg) {
     if (!byDay.has(key)) byDay.set(key, []);
     byDay.get(key).push(o);
   }
-  for (const [key, group] of byDay) {
-    const [tableId] = key.split(":");
-    const opened = new Date(group[0].created_at);
+  // Two statements for all ~300 sittings, not two per sitting. One round trip
+  // and one commit each was ~600 serial statements per seed, the largest part
+  // of `db:mock`'s time and of the dev database's write I/O (gate-db-io
+  // review, 2026-11-13). The ids are made here so each order can be pointed at
+  // its sitting without relying on the order `returning` comes back in.
+  const sittings = [...byDay].map(([key, group]) => ({
+    id: randomUUID(),
+    tableId: key.split(":")[0],
+    opened: new Date(group[0].created_at).toISOString(),
     // Paid and gone 45 minutes after the last order, or now if that is later
     // than now: a sitting cannot have closed in the future.
-    const closed = new Date(Math.min(new Date(group[group.length - 1].created_at).getTime() + 45 * 60000, Date.now()));
-    const {
-      rows: [session],
-    } = await pg.query(
-      `insert into table_sessions (restaurant_id, table_id, opened_at, closed_at, close_reason)
-       values ($1, $2, $3, $4, 'paid') returning id`,
-      [rid, tableId, opened.toISOString(), closed.toISOString()],
-    );
-    await pg.query("update orders set session_id = $2 where id = any($1)", [
-      group.map(o => o.id),
-      session.id,
-    ]);
-  }
+    closed: new Date(Math.min(new Date(group[group.length - 1].created_at).getTime() + 45 * 60000, Date.now())).toISOString(),
+    orderIds: group.map(o => o.id),
+  }));
+  await pg.query(
+    `insert into table_sessions (id, restaurant_id, table_id, opened_at, closed_at, close_reason)
+     select s.id, $1, s.table_id, s.opened_at, s.closed_at, 'paid'
+       from unnest($2::uuid[], $3::uuid[], $4::timestamptz[], $5::timestamptz[])
+         as s(id, table_id, opened_at, closed_at)`,
+    [rid, sittings.map(s => s.id), sittings.map(s => s.tableId), sittings.map(s => s.opened), sittings.map(s => s.closed)],
+  );
+  const assigned = sittings.flatMap(s => s.orderIds.map(orderId => [orderId, s.id]));
+  await pg.query(
+    `update orders o set session_id = a.session_id
+       from unnest($2::uuid[], $3::uuid[]) as a(order_id, session_id)
+      where o.id = a.order_id and o.restaurant_id = $1`,
+    [rid, assigned.map(([orderId]) => orderId), assigned.map(([, sessionId]) => sessionId)],
+  );
 
   // ── Open bills: three tables seated right now ──────────────────────────
   const openTables = sample(tables, 3);
