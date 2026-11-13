@@ -34,6 +34,10 @@ and that a new party cannot see the previous party's waiting phones.
 | A duplicate refund tracks customer completion and fee completion separately (S11 I5) | A failed fee return disappeared behind an already-refunded customer payment |
 | A duplicate refund keeps its original charge currency everywhere (S11 I9) | Changing the menu currency relabelled money owed back and the approval amount |
 |---|---|
+| Each subscription source has time to run (review N8) | `subscriptions.spec.ts` checks the recovery path |
+| Overdue refunds remind each restaurant (review N9) | `refunds.spec.ts` checks the recovery path |
+| Ticket retries run before tickets expire (review N10) | `ticket-email-schedule.spec.ts` checks the recovery path |
+
 | A table payment check names the actual table relation (review N3) | `payment-check-route.spec.ts` rejects unknown relations and checks the tenant and table before Stripe |
 | Held approval keeps the kitchen's saved instructions (review N4) | `offline-sale.spec.ts` keeps notes and component extras without duplicating flattened extras |
 | An unread ticket address remains retryable (review N6) | `card-email.spec.ts` fails the card read, then sends after recovery |
@@ -7204,3 +7208,15 @@ extras unchanged so the receipt never adds an extra twice.
 The database read and outbox outcome had to agree on absence. A failed read
 now throws into the existing backoff path; only a successful read can finish
 a ticket as having no email. The spec retries after the database recovers.
+
+## Review N8 — Each subscription source has time to run
+
+Unpaid subscription reads and cancellation recovery had to share time fairly. Each source now has a reserved part of the job budget, so a persistently unpaid queue cannot hide expired paid tiers or period backfills.
+
+## Review N9 — Overdue refunds remind each restaurant
+
+The global oldest-age metric and per-case reminders had to agree on their scope. Reminders now inspect the bounded rotating page, retaining the existing per-case notification key across repeated runs.
+
+## Review N10 — Ticket retries run before tickets expire
+
+The retry clock and worker schedule had to agree. Recovery now runs every five minutes, independently of payment traffic, within the existing 24-hour email lifetime. More frequent bounded runs also raise queue throughput.
