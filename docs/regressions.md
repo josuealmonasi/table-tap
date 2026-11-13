@@ -40,6 +40,9 @@ and that a new party cannot see the previous party's waiting phones.
 | Held receipts reuse the existing payment tenant key | The train created a second unique index on the same payment columns; `held-payment-index.spec.ts` keeps the original unique key and rejects the duplicate build |
 | Restaurant deletion archives the account journal with its source books | The restaurant cascade deleted original charge snapshots that the archive list omitted; `account-journal-archive.spec.ts` pins the journal copy, tenant lock and preserved held-receipt/dispute checks |
 | Printed IVA keeps each order's saved rate | A second current restaurant rate could relabel an older sale; `ticket-vat.spec.ts` and `receipt-vat-source.spec.ts` check saved rates, missing evidence and mixed-rate splits |
+| Statement text separates days and the payment link | HTML headings separated days while plain text ran them together; `mail-plaintext.spec.ts` snapshots both languages |
+| Receipt text keeps paragraph breaks | Empty separators were discarded before sending POS and diner receipts; `mail-plaintext.spec.ts` snapshots items, totals and paragraphs in both languages |
+| Card ticket text gives the stop link its own line | The HTML link stood apart while plain text buried its URL beside the label; `mail-plaintext.spec.ts` and `card-email.spec.ts` check the copy and actual sender |
 | Restaurant logos use PNG bytes, content type and path, and the bucket accepts PNG | The photo encoder stored WebP logos that the ticket PDF could not print; changing only the encoder would leave a WebP path and a bucket that refused PNG. `image-resize.spec.ts` checks logos and unchanged photo encodings; `images.spec.ts` checks the bucket allowlist |
 | A new card save cannot duplicate today's ticket after a lost reply (card email UI) | The save could commit unseen and both the card outbox and the per-sale sender mailed the same ticket; `card-email-pos.spec.tsx` holds the lost reply and checks skip in the charge and held replay |
 | A new card reader does not reuse another reader's address (card email UI) | A cashier could briefly see an owner's full address from the shared SWR cache; `card-email.spec.tsx` reproduces the flash with a delayed masked reply |
@@ -7328,3 +7331,30 @@ that check and the backfill's own conditions; `coverage-read-no-write.spec.ts`
 compares them, and `scripts/probe-coverage-no-write.mjs` runs `order_coverage`
 inside `begin read only` on the demo data and compares its numbers with the
 old body's.
+
+## Statement text needs the same day boundaries as HTML
+
+The HTML headings and the plain-text day list had to agree about where each day
+begins. Items already had newlines in this checkout, so the fully concatenated
+body from the mail log was not reproduced. The missing blank lines between days
+and the inline payment URL were reproduced. `mailText` preserves intentional
+paragraph breaks; `mail-plaintext.spec.ts` snapshots English and Spanish days,
+items, balance and a payment URL on its own line. `mail-idempotency.spec.ts`
+checks that the provider payload keeps those newlines.
+
+## Receipt paragraphs must survive the text builder
+
+The receipt array contained empty lines to separate the header, dishes, total
+and footer, but its final filter removed every separator. The HTML layout and
+the text builder had to agree about those paragraphs. POS and diner receipts
+now use `mailText`; `mail-plaintext.spec.ts` checks both languages and a counter
+sale without a table, so an absent table does not split the header.
+
+## Card ticket links must remain readable outside HTML
+
+The HTML stop link and the card ticket's text footer had to offer the same clear
+way to stop emails. The text put the URL beside its label. `ticketMail` now
+keeps the receipt paragraphs and gives the stop URL its own line, while still
+replacing the receipt's promise not to keep the address with the card's footer.
+`mail-plaintext.spec.ts` snapshots both languages; `card-email.spec.ts` checks
+the actual outbox sender with its database and mail provider mocked.
