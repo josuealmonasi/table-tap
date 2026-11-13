@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { ticketMail } from "@/lib/ticket-mail";
 // ============================================================================
 // Tickets emailed to the visit card's address (owner's request, 2026-11-11).
 // The `queue_ticket_email` trigger puts each paid sale whose card has an
@@ -50,11 +51,10 @@ async function sendGroup(rows: OutboxRow[], key: string): Promise<Outcome> {
   const footer = t("cardEmail.footer", { restaurant: where.name });
   // The receipt's own footer promises the address is not kept; this one is
   // kept on the card, so that line is replaced, not contradicted (Codex review).
-  const kept = (text: string) => text.split(t("receipt.footer")).join("");
+  const mail = ticketMail(receipt, { receiptFooter: t("receipt.footer"), footer, stopLabel: t("cardEmail.stopLink"), stop });
   const result = await sendMail({
     to: card.email, fromName: where.name, subject: receipt.subject,
-    text: `${kept(receipt.text)}\n\n${footer}\n${t("cardEmail.stopLink")}: ${stop}`,
-    html: `${kept(receipt.html)}<p style="margin-top:24px;color:#6E7A74;font-size:12px">${footer} <a href="${stop}">${t("cardEmail.stopLink")}</a></p>`,
+    ...mail,
     attachments: [{ filename: `ticket-${model.code}.pdf`, content: pdf }],
     headers: { "List-Unsubscribe": `<${stop}>` },
     idempotencyKey: key,

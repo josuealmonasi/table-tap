@@ -34,6 +34,9 @@ and that a new party cannot see the previous party's waiting phones.
 | A duplicate refund tracks customer completion and fee completion separately (S11 I5) | A failed fee return disappeared behind an already-refunded customer payment |
 | A duplicate refund keeps its original charge currency everywhere (S11 I9) | Changing the menu currency relabelled money owed back and the approval amount |
 |---|---|
+| Statement text separates days and the payment link | HTML headings separated days while plain text ran them together; `mail-plaintext.spec.ts` snapshots both languages |
+| Receipt text keeps paragraph breaks | Empty separators were discarded before sending POS and diner receipts; `mail-plaintext.spec.ts` snapshots items, totals and paragraphs in both languages |
+| Card ticket text gives the stop link its own line | The HTML link stood apart while plain text buried its URL beside the label; `mail-plaintext.spec.ts` and `card-email.spec.ts` check the copy and actual sender |
 | Restaurant logos use PNG bytes, content type and path, and the bucket accepts PNG | The photo encoder stored WebP logos that the ticket PDF could not print; changing only the encoder would leave a WebP path and a bucket that refused PNG. `image-resize.spec.ts` checks logos and unchanged photo encodings; `images.spec.ts` checks the bucket allowlist |
 | A new card save cannot duplicate today's ticket after a lost reply (card email UI) | The save could commit unseen and both the card outbox and the per-sale sender mailed the same ticket; `card-email-pos.spec.tsx` holds the lost reply and checks skip in the charge and held replay |
 | A new card reader does not reuse another reader's address (card email UI) | A cashier could briefly see an owner's full address from the shared SWR cache; `card-email.spec.tsx` reproduces the flash with a delayed masked reply |
@@ -6792,3 +6795,30 @@ invariant (`a field label is a block`) parses every component and fails on
 any `<label>` or `<span>` with `tt-mod-label` that is neither inside a
 `.tt-field` nor given `display: block|flex|grid` by another of its classes.
 It has no allow-list.
+
+## Statement text needs the same day boundaries as HTML
+
+The HTML headings and the plain-text day list had to agree about where each day
+begins. Items already had newlines in this checkout, so the fully concatenated
+body from the mail log was not reproduced. The missing blank lines between days
+and the inline payment URL were reproduced. `mailText` preserves intentional
+paragraph breaks; `mail-plaintext.spec.ts` snapshots English and Spanish days,
+items, balance and a payment URL on its own line. `mail-idempotency.spec.ts`
+checks that the provider payload keeps those newlines.
+
+## Receipt paragraphs must survive the text builder
+
+The receipt array contained empty lines to separate the header, dishes, total
+and footer, but its final filter removed every separator. The HTML layout and
+the text builder had to agree about those paragraphs. POS and diner receipts
+now use `mailText`; `mail-plaintext.spec.ts` checks both languages and a counter
+sale without a table, so an absent table does not split the header.
+
+## Card ticket links must remain readable outside HTML
+
+The HTML stop link and the card ticket's text footer had to offer the same clear
+way to stop emails. The text put the URL beside its label. `ticketMail` now
+keeps the receipt paragraphs and gives the stop URL its own line, while still
+replacing the receipt's promise not to keep the address with the card's footer.
+`mail-plaintext.spec.ts` snapshots both languages; `card-email.spec.ts` checks
+the actual outbox sender with its database and mail provider mocked.

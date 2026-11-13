@@ -91,8 +91,10 @@ it("sends a table's orders paid together as one email, with the PDF and the stop
   state.claimed = [row("1", "o1", "s"), row("2", "o2", "s")];
   await drain();
   expect(state.sent).toHaveLength(1);
-  const mail = state.sent[0] as { to: string; attachments: { filename: string }[]; headers: Record<string, string>; html: string };
+  const mail = state.sent[0] as { to: string; attachments: { filename: string }[]; headers: Record<string, string>; html: string; text: string };
   expect(mail.to).toBe("ana@example.invalid");
+  expect(mail.text.split("\n").slice(-2)).toEqual(["Dejar de recibir mis tickets por correo:",
+    `http://localhost:3000/tickets/stop?t=${KEY}`]);
   expect(mail.attachments[0].filename).toBe("ticket-ORD-1.pdf");
   expect(mail.headers["List-Unsubscribe"]).toContain("/tickets/stop?t=11111111-1111-4111-8111-111111111111");
   expect(finished()).toEqual([{ patch: expect.objectContaining({ outcome: "sent" }), ids: ["1", "2"] }]);

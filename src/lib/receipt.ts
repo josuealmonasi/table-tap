@@ -1,3 +1,4 @@
+import { mailText } from "@/lib/mail-text";
 import { loyaltyReceiptLines, type ReceiptLoyalty } from "@/lib/loyalty/receipt";
 import type { ReturnComponents } from "@/lib/return-components";
 import { receiptReturnRows, type ReceiptReturn } from "@/lib/receipt-returns";
@@ -189,10 +190,10 @@ export function buildReceipt(
   const { code, when, cur, lines, rows, totalLabel, paid } = receiptModel(orders, place, t, payment);
   const order = { table_label: payment ? payment.table_label ?? null : orders[0]?.table_label ?? null };
   const loyaltyLines = loyaltyReceiptLines(payment ? [payment, ...orders] : orders, t);
-  const text = [
+  const text = mailText([
     place.name,
     t("receipt.heading", { code }),
-    order.table_label ? t("receipt.table", { label: order.table_label }) : "",
+    ...(order.table_label ? [t("receipt.table", { label: order.table_label })] : []),
     when,
     "",
     ...lines.map(l => `${l.label}  ${formatMoney(l.amount, cur)}`),
@@ -202,10 +203,9 @@ export function buildReceipt(
     "",
     ...loyaltyLines,
     t("receipt.footer"),
+    "",
     t("receipt.notFiscal"),
-  ]
-    .filter(Boolean)
-    .join("\n");
+  ]);
 
   const html = `
 <div style="font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;max-width:480px;margin:0 auto;padding:24px;color:#16211C">
