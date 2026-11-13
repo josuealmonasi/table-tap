@@ -830,7 +830,12 @@ drop policy if exists "owner reads orders" on orders; -- superseded by team read
 drop policy if exists "team reads orders" on orders;
 create policy "team reads orders"
   on orders for select
-  using (has_role(restaurant_id, array['manager', 'waiter', 'cashier']));
+  -- Build the allowed restaurant ids once, not once per order in all history.
+  -- Keep has_role: founding owners and co-owners qualify outside this role list.
+  using (restaurant_id = any (array(
+    select r.id from public.restaurants r
+    where public.has_role(r.id, array['manager', 'waiter', 'cashier'])
+  )));
 
 -- INSERT/UPDATE on orders is done ONLY server-side via the secret key, which
 -- bypasses RLS. So we intentionally add NO insert/update policies here:
@@ -844,7 +849,11 @@ drop policy if exists "owner reads service requests" on service_requests;
 drop policy if exists "team reads service requests" on service_requests;
 create policy "team reads service requests"
   on service_requests for select
-  using (has_role(restaurant_id, array['manager', 'waiter', 'cashier']));
+  -- The same audience as orders, with one restaurant list for the whole read.
+  using (restaurant_id = any (array(
+    select r.id from public.restaurants r
+    where public.has_role(r.id, array['manager', 'waiter', 'cashier'])
+  )));
 drop policy if exists "owner updates service requests" on service_requests;
 drop policy if exists "team updates service requests" on service_requests;
 create policy "team updates service requests"
@@ -9712,7 +9721,10 @@ grant select on kitchen_tickets to authenticated;
 grant all on kitchen_tickets to service_role;
 drop policy if exists "team reads kitchen tickets" on kitchen_tickets;
 create policy "team reads kitchen tickets" on kitchen_tickets for select to authenticated
-  using (works_at(restaurant_id));
+  -- The pass keeps its wider team audience without a lookup per ticket.
+  using (restaurant_id = any (array(
+    select r.id from public.restaurants r where public.works_at(r.id)
+  )));
 
 -- Build from an allowlist at every depth: removing just price missed extras,
 -- combo components and any new money field added to order snapshots later.
@@ -9795,7 +9807,10 @@ grant select on kitchen_requests to authenticated;
 grant all on kitchen_requests to service_role;
 drop policy if exists "team reads kitchen calls" on kitchen_requests;
 create policy "team reads kitchen calls" on kitchen_requests for select to authenticated
-  using (works_at(restaurant_id));
+  -- Match ticket access without checking membership again for every call.
+  using (restaurant_id = any (array(
+    select r.id from public.restaurants r where public.works_at(r.id)
+  )));
 
 create or replace function public.sync_kitchen_request()
 returns trigger language plpgsql security definer set search_path = public as $$

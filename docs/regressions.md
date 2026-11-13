@@ -37,6 +37,7 @@ and that a new party cannot see the previous party's waiting phones.
 | Takings bound return evidence before grouping (SQL read cost 2) | The day filter reached PostgREST only after SQL had materialized the restaurant's refund history |
 | Cash case tests narrow optional matchers | A runtime assertion did not tell TypeScript which API cases have an error matcher, so the new contract spec broke type checking |
 | Return polling batches SQL progress (SQL read cost 1) | The list needed every outstanding balance, but sent one RPC per refund every 15 seconds |
+| Orders and pass feeds build their allowed restaurant list once per read | History called `has_role` for every order; the same pattern affected service requests and kitchen feeds. `orders-rls-equivalence.spec.ts` pins the old audience, and `probe-orders-rls-equivalence.mjs` compares counts and row identities under real RLS |
 | The cash API case checks the cashier's own refusal in both languages | Role-specific instructions were correct, but the case still matched the manager's older wording and reported a false failure; `cash-held-api-contract.spec.ts` checks both translations |
 | The cash API contract spec typechecks from a clean checkout | The spec and the inferred case union must agree: some cases have no refusal matcher. A property guard keeps that distinction; a clean `tsc --noEmit` catches an unsafe read |
 | The POS retry fixture leaves journal sources for its restaurant cascade | The retry case used the demo restaurant and deleted its charged order individually; the journal correctly refused cleanup. `api-retry-account-fixture.spec.ts` checks the disposable tenant and retained sources |
@@ -7394,3 +7395,31 @@ The API case list and the contract test had to agree that only some cases carry
 property access on the inferred union. The test now checks the property first;
 its two language assertions are unchanged. `tsc --noEmit` checks the narrowing,
 and `cash-held-api-contract.spec.ts` still checks both actual refusal messages.
+
+## Order history and its allowed restaurant list
+
+The dashboard's history query and its RLS check had to agree about how much
+work one read needs. `has_role(restaurant_id, ...)` checked membership for
+every order, so a small history page still paid for the restaurant's entire
+history. Service requests and the kitchen's tickets and calls used the same
+row-dependent pattern.
+
+Those four SELECT policies now compare `restaurant_id` against an uncorrelated
+array subquery. PostgreSQL builds that array once as an InitPlan and can use
+the restaurant index. The existing helpers still decide which restaurants
+belong in it: founding owners, co-owners and the allowed staff roles retain
+their rows, kitchen retains its separate projection, and platform admins get
+no extra direct access. Helper calls now scale with restaurants, not orders.
+No function, grant or write policy changes. In particular, the diner tracker
+still reads its single order server-side.
+
+`orders-rls-equivalence.spec.ts` parses the saved old policies and the last
+current definitions, compares their audiences, and checks owners, co-owners,
+multiple memberships, other tenants, kitchen, platform admins and no user.
+`orders-rls-probe.spec.ts` checks the read-only probe's actor isolation,
+rollback, production refusal and row-identity comparison. Claude runs
+`scripts/probe-orders-rls-equivalence.mjs` before applying the schema and
+again with `--compare /tmp/orders-before.json` afterward, without reseeding
+between captures. `--explain` includes the actual authenticated plans.
+The probe refuses a comparison if the underlying rows or memberships changed;
+equal counts alone cannot hide a different restaurant's rows.
