@@ -34,6 +34,10 @@ and that a new party cannot see the previous party's waiting phones.
 | A duplicate refund tracks customer completion and fee completion separately (S11 I5) | A failed fee return disappeared behind an already-refunded customer payment |
 | A duplicate refund keeps its original charge currency everywhere (S11 I9) | Changing the menu currency relabelled money owed back and the approval amount |
 |---|---|
+| A table payment check names the actual table relation (review N3) | `payment-check-route.spec.ts` rejects unknown relations and checks the tenant and table before Stripe |
+| Held approval keeps the kitchen's saved instructions (review N4) | `offline-sale.spec.ts` keeps notes and component extras without duplicating flattened extras |
+| An unread ticket address remains retryable (review N6) | `card-email.spec.ts` fails the card read, then sends after recovery |
+
 | Held receipts reuse the existing payment tenant key | The train created a second unique index on the same payment columns; `held-payment-index.spec.ts` keeps the original unique key and rejects the duplicate build |
 | Restaurant deletion archives the account journal with its source books | The restaurant cascade deleted original charge snapshots that the archive list omitted; `account-journal-archive.spec.ts` pins the journal copy, tenant lock and preserved held-receipt/dispute checks |
 | Printed IVA keeps each order's saved rate | A second current restaurant rate could relabel an older sale; `ticket-vat.spec.ts` and `receipt-vat-source.spec.ts` check saved rates, missing evidence and mixed-rate splits |
@@ -7182,3 +7186,21 @@ skeleton is unchanged. CardEmail says a failed read once.
 paid and was divided by the shares again. `splitTipPrincipal` uses the
 `amount` it froze, in the preview and the pay route alike.
 `tip-base.react-component.spec.tsx`.
+
+## Review N3 — Checking a table payment
+
+The identity reader and schema had to agree on `restaurant_tables`. A typo
+returned an unverified payment without ever checking the saved Stripe page.
+The schema-aware route spec now checks the relation and both identity filters.
+
+## Review N4 — Approving interrupted kitchen work
+
+The saved order and held-line parser had to agree on `notes` and component
+extras. Approval now keeps bounded copies of both, with the original flattened
+extras unchanged so the receipt never adds an extra twice.
+
+## Review N6 — Retrying an unread ticket address
+
+The database read and outbox outcome had to agree on absence. A failed read
+now throws into the existing backoff path; only a successful read can finish
+a ticket as having no email. The spec retries after the database recovers.

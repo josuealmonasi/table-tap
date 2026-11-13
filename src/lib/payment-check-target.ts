@@ -13,7 +13,7 @@ export async function paymentCheckTarget(restaurantId: string, scope: PaymentChe
     return { orderIds: scope.orderIds, ...(data.length === 1 && data[0].account_id && { accountId: data[0].account_id }) };
   }
   if (scope.kind === "table") {
-    const { data, error } = await db.from("tables").select("id").eq("restaurant_id", restaurantId).eq("id", scope.tableId).maybeSingle();
+    const { data, error } = await db.from("restaurant_tables").select("id").eq("restaurant_id", restaurantId).eq("id", scope.tableId).maybeSingle();
     if (error) throw error;
     if (!data) return null;
     const orders = await checkoutRows<{ id: string }>((start, end) => db.from("orders").select("id")

@@ -25,8 +25,10 @@ type Db = ReturnType<typeof createAdminClient>;
 async function sendGroup(db: Db, rows: OutboxRow[]): Promise<TicketOutcome | "lost"> {
   const { restaurant_id: restaurantId, card_id: cardId, claim } = rows[0];
   const ids = rows.map(r => r.id);
-  const { data: card } = await db.from("loyalty_cards").select("email, email_unsubscribe")
+  const { data: card, error: cardError } = await db.from("loyalty_cards").select("email, email_unsubscribe")
     .eq("id", cardId).eq("restaurant_id", restaurantId).maybeSingle();
+  // An unread address is not a removed address: keep the ticket for a retry.
+  if (cardError) throw new Error(cardError.message);
   // Changed or removed since the payment queued it: never the new address.
   if (!card?.email || !card.email_unsubscribe || rows.some(r => r.address_key !== card.email_unsubscribe)) return { outcome: "no_email" };
   if (!mailConfigured()) return { outcome: "unconfigured" };
