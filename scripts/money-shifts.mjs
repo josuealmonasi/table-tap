@@ -16,6 +16,9 @@ export function checkClosedShifts(rows, { ok, bad, info }) {
       && r.status === "succeeded" && r.payout_actor && inside(r.completed_at));
     const withdrawals = rows.cash_movements.filter(m => mine(m) && m.shift_id === s.id
       && m.kind === "withdrawal" && time(m.created_at) <= time(s.closed_at));
+    // Held receipts resolved without a sale whose cash stayed in this drawer.
+    const unclassified = rows.held_cash_receipts.filter(c => mine(c) && c.shift_id === s.id
+      && inside(c.recognized_at));
     let oldReturns = 0;
     for (const l of rows.user_logs) {
       if (l.restaurant_id !== s.restaurant_id || l.action !== "refunded" || !inside(l.created_at)
@@ -28,7 +31,7 @@ export function checkClosedShifts(rows, { ok, bad, info }) {
       if (currency === s.currency && amount != null) oldReturns += cents(amount);
     }
     const sum = records => records.reduce((n, r) => n + cents(r.amount), 0);
-    const expected = cents(s.opening_amount) + sum(receipts) - sum(returns) - oldReturns - sum(withdrawals);
+    const expected = cents(s.opening_amount) + sum(receipts) + sum(unclassified) - sum(returns) - oldReturns - sum(withdrawals);
     if (!s.currency || !Number.isFinite(expected) || cents(s.expected_cash) !== expected) {
       fail(`shift ${s.id} expected cash ${s.expected_cash} disagrees with ledger ${(expected / 100).toFixed(2)} ${s.currency}`);
     }

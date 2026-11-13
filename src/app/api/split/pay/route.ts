@@ -1,5 +1,6 @@
 import { after } from "next/server";
 import { drainTicketEmails } from "@/lib/ticket-email";
+import { frozenTipPrincipal, ordersTipBase, splitTipBase, tipFromPercent } from "@/lib/tip-base";
 import { paySplitSlots } from "@/lib/split-slots-pay";
 import { tableMember } from "@/lib/table-membership";
 import { dinerCheckoutOrders } from "@/lib/diner-checkout-orders";
@@ -56,6 +57,9 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   if (!splitId || !sessionId || !restaurantId || !tableId) {
     return await apiError("apiErr.invalidRequest", 400);
   }
+  // Refused before anything is reserved: a tip that is not a number would
+  // otherwise reach Stripe as NaN, after the share's fee slice was taken.
+  if (tipAmount != null && !Number.isFinite(Number(tipAmount))) return await apiError("apiErr.invalidRequest", 400);
 
   const member = await tableMember(req, restaurantId, tableId, sessionId, true).catch(() => null);
   if (!member) return await apiError("apiErr.tableJoin", 403);
@@ -140,10 +144,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   // food nobody owes for any more.
   if (tableBill(orders, []).total <= 0) return await apiError("apiErr.billSettled", 409);
 
-  const pct = Math.min(100, Math.max(0, Number(tipPct) || 0));
-  const asked = tipAmount != null ? Number(tipAmount) : (payable * pct) / 100;
-  const tip = Math.min(Math.max(0, round2(asked)), payable);
-  const cents = Math.round(round2(payable + tip) * 100);
+
 
   // Our cut is the table's, not one per person: a bill divided four ways is
   // still one bill, and charging the restaurant four times for the courtesy of
@@ -168,7 +169,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       fee = await reserveFeeCents(restaurantId, feePlan.limits, slice, "split");
     }
   } catch {
-    return await apiError("apiErr.generic", 502);
+    return await apiError("apiErr.checkoutFailed", 502);
   }
   const appFee = fee.cents;
 
@@ -190,6 +191,11 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     await giveBackFee();
     return await apiError("apiErr.mixedCurrencies", 409);
   }
+
+  const tipBase = splitTipBase(frozenTipPrincipal(split.food_principal, frozenOrders), shares, [claim.share_no], ordersTipBase(own));
+  const asked = tipAmount != null ? Number(tipAmount) : tipFromPercent(tipBase, Number(tipPct));
+  const tip = Math.min(Math.max(0, round2(asked)), payable);
+  const cents = Math.round(round2(payable + tip) * 100);
 
   try {
     const session = await openDinerAttempt(stripe,
@@ -235,12 +241,12 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     );
 
     // A session with no page is still a session: its fee waits for expiry.
-    if (!session.url) return await apiError("apiErr.generic", 502);
+    if (!session.url) return await apiError("apiErr.checkoutFailed", 502);
     return NextResponse.json({ url: session.url });
   } catch {
     // Released only when Stripe refused outright: an answer that never
     // arrived may still be a session, which Stripe's expiry releases.
     // `openDinerAttempt` releases only the reservation it knows was refused.
-    return await apiError("apiErr.generic", 502);
+    return await apiError("apiErr.checkoutFailed", 502);
   }
 }

@@ -7,7 +7,7 @@ import { dateLocale, formatMoney } from "@/lib/format";
 import { otherCurrencyLines } from "@/lib/other-currency";
 import { escapeHtml } from "@/lib/html";
 import { useToast } from "@/components/ui/Toast";
-import { needsExplanation, type ShiftView } from "@/lib/cash-shift";
+import { needsExplanation, shiftOtherCurrencies, type ShiftView } from "@/lib/cash-shift";
 import ShiftTrail from "./ShiftTrail";
 import { SEP } from "@/lib/separator";
 
@@ -94,6 +94,9 @@ export default function ShiftRecord({ view, timeZone, restaurantName }: ShiftRec
         `<table style="font-size:14px;border-collapse:collapse;margin:12px 0">` +
         row(t("corte.opening"), money(sum.opening)) +
         row(`+ ${t("corte.cashSales")}`, money(sum.cashSales)) +
+        (Number(sum.tips) > 0 ? row(t("corte.cashTips"), money(Number(sum.tips))) : "") +
+        (Number(sum.tips_out) > 0 ? row(t("corte.tipsOut"), money(Number(sum.tips_out))) : "") +
+        (Number(sum.unclassifiedCash) > 0 ? row(`+ ${t("corte.unclassifiedCash")}`, money(Number(sum.unclassifiedCash))) : "") +
         row(`− ${t("corte.withdrawals")}`, money(sum.withdrawn)) +
         row(t("corte.expected"), money(Number(shift.expected_cash ?? sum.expected)), true) +
         row(t("shift.countedLabel"), money(Number(shift.counted_cash ?? 0)), true) +
@@ -102,7 +105,7 @@ export default function ShiftRecord({ view, timeZone, restaurantName }: ShiftRec
           ? row(t("shift.lateArrived"), lateAmount) + row(nowVerdict, nowOff ? money(Math.abs(nowDifference)) : "", true)
           : "") +
         `</table>` +
-        otherCurrencyLines(view.otherCurrencies, t, formatMoney).map(line => `<p style="font-size:14px">${escapeHtml(line)}</p>`).join("") +
+        otherCurrencyLines(shiftOtherCurrencies(view), t, formatMoney).map(line => `<p style="font-size:14px">${escapeHtml(line)}</p>`).join("") +
         (shift.difference_note ? `<p style="font-size:14px">${escapeHtml(t("shift.why"))}: ${escapeHtml(shift.difference_note)}</p>` : "") +
         `<h2 style="font-size:15px;margin-top:20px">${escapeHtml(t("shift.trail"))}</h2>` +
         (trailRows ? `<ul style="font-size:13px">${trailRows}</ul>` : `<p style="font-size:13px">${escapeHtml(t("shift.trailEmpty"))}</p>`) +
@@ -132,6 +135,14 @@ export default function ShiftRecord({ view, timeZone, restaurantName }: ShiftRec
       </div>
 
       <div className="tt-cashbox-sum" role="table" aria-label={t("shift.sheetTitle")}>
+        {Number(sum.tips) > 0 && <div className="tt-cashbox-line tt-muted" role="row">
+          <span role="cell">{t("corte.cashTips")}</span>
+          <span role="cell">{money(Number(sum.tips))}</span>
+        </div>}
+        {Number(sum.tips_out) > 0 && <div className="tt-cashbox-line tt-muted" role="row">
+          <span role="cell">{t("corte.tipsOut")}</span>
+          <span role="cell">{money(Number(sum.tips_out))}</span>
+        </div>}
         <div className="tt-cashbox-line" role="row">
           <span role="cell">{t("corte.expected")}</span>
           <span role="cell">{money(Number(shift.expected_cash ?? sum.expected))}</span>
@@ -158,7 +169,7 @@ export default function ShiftRecord({ view, timeZone, restaurantName }: ShiftRec
         )}
       </div>
 
-      {otherCurrencyLines(view.otherCurrencies, t, formatMoney).map(line => (
+      {otherCurrencyLines(shiftOtherCurrencies(view), t, formatMoney).map(line => (
         <p key={line} className="tt-muted tt-shift-why">{line}</p>
       ))}
       {shift.difference_note && (

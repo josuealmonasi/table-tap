@@ -72,7 +72,7 @@ export function posSaleCases(fx) {
           .eq("restaurant_id", f.restaurant.id).eq("note", `${MARK} terminal`);
         const ids = (sales ?? []).map(o => o.id);
         if (ids.length) {
-          await f.admin.from("payments").delete().in("order_id", ids);
+          await f.admin.from("payments").delete().is("account_id", null).in("order_id", ids);
           await f.admin.from("orders").delete().in("id", ids);
         }
       },
@@ -114,7 +114,7 @@ export function posSaleCases(fx) {
       expect: [409], expectError: /ya está marcado|already marked/i },
     { name: "POST /api/terminal/deposits (a day with no terminal sales)", as: "owner", method: "POST",
       path: "/api/terminal/deposits", body: f => ({ day: "2001-01-01", currency: f.restaurant.currency, received: "1" }),
-      expect: [404], expectError: /no hubo cobros|no card payments/i },
+      expect: [404], expectError: /no tiene cobros ni devoluciones|no terminal sales or returns/i },
     { name: "POST /api/terminal/deposits (a cashier refused)", as: "cashier", method: "POST",
       path: "/api/terminal/deposits", body: f => ({ day: f.depositDay, currency: f.restaurant.currency, received: "1" }), expect: [403] },
     { name: "DELETE /api/terminal/deposits (taken back)", as: "manager", method: "DELETE",

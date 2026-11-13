@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { useT } from "@/lib/i18n/context";
 import type { CostsView } from "@/lib/costs/server";
+import DisputeSummary from "../disputes/DisputeSummary.react-component";
 import PeriodSummary from "./PeriodSummary";
 import PriceRises from "./PriceRises";
 import FeeCard from "./FeeCard";
@@ -29,7 +30,7 @@ export default function MarginsPanel({ view, currency }: MarginsPanelProps) {
   return (
     <>
       <p className="tt-muted tt-costs-intro">{t("costs.intro")}</p>
-      {hasRecipes || view.period.rows.length > 0 ? (
+      {hasRecipes || view.period.rows.length > 0 || view.disputes?.currencies.length > 0 ? (
         <PeriodSummary period={view.period} currency={currency} />
       ) : (
         <section className="tt-section tt-costs-start">
@@ -39,6 +40,7 @@ export default function MarginsPanel({ view, currency }: MarginsPanelProps) {
           </Link>
         </section>
       )}
+      {view.disputes && <DisputeSummary report={view.disputes} contribution={view.period.contribution} currency={currency} />}
       {view.rises.length > 0 && <PriceRises rises={view.rises} currency={currency} />}
       <FeeCard fees={view.fees} terminalFeePct={view.terminalFeePct} currency={currency} unverifiedFees={view.unverifiedFees} />
       <ProductMargins

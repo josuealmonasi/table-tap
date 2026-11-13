@@ -50,7 +50,7 @@ const inScope = new Map();
 for (const c of all) {
   // Only the route matters here, and a printer's token is any string. A path
   // that cannot be worked out this early runs: skipping it would be a guess.
-  try { inScope.set(c, apiInScope(typeof c.path === "function" ? await c.path(fx, {}) : c.path)); }
+  try { inScope.set(c, apiInScope(typeof c.path === "function" ? await c.path(c.fixture ?? fx, {}) : c.path)); }
   catch { inScope.set(c, true); }
 }
 const chainInScope = all.some(c => chained(c) && inScope.get(c));
@@ -71,10 +71,11 @@ try {
     // worker, a fixture row that will not insert — is this case failing, not
     // the whole run: it used to crash the gate on case nine, and every case
     // after it went unchecked while the output read like one broken route.
+    const caseFx = c.fixture ?? fx;
     let restore = null;
     if (c.arrange) {
       try {
-        restore = await c.arrange(fx);
+        restore = await c.arrange(caseFx);
       } catch (e) {
         bad(`${c.name} — could not set the case up: ${e.message}`);
         continue;
@@ -90,12 +91,12 @@ try {
       // A path may be a function for the same reason a body may: some of what
       // a case has to address is only known once the fixture exists — a
       // printer's token, the id of the job it was handed.
-      const path = typeof c.path === "function" ? await c.path(fx, saved) : c.path;
-      const body = typeof c.body === "function" ? await c.body(fx, saved) : c.body;
-      const customHeaders = typeof c.headers === "function" ? await c.headers(fx) : c.headers ?? {};
+      const path = typeof c.path === "function" ? await c.path(caseFx, saved) : c.path;
+      const body = typeof c.body === "function" ? await c.body(caseFx, saved) : c.body;
+      const customHeaders = typeof c.headers === "function" ? await c.headers(caseFx) : c.headers ?? {};
       const headers = { "Content-Type": "application/json", ...customHeaders };
-      if (c.as !== "diner") headers.cookie = fx.who[c.as];
-      else if (!("cookie" in customHeaders)) headers.cookie = await fx.phoneMembers.cookieFor(path, body);
+      if (c.as !== "diner") headers.cookie = caseFx.who[c.as];
+      else if (!("cookie" in customHeaders)) headers.cookie = await caseFx.phoneMembers.cookieFor(path, body);
       res = await retryFetch(
         BASE + path,
         {
@@ -151,7 +152,7 @@ try {
     // coupon use back expects 500, so its check never ran and the assertion
     // was decorative. This one runs for any status the case allows.
     if (c.effect) {
-      const verdict = await c.effect(fx, res.status);
+      const verdict = await c.effect(caseFx, res.status);
       if (verdict !== true) {
         bad(`${c.name} — ${res.status}, and ${verdict}`);
         continue;
@@ -166,7 +167,7 @@ try {
       // The fixture goes with it, so a case can check what the route DID and
       // not only what it said: a write-off answers `{ ok: true }` either way,
       // and what matters is the state it left the orders in.
-      const verdict = await c.check(data, fx);
+      const verdict = await c.check(data, caseFx);
       if (verdict !== true) {
         bad(`${c.name} — answered 200 but ${verdict}`);
         continue;

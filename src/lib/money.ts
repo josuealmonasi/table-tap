@@ -5,11 +5,16 @@
  * Splits an IVA-inclusive subtotal into its net + tax parts. Menu prices already
  * include IVA, so net = subtotal / (1 + rate) and iva = subtotal − net.
  * A rate of 0 (or less) means no tax: the whole amount is net.
+ *
+ * In whole cents, so the two parts always add up to the subtotal: rounded
+ * separately, MX$0.01 at 100% became MX$0.01 net + MX$0.01 IVA — a cent the
+ * bill never charged (sweep 10, finding 5).
  */
 export function ivaSplit(subtotal: number, taxPct: number): { net: number; iva: number } {
   if (taxPct <= 0) return { net: subtotal, iva: 0 };
-  const net = subtotal / (1 + taxPct / 100);
-  return { net, iva: subtotal - net };
+  const cents = Math.round(subtotal * 100);
+  const netCents = Math.round(cents / (1 + taxPct / 100));
+  return { net: netCents / 100, iva: (cents - netCents) / 100 };
 }
 
 /**
@@ -29,4 +34,13 @@ export function ivaSplit(subtotal: number, taxPct: number): { net: number; iva: 
  */
 export function round2(n: number): number {
   return Math.round(n * 100) / 100;
+}
+
+/**
+ * An IVA-inclusive amount without its IVA, at the order's own rate. Costs
+ * takes it off revenue and the ticket prints what it took off ("IVA 16%
+ * incluido"); one function, so the two never disagree about the same sale.
+ */
+export function withoutIva(gross: number, taxPct: number): number {
+  return taxPct > 0 ? gross / (1 + taxPct / 100) : gross;
 }

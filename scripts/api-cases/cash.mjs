@@ -1,5 +1,6 @@
 import { MARK } from "../api-fixtures.mjs";
 import { setAsideHeldCash } from "../api-retry-fixture.mjs";
+import { tipsOutCases } from "./cash-tips-out.mjs";
 
 export function cashCases(fx) {
   const { restaurant } = fx;
@@ -63,7 +64,7 @@ export function cashCases(fx) {
       path: "/api/cash-shift", body: async f => {
         const { data } = await f.admin.from("cash_shifts").select("id").eq("restaurant_id", r).is("closed_at", null).single();
         return { action: "close", shiftId: data.id, ref: crypto.randomUUID(), counted: "1000", confirm: true };
-      }, expect: [409], expectError: /revisión de un gerente|manager review/i },
+      }, expect: [409], expectError: /un gerente debe revisar|a manager must review/i },
     { name: "POST /api/cash-shift (closed on a blind count)", as: "cashier", method: "POST",
       // The seeded held cash is set aside for the close, then put back as it was.
       arrange: f => setAsideHeldCash(f, r),
@@ -99,5 +100,6 @@ export function cashCases(fx) {
       expect: [409], expectError: /ya tiene explicación|already explained/i },
     { name: "POST /api/cash-shift (a waiter cannot explain one)", as: "waiter", method: "POST",
       path: "/api/cash-shift", body: (_f, saved) => ({ action: "explain", id: saved.cashShift, note: "x" }), expect: [403] },
+    ...tipsOutCases(fx),
   ];
 }

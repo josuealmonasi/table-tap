@@ -1,4 +1,5 @@
-import { withAccountCredits } from "@/lib/account-credit-history";
+import { ordersTipBase } from "@/lib/tip-base";
+import { readAccountCredits, withAccountCredits } from "@/lib/account-credit-history";
 import { unresolvedAccounts } from "@/lib/account-checkout-state";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { everyRow } from "@/lib/paged";
@@ -57,15 +58,18 @@ export async function listAccounts(restaurantId: string): Promise<AccountSummary
       .eq("paid", false).eq("written_off", false).neq("status", "cancelled")
       .order("id").range(a, b), "what the accounts owe"),
   ]);
-  const owed = new Map<string, { last: string | null }>();
+  const owed = new Map<string, { last: string | null; sums: Map<string, number> }>();
   for (const o of owedRows) {
+    const accountId = o.account_id;
     const at = o.charged_at ?? o.created_at;
-    const was = owed.get(o.account_id) ?? { last: null };
-    owed.set(o.account_id, { last: !was.last || at > was.last ? at : was.last });
+    const balance = owed.get(accountId) ?? { last: null, sums: new Map<string, number>() };
+    balance.last = !balance.last || at > balance.last ? at : balance.last;
+    balance.sums.set(o.currency, round2((balance.sums.get(o.currency) ?? 0) + Number(o.total)));
+    owed.set(accountId, balance);
   }
   const unresolved = await unresolvedAccounts(restaurantId, accounts.map(a => a.id));
   return accounts.map(a => {
-    const balances = currencyBalances(owedRows.filter(o => o.account_id === a.id).map(o => ({ currency: o.currency, amount: Number(o.total) })));
+    const balances = [...(owed.get(a.id)?.sums ?? [])].map(([currency, amount]) => ({ currency, amount }));
     return {
       ...a,
       payingOnline: unresolved.has(a.id),
@@ -102,6 +106,7 @@ export interface StatementPayment {
 
 /** What is owed, day by day, and what was paid before. */
 export interface Statement {
+  tipBalances?: CurrencyBalance[];
   currency?: string | null;
   balances?: CurrencyBalance[];
   owed: number;
@@ -113,6 +118,8 @@ export interface Statement {
 }
 
 interface StatementOrder {
+  service_fee?: number;
+  tip?: number;
   status: string;
   currency: string;
   id: string;
@@ -125,19 +132,22 @@ interface StatementOrder {
 }
 
 /** An account's statement: its unpaid orders by the restaurant's day, and its payments. */
-export async function statementOf(account: AccountRow, timeZone?: string | null): Promise<Statement> {
+export async function statementOf(account: AccountRow, timeZone?: string | null | PromiseLike<string | null | undefined>): Promise<Statement> {
   const db = createAdminClient();
-  const [orders, paymentsRes] = await Promise.all([
-    everyRow<StatementOrder>((a, b) => db.from("orders").select("id, items, total, currency, table_label, created_at, charged_at, charged_by, status")
-      .eq("restaurant_id", account.restaurant_id).eq("account_id", account.id).eq("paid", false).eq("written_off", false).neq("status", "cancelled")
-      .order("id").range(a, b), "the account's orders"),
+  const ordersRead = everyRow<StatementOrder>((a, b) => db.from("orders").select("id, items, total, currency, table_label, created_at, charged_at, charged_by, status, service_fee, tip")
+    .eq("restaurant_id", account.restaurant_id).eq("account_id", account.id).eq("paid", false).eq("written_off", false).neq("status", "cancelled")
+    .order("id").range(a, b), "the account's orders");
+  const [orders, paymentsRes, returns, credits, resolvedTimeZone] = await Promise.all([
+    ordersRead,
     db.from("payments").select("amount, tip, currency, method, created_at")
       .eq("restaurant_id", account.restaurant_id).eq("account_id", account.id).order("created_at", { ascending: false }).limit(20),
+    everyRow<{ id: string; amount: number; currency: string; status: string; created_at: string }>((a, b) => db
+      .from("refund_operations").select("id, amount, currency, status, created_at, order_adjustments!inner(orders!inner(account_id))")
+      .eq("restaurant_id", account.restaurant_id).eq("order_adjustments.orders.account_id", account.id)
+      .order("id").range(a, b), "the account's returns"),
+    readAccountCredits(db, account.restaurant_id, account.id),
+    timeZone,
   ]);
-  const returns = await everyRow<{ id: string; amount: number; currency: string; status: string; created_at: string }>((a, b) => db
-    .from("refund_operations").select("id, amount, currency, status, created_at, order_adjustments!inner(orders!inner(account_id))")
-    .eq("restaurant_id", account.restaurant_id).eq("order_adjustments.orders.account_id", account.id)
-    .order("id").range(a, b), "the account's returns");
   const charges: StatementCharge[] = orders.map(o => ({
     currency: o.currency,
     orderId: o.id,
@@ -154,8 +164,9 @@ export async function statementOf(account: AccountRow, timeZone?: string | null)
   return {
     currency: balances.length === 1 ? balances[0].currency : null,
     balances,
+    tipBalances: balances.map(b => ({ currency: b.currency, amount: ordersTipBase(orders.filter(o => o.currency === b.currency)) })),
     owed: balances.length > 1 ? 0 : round2(charges.reduce((sum, c) => sum + c.total, 0)),
-    days: byDay(await withAccountCredits(db, account.restaurant_id, account.id, charges), timeZone ?? DEFAULT_TIME_ZONE),
+    days: byDay(await withAccountCredits(db, account.restaurant_id, account.id, charges, credits), resolvedTimeZone ?? DEFAULT_TIME_ZONE),
     payments: payments.map(p => ({ at: p.created_at, amount: Number(p.amount), tip: Number(p.tip), method: p.method, currency: p.currency })),
     returns: returns.map(r => ({ id: r.id, amount: Number(r.amount), currency: r.currency, status: r.status, created_at: r.created_at })),
     chargedBy: Object.fromEntries(orders.map(o => [o.id, o.charged_by])),

@@ -1,5 +1,6 @@
 import { writeFileSync } from "node:fs";
-import { expect, it } from "vitest";
+import PDFDocument from "pdfkit";
+import { afterEach, expect, it, vi } from "vitest";
 import { planColumns, ticketPdf, wrapToWidth, type TicketText } from "@/lib/ticket-pdf";
 import { printable } from "@/lib/ticket-fonts";
 import { TICKET_FONTS } from "@/lib/ticket-font-ids";
@@ -12,11 +13,12 @@ const model: ReceiptModel = {
     { label: "1× Chocolate Lava Cake con helado de vainilla", qty: 1, name: "Chocolate Lava Cake con helado de vainilla", unit: 105, amount: 105 },
     { label: "3× Green Tea", qty: 3, name: "Green Tea", unit: 45, amount: 135 },
   ],
-  rows: [["Propina", "MX$63.00"]], totalLabel: "Total", paid: 693,
+  rows: [["Propina", "MX$63.00"]], totalLabel: "Total", paid: 693, vatParts: [{ rate: 16, base: 630 }],
 };
 const text: TicketText = {
   folio: "Folio", table: l => `Mesa ${l}`, header: { qty: "CANT", item: "DESCRIPCIÓN", price: "PRECIO", amount: "IMPORTE" },
   articles: n => `No. de artículos: ${n}`, payMethod: m => `Pagado en ${m === "cash" ? "efectivo" : "tarjeta"}`,
+  vatIncluded: rate => `IVA ${rate}% incluido`,
   loyaltyTitle: "TARJETA DE VISITAS", loyaltyLine: l => `Tarjeta ···· ${l.last4}: ${l.progress} de ${l.goal}`,
   qrHint: "Muestra este código en caja para encontrar tu ticket", thanks: "Gracias por su visita",
   notFiscal: "Este ticket no es una factura.",
@@ -61,4 +63,44 @@ it.each(TICKET_FONTS)("renders a ticket-shaped PDF in %s, cut to its own length"
 it("renders without a visit card or fiscal data", async () => {
   const pdf = await ticketPdf(model, { name: "Café" }, text, null, "https://x.test/");
   expect(pdf.subarray(0, 5).toString()).toBe("%PDF-");
+});
+
+/** Every string the ticket draws, in order (both layout passes). */
+async function drawn(m: ReceiptModel): Promise<string[]> {
+  const spy = vi.spyOn(PDFDocument.prototype, "text");
+  await ticketPdf(m, place, text, null, "https://x.test/");
+  return spy.mock.calls.map(call => String(call[0]));
+}
+afterEach(() => { vi.restoreAllMocks(); });
+
+it("prints the IVA inside the total right under it, without the tip (owner, 2026-11-12)", async () => {
+  const strings = await drawn(model);
+  // MX$630.00 of food in a MX$693.00 total: 630 − 630 / 1.16 = 86.90. The MX$63.00 tip carries none.
+  const at = strings.indexOf("IVA 16% incluido");
+  expect(at).toBeGreaterThan(0);
+  expect(strings[at - 2]).toBe("TOTAL");
+  expect(strings[at - 1]).toBe("MX$693.00");
+  expect(strings[at + 1]).toBe("MX$86.90");
+});
+
+it("prints the border region's 8 %", async () => {
+  const strings = await drawn({ ...model, vatParts: [{ rate: 8, base: 108 }] });
+  expect(strings[strings.indexOf("IVA 8% incluido") + 1]).toBe("MX$8.00");
+});
+
+it.each([
+  ["the order's saved rate is zero", [{ rate: 0, base: 630 }]],
+  ["the saved rate is invalid", [{ rate: -1, base: 630 }]],
+  ["no rate was read", null],
+  ["the base is not known for certain", null],
+] as const)("prints no IVA line when %s", async (_why, vatParts) => {
+  const strings = await drawn({ ...model, vatParts: vatParts ? [...vatParts] : null });
+  expect(strings.some(s => s.startsWith("IVA"))).toBe(false);
+  expect(strings).toContain("MX$693.00");
+});
+
+it("prints one included amount per saved rate on a mixed-rate table", async () => {
+  const strings = await drawn({ ...model, vatParts: [{ rate: 16, base: 116 }, { rate: 8, base: 108 }] });
+  expect(strings[strings.indexOf("IVA 16% incluido") + 1]).toBe("MX$16.00");
+  expect(strings[strings.indexOf("IVA 8% incluido") + 1]).toBe("MX$8.00");
 });

@@ -1,5 +1,6 @@
 import { after } from "next/server";
 import { drainTicketEmails } from "@/lib/ticket-email";
+import { ordersTipBase, tipFromPercent } from "@/lib/tip-base";
 import { ownBillAccess } from "@/lib/legacy-bill-access";
 import { dinerCurrency } from "@/lib/diner-currency";
 import { openDinerAttempt, resumeDinerAttempt } from "@/lib/diner-attempt";
@@ -170,8 +171,9 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   // somebody for. A percentage is recomputed here rather than trusted, so a
   // request cannot claim 15% and send a different number.
   // Tip follows the discounted amount, the same order the cart uses.
-  const pct = Math.min(100, Math.max(0, Number(tipPct) || 0));
-  const asked = tipAmount != null ? Number(tipAmount) : (payable * pct) / 100;
+  // A tip that is not a number is refused, not charged as NaN into Stripe.
+  if (tipAmount != null && !Number.isFinite(Number(tipAmount))) return await apiError("apiErr.invalidRequest", 400);
+  const asked = tipAmount != null ? Number(tipAmount) : tipFromPercent(ordersTipBase(orders, discount), Number(tipPct));
   const tip = Math.min(Math.max(0, round2(asked)), payable);
 
   const amount = round2(payable + tip);

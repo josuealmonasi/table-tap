@@ -6,8 +6,8 @@ import { formatMoney } from "@/lib/format";
 import type { SplitState } from "@/hooks/useSplit";
 import { shareChoices } from "@/lib/split-shares";
 import { applyPayment } from "@/lib/table-balance";
-import { tipFor } from "@/lib/pricing";
 import { SEP } from "@/lib/separator";
+import { splitTipBase, tipFromPercent } from "@/lib/tip-base";
 
 interface SplitBillCardProps {
   split: SplitState | null;
@@ -166,7 +166,8 @@ export default function LegacySplitBillCard({
   // ── Agreed, and this is the bill
   if (split.status === "locked" && mine) {
     const total = mine.amount + split.ownSince;
-    const taken = applyPayment(total,total,tipFor(total,tipPct));
+    const base = splitTipBase(split.tipPrincipal ?? 0, split.shares, [mine.shareNo], split.ownTipBase ?? 0);
+    const taken = applyPayment(total, total, tipFromPercent(base, tipPct));
     return (
       <div className="tt-split tt-split-locked">
         <strong>{t("split.yourShare")}</strong>

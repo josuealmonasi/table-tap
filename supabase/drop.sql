@@ -1,3 +1,15 @@
+drop table if exists account_movements cascade;
+drop function if exists public.account_journal_backfill_v1(uuid, timestamptz);
+drop function if exists public.guard_account_movement();
+drop function if exists public.check_account_movement_source();
+drop function if exists public.start_new_account_journal_v1() cascade;
+drop function if exists public.keep_account_journal_source_v1() cascade;
+drop function if exists public.append_account_collection_v1(uuid);
+drop function if exists public.append_account_credit_movement_v1(uuid);
+drop function if exists public.account_journal_expected_v1(uuid);
+drop function if exists public.assert_account_journal_v1(uuid);
+drop function if exists public.check_account_journal_v1() cascade;
+drop function if exists public.forget_account_journal_check_v1() cascade;
 drop table if exists restaurant_accounting_records cascade;
 drop table if exists platform_admin_audit cascade;
 drop function if exists public.account_credit_v1(uuid, uuid, numeric, numeric, text, text, text, uuid);
@@ -44,7 +56,7 @@ drop table if exists refund_allocations cascade;
 drop table if exists refund_operations cascade;
 drop table if exists order_adjustments cascade;
 drop table if exists payment_allocations cascade;
--- ============================================================================
+-- =====================================================================
 -- TableTap — DROP everything (DESTRUCTIVE)
 -- Removes the tables, their data, policies, and indexes entirely.
 -- Run via: pnpm db:drop   (or paste into the Supabase SQL Editor)
@@ -83,8 +95,13 @@ drop table if exists cash_movements      cascade;
 drop table if exists cash_shifts         cascade;
 drop function if exists public.freeze_cash_currency();
 drop function if exists public.cash_shift_totals(uuid, uuid, timestamptz);
+drop function if exists public.resolve_held_sale(uuid, uuid, text, text, text, text, numeric, text, timestamptz, uuid, uuid, uuid);
+drop table if exists held_sale_resolutions cascade;
+drop table if exists held_cash_receipts cascade;
+drop function if exists public.guard_held_resolution() cascade;
 drop function if exists public.close_cash_shift(uuid, uuid, numeric, text);
 drop function if exists public.create_cash_withdrawal(uuid, uuid, numeric, text, text);
+drop function if exists public.create_cash_withdrawal(uuid, uuid, numeric, text, text, text);
 drop function if exists public.delete_cash_withdrawal(uuid, uuid, uuid);
 drop function if exists public.cash_shifts_for_day(uuid, timestamptz);
 drop table if exists stock_reservations cascade;
@@ -210,6 +227,8 @@ drop function if exists public.record_purchase(uuid, uuid, numeric, numeric, tex
 drop function if exists public.settle_offline_sale(uuid, uuid, text, text, timestamptz);
 drop function if exists public.take_stock_floor(uuid, jsonb);
 drop function if exists public.reserve_platform_fee(uuid, integer, integer, text, text);
+drop function if exists public.guard_fee_month_currency() cascade;
+drop function if exists public.currency_locked_until(uuid);
 drop function if exists public.take_platform_fee(uuid, text, integer);
 drop function if exists public.release_platform_fee(uuid);
 drop function if exists public.record_session_fee(uuid, text, integer, text, integer);
@@ -341,6 +360,7 @@ drop function if exists public.stamp_refund_due_charge() cascade;
 drop function if exists public.order_intent_result(uuid, uuid, text);
 drop function if exists public.create_order_intent(uuid, uuid, text, jsonb, jsonb, boolean, int, jsonb);
 drop function if exists public.create_cash_withdrawal_once(uuid, uuid, numeric, text, text, uuid);
+drop function if exists public.create_cash_withdrawal_once(uuid, uuid, numeric, text, text, uuid, text);
 drop function if exists public.record_purchase_once_v2(uuid, uuid, numeric, numeric, text, uuid);
 drop function if exists public.record_purchase_once(uuid, uuid, numeric, numeric, text, uuid);
 drop function if exists public.record_waste_once(uuid, uuid, uuid, numeric, text, text, numeric, text, uuid);
@@ -364,6 +384,14 @@ drop function if exists public.sale_line_costs(uuid, jsonb);
 drop function if exists public.counter_pay_later_full(uuid) cascade;
 
 drop function if exists public.stamp_checkout_discount_v1();
+-- Disputes (chargebacks).
+drop function if exists public.fail_stripe_dispute_event(uuid, uuid, text);
+drop function if exists public.finish_stripe_dispute_event(uuid, uuid, jsonb, jsonb);
+drop function if exists public.claim_stripe_dispute_event(uuid);
+drop function if exists public.enqueue_stripe_dispute_event(text, boolean, text, text, text, text, timestamptz);
+drop table if exists stripe_dispute_movements cascade;
+drop table if exists stripe_dispute_events cascade;
+drop table if exists stripe_disputes cascade;
 -- Loyalty stamped by payment.
 drop function if exists public.stamp_loyalty_on_payment() cascade;
 drop function if exists public.fix_loyalty_card_on_payment() cascade;

@@ -6,7 +6,7 @@ import type { createAdminClient } from "@/lib/supabase/admin";
 let fixture: ReturnType<typeof returnFixture>;
 beforeEach(() => {
   vi.stubEnv("SUPABASE_SECRET_KEY", "test-receipt-signing-key"); fixture = returnFixture();
-  Object.assign(fixture.tables.orders[0], { total: 30, subtotal: 70, created_at: "2026-10-27T18:00:00Z", items: [] });
+  Object.assign(fixture.tables.orders[0], { tax_pct: 16, total: 30, subtotal: 70, created_at: "2026-10-27T18:00:00Z", items: [] });
   fixture.tables.order_adjustments = [{ id: "return", kind: "return", order_id: ORDER, restaurant_id: "r1", currency: "MXN",
     previous_total: 80, resulting_total: 30, previous_tip: 10, resulting_tip: 10, previous_service_fee: 0, resulting_service_fee: 0 }];
   fixture.tables.refund_operations = [{ id: "card", restaurant_id: "r1", adjustment_id: "return", source: "stripe", amount: 40, currency: "MXN", status: "succeeded", completed_at: "2026-10-28T12:00:00Z" },
@@ -66,6 +66,23 @@ it("keeps a slot receipt on its own payment while showing that payment's returne
   expect(receipt.text).toContain("receipt.original  MX$80.00");
   expect(receipt.text).toContain("receipt.returnPending  MX$10.00");
   expect(receipt.text).toContain("receipt.retained  MX$70.00");
+});
+it.each([
+  ["carried no tips", { amount: 80, food_principal: 80 }, true, 60],
+  ["carried tips added before the split", { amount: 80, food_principal: 70 }, false, null],
+  ["predates the frozen food amount", { amount: 80, food_principal: null }, false, null],
+])("prints a part's IVA only when its split's debt %s (ticket IVA, 2026-11-12)", async (_why, frozen, tipFree, base) => {
+  const { readSlotReceipt } = await import("@/lib/receipt-source");
+  const { receiptModel } = await import("@/lib/receipt");
+  fixture.tables.payments = [{ id: "payment", restaurant_id: "r1", session_id: "session", amount: 80, tip: 10, currency: "MXN", created_at: "2026-10-27T18:00:00Z" }];
+  fixture.tables.bill_split_slots = [{ payment_id: "payment", restaurant_id: "r1", split_id: "split", share_no: 0, amount_cents: 8000 }];
+  fixture.tables.bill_splits = [{ id: "split", restaurant_id: "r1", session_id: "session", model_version: 2, currency: "MXN", order_ids: [ORDER], ...frozen }];
+  fixture.tables.payment_allocations = [{ id: "allocation", restaurant_id: "r1", payment_id: "payment" }];
+  fixture.tables.refund_allocations = [{ id: "link", restaurant_id: "r1", allocation_id: "allocation", operation_id: "cash", amount: 10, tip: 0 }];
+  const source = await readSlotReceipt(db(), "payment");
+  expect(source.payment?.parts_without_tips).toBe(tipFree);
+  // MX$80.00 charged, MX$10.00 of it the new tip, MX$10.00 of the part returned: MX$60.00 of sale kept.
+  expect(receiptModel([], { name: "Bistro", locale: "en-US", timeZone: "UTC" }, key => key, source.payment).vatParts).toEqual(base === null ? null : [{ rate: 16, base }]);
 });
 it("shows a paid order cancelled and refunded in full as returned, not as MX$100 owed (sweep 4, finding 1)", async () => {
   Object.assign(fixture.tables.orders[0], { total: 100, tip: 0, service_fee: 0, paid: true });

@@ -242,6 +242,21 @@ dishes on a bill the restaurant has just cancelled.
   is `card_payments` being `active` — `src/lib/stripe-connect.ts`. It once
   still asked for the `recipient` configuration a destination charge needs,
   which Stripe then refused outright, so no restaurant could connect.
+- **The catalog, as confirmed by the owner on 2026-11-11** (production's
+  `plan_limits`; founder price first, list price once the 50 founder places
+  are gone):
+
+  | | Carta | Caja | Servicio | Casa | Grupo |
+  |---|---|---|---|---|---|
+  | Month | free | MX$399 | MX$699 → 899 | MX$1,499 → 1,899 | from MX$3,499 (soon) |
+  | Per card order / monthly ceiling | MX$3 / MX$699 | — | MX$1.50 / MX$1,050 | MX$0.75 / MX$900 | — |
+  | Tables · staff · menus · dishes | 0 · 2 · 1 · 30 | 0 · 5 · 3 · ∞ | 15 · 10 · 3 · ∞ | 50 · ∞ · ∞ · ∞ | ∞ |
+
+  The per-order fee never exceeds 5% of the order. Each tier carries one
+  line on its card (`plan.desc.*`, es/en), the table count read from the row
+  through `planDescription` so a changed limit cannot leave the copy behind
+  (`plan-description.spec.ts`). The first seed in `schema.sql` still says 25
+  tables for Servicio; a later update sets the 15 production has.
 - **Plans** (`plan_limits`): `carta` free, `caja` MX$399, `servicio`, `casa`,
   `grupo`. Each row carries the ceilings (tables, staff, menus, items) and the
   feature flags: dine-in, menu schedules, deferred payment, promotions,
@@ -414,6 +429,17 @@ dishes on a bill the restaurant has just cancelled.
   person's own" is true of the one added when a share is *paid*: clamped to the
   payable amount, recorded in `payments.tip`, and added to the oldest order on
   the sitting.
+- **Tip percentages always use dishes after discounts.** `src/lib/tip-base.ts`
+  is the shared rule for checkout, the bill, split shares and account payments,
+  including the amounts printed on the tip chips. Service, earlier tips and
+  principal already collected are excluded. A bill uses the selected unpaid
+  orders' remaining dishes, less any new coupon. A split uses its share of the
+  frozen dishes (the first share carries the odd cents), plus only that diner's
+  later orders covered by the payment. Model 2 selected slots cover frozen food
+  only; later orders stay outside that payment. Accounts use the dishes in the
+  checkout's frozen order scope, in the selected currency. The server recomputes
+  percentages with the same helper; explicit amounts retain their existing caps.
+  Fee principal and fee budgets keep their existing meaning, including service.
 - **A bill names every charge in its total.** The diner's bill lists the
   dishes, any discount, the service charge (with the percentage it was taken
   at) and any tip as their own lines, adding up to exactly what is charged.
@@ -517,6 +543,10 @@ dishes on a bill the restaurant has just cancelled.
   in `fee_reconcile_queue` before the webhook answers. An ack removes only the
   generation it reconciled. This is how a refund the restaurant made by hand in
   Stripe gets our fee share back automatically, as the terms promise.
+  An absent Stripe application fee stays pending when our fee ledger or saved
+  checkout proves a positive fee; only local zero-fee evidence permits zero
+  verification. The platform webhook also enqueues `application_fee.created`,
+  resolving its charge on the original connected account before acknowledging.
   Duplicate-charge refunds record every contributing refund in
   `refund_due_coverage`, and complete only when the active ones pay it all.
   Its exact fee request
@@ -621,11 +651,26 @@ dishes on a bill the restaurant has just cancelled.
   handed back, as the corte counts it), minus its withdrawals
   (`cash_shift_totals`, also used by the later review). Closing, withdrawal
   creation and withdrawal deletion share the restaurant money lock and check
-  the exact open shift inside the transaction that writes the change. A
+  the exact open shift inside the transaction that writes the change.
+  Online receipts are dated after their money lock, so a collection waiting
+  behind a close is dated after that close. Offline receipts retain the date
+  the cash was taken. Closing rechecks unapproved offline cash under the same
+  lock as queue submission and refuses to sign until it is reviewed. A
   difference ("Sobrante" / "Faltante") is
   explained once, by the closer or a manager. Withdrawals (`cash_movements`)
   go only into the open shift, and a manager can strike one off only while it
-  is still open. Every shift freezes its currency at opening, and each
+  is still open. Each withdrawal records its purpose: "Propinas pagadas" /
+  "Tips paid out" (`tips`) or "Otro retiro" / "Other withdrawal" (`other`,
+  the default, including historical movements). The route rejects any other
+  purpose; both withdrawal writers save it, and a retry must match its original
+  purpose. The shift block, closed record and printed handover show the tips
+  inside cash sales (`tips`) and, when positive, tips paid out (`tips_out`) below
+  that line. Payouts are already part of withdrawals: expected cash remains
+  opening + net cash sales − all withdrawals, regardless of purpose.
+  **Schema handoff:** `supabase/PROPOSAL-tips-out.sql` proposes the column and
+  RPC changes; Claude must incorporate them into `schema.sql` and `drop.sql`
+  and apply them before deploying the route's `p_purpose` argument.
+  Every shift freezes its currency at opening, and each
   movement keeps that shift's currency. Receipts and completed cash returns
   are summed only in that currency; labels and printed handovers use it too.
   Old shifts whose opening currency cannot be proven use the restaurant's
@@ -953,6 +998,10 @@ business's profit.
   (`src/lib/costs/margins.ts`). A line with any dish or extra lacking a recipe
   is left out of the totals and named apart — counted at nothing, a mostly
   uncosted menu would show a margin of nearly everything.
+  Analytics revenue, average ticket and daily bars exclude staff tips, including
+  tip components restored after returns, and retain service and IVA. Tips are
+  reported separately. The corte and expected drawer cash still include tips
+  received, less any actual cash handed back or withdrawn.
   Analytics product rows and contribution use the same final food revenue:
   `max(0, total - service_fee - tip)`, including IVA, allocated in whole cents.
   New diner, till, waiter-pad and offline sales freeze each whole line's
@@ -969,6 +1018,10 @@ business's profit.
   rate (3.6% + MX$3, IVA on the fee) and TableTap's per-order fee
   (`platform_fees`, net of returned fees); a card on the restaurant's terminal pays
   `restaurants.terminal_fee_pct`, which the owner sets (3.5% until they do).
+  Terminal fees use the original sales day's signed deposit rate when present,
+  otherwise the current rate. Same-day returns reverse that fee; later-day
+  returns retain it. A carried same-day return keeps the original signed rate
+  after another deposit consumes it, so the terminal display still adds up.
   Fees over takings is one rate, applied to each product's price
   (`src/lib/costs/fees.ts`).
   Takings and platform fees use the current report currency. A fee's original
@@ -1102,6 +1155,22 @@ stops.
 now catches each one.
 
 ## The counter till
+
+Managers can resolve a held cash receipt without creating a sale, payment or
+stock movement. Retained cash is disclosed apart from sales in the shift an
+approval would count it in: the one open when it was collected, even if that
+shift has since closed (it then reappears in that day's handover); only a
+collection no shift covers falls back to the open shift. Foreign cash is listed
+with other-currency takings and never added to the drawer's expected count.
+Returned cash in the drawer currency is received the same way, in the shift
+that collected it, and requires a recorded withdrawal in the open shift (where
+the cash left the drawer) whose purpose is not tips and that backs no other
+resolution; once linked
+it cannot be removed, and the drawer shows why instead of "Quitar". Foreign
+returned cash takes no withdrawal or new receipt. While any cash sale from any
+till waits for review, the till disables "Cerrar caja" and says a manager must
+review them; a cashier's refused close says to call a manager. Resolution history exposes
+copyable full cash-receipt, payment and withdrawal IDs for later duplicate links.
 
 A cashier rings a sale face to face, takes cash or a card on the restaurant's
 own terminal, and the order lands on the pass already paid for. The customer is
@@ -1287,8 +1356,15 @@ to know what should reach the bank and when.
   was reconciled is kept. Calculation and insertion share the restaurant
   money lock with settlement. New marks save exact payment and return IDs,
   the cutoff time and fee rate; old marks retain their timestamp rule.
-  Returns after sign-off carry to the next unsigned day with sales, or stay
-  visible waiting for it. Taking back a mark uses the same money lock.
+  Returns after sign-off carry to the next unsigned day with net sales. If
+  none exists yet, each return owns its own day (the next unsigned calendar
+  day if its day is already signed) as a return-only bank movement. The bank
+  can debit that amount: managers can mark a negative received amount even
+  without new sales, including in a former currency. Before marking, a newly
+  available sales day takes precedence; after marking, the manifest consumes
+  those return IDs permanently until the mark is taken back. A day owning
+  neither net sales nor carried returns still refuses reconciliation. Taking
+  back a mark uses the same money lock.
 - **Whole days and recovered sales:** the recent window starts at local
   midnight fourteen calendar days back. Older unsigned sales days and signed
   days with late receipts remain visible, with each day's complete contents.
@@ -1365,8 +1441,26 @@ measure. Its amounts come from
   municipio and estado), phone, RFC and régimen fiscal. These columns are
   optional, owner-only and never granted to anon (`ticket-place.ts`).
 - Body: date, folio (the order code), table, four columns (quantity, item,
-  unit price, amount), the number of items, the receipt's rows, the total and
-  how it was paid.
+  unit price, amount), the number of items, the receipt's rows, the total,
+  the IVA it includes, and how it was paid.
+- **"IVA 16% incluido" under the total** (owner's decision, 2026-11-12: "do
+  as a Mexican ticket does"). Menu prices to the general public are
+  IVA-inclusive, so the ticket prints the total and then the IVA inside it:
+  `round2(base − base / (1 + rate/100))` (`ticket-vat.ts`). The base is the
+  sale as charged — food and charges after every discount, after a
+  forgiveness or a return, never the tip, which carries no IVA. A table's
+  orders sum each order's total less its own tip; a paid split part is its
+  own amount less its own tip, and only when the split's frozen debt carried
+  no tips (`bill_splits.amount = food_principal`, read as
+  `parts_without_tips`); otherwise, or whenever the numbers do not add up, the
+  base is unknown and the line is left off rather than printed wrong. The
+  rate is the order's own `orders.tax_pct`, saved when sold from Settings →
+  Impuesto. A table with orders at different saved rates prints one line per
+  rate; a split part prints a line only when every frozen order has the same
+  known rate. Zero or missing rates print no line. The sample uses the current
+  saved `restaurants.tax_pct`. There is no second tax setting or new column.
+  Costs and the ticket share `withoutIva` in `money.ts`. Only the PDF ticket
+  prints the line; the email/HTML receipt does not.
 - The visit card when a card was presented before paying: its stamps drawn
   as circles (the earned ones filled), the code's last four, and the next
   reward. It is read from the receipt source — the sale's card, its sitting's,
@@ -1716,6 +1810,26 @@ server applies it only if nothing has happened since.
   original receipt. `/dashboard/held-sales` lets a manager review it on any
   device, confirm the original collector/currency/time and enter an approval
   reason. Approval never restores permission to create new sales on that plan.
+- A manager can resolve a pending **cash** receipt without creating a sale at
+  `POST /api/pos/recover/resolve`. The session supplies the actor and restaurant;
+  the decision records a reason (8–500 characters), original collector,
+  collection time, currency and an amount with cent precision. Cash kept becomes
+  unclassified cash in the open shift, separate from sales. Cash returned also
+  requires a matching recorded withdrawal from that shift. A duplicate links
+  exactly one existing cash payment or held cash receipt. No cash collected
+  requires zero and no links. The SQL transaction preserves the raw receipt,
+  freezes the resolution and answers an identical retry with the same record.
+  Resolved receipts leave pending, cannot later be approved and appear alongside
+  approvals in history, newest decision first, labelled by disposition with the
+  resolver, reason and amount. Card receipts have no resolve action. The form
+  reads only the acting restaurant's open-shift withdrawals through the sibling
+  route's manager-only GET; SQL rechecks all links under the money lock.
+- Intake refuses non-string, non-null whole-order notes/names and money fields
+  that are not finite JavaScript numbers in cents (allowing float noise).
+  The normalized tip cannot exceed the total; the sum retains its one-cent
+  tolerance. Raw receipts remain unchanged. Manager review renders normalized
+  lines and charge fields, including legacy formatted amounts, and approval
+  drops malformed legacy whole-order notes/names from the resulting order.
 - Approved lines keep the till's original prices and combo parts, which are
   what stock gives up even after the promotion has ended. The order, money,
   stock and approval audit commit together, retaining both the collector and
@@ -1726,7 +1840,7 @@ server applies it only if nothing has happened since.
   history, printed receipt, activity log and manager queue show the original.
 - Analytics' "Ventas sin conexión" counts current-currency offline sales of the
   last 44 days and lists every one with a difference. The manager queue keeps
-  every received exception regardless of age, including approved history.
+  every received exception regardless of age, including approved and resolved history.
 - While the device holds unsent sales, it cannot close the shift or sign out:
   they are the only record of money in the drawer. One the server refuses is
   kept with the reason, never thrown away.
@@ -2537,7 +2651,8 @@ collection freezes the size permanently; food cancellation uses refunds.
 
 `/api/split/pay` retains the legacy claim path and dispatches model 2 to grouped
 slots. Its body adds `revision`, unique zero-based `slots`, `expectedCents` and
-optional `tipCents` (default zero, at most the selected parts). It creates a
+optional `tipCents` (default zero, at most the selected parts), or `tipPct`
+for a percentage of their frozen dishes. Sending both is refused. It creates a
 durable attempt, reserves every selected part, then creates Stripe Checkout.
 The amount is the parts plus the new tip. The application fee is the sum of
 their frozen fee slices, reserved through the existing monthly cap. Below the
@@ -2836,7 +2951,7 @@ Each job has ten seconds, with bounded network requests and no Stripe network
 retries. Each source reads at most ten items per batch (refunds have two
 sources sharing one budget). A rotating page prevents a full batch of pending
 items from permanently hiding later restaurants. Work stops before the budget
-to leave time for observation; four jobs fit within the route's 60-second limit.
+to leave time for observation; five jobs fit within the route's 60-second limit.
 An item or job failure does not prevent subsequent items or jobs from running.
 
 The JSON response and logs report each job's completed items, remaining
@@ -2917,6 +3032,180 @@ codes when reducing sales for table forgiveness: every reason lowers the live
 paid total and appears as a write-off. Account credits follow that existing
 behavior; reason-specific sales/loss reporting is not changed by this feature.
 
+### Disputes — PR 1 (proposal awaiting Claude's schema fold)
+
+Connect receives `charge.dispute.created`, `updated`, `closed`, `funds_withdrawn`
+and `funds_reinstated`. Each verified notification commits a durable
+`stripe_dispute_events` inbox row before acknowledgment. Provider read failures
+stay retryable through the existing `/api/cron/recover` runner's dispute job;
+there is no additional scheduler. A per-case lease fences expired workers.
+Refresh always retrieves the current dispute and its balance transactions on
+the original connected account; out-of-order event payloads never establish
+status or money. Each provider balance transaction is recorded once, with its
+signed principal, fee, net, currency, fee details and provider date. Provider
+transaction identity and monetary evidence cannot be overwritten by a retry.
+
+`stripe_disputes`, `stripe_dispute_movements` and `stripe_dispute_events` have
+RLS, service-only access, composite tenant references and Stripe identities
+unique within account and livemode. The tables and their four functions are in
+`supabase/schema.sql`; `admin_delete_restaurant` refuses deletion while a
+matched dispute is open or unreconciled and archives all three tables with the
+books.
+Historical diner checkout and payment provenance establishes ownership by
+PaymentIntent and original Stripe account. Account checkouts link through their
+saved diner checkout session. Current Connect settings provide only the tenant
+for an unmatched review case, with no linked order. A review case finishes its
+inbox event (`done`), so recovery does not re-read it from Stripe; the case row
+keeps `review` for a platform admin (no admin UI yet). Review cases and their
+movements are not the tenant's books: Costs and Analytics leave them out of
+every total, of contribution after chargebacks and of the pending/incomplete
+notes. Unknown accounts remain in the private inbox for review. Shared-charge
+history identifies the whole charge.
+
+Costs shows **chargeback adjustments** below contribution, followed by
+**contribution after chargebacks** (existing contribution plus actual signed
+balance-transaction net). Movements use provider dates even for older sales or
+a period with no sales. Analytics has a separate section for withdrawals,
+reinstatements, actual net fees, current exposure and current won/lost counts.
+Manager order/bill history appends dated chargeback status and actual movements.
+Sales, product revenue, tips, payments, allocations, receipts and the corte
+retain their original facts. Charge and settlement currencies remain separate;
+foreign settlement is displayed in its own currency and excluded from the
+current-currency contribution with an incomplete-total notice. Reports exclude
+other Stripe modes, and failed reads fail visibly rather than displaying zero.
+
+Deletion is blocked for open or unreconciled matched disputes and pending inbox
+work, including events on historical accounts. Review cases never block it;
+they are archived with the books. Completed dispute books are
+archived by `admin_delete_restaurant` with the other financial records: all three
+dispute tables join its archive list. A win without reinstated principal stays
+pending; winning never invents a fee credit. No application-fee refund or
+finding-7 resolution UI is included. Historical discovery/backfill and an
+independent provider-completeness probe are deferred to PR 3.
+
+The money gate checks integer `amount_minor - fee_minor = net_minor`, scoped
+transaction uniqueness, tenant/account/mode attribution and per-case ID set
+equality with the last verified provider snapshot. It reports pending work and
+explicitly says **provider completeness unverified**. These structural checks
+cannot detect a dispute never ingested. PostgreSQL lease/race/RLS probes,
+Stripe sandbox transaction-shape checks, layout and full live gates remain
+Claude's integration work; offline specs do not claim those results.
+
+## Account journal (R8-7, PR 2 of 5)
+
+`account_movements` is an immutable, private journal of integer cents per account
+and saved MXN/USD currency. Charge and added_tip increase debt; live collection
+and credit decrease it. Opening debt is a snapshot, while historical collections
+and observations have zero debt effect. Return/refund kinds remain reserved for
+later PRs. RLS still denies all client access; service_role has select/insert
+only. Immutable guards, deferred source foreign keys, source identities and
+restaurant/account/currency checks remain enforced. Tip and service components
+are only non-negative, not bounded by the amount, because an approved coupon or a
+full comp lowers the total but not them. A zero-priced order still
+has a zero-cent charge when included in a charged bill.
+
+The journal is **started on activation**, and written by these transactions:
+
+- `account_charge_v2`: one charge per order, with its immutable original snapshot.
+  Both POS account writers delegate to it.
+- `account_settle_v2`, `account_settle_currency_v1` and
+  `account_checkout_settle_v2`: one collection per payment and an added_tip for
+  the new tip only. The payment freezes `account_added_tip_cents` and
+  `account_tip_order_id`; its existing tip field also includes earlier tips.
+- `account_credit_v1`: one credit keyed by its immutable account_credit adjustment.
+- `prepare_order_refund` and direct `cancel_order_v2`: an unpaid, not written-off
+  account cancellation reverses the remaining debt with a credit keyed by its
+  unique cancel adjustment. The current cancellation plan already creates that
+  adjustment. The legacy direct cancel path did not; it now creates one, using
+  charged_by (or system) because that signature has no actor argument.
+
+All legacy signatures remain and delegate to their v2 writer. Private append
+helpers have no public, anon, authenticated or service_role execute grant. Every
+writer takes the restaurant money lock, then the account, then orders in id
+order. Lazy allocation repair, only when an account receipt still awaits
+repair or manager evidence, prelocks the accounts that own orders and then only
+account orders, both in id order, before touching historical receipts; credit/cancel/POS enter that repair before
+locking their own order. Replays return before writes; unique source indexes
+reject duplicate appends rather than suppressing them. Appends are conditional
+on `customer_accounts.journal_started_at` being nonnull.
+
+The production delta is one transaction in three parts. It starts with
+`supabase/journal-lock.sql`, which takes every restaurant's `lock_restaurant_money`
+in id order before any schema change, so no money writer can hold a lock the
+delta waits for while waiting on the delta's table locks. Then it installs the
+schema and writers, then includes `supabase/journal-activate.sql`, then commits.
+That fragment takes the same locks again (a no-op inside the delta, and the same
+order when dev mock runs it alone), sets the column default, and then, for each
+restaurant in id order, calls `account_journal_backfill_v1`.
+The cutoff uses `clock_timestamp()` after the lock: SQL `now()` is the earlier
+transaction start and can predate a lock wait. Account charges, payments and
+adjustments likewise stamp the actual write time after acquiring the lock.
+The backfill locks accounts and orders in id order, opens current reduced unpaid,
+not written-off, not cancelled debt per currency (including zero), imports
+independently evidenced credits/collections without counting debt twice, then
+stamps the cutoff. Unknown historical receipt currency aborts for review.
+Unknown original amounts/components/charge dates remain JSON null; charged_at
+is never inferred from created_at. Started accounts are skipped on replay.
+Pre-cutoff coverage is explicitly incomplete.
+
+Activation stamps `restaurants.account_journal_started_at`, including empty
+restaurants, and sets its default for future restaurants. Opening an account
+holds the same money lock and stamps `journal_started_at = now()` when its
+restaurant is activated. Such accounts start from birth without an opening
+backfill. Both activation markers and new-tip source metadata are immutable.
+No additional historical movements can be imported into a started account.
+
+Deferred constraint triggers on orders, payments, adjustments, accounts and
+movements inspect the final transaction state. Each account is reconciled once
+per transaction, tracked in the transaction-local `tabletap.journal_checked`
+set; later row events skip that account-wide assert. Missing charge, added-tip
+and collection append checks still run per row before consulting the set.
+Order updates queue no journal work when neither version belongs to an account
+or when account/restaurant identity, currency, charge date, paid/write-off state,
+total, tip, service fee and cancellation state are unchanged. Ordinary kitchen
+status moves (such as preparing to ready) therefore queue nothing; entering or
+leaving cancellation still checks the account. Every live source must have one
+matching movement, every live movement must have a source, components and
+currency must agree, and journal debt must equal outstanding order debt per
+currency. Original charge/opening components are reconciled against subsequent
+reductions and added tips, including orders charged before activation. Detaching
+or redating a started charge, a forgotten append, or an orphan append fails at
+commit. These checks never repair a missing append themselves.
+
+The money gate paginates all sources and movements, performs independent
+bidirectional source checks and exact per-account/currency debt reconciliation,
+and retains existing receipt/allocation/drawer checks. Dev `db:mock` runs
+activation after seeding; mock account charges use the real writer so repeated
+seeds also work after activation. The dev-only `scripts/probe-account-journal.mjs`
+refuses production and covers activation, writers, replays, rollback on missing
+and orphan appends, and both credit-versus-settle serializations. Staff settlement
+still collects a whole currency balance; its partial-account probe collects MXN
+while USD remains owed. A rolled-back planted second-call failure verifies the
+account cache, including a control with its guard removed.
+It also plants a trigger-entry failure to prove kitchen and note updates queue
+no journal work, with cancellation as the positive control. The probe prints
+COMMIT time for settling 50 outstanding orders among 500 charges and total time
+for 200 non-account kitchen status updates. Database execution remains a
+required release gate.
+
+Statements, analytics and corte continue reading orders/payments until PR 3.
+
+Release verification still needs fixture isolation in the older API/attack gates:
+`api-cases/refunds.mjs` attaches and detaches an order directly;
+`attack-accounts.mjs` and `attack-account-credit.mjs` seed direct account orders;
+`api-fixtures.mjs` and `attack-accounts.mjs` delete account source rows individually.
+Started journals intentionally reject those operations. These cases must use real
+charge writers and disposable parent restaurants for cleanup before the full
+gates can be reported green. `allocations-check.mjs` and the older
+`probe-account-credit.mjs` likewise contain direct account-order seed paths.
+The new journal probe already uses disposable restaurants and cascade cleanup.
+Pre-cutoff event coverage is explicitly incomplete. The opening contains only
+current outstanding-order snapshots; collected orders are represented only by
+independently evidenced credit/payment history. Dev verification is provided by
+`scripts/probe-account-journal.mjs`, which refuses production. It must not be run
+against production during PR 1. The probe checks the function's own money lock
+without a caller lock, verifies rollback leaves an account unstarted, and tests
+effective client/service roles alongside catalog privileges.
 
 ## Visit-card ticket email screens (11 November 2026)
 

@@ -25,3 +25,11 @@ it("keeps model-1's own-order and tip payment body", async () => {
     restaurantId: "restaurant", tableId: "table", sessionId: "session" });
   vi.unstubAllGlobals();
 });
+it("sends slot percentage choices without converting them to a trusted exact tip", async () => {
+  vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false, json: async () => ({ error: "refused" }) }));
+  await useBillPayment("restaurant", "table", "session").paySlots({ splitId: "s", revision: 1, slots: [0], expectedCents: 6000, tipPct: 15 });
+  const body = JSON.parse(vi.mocked(fetch).mock.calls[0][1]!.body as string);
+  expect(body).toMatchObject({ tipPct: 15, expectedCents: 6000 });
+  expect(body).not.toHaveProperty("tipCents");
+  vi.unstubAllGlobals();
+});

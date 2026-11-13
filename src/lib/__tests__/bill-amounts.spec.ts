@@ -4,7 +4,7 @@ import type { AppliedCoupon } from "@/lib/pricing";
 import { billAmounts } from "@/lib/bill-amounts";
 
 const side = (total: number, discount = 0, service = 0, tip = 0) =>
-  ({ orders: [], items: [], total, discount, service, tip }) as unknown as TableBill["mine"];
+  ({ orders: [{ total, discount, service_fee: service, tip }], items: [], total, discount, service, tip }) as unknown as TableBill["mine"];
 const bill = {
   mine: side(44, 0, 4),
   others: side(56, 5, 0, 6),
@@ -21,7 +21,7 @@ describe("what the part of a bill being paid comes to", () => {
     const a = billAmounts(bill, "all", null, 10, null);
     expect(a.dishes + a.service + a.priorTip).toBeCloseTo(a.food, 2);
     expect(a.total).toBeCloseTo(a.base + a.tip, 2);
-    expect(a.tip).toBe(10); // ten percent of a hundred
+    expect(a.tip).toBe(9); // ten percent of ninety pesos of dishes
     expect(a.discount).toBe(5); // what the floor already took off is still shown
   });
 
@@ -35,7 +35,7 @@ describe("what the part of a bill being paid comes to", () => {
     const a = billAmounts(bill, "all", coupon, 10, null);
     expect(a.couponOff).toBe(10);
     expect(a.base).toBe(90);
-    expect(a.tip).toBe(9);
+    expect(a.tip).toBe(8);
     expect(billAmounts(bill, "all", null, 0, 500).tip).toBe(100);
   });
 });

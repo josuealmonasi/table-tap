@@ -82,7 +82,12 @@ export default function TerminalDeposits({ terminal, currency, timeZone }: Termi
                 <span className="tt-costs-product-name">{dayLabel(d.day)}</span>
                 <span className={`tt-costs-chip tt-terminal-${d.status}`}>{t(`terminal.status.${d.status}`)}</span>
                 <span className="tt-costs-product-meta tt-muted">
-                  {d.count === 0 && !d.deposit ? t("terminal.givenBackNext", { amount: money(d.givenBack) }) : (
+                  {d.count === 0 && d.givenBack > 0 ? (
+                    <>
+                      {t("terminal.returnOnly", { amount: money(d.givenBack) })}
+                      {SEP}{t("terminal.expected", { amount: money(d.expected), day: dayLabel(d.expectedOn) })}
+                    </>
+                  ) : (
                     <>
                       {t("terminal.taken", { n: d.count, amount: money(d.takings), tips: money(d.tips) })}
                       {SEP}{t("terminal.fee", { amount: money(d.fee) })}
@@ -113,7 +118,7 @@ export default function TerminalDeposits({ terminal, currency, timeZone }: Termi
                     <button type="button" className="tt-btn tt-btn-ghost tt-btn-sm" onClick={() => void takeBack(d.day)}>
                       {t("terminal.undo")}
                     </button>
-                  ) : d.count > 0 ? (
+                  ) : d.count > 0 || d.givenBack > 0 ? (
                     <button type="button" className="tt-btn tt-btn-primary tt-btn-sm" onClick={() => setMarking(d)}>
                       {t("terminal.mark")}
                     </button>

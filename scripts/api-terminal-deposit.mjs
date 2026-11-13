@@ -28,7 +28,7 @@ export function terminalDepositRace() {
         if (observer) await observer.end();
         await checked(f.admin.from("terminal_deposits").delete().eq("restaurant_id", r).eq("note", note));
         await checked(f.admin.from("user_logs").delete().eq("restaurant_id", r).eq("entity", "terminal").eq("actor_email", "demo-manager@tabletap.dev").gte("created_at", started).like("detail", `%${day}%`));
-        await checked(f.admin.from("payments").delete().eq("restaurant_id", r).in("id", receipts));
+        await checked(f.admin.from("payments").delete().is("account_id", null).eq("restaurant_id", r).in("id", receipts));
         await checked(f.admin.from("print_jobs").delete().in("order_id", orders));
         await checked(f.admin.from("orders").delete().eq("restaurant_id", r).in("id", orders));
       };

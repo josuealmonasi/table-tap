@@ -16,12 +16,18 @@ export async function checkoutRows<T>(read: (start: number, end: number) => Prom
 }
 
 /** Slice URL filters too: a busy account can owe more IDs than PostgREST accepts. */
-export async function checkoutRowsIn<T extends { id: string }>(ids: string[], read: (ids: string[], start: number, end: number) => PromiseLike<{ data: T[] | null; error: unknown }>): Promise<T[]> {
+export async function checkoutRowsIn<T extends { id: string }>(ids: string[], read: (ids: string[], start: number, end: number) => PromiseLike<{ data: T[] | null; error: unknown }>, concurrency = 1): Promise<T[]> {
   const rows = new Map<string, T>();
   const unique = [...new Set(ids)];
-  for (let i = 0; i < unique.length; i += IDS_PER_READ) {
-    const slice = unique.slice(i, i + IDS_PER_READ);
-    for (const row of await checkoutRows<T>((start, end) => read(slice, start, end))) rows.set(row.id, row);
+  for (let i = 0; i < unique.length; i += IDS_PER_READ * concurrency) {
+    const batches = [];
+    for (let j = i; j < Math.min(i + IDS_PER_READ * concurrency, unique.length); j += IDS_PER_READ) {
+      const slice = unique.slice(j, j + IDS_PER_READ);
+      batches.push(checkoutRows<T>((start, end) => read(slice, start, end)));
+    }
+    for (const batch of await Promise.all(batches)) {
+      for (const row of batch) rows.set(row.id, row);
+    }
   }
   return [...rows.values()];
 }
