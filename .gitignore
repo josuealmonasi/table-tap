@@ -33,3 +33,8 @@ yarn-error.log*
 *.tsbuildinfo
 .claude/launch.json
 TEST-ACCOUNTS.txt
+
+# Agent worktrees live inside the repo folder; they are other checkouts, not
+# this one's files. Untracked, they made the gate report "the code changed
+# while it ran" whenever an agent started mid-run (2026-11-13).
+.claude/worktrees/

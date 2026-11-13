@@ -1,5 +1,12 @@
 import type { NextConfig } from "next";
 
+// The gate runner builds with live updates off to spare the dev database
+// (src/lib/supabase/live-updates.ts). A deployed build must never: the boards
+// would stop updating with nothing on screen to say so.
+if (process.env.VERCEL && process.env.NEXT_PUBLIC_GATE_LIVE_UPDATES === "off") {
+  throw new Error("NEXT_PUBLIC_GATE_LIVE_UPDATES=off is for the gate build only; remove it from this Vercel environment.");
+}
+
 const nextConfig: NextConfig = {
   // The ticket's typefaces are read from disk by the routes that make the
   // PDF; tracing does not see a readFileSync path, so it is named here.
