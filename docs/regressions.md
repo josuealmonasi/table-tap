@@ -34,6 +34,7 @@ and that a new party cannot see the previous party's waiting phones.
 | A duplicate refund tracks customer completion and fee completion separately (S11 I5) | A failed fee return disappeared behind an already-refunded customer payment |
 | A duplicate refund keeps its original charge currency everywhere (S11 I9) | Changing the menu currency relabelled money owed back and the approval amount |
 |---|---|
+| Orders and pass feeds build their allowed restaurant list once per read | History called `has_role` for every order; the same pattern affected service requests and kitchen feeds. `orders-rls-equivalence.spec.ts` pins the old audience, and `probe-orders-rls-equivalence.mjs` compares counts and row identities under real RLS |
 | The cash API case checks the cashier's own refusal in both languages | Role-specific instructions were correct, but the case still matched the manager's older wording and reported a false failure; `cash-held-api-contract.spec.ts` checks both translations |
 | Held receipts reuse the existing payment tenant key | The train created a second unique index on the same payment columns; `held-payment-index.spec.ts` keeps the original unique key and rejects the duplicate build |
 | Restaurant deletion archives the account journal with its source books | The restaurant cascade deleted original charge snapshots that the archive list omitted; `account-journal-archive.spec.ts` pins the journal copy, tenant lock and preserved held-receipt/dispute checks |
@@ -7159,3 +7160,31 @@ It reported a failure even though the route refused the close with 409.
 The case now recognizes the cashier's instruction. The contract spec feeds
 it the real English and Spanish strings, so a copy change cannot silently
 leave the live gate checking words the route no longer sends.
+
+## Order history and its allowed restaurant list
+
+The dashboard's history query and its RLS check had to agree about how much
+work one read needs. `has_role(restaurant_id, ...)` checked membership for
+every order, so a small history page still paid for the restaurant's entire
+history. Service requests and the kitchen's tickets and calls used the same
+row-dependent pattern.
+
+Those four SELECT policies now compare `restaurant_id` against an uncorrelated
+array subquery. PostgreSQL builds that array once as an InitPlan and can use
+the restaurant index. The existing helpers still decide which restaurants
+belong in it: founding owners, co-owners and the allowed staff roles retain
+their rows, kitchen retains its separate projection, and platform admins get
+no extra direct access. Helper calls now scale with restaurants, not orders.
+No function, grant or write policy changes. In particular, the diner tracker
+still reads its single order server-side.
+
+`orders-rls-equivalence.spec.ts` parses the saved old policies and the last
+current definitions, compares their audiences, and checks owners, co-owners,
+multiple memberships, other tenants, kitchen, platform admins and no user.
+`orders-rls-probe.spec.ts` checks the read-only probe's actor isolation,
+rollback, production refusal and row-identity comparison. Claude runs
+`scripts/probe-orders-rls-equivalence.mjs` before applying the schema and
+again with `--compare /tmp/orders-before.json` afterward, without reseeding
+between captures. `--explain` includes the actual authenticated plans.
+The probe refuses a comparison if the underlying rows or memberships changed;
+equal counts alone cannot hide a different restaurant's rows.
