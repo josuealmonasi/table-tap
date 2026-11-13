@@ -9316,8 +9316,10 @@ grant execute on function public.record_offline_sale(uuid,uuid,jsonb,text,text,t
 --                   collecting shift's overage unexplained and gave the open
 --                   shift a matching false shortage (full review M1). Only a
 --                   collection no shift covers falls back to the open shift.
---   returned_cash — the cash went back: that receipt plus the recorded
---                   withdrawal that paid it out, net zero in the drawer.
+--   returned_cash — the cash went back: that receipt, counted in the shift
+--                   that collected it as retained cash is, plus the open
+--                   shift's recorded withdrawal that paid it out. Each shift
+--                   explains its own count; net zero across them.
 --   duplicate     — already counted elsewhere: linked to that payment or
 --                   receipt, counted nowhere twice.
 --   no_cash       — nothing was collected.
@@ -9422,7 +9424,8 @@ create or replace function public.resolve_held_sale(
   p_payment uuid default null, p_cash_receipt uuid default null, p_payout uuid default null
 ) returns jsonb language plpgsql security definer set search_path = public as $$
 declare q offline_sale_queue%rowtype; r held_sale_resolutions%rowtype;
-  s cash_shifts%rowtype; v_at timestamptz; v_recognized timestamptz; v_receipt uuid := p_cash_receipt;
+  s cash_shifts%rowtype; v_collecting cash_shifts%rowtype; v_at timestamptz; v_recognized timestamptz;
+  v_receipt uuid := p_cash_receipt;
 begin
   perform public.lock_restaurant_money(p_restaurant);
   -- Service-only: the route passes the signed-in email, never one from a body.
@@ -9473,22 +9476,25 @@ begin
   elsif p_disposition in ('retained_cash', 'returned_cash') then
     if p_amount <= 0 or p_payment is not null then raise exception 'new cash receipt required'; end if;
     v_at := clock_timestamp();
-    if p_disposition = 'retained_cash' then
-      -- The shift an approval counts it in: settle_offline_sale_v2 dates the
-      -- payment at the sale's time, and cash_shift_totals counts it in the
-      -- shift whose window holds that time, even one already signed. The
-      -- receipt goes to that shift, dated the same way, so both decisions
-      -- land in the same shift for the same receipt (full review M1).
-      select * into s from cash_shifts where restaurant_id = p_restaurant
-        and opened_at <= p_collected_at and (closed_at is null or closed_at >= p_collected_at)
-        order by opened_at desc, id desc limit 1 for update;
-      if found then v_recognized := least(p_collected_at, v_at); end if;
-    end if;
-    if v_recognized is null then
+    -- The cash came in where an approval counts it: settle_offline_sale_v2
+    -- dates the payment at the sale's time, and cash_shift_totals counts it in
+    -- the shift whose window holds that time, even one already signed. The
+    -- receipt goes to that shift, dated the same way, so every decision about
+    -- one receipt lands in the same shift (full review M1). Returned cash left
+    -- the drawer later, as the open shift's withdrawal: each shift explains
+    -- its own count, the one +amount received, the other -amount paid out.
+    select * into v_collecting from cash_shifts where restaurant_id = p_restaurant
+      and opened_at <= p_collected_at and (closed_at is null or closed_at >= p_collected_at)
+      order by opened_at desc, id desc limit 1 for update;
+    if found then v_recognized := least(p_collected_at, v_at); end if;
+    if p_disposition = 'returned_cash' or v_recognized is null then
       -- Returned cash pays out from the open drawer; a collection no shift
       -- covers has no other drawer to be counted in.
       select * into s from cash_shifts where restaurant_id = p_restaurant and closed_at is null for update;
       if not found then raise exception 'open shift required'; end if;
+    end if;
+    if v_recognized is null then
+      v_collecting := s;
       v_recognized := v_at;
     end if;
     if p_disposition = 'returned_cash' and p_currency <> s.currency then
@@ -9505,7 +9511,7 @@ begin
         end if;
       elsif p_payout is not null then raise exception 'unexpected payout'; end if;
       insert into held_cash_receipts(restaurant_id, pos_ref, shift_id, amount, currency, collector, collected_at, recognized_at)
-        values(p_restaurant, p_ref, s.id, p_amount, p_currency, btrim(p_collector), p_collected_at, v_recognized) returning id into v_receipt;
+        values(p_restaurant, p_ref, v_collecting.id, p_amount, p_currency, btrim(p_collector), p_collected_at, v_recognized) returning id into v_receipt;
     end if;
   elsif p_amount <> 0 or num_nonnulls(p_payment, p_cash_receipt, p_payout) <> 0 then
     raise exception 'no_cash takes no amount and no links';
@@ -10905,11 +10911,12 @@ returns setof public.cash_shifts language sql stable security definer set search
       and p.method = 'cash' and nullif(p.actor_email, '') is not null
       and p.recorded_at >= p_day_start and p.recorded_at > s.closed_at
       and p.created_at between s.opened_at and s.closed_at)
-    -- Held cash retained into a shift already closed, counted there as an
-    -- approval would be: that shift's count changed today too (full review M1).
+    -- Held cash retained or returned, received into a shift already closed and
+    -- counted there as an approval would be: that shift's count changed today
+    -- too (full review M1).
     or exists(select 1 from held_sale_resolutions r join held_cash_receipts c
         on c.restaurant_id = r.restaurant_id and c.id = r.cash_receipt_id
-      where r.restaurant_id = p_restaurant and r.disposition = 'retained_cash' and c.shift_id = s.id
+      where r.restaurant_id = p_restaurant and r.disposition in ('retained_cash', 'returned_cash') and c.shift_id = s.id
         and r.resolved_at >= p_day_start and r.resolved_at > s.closed_at)
   ) order by s.opened_at, s.id;
 $$;

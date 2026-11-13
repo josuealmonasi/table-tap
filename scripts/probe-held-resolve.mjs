@@ -247,6 +247,37 @@ try {
     assert.deepEqual(approved, retained, "both decisions must land in the same shift");
   });
 
+  await check("returned cash is received in the shift that collected it and paid out from the open one (full review M1)", async () => {
+    const shiftA = shift;
+    const collectedAt = await value("select clock_timestamp() value");
+    // Shift A closes with the offline sale's MX$60 still in its drawer: 60 over.
+    const openA = await totalsOf(shiftA);
+    const counted = Number(openA.expected) + 60;
+    const closedA = await value("select close_cash_shift($1,$2,$3,'probe') value", [restaurant, shiftA, counted]);
+    assert.equal(Number(closedA.difference), 60);
+    const ref = await held(60, "cash", "MXN", collectedAt.toISOString());
+    const shiftB = await value("select open_cash_shift($1,'probe',100) value", [restaurant]);
+    assert.ok(shiftB, "shift B must open");
+    const dayStart = await value("select clock_timestamp() value");
+    const baseB = await totalsOf(shiftB);
+    // During B the MX$60 is handed back out of the drawer, recorded as B's withdrawal.
+    const payout = (await value("select create_cash_withdrawal($1,$2,60,'returned','probe','other') value", [restaurant, shiftB])).id;
+    const r = await resolve(ref, owner, "returned_cash", 60, { payout }, "MXN", collectedAt);
+    assert.equal(r.payout_id, payout);
+    assert.equal(await value("select shift_id value from held_cash_receipts where id=$1", [r.cash_receipt_id]), shiftA);
+    // A explains its count: the +60 it received; B explains its own: the -60 paid out.
+    const a = await totalsOf(shiftA), b = await totalsOf(shiftB);
+    assert.equal(Number(a.expected), counted, "A's overage is explained by the receipt");
+    assert.equal(Number(a.unclassifiedCash) - Number(openA.unclassifiedCash), 60);
+    assert.equal(Number(b.expected), Number(baseB.expected) - 60, "B expects the cash that physically left");
+    assert.equal(Number(b.withdrawn) - Number(baseB.withdrawn), 60);
+    assert.equal(Number(b.unclassifiedCash), Number(baseB.unclassifiedCash));
+    const closedB = await value("select close_cash_shift($1,$2,$3,'probe') value", [restaurant, shiftB, Number(baseB.expected) - 60]);
+    assert.equal(Number(closedB.difference), 0);
+    assert.equal(await value("select count(*)::int value from cash_shifts_for_day($1,$2) where id=$3", [restaurant, dayStart, shiftA]), 1,
+      "the corrected closed shift shows in today's handover");
+  });
+
   await check("a resolved receipt is frozen: no late approval, no edits", async () => {
     const ref = await held(15);
     await resolve(ref, owner, "retained_cash", 15);

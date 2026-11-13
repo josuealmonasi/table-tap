@@ -7004,7 +7004,12 @@ open drawer. `cash_shifts_for_day` brings back a closed shift corrected that
 way, as it does for a late approval. `held-resolve-shift-schema.spec.ts` pins
 both SQL paths to the same window; `scripts/probe-held-resolve.mjs` runs both
 decisions on one receipt from a closed shift and asserts the same shift moves.
-Returned cash still nets in the open drawer, where its withdrawal is recorded.
+Returned cash follows the same rule (owner's call: every shift explains
+itself): its receipt is received in the collecting shift, and the withdrawal
+that paid it out stays in the open shift where the cash left the drawer, so A
+shows +amount received and B the -amount withdrawal, neither over nor short.
+The probe's returned case closes both shifts on those counts with no
+difference.
 
 ## Returned held cash cannot be backed by a tips payout (2026-11-12)
 

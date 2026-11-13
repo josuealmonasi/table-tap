@@ -1162,8 +1162,10 @@ approval would count it in: the one open when it was collected, even if that
 shift has since closed (it then reappears in that day's handover); only a
 collection no shift covers falls back to the open shift. Foreign cash is listed
 with other-currency takings and never added to the drawer's expected count.
-Returned cash in the drawer currency requires a recorded withdrawal in the open
-shift whose purpose is not tips and that backs no other resolution; once linked
+Returned cash in the drawer currency is received the same way, in the shift
+that collected it, and requires a recorded withdrawal in the open shift (where
+the cash left the drawer) whose purpose is not tips and that backs no other
+resolution; once linked
 it cannot be removed, and the drawer shows why instead of "Quitar". Foreign
 returned cash takes no withdrawal or new receipt. While any cash sale from any
 till waits for review, the till disables "Cerrar caja" and says a manager must
