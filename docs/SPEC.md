@@ -2866,8 +2866,8 @@ merchant of record and bears chargebacks; our per-order fee is flat, capped at
 not on a chargeback; published prices are what is charged, IVA included; the
 restaurant is the data controller for diners, customer accounts and staff, and
 TableTap the processor with Supabase (Oregon), Vercel (Portland), Resend and
-Stripe as sub-processors; the deletion archive is kept blocked for the legal
-retention period and then deleted. Placeholders for the legal identity are
+Stripe as sub-processors; the deletion archive is kept blocked for ten years
+and then deleted (no purge job yet). Placeholders for the legal identity are
 listed in `docs/before-launch.md` §6. Gaps between these texts and the code are
 in `loop/reviews/legal-review-20261113.md` (tabletap-release checkout).
 
