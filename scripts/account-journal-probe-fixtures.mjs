@@ -12,7 +12,7 @@ export async function order(db, restaurant, owner, total, currency = "MXN", char
   assert.equal(charged, true, "Unknown history belongs only in dormantOrder");
   const id = randomUUID();
   await db.query(`insert into orders(id,restaurant_id,status,subtotal,total,tip,service_fee,currency)
-    values($1,$2,'completed',$3-$5-$6,$3,$5,$6,$4)`, [id, restaurant, total, currency, tip, service]);
+    values($1,$2,'completed',$3::numeric-$5::numeric-$6::numeric,$3,$5,$6,$4)`, [id, restaurant, total, currency, tip, service]);
   const { rows } = await db.query("select account_charge_v2($1,$2,$3,$4,'probe') value", [restaurant, owner, [id], total]);
   assert.equal(rows[0].value.outcome, "charged");
   return id;
