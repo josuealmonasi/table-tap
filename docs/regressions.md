@@ -34,6 +34,7 @@ and that a new party cannot see the previous party's waiting phones.
 | A duplicate refund tracks customer completion and fee completion separately (S11 I5) | A failed fee return disappeared behind an already-refunded customer payment |
 | A duplicate refund keeps its original charge currency everywhere (S11 I9) | Changing the menu currency relabelled money owed back and the approval amount |
 |---|---|
+| The cash API case checks the cashier's own refusal in both languages | Role-specific instructions were correct, but the case still matched the manager's older wording and reported a false failure; `cash-held-api-contract.spec.ts` checks both translations |
 | Held receipts reuse the existing payment tenant key | The train created a second unique index on the same payment columns; `held-payment-index.spec.ts` keeps the original unique key and rejects the duplicate build |
 | Restaurant deletion archives the account journal with its source books | The restaurant cascade deleted original charge snapshots that the archive list omitted; `account-journal-archive.spec.ts` pins the journal copy, tenant lock and preserved held-receipt/dispute checks |
 | Printed IVA keeps each order's saved rate | A second current restaurant rate could relabel an older sale; `ticket-vat.spec.ts` and `receipt-vat-source.spec.ts` check saved rates, missing evidence and mixed-rate splits |
@@ -7147,3 +7148,14 @@ invariant (`a field label is a block`) parses every component and fails on
 any `<label>` or `<span>` with `tt-mod-label` that is neither inside a
 `.tt-field` nor given `display: block|flex|grid` by another of its classes.
 It has no allow-list.
+
+## The cashier's review instruction and its API case
+
+The cash-close refusal and the API gate's expected wording have to agree.
+Cashiers were correctly told to ask a manager to review held cash, but the
+case still expected the older instruction for somebody who can review it.
+It reported a failure even though the route refused the close with 409.
+
+The case now recognizes the cashier's instruction. The contract spec feeds
+it the real English and Spanish strings, so a copy change cannot silently
+leave the live gate checking words the route no longer sends.
