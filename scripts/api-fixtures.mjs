@@ -666,6 +666,8 @@ export async function setup(env, base) {
 
 /** Everything marked goes, whatever happened to the tests. */
 export async function teardown(fx) {
+  await fx.splitSlotFixtures?.cleanup();
+  await fx.readOnlyFixtures?.cleanup();
   await fx.accountFixture?.cleanup();
   await fx.phoneMembers?.cleanup();
   const { admin, restaurant } = fx;

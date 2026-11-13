@@ -1,33 +1,22 @@
 import { MARK } from "./api-fixtures.mjs";
+import { sharedRunFixtures } from "./run-fixtures.mjs";
 
-/** Each case owns its offer and restores the freeze even when the request fails. */
-async function frozenOffer(f, table, active = true) {
+/** Refusals share an unchanged offer; each case restores the freeze on failure. */
+async function frozenOffer(f, table, active = true, readOnly = false) {
   const restaurantId = f.restaurant.id;
   const { data: before, error: readError } = await f.admin.from("restaurants")
     .select("plan_status").eq("id", restaurantId).single();
   if (readError) throw readError;
-  const values = table === "promotions"
-    ? { restaurant_id: restaurantId, kind: "bogo", name: `${MARK} frozen`, buy_qty: 2, pay_qty: 1, active }
-    : { restaurant_id: restaurantId, code: `S14-${Date.now()}`, kind: "percent", value: 10, active };
-  let id;
+  let offer;
   const restore = async () => {
     const { error } = await f.admin.from("restaurants").update(before).eq("id", restaurantId);
     if (error) throw error;
-    if (id) {
-      const { error: removeError } = await f.admin.from(table).delete().eq("id", id);
-      if (removeError) throw removeError;
-    }
+    if (offer) await offer.cleanup();
   };
   try {
-    const { data, error } = await f.admin.from(table).insert(values).select("*").single();
-    if (error) throw error;
-    id = data.id;
-    f.frozenOffer = { table, before: data };
-    if (table === "promotions") {
-      const { error: linkError } = await f.admin.from("promotion_items")
-        .insert({ promotion_id: id, item_id: f.dish.id, qty: 1 });
-      if (linkError) throw linkError;
-    }
+    offer = readOnly ? await sharedRunFixtures(f).acquire(`frozen-${table}-${active}`, () => plantOffer(f, table, active))
+      : await plantOffer(f, table, active);
+    f.frozenOffer = { table, before: offer.data };
     const { error: freezeError } = await f.admin.from("restaurants")
       .update({ plan_status: "locked" }).eq("id", restaurantId);
     if (freezeError) throw freezeError;
@@ -36,6 +25,26 @@ async function frozenOffer(f, table, active = true) {
     await restore();
     throw error;
   }
+}
+
+async function plantOffer(f, table, active) {
+  const values = table === "promotions"
+    ? { restaurant_id: f.restaurant.id, kind: "bogo", name: `${MARK} frozen`, buy_qty: 2, pay_qty: 1, active }
+    : { restaurant_id: f.restaurant.id, code: `S14-${crypto.randomUUID()}`, kind: "percent", value: 10, active };
+  const { data, error } = await f.admin.from(table).insert(values).select("*").single();
+  if (error) throw error;
+  const cleanup = async () => {
+    const { error: removeError } = await f.admin.from(table).delete().eq("id", data.id);
+    if (removeError) throw removeError;
+  };
+  try {
+    if (table === "promotions") {
+      const { error: linkError } = await f.admin.from("promotion_items")
+        .insert({ promotion_id: data.id, item_id: f.dish.id, qty: 1 });
+      if (linkError) throw linkError;
+    }
+    return { data, cleanup };
+  } catch (error) { await cleanup(); throw error; }
 }
 
 async function unchangedExceptActive(f, off = false) {
@@ -53,15 +62,15 @@ export function frozenOfferCases() {
       body: f => ({ id: f.frozenOffer.before.id, active: false }), expect: [200],
       effect: f => unchangedExceptActive(f, true) },
     { name: `PATCH /api/${table} (frozen: an off flag cannot hide an edit)`, as: "manager", method: "PATCH",
-      path: `/api/${table}`, arrange: f => frozenOffer(f, table),
+      path: `/api/${table}`, arrange: f => frozenOffer(f, table, true, true),
       body: f => ({ id: f.frozenOffer.before.id, active: false, name: "Changed", kind: "percent", value: 20 }),
       expect: [402], effect: f => unchangedExceptActive(f) },
     { name: `PATCH /api/${table} (frozen: resuming is refused)`, as: "manager", method: "PATCH",
-      path: `/api/${table}`, arrange: f => frozenOffer(f, table, false),
+      path: `/api/${table}`, arrange: f => frozenOffer(f, table, false, true),
       body: f => ({ id: f.frozenOffer.before.id, active: true }), expect: [402],
       effect: f => unchangedExceptActive(f) },
     { name: `DELETE /api/${table} (frozen: deleting is refused)`, as: "manager", method: "DELETE",
-      path: `/api/${table}`, arrange: f => frozenOffer(f, table),
+      path: `/api/${table}`, arrange: f => frozenOffer(f, table, true, true),
       body: f => ({ id: f.frozenOffer.before.id }), expect: [402],
       effect: f => unchangedExceptActive(f) },
   ]);

@@ -34,6 +34,9 @@ and that a new party cannot see the previous party's waiting phones.
 | A duplicate refund tracks customer completion and fee completion separately (S11 I5) | A failed fee return disappeared behind an already-refunded customer payment |
 | A duplicate refund keeps its original charge currency everywhere (S11 I9) | Changing the menu currency relabelled money owed back and the approval amount |
 |---|---|
+| Seed receipts and allocation backfill keep the same historical evidence | Every seed inserted version-0 receipts, so reading a bill rewrote hundreds of rows; `seed-payment-allocations.spec.ts` compares every explicit-order field and allocation value with the backfill |
+| Read-only gate cases share their run's fixtures | Identical refusals repeatedly inserted and deleted orders, tables and splits; `gate-fixture-reuse.spec.ts` and `api-readonly-fixtures.spec.ts` check reuse, writer isolation and cleanup |
+| Reseeding restores demo logins without replacing their identities | Deleting the restaurant also deleted five healthy logins and sessions; `seed-logins.spec.ts` and `mock-logins.spec.ts` check identity reuse, changed passwords, metadata reset and explicit drop |
 | The cash API case checks the cashier's own refusal in both languages | Role-specific instructions were correct, but the case still matched the manager's older wording and reported a false failure; `cash-held-api-contract.spec.ts` checks both translations |
 | Held receipts reuse the existing payment tenant key | The train created a second unique index on the same payment columns; `held-payment-index.spec.ts` keeps the original unique key and rejects the duplicate build |
 | Restaurant deletion archives the account journal with its source books | The restaurant cascade deleted original charge snapshots that the archive list omitted; `account-journal-archive.spec.ts` pins the journal copy, tenant lock and preserved held-receipt/dispute checks |
@@ -7159,3 +7162,42 @@ It reported a failure even though the route refused the close with 409.
 The case now recognizes the cashier's instruction. The contract spec feeds
 it the real English and Spanish strings, so a copy change cannot silently
 leave the live gate checking words the route no longer sends.
+
+## Seed receipts and historical allocation evidence
+
+The seed's explicit receipts and `backfill_payment_allocations` must describe
+the same money. The seed wrote version 0, then the first bill read inserted
+allocations and rewrote hundreds of payments. Synthetic history now writes
+version 1 and its exact allocations at insertion. The contract spec compares
+all eight backfill fields and the allocation values, including preserved tip
+metadata, unknown breakdowns and legacy provenance. Live and unmarked legacy
+writers keep their existing paths. `mock-history.mjs` reads receipts for daily
+shifts; it does not insert payments.
+
+Cancelled legacy sales still retain their historical review examples. PR #638
+conservatively asks for backfill while those reviews remain, even when the
+importer has no new evidence to write. Current allocation rows remove the
+receipt rewrite; skipping that remaining no-op import needs a separate,
+evidence-aware review predicate. No review or return evidence is fabricated
+to make a read look clean.
+
+## Read-only gate cases and fixture ownership
+
+The fixture lifecycle and each case's effects have to agree. Refused split,
+inactive-order and frozen-offer requests repeatedly created the same rows.
+One run now owns each unchanged fixture set; case cleanup returns the borrowed
+rows without deleting them. Run cleanup removes them, including after failed
+requests. Specs check reuse, incompatible states, separate runs, failed setup
+and private writer cleanup. Every gate verdict stays unchanged. The exact
+shared cases and cases that still need private rows are listed in
+`docs/gate-fixture-ownership.md`.
+
+## Demo logins and a restaurant reset
+
+The seed's clean restaurant and the gate's existing login must agree. Reseeding
+deleted five auth users, their identities, profiles and sessions before
+recreating the same people. It now retains the auth IDs, restores passwords
+only if changed, clears demo metadata and bans, removes accidental admin
+grants and restores names. Unchanged passwords never go through GoTrue's
+password update. Explicit `dropMock` still removes all five users. Mocked
+database and admin-client specs check both lifetimes without sending mail.

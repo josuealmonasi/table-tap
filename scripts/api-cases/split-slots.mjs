@@ -1,9 +1,12 @@
 import { tipBaseCase } from "./tip-base.mjs";
-import { splitSlotFixture } from "../split-slots-fixture.mjs";
+import { splitSlotFixtures } from "../split-slot-fixtures.mjs";
 
 export function splitSlotCases(fx) {
   const r = fx.restaurant.id;
-  const arrange = options => async f => { f.slotCase = await splitSlotFixture(f.admin, r, options); return f.slotCase.cleanup; };
+  const fixtures = fx.splitSlotFixtures = splitSlotFixtures(fx.admin, r);
+  const arrange = (options, readOnly = false) => async f => {
+    f.slotCase = await fixtures.acquire(options, readOnly); return f.slotCase.cleanup;
+  };
   const controlBody = f => ({ ...f.slotCase.scope, splitId: f.slotCase.splitId, revision: 1, shares: 3 });
   const error = {
     stale: /cuenta cambió|bill changed/i, frozen: /empezó a pagar|started paying/i,
@@ -25,20 +28,20 @@ export function splitSlotCases(fx) {
       } },
     ...["stale", "busy", "currency", "nothing"].map(outcome => ({
       name: `POST /api/split/start (${outcome})`, as: "waiter", method: "POST", path: "/api/split/start",
-      arrange: arrange({ start: outcome === "busy", totalCents: outcome === "nothing" ? 0 : 11000 }),
+      arrange: arrange({ start: outcome === "busy", totalCents: outcome === "nothing" ? 0 : 11000 }, outcome !== "nothing"),
       body: f => ({ ...f.slotCase.startBody, ref: crypto.randomUUID(), ...(outcome === "stale" ? { expectedCents: 10000 } : {}),
         ...(outcome === "currency" ? { currency: "USD" } : {}) }), expect: [409],
       expectError: outcome === "nothing" ? /nada|nothing/i : error[outcome],
     })),
     { name: "POST /api/split/start (same request returns its split)", as: "waiter", method: "POST", path: "/api/split/start",
-      arrange: arrange(), body: f => f.slotCase.startBody, expect: [200], check: (d, f) => d.outcome === "repeat" && d.split === f.slotCase.splitId || "start made a second split" },
+      arrange: arrange(undefined, true), body: f => f.slotCase.startBody, expect: [200], check: (d, f) => d.outcome === "repeat" && d.split === f.slotCase.splitId || "start made a second split" },
     ...[["resize", "/api/split/resize"], ["cancel", "/api/split/cancel"]].flatMap(([action, path]) => [
       { name: `POST /api/split/${action} (current revision)`, as: "waiter", method: "POST", path,
         arrange: arrange(), body: controlBody, expect: [200], check: d => d.revision === 2 || "revision did not advance" },
       ...["stale", "frozen", "gone"].map(outcome => ({
         name: `POST /api/split/${action} (${outcome})`, as: "waiter", method: "POST", path,
         arrange: async f => {
-          const cleanup = await arrange()(f);
+          const cleanup = await arrange(undefined, outcome !== "frozen")(f);
           try {
             if (outcome === "frozen") { const hold = await f.slotCase.hold(); if (hold.result.outcome !== "reserved") throw new Error("fixture did not reserve"); }
             return cleanup;
@@ -51,7 +54,7 @@ export function splitSlotCases(fx) {
     ...["cash", "card", "duplicate", "reserved", "paid", "stale", "currency"].map(outcome => ({
       name: `POST /api/split/collect (${outcome})`, as: "waiter", method: "POST", path: "/api/split/collect",
       arrange: async f => {
-        const cleanup = await arrange()(f);
+        const cleanup = await arrange(undefined, ["stale", "currency"].includes(outcome))(f);
         f.slotCollection = f.slotCase.body();
         try {
           if (outcome === "reserved") { const hold = await f.slotCase.hold(); if (hold.result.outcome !== "reserved") throw new Error("fixture did not reserve"); }
@@ -92,7 +95,7 @@ export function splitSlotCases(fx) {
     ...["taken", "paid", "stale", "below_minimum"].map(outcome => ({
       name: `POST /api/split/pay (model 2 ${outcome})`, as: "diner", method: "POST", path: "/api/split/pay",
       arrange: async f => {
-        const cleanup = await arrange({ totalCents: outcome === "below_minimum" ? 1000 : 11000 })(f);
+        const cleanup = await arrange({ totalCents: outcome === "below_minimum" ? 1000 : 11000 }, outcome === "stale")(f);
         let reader;
         try {
           reader = await f.withCardReader();

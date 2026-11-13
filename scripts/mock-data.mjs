@@ -32,6 +32,7 @@ import { seedTerminal } from "./mock-terminal.mjs";
 import { legacyTerminalTimes } from "./mock-terminal-times.mjs";
 import { finalizeMockCashShift } from "./mock-cash-shift.mjs";
 import { bulkInsert, randInt, sample } from "./menu-catalog.mjs";
+import { ensureDemoUser } from "./mock-logins.mjs";
 
 export const DEMO_RESTAURANT = "Demo Bistro";
 // Read when the seeder runs, after its caller loaded the env file: production's
@@ -57,26 +58,7 @@ function adminClient() {
 
 /** Reuse an existing auth user (surviving a drop) or create one. */
 async function ensureUser(pg, admin, email, name) {
-  const { rows } = await pg.query("select id from auth.users where email = $1", [email]);
-  let userId = rows[0]?.id;
-  if (!userId) {
-    const { data, error } = await admin.auth.admin.createUser({
-      email,
-      password: demoPassword(),
-      email_confirm: true,
-    });
-    if (error) throw new Error(`${email}: ${error.message}`);
-    userId = data.user.id;
-  }
-  if (name) {
-    await pg.query(
-      `insert into profiles (user_id, full_name, updated_at)
-       values ($1, $2, now())
-       on conflict (user_id) do update set full_name = $2`,
-      [userId, name],
-    );
-  }
-  return userId;
+  return ensureDemoUser(pg, admin, email, name, demoPassword());
 }
 
 /**
@@ -92,7 +74,7 @@ async function ensureUser(pg, admin, email, name) {
 let keptStripe = null;
 
 /** Removes Demo Bistro (cascades all its data) and the demo logins. */
-export async function dropMock(pg) {
+export async function dropMock(pg, { keepLogins = false } = {}) {
   const { rows } = await pg.query(
     "select id, stripe_account_id, stripe_charges_enabled from restaurants where name = $1",
     [DEMO_RESTAURANT],
@@ -106,6 +88,7 @@ export async function dropMock(pg) {
     }
     await pg.query("delete from restaurants where id = $1", [r.id]);
   }
+  if (keepLogins) return rows.length;
   const admin = adminClient();
   for (const email of DEMO_EMAILS) {
     const { rows: u } = await pg.query("select id from auth.users where email = $1", [
@@ -192,7 +175,7 @@ export async function seedMock(pg) {
   if (!process.env.SUPABASE_SECRET_KEY) {
     throw new Error("SUPABASE_SECRET_KEY missing — needed to create demo logins.");
   }
-  await dropMock(pg); // clean slate → repeatable
+  await dropMock(pg, { keepLogins: true }); // clean slate → repeatable; logins keep their sessions
 
   const admin = adminClient();
   const ownerId = await ensureUser(pg, admin, DEMO_OWNER.email, DEMO_OWNER.name);
