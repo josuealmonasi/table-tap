@@ -43,7 +43,7 @@ export async function GET(req: NextRequest) {
 /** Code possession proves card ownership; the table cookie proves sitting ownership. */
 export async function POST(req: NextRequest) {
   if (await isRoomLimited(req, "loyalty-attach", 30)) return await apiError("apiErr.tooManyRequests", 429);
-  const body = await jsonBody<AttachmentTarget & { code?: unknown; remove?: unknown }>(req);
+  const body = await jsonBody<AttachmentTarget & { code?: unknown; remove?: unknown; currentCode?: unknown }>(req);
   if (!body) return await apiError("apiErr.invalidRequest", 400);
   if (await isTableLimited(req, "loyalty-attach", typeof body.tableId === "string" ? body.tableId : null, 30)) {
     return await apiError("apiErr.tooManyRequests", 429);
@@ -81,9 +81,12 @@ export async function POST(req: NextRequest) {
       if (!data) return await apiError("loyaltyAttach.gone", 404);
       return NextResponse.json({ outcome: "removed", card: null });
     }
-    const { data, error } = await db.rpc("attach_loyalty_card_v1", {
+    // A diner replaces a different card only with that card's code, the same
+    // proof removing it takes (review access1); staff replace it freely.
+    const { data, error } = await db.rpc("attach_loyalty_card_v2", {
       p_restaurant: access.restaurantId, p_code: code, p_order: access.orderId,
-      p_session: access.sessionId, p_actor: access.actor,
+      p_session: access.sessionId, p_actor: access.actor, p_staff: access.staff,
+      p_current_code: typeof body.currentCode === "string" ? normalizeCode(body.currentCode) : null,
     });
     if (error || !data) return await apiError("apiErr.generic", 503);
     if (data.outcome !== "attached") {

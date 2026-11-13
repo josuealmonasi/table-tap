@@ -15,7 +15,7 @@ export function tenantBooks<C extends DisputeCase, M extends DisputeMovement>(ca
 
 /** Provider dates apply even when the original sale is outside this period.
  * Cases supply current exposure; their charge currency never relabels cash. */
-export function disputeReport(allCases: DisputeCase[], allMovements: DisputeMovement[], since: string, until: string, pending: number): DisputeReport {
+export function disputeReport(allCases: DisputeCase[], allMovements: DisputeMovement[], since: string, until: string, pending: number, review: number): DisputeReport {
   const { cases, movements } = tenantBooks(allCases, allMovements);
   const currencies = new Map<string, DisputeReport["currencies"][number]>();
   const row = (currency: string) => {
@@ -32,6 +32,6 @@ export function disputeReport(allCases: DisputeCase[], allMovements: DisputeMove
   for (const dispute of cases) {
     if (!["won", "lost", "warning_closed", "prevented"].includes(dispute.status)) row(dispute.currency).exposure += minorUnits(dispute.amount_minor, dispute.currency);
   }
-  return { currencies: [...currencies.values()].sort((a, b) => a.currency.localeCompare(b.currency)), pending,
+  return { currencies: [...currencies.values()].sort((a, b) => a.currency.localeCompare(b.currency)), pending, review,
     won: cases.filter(d => d.status === "won").length, lost: cases.filter(d => d.status === "lost").length };
 }

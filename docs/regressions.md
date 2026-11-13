@@ -7182,3 +7182,135 @@ its order, account and dish for the final restaurant cascade. Its borrowed
 menu and restaurant switches are still restored after the case. The focused
 spec reproduces the foreign-key refusal, checks the private fixture, and
 proves cleanup restores the switches without deleting retained sources.
+
+## Background jobs: what a stuck job tells, and when it stops (2026-11-12)
+
+A full review of the background work (`loop/reviews/full-review-background.md`)
+found eight places where a job and its promise had to agree with nothing
+checking that they did. Each is now pinned:
+
+- **The overdue duplicate-refund bell rang once per restaurant, ever.** Its ID
+  was the restaurant alone, written with "ignore duplicates", so a second stuck
+  refund months later rang nothing and the bell kept the first case's amount.
+  The key is now the restaurant and the stuck `refunds_due` row
+  (`src/lib/recovery/overdue.ts`). `refunds.spec.ts` resolves one case, sticks
+  another, and checks a second reminder with the new amount and table.
+- **A ticket email retried within seconds and gave up after three blips.** A
+  failure released the claim at once and the next drain took the same rows.
+  `ticket_email_outbox.next_attempt_at` now holds 1 min, 10 min, then 1 h; the
+  fourth failure, or a refusal no retry changes (a 4xx other than 429 and an
+  idempotent request in flight), finishes the rows as `failed` with
+  `failure_reason`. The claim skips rows waiting out their backoff and takes
+  fresh tickets before retries, so failing rows never fill every claim.
+  `card-email.spec.ts`, `background-reliability.spec.ts`.
+- **A ticket retry rebuilt a different body under the same key.** Resend
+  refuses a reused key with a changed payload, so a ticket delivered on the
+  first try (reply lost) finished as `failed`. The rendered body is stored on
+  the batch's rows (`mail_body`, cleared when it finishes) before the first
+  send and resent as is (`src/lib/ticket-email-body.ts`); Resend's
+  `invalid_idempotent_request` means an email went out under that key and
+  counts as sent. `card-email.spec.ts` sends, crashes, retries, and compares
+  the two bodies byte for byte.
+- **A missed cancellation kept a paid tier forever.** Recovery only re-read
+  locked and past-due restaurants. `restaurants.plan_period_ends_at` now keeps
+  the paid period's end, and recovery re-reads Stripe for an active or
+  trialing paid tier whose cancellation date or period end passed more than
+  three days ago, storing the answer through the webhook's transition (so a
+  cancelled subscription goes to Carta, an unpaid one locks). A failed Stripe
+  read writes nothing. Restaurants synced before the column existed are read
+  once (a page per run) to store their period end, without waiting for a
+  webhook. `recovery/__tests__/subscriptions.spec.ts`.
+- **The ticket drain got only the cron's leftovers.** It ran in `after()` once
+  five 10-second jobs had finished. It now runs alongside them with its own
+  40-second budget, stops between groups at the deadline and releases what it
+  had claimed; the route answers after it. Each job's page grew from 10 to 25
+  items (each item still stops at the job's time budget). `route.spec.ts`,
+  `card-email.spec.ts`, `bounds.spec.ts`.
+- **A re-queued fee looked new.** `enqueue_fee_reconcile` reset `enqueued_at`
+  on every refund event, so a stuck charge never aged into the overdue
+  warning. Only the generation moves now. `background-reliability.spec.ts`.
+- **A dispute event in error was polled forever and blocked deletion.** After
+  ten attempts `fail_stripe_dispute_event` sets the event to `review`:
+  recovery no longer polls it, `admin_delete_restaurant` does not wait on it,
+  it is archived with the restaurant, and `pnpm money` lists it. A new webhook
+  delivery may still claim and finish it. The restaurant's dispute readers
+  (Costs and Analytics summary, order history) show it as "Requiere revisión"
+  / "Needs review", counted apart from pending, never as both
+  (`DisputeReport.review`, `NEEDS_REVIEW`). `disputes/__tests__/recovery.spec.ts`,
+  `read.spec.ts`, `disputes.react-component.spec.tsx`.
+- **A forgiven walkout stamped the visit card and emailed a ticket** (owner's
+  decision, 2026-11-12: it does neither). Both triggers now skip an order
+  settled by `write_off_remainder_v1` (`tabletap.walkout_writer`, set only
+  around the loop that settles the orders) or carrying a `forgive`
+  adjustment (`settled_by_write_off`). `background-reliability.spec.ts`.
+
+Schema: `ticket_email_outbox.next_attempt_at`, `failure_reason`, `mail_body`;
+`restaurants.plan_period_ends_at`; `stripe_dispute_events.state` accepts
+`review`; `settled_by_write_off(uuid, uuid)` is new (in `drop.sql`), with the
+partial index `order_adjustments_forgiven_order` it reads. The
+code writes `plan_period_ends_at` and the outbox columns, so production is
+migrated before this merges.
+## Review leftovers (2026-11-12)
+
+Ten confirmed findings from the full review of `train/queue-all`
+(`loop/reviews/full-review-*.md`), each two places that had to agree.
+
+**bg4, the fee queue took refunds of charges that were never ours.** The
+Connect webhook enqueued every `charge.refunded` / `refund.*` on the account,
+the recovery only knew four tables to find the charge's account in, and a row
+it could not resolve stayed forever and held `admin_delete_restaurant` at
+`provider`. Now one list, `FEE_ACCOUNT_SOURCES` in `refunds/fee-queue.ts`
+(fee returns, diner checkouts, refund operations, refunds due, payments), is
+what the webhook checks before enqueueing, where the recovery reads the
+account, and what the deletion guard waits on. A row none of them explains is
+acked at its generation as not ours. `fee-queue-scope.spec.ts` and
+`fee-returns-schema.spec.ts` pin all three.
+
+**bg8, the delete archive missed money tables.** The archive was pinned
+against its own list, so fee returns, refund failures and coverage, fee
+epochs, coupon redemptions, write-off and discount approvals, loyalty
+redemptions and every bill split table cascaded away uncopied. They are
+archived now (keyless tables get an md5 id of their key), and
+`admin-safety-schema.spec.ts` walks every `on delete cascade` path from
+`restaurants` and fails on any table that is neither archived nor named in
+`NOT_BOOKS` with its reason.
+
+**bg9, one Stripe account, one restaurant.** Every webhook helper finds the
+restaurant with `maybeSingle()`; a duplicate account made each refund event
+raise and answer 500. A partial unique index now refuses the duplicate. The
+gate scripts that borrow a fake account give a second restaurant its own
+(`acct_api_check_other`, `acct_api_check_account`).
+
+**bg10, the fee month rolled over in UTC.** The cap and the currency lock
+used the UTC month, so in Mexico City both rolled at 18:00 on the last day.
+`fee_month(restaurant)` reads the restaurant's timezone and is the only month
+`reserve_platform_fee`, `record_session_fee` and `currency_locked_until` use.
+`fee-month-currency.spec.tsx`.
+
+**access1, a table member could take over the sitting's card.** Removing a
+card took its code; replacing it took nothing, so one phone could redirect the
+table's ticket emails and stamps to its own card. `attach_loyalty_card_v2`
+refuses a diner replacing a different card without that card's code
+(`taken`), under the row lock. Staff replace as before.
+
+**access2, the diner's "taken" was an address oracle.** A diner's link now
+answers `submitted` whether the address was linked or already on another
+card, in the card-email route and in card creation, and is limited per network
+address as well as per card. Staff still learn which card holds it. The diner
+screen notes what `submitted` means. `diner-answer.spec.ts`, `card-email.spec.tsx`.
+
+**access3, a far history page read the whole history.** The held-sales
+history page is clamped to the last page there is, counted per clock, before
+either clock is read. `held-sales-history-route.spec.ts`.
+
+**screens4 and screens5, errors said more than once.** Order history reads a
+page's chargebacks once (`useDisputeHistory`), only for orders a card could
+have paid, shows one alert when that fails and no per-row loading line, so the
+skeleton is unchanged. CardEmail says a failed read once.
+`order-history-disputes.spec.tsx`, `card-email.spec.tsx`.
+
+**M4, a legacy split under-tipped later shares.** A v1 split locked before
+`food_principal` read what its orders still owed, which shrank as shares were
+paid and was divided by the shares again. `splitTipPrincipal` uses the
+`amount` it froze, in the preview and the pay route alike.
+`tip-base.react-component.spec.tsx`.

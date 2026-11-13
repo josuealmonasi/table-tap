@@ -229,6 +229,7 @@ drop function if exists public.take_stock_floor(uuid, jsonb);
 drop function if exists public.reserve_platform_fee(uuid, integer, integer, text, text);
 drop function if exists public.guard_fee_month_currency() cascade;
 drop function if exists public.currency_locked_until(uuid);
+drop function if exists public.fee_month(uuid);
 drop function if exists public.take_platform_fee(uuid, text, integer);
 drop function if exists public.release_platform_fee(uuid);
 drop function if exists public.record_session_fee(uuid, text, integer, text, integer);
@@ -394,8 +395,10 @@ drop table if exists stripe_dispute_events cascade;
 drop table if exists stripe_disputes cascade;
 -- Loyalty stamped by payment.
 drop function if exists public.stamp_loyalty_on_payment() cascade;
+drop function if exists public.settled_by_write_off(uuid, uuid);
 drop function if exists public.fix_loyalty_card_on_payment() cascade;
 drop function if exists public.queue_ticket_email() cascade;
 drop function if exists public.claim_ticket_emails(int);
 drop function if exists public.attach_loyalty_card_v1(uuid, text, uuid, uuid, text);
+drop function if exists public.attach_loyalty_card_v2(uuid, text, uuid, uuid, text, boolean, text);
 drop function if exists public.loyalty_open(uuid);
