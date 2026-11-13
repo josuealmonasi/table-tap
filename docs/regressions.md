@@ -34,6 +34,7 @@ and that a new party cannot see the previous party's waiting phones.
 | A duplicate refund tracks customer completion and fee completion separately (S11 I5) | A failed fee return disappeared behind an already-refunded customer payment |
 | A duplicate refund keeps its original charge currency everywhere (S11 I9) | Changing the menu currency relabelled money owed back and the approval amount |
 |---|---|
+| Return polling batches SQL progress (SQL read cost 1) | The list needed every outstanding balance, but sent one RPC per refund every 15 seconds |
 | The cash API case checks the cashier's own refusal in both languages | Role-specific instructions were correct, but the case still matched the manager's older wording and reported a false failure; `cash-held-api-contract.spec.ts` checks both translations |
 | Held receipts reuse the existing payment tenant key | The train created a second unique index on the same payment columns; `held-payment-index.spec.ts` keeps the original unique key and rejects the duplicate build |
 | Restaurant deletion archives the account journal with its source books | The restaurant cascade deleted original charge snapshots that the archive list omitted; `account-journal-archive.spec.ts` pins the journal copy, tenant lock and preserved held-receipt/dispute checks |
@@ -7159,3 +7160,14 @@ It reported a failure even though the route refused the close with 409.
 The case now recognizes the cashier's instruction. The contract spec feeds
 it the real English and Spanish strings, so a copy change cannot silently
 leave the live gate checking words the route no longer sends.
+
+## Return polling batches SQL progress (SQL read cost 1)
+
+The Returns list and the SQL progress rules had to agree for every open refund.
+Limiting concurrency protected the pool, but still sent one RPC per refund on
+every poll. `refund_operations_progress_v1` delegates to the existing per-id
+function, scoped to the restaurant and requested ids. The reader joins balances
+by operation id and continues a capped response; missing, repeated or invalid
+balances fail the read instead of looking paid. `progress-reads.spec.ts` compares
+batched balances with per-id answers, checks one ordinary batch, capped pages,
+identity, errors and the absence of fee recovery on this read path.

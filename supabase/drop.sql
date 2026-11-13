@@ -307,6 +307,7 @@ drop table if exists offline_sale_queue cascade;
 drop function if exists public.return_on_order_v1(uuid, uuid, int, text, text, text, uuid, int, int, int);
 drop function if exists public.retained_order_component_capacity_v1(uuid, uuid);
 drop function if exists public.check_order_return_adjustment_v1();
+drop function if exists public.refund_operations_progress_v1(uuid, uuid[]);
 drop function if exists public.refund_operation_progress_v1(uuid);
 drop function if exists public.refund_id_taken_v1(uuid, text, uuid);
 drop function if exists public.complete_refund_operation_v1(uuid, text);

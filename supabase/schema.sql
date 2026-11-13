@@ -14346,3 +14346,16 @@ alter table account_movements add constraint account_movements_debt check (
     or (kind in ('collection', 'credit') and amount_cents > 0 and debt_delta_cents = -amount_cents and provenance = 'live')
     or (kind = 'collection' and amount_cents > 0 and debt_delta_cents = 0 and provenance = 'backfill')
     or (kind in ('return_approved', 'refund_paid', 'historical_observation') and debt_delta_cents = 0));
+
+-- Batch the polled list without making a second version of the money rules.
+create or replace function public.refund_operations_progress_v1(p_restaurant uuid, p_ids uuid[])
+returns table (operation_id uuid, outstanding_cents int, unresolved boolean)
+language sql stable security definer set search_path = public as $$
+  select o.id, progress.outstanding_cents, progress.unresolved
+  from refund_operations o
+  cross join lateral jsonb_to_record(public.refund_operation_progress_v1(o.id))
+    as progress(outstanding_cents int, unresolved boolean)
+  where o.restaurant_id = p_restaurant and o.id = any(p_ids);
+$$;
+revoke all on function public.refund_operations_progress_v1(uuid, uuid[]) from public, anon, authenticated;
+grant execute on function public.refund_operations_progress_v1(uuid, uuid[]) to service_role;
