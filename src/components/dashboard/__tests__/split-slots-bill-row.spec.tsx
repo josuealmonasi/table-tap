@@ -3,7 +3,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { expect, it, vi } from "vitest";
 import OpenBillRow from "../OpenBillRow";
 import type { OpenBill } from "@/lib/open-bills";
-vi.mock("@/lib/i18n/context", () => ({ useT: () => (key: string) => key }));
+vi.mock("@/lib/i18n/context", () => ({ useT: () => (key: string) => key, useLocale: () => ({ locale: "en", setLocale: () => {} }) }));
 it("shows the real amount left after one slot is paid", () => {
   vi.stubGlobal("React", React);
   const bill: OpenBill = { tableId: "t", code: null, customerName: null, discount: 0, discounted: false, key: "t", orderIds: ["order"], items: [], tableLabel: "1", total: 100, collected: 50,

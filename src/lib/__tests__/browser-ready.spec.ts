@@ -84,6 +84,27 @@ it("fails unresolved data instead of auditing the page shell", async () => {
   await result;
 });
 
+it("names the requests still in flight when readiness times out, with the same rules", async () => {
+  const page = new FakePage();
+  const pending = trackData(page);
+  const poll = { resourceType: () => "fetch", method: () => "GET", url: () => "http://localhost/api/table-membership?restaurantId=r" };
+  page.emit("request", poll);
+  page.emit("request", { resourceType: () => "image", method: () => "GET", url: () => "http://localhost/logo.png" });
+  const result = expect(ready(page, { url: page.url(), pending, timeout: 500 }))
+    .rejects.toThrow("page state did not become ready in 500ms (in flight: GET http://localhost/api/table-membership?restaurantId=r)");
+  await vi.advanceTimersByTimeAsync(600);
+  await result;
+  // Nothing tracked in flight says so; an untracked visit adds nothing.
+  page.emit("requestfinished", poll);
+  page.content = false;
+  const quiet = expect(ready(page, { url: page.url(), pending, timeout: 500 })).rejects.toThrow(/ready in 500ms \(nothing in flight\)$/);
+  await vi.advanceTimersByTimeAsync(600);
+  await quiet;
+  const bare = expect(ready(page, { url: page.url(), timeout: 500 })).rejects.toThrow(/did not become ready in 500ms$/);
+  await vi.advanceTimersByTimeAsync(600);
+  await bare;
+});
+
 it("leaves a failed navigation to the pool retry policy", async () => {
   const goto = vi.fn().mockRejectedValue(new Error("navigation refused"));
   await expect(navigate({ goto }, "http://localhost/login", phaseTimings().phase, new Set())).rejects.toThrow("navigation refused");

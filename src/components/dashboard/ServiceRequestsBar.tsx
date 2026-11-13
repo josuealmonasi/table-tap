@@ -4,7 +4,8 @@ import { usePendingPhones } from "@/hooks/usePendingPhones";
 import PhoneRequest from "@/components/table-membership/phone-request";
 import { useServiceRequests } from "@/hooks/useServiceRequests";
 import type { BoardRequest } from "@/lib/kitchen-ticket";
-import { useT } from "@/lib/i18n/context";
+import { useLocale, useT } from "@/lib/i18n/context";
+import { formatAgo } from "@/lib/elapsed";
 import { BillIcon, CallWaiterIcon, StatusReadyIcon } from "@/components/ui/icons";
 import type { ReadyTable } from "@/lib/ready-tables";
 import { useEffect, useState, useTransition } from "react";
@@ -48,6 +49,7 @@ export default function ServiceRequestsBar({
   kitchen = false,
 }: ServiceRequestsBarProps) {
   const t = useT();
+  const { locale } = useLocale();
   const phones = usePendingPhones(restaurantId, canSettle);
   const { requests, markDone } = useServiceRequests(restaurantId, initialRequests, kitchen, readFailed);
   // The table whose bill the waiter is collecting, if any.
@@ -67,15 +69,7 @@ export default function ServiceRequestsBar({
   // How long the table has been waiting. Minutes for the first hour, because
   // that is how a floor thinks; hours and days after that, because a request
   // left open since Tuesday printed as "11495m ago" and read as a glitch.
-  const age = (createdAt: string): string => {
-    if (now === null) return "";
-    const mins = Math.floor((now - new Date(createdAt).getTime()) / 60_000);
-    if (mins < 1) return t("orders.justNow");
-    if (mins < 60) return t("orders.minsAgo", { m: mins });
-    const hours = Math.floor(mins / 60);
-    if (hours < 24) return t("orders.hoursAgo", { h: hours });
-    return t("orders.daysAgo", { d: Math.floor(hours / 24) });
-  };
+  const age = (createdAt: string): string => (now === null ? "" : formatAgo(createdAt, now, locale));
 
   const carrying = onDelivered ? ready : [];
   if (requests.length === 0 && carrying.length === 0 && phones.pending.length === 0) return null;

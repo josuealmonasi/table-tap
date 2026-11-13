@@ -53,18 +53,20 @@ export default function QrScanner({
       </button>
 
       <Modal open={open} onClose={() => setOpen(false)} maxWidth={420} title={title}>
-        {problem ? (
-          <p className="tt-muted" style={{ fontSize: 14, margin: 0 }}>
-            {problem}
-          </p>
-        ) : (
-          <>
-            <p className="tt-muted" style={{ fontSize: 13, marginTop: 0 }}>
-              {hint}
+        <div className="tt-scan-stage">
+          {problem ? (
+            <p className="tt-muted" style={{ fontSize: 14 }}>
+              {problem}
             </p>
-            <video ref={videoRef} className="tt-scan-view" muted playsInline />
-          </>
-        )}
+          ) : (
+            <>
+              <p className="tt-muted" style={{ fontSize: 13 }}>
+                {hint}
+              </p>
+              <video ref={videoRef} className="tt-scan-view" muted playsInline />
+            </>
+          )}
+        </div>
       </Modal>
     </>
   );
