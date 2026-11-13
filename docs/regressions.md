@@ -7024,7 +7024,9 @@ checking that they did. Each is now pinned:
   trialing paid tier whose cancellation date or period end passed more than
   three days ago, storing the answer through the webhook's transition (so a
   cancelled subscription goes to Carta, an unpaid one locks). A failed Stripe
-  read writes nothing. `recovery/__tests__/subscriptions.spec.ts`.
+  read writes nothing. Restaurants synced before the column existed are read
+  once (a page per run) to store their period end, without waiting for a
+  webhook. `recovery/__tests__/subscriptions.spec.ts`.
 - **The ticket drain got only the cron's leftovers.** It ran in `after()` once
   five 10-second jobs had finished. It now runs alongside them with its own
   40-second budget, stops between groups at the deadline and releases what it
@@ -7038,7 +7040,11 @@ checking that they did. Each is now pinned:
   ten attempts `fail_stripe_dispute_event` sets the event to `review`:
   recovery no longer polls it, `admin_delete_restaurant` does not wait on it,
   it is archived with the restaurant, and `pnpm money` lists it. A new webhook
-  delivery may still claim and finish it. `disputes/__tests__/recovery.spec.ts`.
+  delivery may still claim and finish it. The restaurant's dispute readers
+  (Costs and Analytics summary, order history) show it as "Requiere revisión"
+  / "Needs review", counted apart from pending, never as both
+  (`DisputeReport.review`, `NEEDS_REVIEW`). `disputes/__tests__/recovery.spec.ts`,
+  `read.spec.ts`, `disputes.react-component.spec.tsx`.
 - **A forgiven walkout stamped the visit card and emailed a ticket** (owner's
   decision, 2026-11-12: it does neither). Both triggers now skip an order
   settled by `write_off_remainder_v1` (`tabletap.walkout_writer`, set only

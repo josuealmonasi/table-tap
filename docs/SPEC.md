@@ -2936,11 +2936,15 @@ Five isolated jobs use the admin client and the existing locked writers:
   So are active or trialing paid tiers whose scheduled end (`plan_ends_at`)
   or paid period (`plan_period_ends_at`) passed more than three days ago: a
   cancellation or unpaid renewal whose webhooks all failed ends the tier the
-  same way the webhook would. A failed Stripe read changes nothing.
+  same way the webhook would. A failed Stripe read changes nothing. Paid
+  tiers with no stored period end (synced before the column existed) are read
+  once, a page per run, to store it.
   Recovery cannot relink a subscription that an admin has since replaced.
 - Dispute events still pending or in error are refreshed; after ten failed
   attempts an event moves to `review`, which recovery no longer polls and
-  restaurant deletion does not wait on.
+  restaurant deletion does not wait on. Costs, Analytics and the order
+  history show such a case as "Requiere revisión" / "Needs review", counted
+  apart from pending.
 
 Each job has ten seconds, with bounded network requests and no Stripe network
 retries. Each source reads at most 25 items per batch (refunds and

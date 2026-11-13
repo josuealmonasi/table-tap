@@ -48,5 +48,16 @@ export async function recoverSubscriptions(context: RecoveryContext) {
     return !data || data.plan === "carta" || !PAID.includes(data.plan_status)
       || (!ended(data.plan_ends_at) && !ended(data.plan_period_ends_at));
   }, "restaurant_created_at_upper_bound"));
-  return combineResults([unpaid, expired], "restaurant_created_at_upper_bound");
+  // Restaurants synced before plan_period_ends_at existed have none stored:
+  // read Stripe once (a page per run) and store it through the same
+  // transition, so they are covered without waiting for their next webhook.
+  const unknown = await isolateJob("subscription period backfill", () => runBatch("subscription period backfill", context, (limit, offset = 0) => db.from("restaurants")
+    .select(columns, { count: "exact" }).in("plan_status", PAID).neq("plan", "carta").not("stripe_subscription_id", "is", null)
+    .is("plan_period_ends_at", null).order("created_at").order("id").range(offset, offset + limit - 1).returns<SubscriptionRow[]>(), async row => {
+    await refresh(context, row);
+    const { data, error } = await db.from("restaurants").select("plan, plan_status, plan_period_ends_at").eq("id", row.id).maybeSingle();
+    if (error) throw new Error(error.message);
+    return !data || data.plan === "carta" || !PAID.includes(data.plan_status) || data.plan_period_ends_at !== null;
+  }, "restaurant_created_at_upper_bound"));
+  return combineResults([unpaid, expired, unknown], "restaurant_created_at_upper_bound");
 }

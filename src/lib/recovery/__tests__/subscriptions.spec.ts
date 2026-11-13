@@ -60,7 +60,39 @@ it("finding 3: a renewal that Stripe confirms moves the period forward and leave
 
 it("finding 3: leaves restaurants inside the grace window, on the free tier or without a subscription alone", async () => {
   f.tables.restaurants = [paid({ plan_period_ends_at: ago(1) }), paid({ id: "r2", plan: "carta", plan_period_ends_at: ago(9) }),
-    paid({ id: "r3", stripe_subscription_id: null, plan_period_ends_at: ago(9) }), paid({ id: "r4", plan_period_ends_at: null })];
+    paid({ id: "r3", stripe_subscription_id: null, plan_period_ends_at: ago(9) }), paid({ id: "r4", plan: "carta", plan_period_ends_at: null }),
+    paid({ id: "r5", stripe_subscription_id: null, plan_period_ends_at: null })];
   expect(await recoverSubscriptions(f.context)).toMatchObject({ done: 0, pending: 0, failed: 0 });
   expect(f.client.subscriptions.retrieve).not.toHaveBeenCalled();
+});
+
+it("backfill: a paid restaurant synced before the period column is read once and gets its period end", async () => {
+  f.tables.restaurants = [paid({ plan_period_ends_at: null })];
+  const end = new Date(Date.now() + 20 * day).toISOString();
+  const sub = { id: "sub", status: "active", metadata: { restaurant_id: "r1" }, current_period_end: end };
+  f.client.subscriptions.retrieve.mockResolvedValue(sub);
+  storesStripeState();
+  expect(await recoverSubscriptions(f.context)).toMatchObject({ done: 1, pending: 0, failed: 0 });
+  expect(apply).toHaveBeenCalledWith(sub, f.context.db, f.context.client, "sub");
+  expect(f.tables.restaurants[0]).toMatchObject({ plan: "casa", plan_status: "active", plan_period_ends_at: end });
+  // Stored: the next run leaves it alone.
+  vi.clearAllMocks();
+  expect(await recoverSubscriptions(f.context)).toMatchObject({ done: 0, pending: 0 });
+  expect(f.client.subscriptions.retrieve).not.toHaveBeenCalled();
+});
+
+it("backfill: a Stripe read error stores nothing and downgrades nothing", async () => {
+  f.tables.restaurants = [paid({ plan_period_ends_at: null })];
+  f.client.subscriptions.retrieve.mockRejectedValue(new Error("Stripe offline"));
+  expect(await recoverSubscriptions(f.context)).toMatchObject({ done: 0, pending: 1, failed: 1 });
+  expect(apply).not.toHaveBeenCalled();
+  expect(f.tables.restaurants[0]).toMatchObject({ plan: "casa", plan_status: "active", plan_period_ends_at: null });
+});
+
+it("backfill: reads at most one page per run", async () => {
+  const { BATCH_SIZE } = await import("../job");
+  f.tables.restaurants = Array.from({ length: BATCH_SIZE + 5 }, (_, i) => paid({ id: `r${i}`, plan_period_ends_at: null }));
+  f.client.subscriptions.retrieve.mockImplementation(async (id: string) => ({ id, status: "active", metadata: { restaurant_id: "nobody" } }));
+  await recoverSubscriptions(f.context);
+  expect(f.client.subscriptions.retrieve.mock.calls.length).toBeLessThanOrEqual(BATCH_SIZE);
 });

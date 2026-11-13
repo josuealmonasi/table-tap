@@ -5,7 +5,7 @@ import useSWR from "swr";
 import { dateLocale, formatMoney } from "@/lib/format";
 import { useLocale, useT } from "@/lib/i18n/context";
 import { minorUnits } from "@/lib/disputes/report";
-import type { DisputeHistory } from "@/lib/disputes/types";
+import { NEEDS_REVIEW, type DisputeHistory } from "@/lib/disputes/types";
 
 interface Props { orderId: string; restaurantId: string; orderIds?: string[] }
 
@@ -32,7 +32,8 @@ export default function DisputeHistoryLines({ orderId, restaurantId, orderIds = 
       amount: formatMoney(minorUnits(dispute.amount_minor, dispute.currency), dispute.currency),
       status: t(`disputes.${dispute.status}`) })}</p>
     {dispute.shared && <p>{t("disputes.shared")}</p>}
-    {dispute.reconciliation_state !== "reconciled" && <p>{t("disputes.pending", { count: 1 })}</p>}
+    {dispute.reconciliation_state === NEEDS_REVIEW ? <p>{t("disputes.needsReviewState")}</p>
+      : dispute.reconciliation_state !== "reconciled" && <p>{t("disputes.pending", { count: 1 })}</p>}
     {dispute.movements.map(tx => <p key={tx.stripe_balance_transaction_id}>
       {new Date(tx.provider_created_at).toLocaleDateString(dateLocale(locale))}: {t(tx.amount_minor < 0 ? "disputes.withdrawn" : "disputes.reinstated")} {formatMoney(minorUnits(tx.amount_minor, tx.currency), tx.currency)}
       {SEP}{t("disputes.fees")} {formatMoney(minorUnits(tx.fee_minor, tx.currency), tx.currency)}
