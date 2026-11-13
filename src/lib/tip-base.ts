@@ -42,6 +42,19 @@ export function frozenTipPrincipal(principal: number | null, orders: TipOrder[])
   return Math.max(0, round2(Number(principal) * food / owed));
 }
 
+/**
+ * The tip principal of a split, whichever version froze it. A v1 split locked
+ * before `food_principal` existed still froze `amount`, what the table owed
+ * when everyone agreed. Reading what the orders owe now instead shrank with
+ * every share paid, and was divided by every share again: the second of two
+ * diners was offered a tip on half of half (review M4). Only a split with
+ * neither (never locked) falls back to the orders.
+ */
+export function splitTipPrincipal(split: { food_principal: number | null; amount?: number | null }, orders: TipOrder[]): number {
+  const amount = Number(split.amount ?? 0);
+  return frozenTipPrincipal(split.food_principal ?? (amount > 0 ? amount : null), orders);
+}
+
 /** Each frozen food cent belongs to one share; the first carries the remainder. */
 export function splitTipBase(principal: number, shares: number, selected: number[], ownBase = 0): number {
   const parts = sharesFor(principal, shares);

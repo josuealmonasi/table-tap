@@ -57,3 +57,57 @@ it("keeps platform history outside deletion cascades and denies client access or
   expect(sql).toContain("raise exception 'Platform admin audit is append-only'");
   expect(drop).toContain("drop table if exists platform_admin_audit cascade;");
 });
+
+/**
+ * Every table `delete from restaurants` removes, directly or through another
+ * cascading table. The delete archive was pinned against its own list, so ten
+ * money tables cascaded away unarchived (review bg8). Now a new cascading table
+ * fails here until it is archived or named below with the reason it is not books.
+ */
+function cascadingTables(schema: string): string[] {
+  const edges: [string, string][] = [];
+  const cascade = /references ([a-z_]+)\s*\([^)]*\)\s+on delete cascade/g;
+  for (const m of schema.matchAll(/create table if not exists ([a-z_]+) \(([\s\S]*?)\n\);/g))
+    for (const r of m[2].matchAll(cascade)) edges.push([m[1], r[1]]);
+  for (const m of schema.matchAll(/alter table (?:if exists )?([a-z_]+)\s([^;]*?);/g))
+    for (const r of m[2].matchAll(cascade)) edges.push([m[1], r[1]]);
+  const reached = new Set(["restaurants"]);
+  for (let grew = true; grew;) {
+    grew = false;
+    for (const [child, parent] of edges) if (reached.has(parent) && !reached.has(child)) { reached.add(child); grew = true; }
+  }
+  reached.delete("restaurants");
+  return [...reached].sort();
+}
+
+const NOT_BOOKS: Record<string, string> = {
+  menus: "the menu, not a record of money", categories: "the menu", menu_items: "the menu",
+  item_addons: "the menu", dietary_tags: "the menu", icon_groups: "the menu", icon_group_items: "the menu",
+  promotions: "an offer's terms; what it took off is on the orders", promotion_items: "an offer's terms",
+  coupons: "a code's terms; each use is in coupon_redemptions", loyalty_programs: "the card's terms",
+  loyalty_cards: "a diner's card; rewards given are in loyalty_redemptions", loyalty_visits: "stamps, no money",
+  restaurant_tables: "the floor plan", staff: "logins, removed with the restaurant",
+  dish_ratings: "diner opinions", notifications: "the bell", print_jobs: "printer queue",
+  kitchen_tickets: "a projection of orders", kitchen_requests: "a projection of service requests",
+  service_requests: "calls for a waiter", ticket_email_outbox: "email delivery, holds diner addresses",
+  stock_reservations: "in-flight stock holds", fee_reconcile_queue: "work queue; deletion waits for it to empty",
+  ingredients: "inventory catalogue", ingredient_prices: "inventory catalogue", recipe_lines: "inventory catalogue",
+  ingredient_counts: "stock counts", ingredient_movements: "stock movements", ingredient_consumption: "stock use",
+  waste_entries: "stock written off, not money collected or owed",
+};
+
+it("bg8: archives every cascading table that is not named as outside the books", () => {
+  const tables = cascadingTables(sql);
+  expect(tables.length).toBeGreaterThan(50);
+  for (const t of ["fee_returns", "refund_failures", "refund_due_coverage", "refund_fee_epochs", "coupon_redemptions",
+    "write_off_requests", "bill_splits", "bill_split_slots", "bill_split_checkout_slots", "loyalty_redemptions"]) {
+    expect(tables).toContain(t);
+  }
+  const missing = tables.filter(t => !NOT_BOOKS[t] && !body.includes(`'${t}'`));
+  expect(missing, `cascading tables the delete never archives: ${missing.join(", ")}`).toEqual([]);
+  const stale = Object.keys(NOT_BOOKS).filter(t => !tables.includes(t) || body.includes(`'${t}'`));
+  expect(stale, `NOT_BOOKS entries that no longer apply: ${stale.join(", ")}`).toEqual([]);
+  // Every archive runs before the cascade.
+  const cascade = body.indexOf("delete from restaurants");
+  for (const t of tables.filter(t => !NOT_BOOKS[t])) expect(body.indexOf(`'${t}'`)).toBeLessThan(cascade);
+});

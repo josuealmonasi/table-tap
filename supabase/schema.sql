@@ -204,6 +204,12 @@ alter table restaurants add column if not exists service_enabled boolean not nul
 alter table restaurants add column if not exists tax_pct numeric not null default 0;
 alter table restaurants add column if not exists tax_show_breakdown boolean not null default false;
 alter table restaurants add column if not exists stripe_account_id text;
+-- One restaurant per connected account. Every Connect webhook finds its
+-- restaurant by this column with maybeSingle(); a duplicate made each refund
+-- event raise, answer 500, and Stripe would retry until it disabled the
+-- endpoint (review bg9). Dropped with the table.
+create unique index if not exists restaurants_stripe_account_unique
+  on restaurants (stripe_account_id) where stripe_account_id is not null;
 alter table restaurants add column if not exists stripe_charges_enabled boolean not null default false;
 alter table orders add column if not exists stripe_refund_id text;
 alter table orders add column if not exists tip numeric not null default 0;
@@ -3686,6 +3692,53 @@ $$;
 revoke all on function public.attach_loyalty_card_v1(uuid, text, uuid, uuid, text) from public, anon, authenticated;
 grant execute on function public.attach_loyalty_card_v1(uuid, text, uuid, uuid, text) to service_role;
 
+-- v1 let any member of a sitting replace the card already on it, so one phone
+-- could redirect every ticket email and stamp of the table to its own card
+-- (review access1). Replacing a different card now takes that card's code,
+-- the same proof removing it takes; staff replace it as before. `taken`
+-- answers a diner who cannot prove it.
+create or replace function public.attach_loyalty_card_v2(
+  p_restaurant uuid, p_code text, p_order uuid, p_session uuid, p_actor text, p_staff boolean, p_current_code text
+) returns jsonb language plpgsql security definer set search_path = public as $$
+declare v_card loyalty_cards%rowtype; v_paid boolean; v_status text; v_current uuid;
+begin
+  if num_nonnulls(p_order, p_session) <> 1 or nullif(btrim(coalesce(p_actor, '')), '') is null or p_staff is null then
+    raise exception 'invalid loyalty attachment';
+  end if;
+  if not public.loyalty_open(p_restaurant) then return jsonb_build_object('outcome', 'off'); end if;
+  select * into v_card from loyalty_cards
+    where restaurant_id = p_restaurant and code = upper(replace(btrim(coalesce(p_code, '')), '-', ''));
+  if not found then return jsonb_build_object('outcome', 'unknown'); end if;
+  if p_order is not null then
+    -- Read under the lock: a cancellation that commits after the route's
+    -- own check must still answer "gone" (Codex review of #620).
+    select paid, status, loyalty_card_id into v_paid, v_status, v_current
+      from orders where id = p_order and restaurant_id = p_restaurant for update;
+    if not found or v_status = 'cancelled' then return jsonb_build_object('outcome', 'gone'); end if;
+    if v_paid then return jsonb_build_object('outcome', 'paid'); end if;
+  else
+    select loyalty_card_id into v_current from table_sessions
+      where id = p_session and restaurant_id = p_restaurant and closed_at is null for update;
+    if not found then return jsonb_build_object('outcome', 'gone'); end if;
+  end if;
+  if not p_staff and v_current is not null and v_current <> v_card.id and not exists (
+    select 1 from loyalty_cards c where c.id = v_current and c.restaurant_id = p_restaurant
+      and c.code = upper(replace(btrim(coalesce(p_current_code, '')), '-', ''))) then
+    return jsonb_build_object('outcome', 'taken');
+  end if;
+  if p_order is not null then
+    update orders set loyalty_card_id = v_card.id where id = p_order and restaurant_id = p_restaurant;
+  else
+    update table_sessions set loyalty_card_id = v_card.id
+      where id = p_session and restaurant_id = p_restaurant and closed_at is null;
+  end if;
+  return jsonb_build_object('outcome', 'attached', 'cardId', v_card.id,
+    'progress', public.loyalty_progress(v_card.id), 'goal', v_card.goal);
+end;
+$$;
+revoke all on function public.attach_loyalty_card_v2(uuid, text, uuid, uuid, text, boolean, text) from public, anon, authenticated;
+grant execute on function public.attach_loyalty_card_v2(uuid, text, uuid, uuid, text, boolean, text) to service_role;
+
 -- The moment a sale becomes paid it takes its sitting's card, if it has none
 -- of its own, and keeps it: the receipt and every reprint then name the card
 -- this payment stamped, even if the table's bill is given another card or none
@@ -5214,7 +5267,8 @@ grant execute on function public.cancel_order(uuid, uuid, text, jsonb, boolean, 
 create table if not exists platform_fees (
   id                    uuid primary key default gen_random_uuid(),
   restaurant_id         uuid not null references restaurants(id) on delete cascade,
-  -- The UTC month the fee was reserved in: the month whose ceiling it uses.
+  -- The month the fee was reserved in: the month whose ceiling it uses.
+  -- The restaurant's own calendar month since review bg10 (`fee_month`).
   period                date not null,
   cents                 integer not null check (cents > 0),
   refunded_cents        integer not null default 0 check (refunded_cents >= 0 and refunded_cents <= cents),
@@ -5245,6 +5299,18 @@ revoke all on platform_fees from anon;
 revoke all on platform_fees from authenticated;
 grant all on platform_fees to service_role;
 
+-- The fee month: the first day of the restaurant's own calendar month, in its
+-- timezone. It was the UTC month, so in Mexico City the cap and the currency
+-- lock rolled over at 18:00 on the last day (review bg10). The cap, the
+-- session fee and the currency lock all read the month here, so they agree.
+create or replace function public.fee_month(p_restaurant uuid)
+returns date language sql stable security definer set search_path = public as $$
+  select date_trunc('month', now() at time zone coalesce(
+    (select r.timezone from restaurants r where r.id = p_restaurant), 'America/Mexico_City'))::date;
+$$;
+revoke all on function public.fee_month(uuid) from public, anon, authenticated;
+grant execute on function public.fee_month(uuid) to service_role;
+
 -- Reserve this checkout's fee under the month's ceiling. `p_cents` is the
 -- per-order fee; `p_cap_cents` the month's ceiling, null for none. Returns
 -- no row when nothing is to be charged: the ceiling is reached, or `p_ref`
@@ -5254,7 +5320,7 @@ create or replace function public.reserve_platform_fee(
 ) returns table (fee_id uuid, fee_cents integer)
 language plpgsql security definer set search_path = public as $$
 declare
-  v_period date := date_trunc('month', now() at time zone 'utc')::date;
+  v_period date := public.fee_month(p_restaurant);
   v_used integer;
   v_cents integer;
 begin
@@ -5291,9 +5357,9 @@ grant execute on function public.reserve_platform_fee(uuid, integer, integer, te
 -- Returns that day, or null when nothing locks the currency.
 create or replace function public.currency_locked_until(p_restaurant uuid)
 returns date language sql stable security definer set search_path = public as $$
-  select (date_trunc('month', now() at time zone 'utc') + interval '1 month')::date
+  select (public.fee_month(p_restaurant) + interval '1 month')::date
   where exists(select 1 from platform_fees f where f.restaurant_id = p_restaurant
-    and f.period = date_trunc('month', now() at time zone 'utc')::date
+    and f.period = public.fee_month(p_restaurant)
     and f.status <> 'released' and f.cents > f.refunded_cents);
 $$;
 revoke all on function public.currency_locked_until(uuid) from public, anon, authenticated;
@@ -5355,7 +5421,7 @@ create or replace function public.record_session_fee(
 begin
   if p_cents is null or p_cents <= 0 or p_ref is null then return false; end if;
   insert into platform_fees (restaurant_id, period, cents, status, source, ref, stripe_payment_intent, charge_cents, settled_at)
-  values (p_restaurant, date_trunc('month', now() at time zone 'utc')::date, p_cents, 'taken', 'session', p_ref,
+  values (p_restaurant, public.fee_month(p_restaurant), p_cents, 'taken', 'session', p_ref,
           p_intent, nullif(p_charge_cents, 0), now())
   on conflict (restaurant_id, ref) where ref is not null and status <> 'released' do nothing;
   return found;
@@ -10171,7 +10237,16 @@ begin
     or exists (select 1 from account_checkouts where restaurant_id = p_restaurant and status = 'open')
     or exists (select 1 from platform_fees where restaurant_id = p_restaurant and status = 'open')
     or exists (select 1 from fee_returns where restaurant_id = p_restaurant and status in ('prepared', 'dispatched', 'unresolved'))
-    or exists (select 1 from fee_reconcile_queue where restaurant_id = p_restaurant) then
+    -- Only a queued charge some record says TableTap made waits: the same
+    -- sources the recovery reads its account from (FEE_ACCOUNT_SOURCES in
+    -- src/lib/refunds/fee-queue.ts). Anything else is closed as not ours by
+    -- the cron and never holds the deletion (review bg4).
+    or exists (select 1 from fee_reconcile_queue q where q.restaurant_id = p_restaurant and (
+      exists (select 1 from fee_returns x where x.restaurant_id = q.restaurant_id and x.stripe_payment_intent = q.stripe_payment_intent)
+      or exists (select 1 from diner_checkouts x where x.restaurant_id = q.restaurant_id and x.stripe_payment_intent = q.stripe_payment_intent)
+      or exists (select 1 from refund_operations x where x.restaurant_id = q.restaurant_id and x.stripe_payment_intent = q.stripe_payment_intent and x.stripe_account_id is not null)
+      or exists (select 1 from refunds_due x where x.restaurant_id = q.restaurant_id and x.stripe_payment_intent = q.stripe_payment_intent and x.stripe_account_id is not null)
+      or exists (select 1 from payments x where x.restaurant_id = q.restaurant_id and x.stripe_payment_intent = q.stripe_payment_intent and x.stripe_account_id is not null))) then
     return jsonb_build_object('outcome', 'provider');
   end if;
   if exists (select 1 from offline_sale_queue where restaurant_id = p_restaurant and approved_at is null and resolved_at is null) then
@@ -10225,7 +10300,12 @@ begin
     'refund_allocations', 'refund_attempts', 'order_adjustments', 'refunds_due',
     'refund_due_attempts', 'platform_fees', 'cash_shifts', 'cash_movements',
     'terminal_deposits', 'customer_accounts', 'account_movements', 'ingredient_purchases',
-    'account_checkouts', 'diner_checkouts', 'table_sessions', 'user_logs'
+    'account_checkouts', 'diner_checkouts', 'table_sessions', 'user_logs',
+    -- The evidence and approvals behind the books above: fee refunds we
+    -- returned, discounts and losses someone approved, coupons and rewards
+    -- given as money off, and how a bill was divided (review bg8).
+    'fee_returns', 'coupon_redemptions', 'write_off_requests', 'discount_requests',
+    'loyalty_redemptions', 'bill_splits'
   ] loop
     -- Lock existing rows as they are copied too: an update must not change a
     -- receipt after its copy. A failed copy or cascade rolls back both writes.
@@ -10254,6 +10334,28 @@ begin
     select p_restaurant, 'table_session_members', t.id, to_jsonb(t)
     from (select m.* from table_session_members m join table_sessions s on s.id = m.session_id
       where s.restaurant_id = p_restaurant for update of m) t;
+  -- Money tables keyed by something other than an id get a stable id made
+  -- from their own key, so a retained row still names exactly one source row.
+  insert into restaurant_accounting_records (restaurant_id, source_table, source_id, row_data)
+    select p_restaurant, 'refund_failures', md5(concat_ws(':', t.restaurant_id, t.stripe_refund_id))::uuid, to_jsonb(t)
+    from (select * from refund_failures where restaurant_id = p_restaurant for update) t;
+  insert into restaurant_accounting_records (restaurant_id, source_table, source_id, row_data)
+    select p_restaurant, 'refund_fee_epochs', md5(concat_ws(':', t.restaurant_id, t.stripe_payment_intent))::uuid, to_jsonb(t)
+    from (select * from refund_fee_epochs where restaurant_id = p_restaurant for update) t;
+  insert into restaurant_accounting_records (restaurant_id, source_table, source_id, row_data)
+    select p_restaurant, 'refund_due_coverage', md5(concat_ws(':', t.due_id, t.stripe_refund_id))::uuid, to_jsonb(t)
+    from (select * from refund_due_coverage where restaurant_id = p_restaurant for update) t;
+  insert into restaurant_accounting_records (restaurant_id, source_table, source_id, row_data)
+    select p_restaurant, 'bill_split_slots', md5(concat_ws(':', t.split_id, t.share_no))::uuid, to_jsonb(t)
+    from (select * from bill_split_slots where restaurant_id = p_restaurant for update) t;
+  insert into restaurant_accounting_records (restaurant_id, source_table, source_id, row_data)
+    select p_restaurant, 'bill_split_checkout_slots', md5(concat_ws(':', t.checkout_id, t.split_id, t.share_no))::uuid, to_jsonb(t)
+    from (select * from bill_split_checkout_slots where restaurant_id = p_restaurant for update) t;
+  -- Legacy split claims have no restaurant_id; reach them through the split.
+  insert into restaurant_accounting_records (restaurant_id, source_table, source_id, row_data)
+    select p_restaurant, 'bill_split_claims', md5(concat_ws(':', t.split_id, t.share_no))::uuid, to_jsonb(t)
+    from (select c.* from bill_split_claims c join bill_splits s on s.id = c.split_id
+      where s.restaurant_id = p_restaurant for update of c) t;
   delete from restaurants where id = p_restaurant;
   return jsonb_build_object('outcome', 'deleted');
 end;

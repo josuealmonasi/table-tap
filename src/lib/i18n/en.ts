@@ -33,6 +33,7 @@ export const en = {
   cardEmail: {
     ownReadFailed: "We could not check your card's email. You can enter a new one.",
     takenDiner: "That email is already on card ···· {suffix}. Use that card.",
+    submittedDiner: "Saved. If this email is already on another visit card here, your tickets keep going to it through that card.",
     scanToRead: "Scan the card to check its email.",
     differentCard: "Scan card ···· {suffix} to change its email.",
     title: "Tickets by email",
@@ -73,6 +74,7 @@ export const en = {
     off: "The visit card is switched off or unavailable on this plan.",
     paid: "This sale is already paid. Present the card before paying.",
     gone: "This sale or sitting is no longer open.",
+    taken: "Another visit card is already on this table. Ask the staff to change it.",
     progress: "Visit card ···· {code}: {progress} of {goal} · {n} more for {reward}",
     earned: "Visit card ···· {code}: You earned {reward}! Ask for it on your next visit.",
     pending: "Visit card ···· {code}: your visit will be confirmed when the sale reconnects.",

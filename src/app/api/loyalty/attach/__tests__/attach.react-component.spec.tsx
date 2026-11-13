@@ -41,14 +41,14 @@ it.each(["cashier", "waiter", "manager", "owner"])("%s attaches within their own
   f.role = role;
   const res = await post();
   expect(res.status).toBe(200);
-  expect(f.rpc).toHaveBeenCalledWith("attach_loyalty_card_v1", expect.objectContaining({ p_restaurant: ids.restaurantId,
+  expect(f.rpc).toHaveBeenCalledWith("attach_loyalty_card_v2", expect.objectContaining({ p_restaurant: ids.restaurantId, p_staff: true,
     p_code: "K7QM3XW9K7P2", p_order: ids.orderId, p_session: null, p_actor: "staff@test" }));
   expect(await res.json()).toEqual({ outcome: "attached", card: { suffix: "K7P2", progress: 5, goal: 8 } });
 });
 it.each(["kitchen", null])("%s cannot attach arbitrary orders", async role => {
   f.role = role; expect((await post()).status).toBe(403); expect(f.rpc).not.toHaveBeenCalled();
 });
-it.each([["unknown", 404], ["off", 409], ["paid", 409], ["gone", 404]] as const)("translates RPC %s", async (outcome, status) => {
+it.each([["unknown", 404], ["off", 409], ["paid", 409], ["gone", 404], ["taken", 409]] as const)("translates RPC %s", async (outcome, status) => {
   f.result.outcome = outcome; const res = await post();
   expect(res.status).toBe(status); const data = await res.json();
   expect(data.error).not.toMatch(/^loyaltyAttach\./); expect(data.outcome).toBe(outcome);
@@ -64,6 +64,31 @@ it("a member attaches the device's bearer code only to their live sitting", asyn
   f.role = null; const sitting = { restaurantId: ids.restaurantId, tableId: ids.tableId, sessionId: ids.sessionId };
   expect((await post({ ...sitting, code })).status).toBe(200);
   expect(f.rpc).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ p_actor: "diner", p_session: ids.sessionId }));
+});
+// Review access1: a member could replace another diner's card and take the
+// table's ticket emails and stamps. Replacing needs the current card's code.
+it("a diner replaces a different card only with that card's code", async () => {
+  f.role = null; const sitting = { restaurantId: ids.restaurantId, tableId: ids.tableId, sessionId: ids.sessionId };
+  await post({ ...sitting, code, currentCode: "abcd-efgh-jkmn" });
+  expect(f.rpc).toHaveBeenCalledWith("attach_loyalty_card_v2", expect.objectContaining({
+    p_actor: "diner", p_staff: false, p_current_code: "ABCDEFGHJKMN" }));
+  f.result.outcome = "taken";
+  const res = await post({ ...sitting, code });
+  expect(res.status).toBe(409);
+  expect(await res.json()).toMatchObject({ outcome: "taken" });
+  expect(f.rpc).toHaveBeenLastCalledWith("attach_loyalty_card_v2", expect.objectContaining({ p_staff: false, p_current_code: null }));
+});
+it("the database refuses a diner's replacement without the current card's code, under the row lock", async () => {
+  const { readFileSync } = await import("node:fs");
+  const sql = readFileSync("supabase/schema.sql", "utf8");
+  const body = sql.split("create or replace function public.attach_loyalty_card_v2(")[1].split("$$;")[0];
+  expect(body).toContain("p_staff boolean, p_current_code text\n)");
+  expect(body).toMatch(/select loyalty_card_id into v_current from table_sessions[\s\S]*for update/);
+  expect(body).toContain("if not p_staff and v_current is not null and v_current <> v_card.id and not exists (");
+  expect(body).toContain("c.code = upper(replace(btrim(coalesce(p_current_code, '')), '-', ''))");
+  expect(body.indexOf("'outcome', 'taken'")).toBeLessThan(body.indexOf("update table_sessions set loyalty_card_id"));
+  expect(sql).toContain("revoke all on function public.attach_loyalty_card_v2(uuid, text, uuid, uuid, text, boolean, text) from public, anon, authenticated;");
+  expect(readFileSync("supabase/drop.sql", "utf8")).toContain("drop function if exists public.attach_loyalty_card_v2(uuid, text, uuid, uuid, text, boolean, text);");
 });
 it.each(["unapproved", "other sitting", "closed", "preview", "order"])("refuses a diner's %s", async problem => {
   f.role = null; const body = { restaurantId: ids.restaurantId, tableId: ids.tableId, sessionId: ids.sessionId };
