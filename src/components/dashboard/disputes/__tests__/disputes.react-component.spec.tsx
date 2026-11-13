@@ -83,8 +83,7 @@ it("a case set aside for review is its own count and state, in both languages, n
     expect(summary).toContain(`${label}: 2`);
     expect(summary).not.toContain(locale === "es" ? "pendientes de conciliación" : "awaiting reconciliation");
     expect(summary).toContain(locale === "es" ? "Total incompleto" : "Incomplete total");
-    state.rows = [{ ...dispute, reconciliation_state: "needs_review", shared: false, movements: [] }];
-    const history = renderToStaticMarkup(<History orderId="order" restaurantId="r" />);
+    const history = renderToStaticMarkup(<History disputes={[{ ...dispute, reconciliation_state: "needs_review", shared: false, movements: [] }]} />);
     expect(history).toContain(label);
     expect(history).not.toContain(locale === "es" ? "pendientes de conciliación" : "awaiting reconciliation");
   }
