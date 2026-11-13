@@ -1,4 +1,5 @@
 import { adminCases } from "../api-admin-cases.mjs";
+import { loginSecret } from "../login-secrets.mjs";
 import { frozenOfferCases } from "../api-frozen-offers.mjs";
 
 export function adminOpeningCases() {
@@ -80,7 +81,7 @@ export function adminOwnerCases(fx) {
       path: "/api/billing/cancel", body: {}, expect: [401, 403] },
     { name: "POST /api/admin/users (manager refused)", as: "manager", method: "POST",
       path: "/api/admin/users",
-      body: { email: "nobody@tabletap.dev", password: "not-a-real-one", role: "admin" },
+      body: () => ({ email: "nobody@tabletap.dev", password: loginSecret("TEST_PASSWORD"), role: "admin" }),
       expect: [401, 403] },
     // A platform admin moves a restaurant to another plan, and its team with
     // it. Put back afterwards, trial and all.

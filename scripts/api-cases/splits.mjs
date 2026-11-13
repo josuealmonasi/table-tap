@@ -1,5 +1,6 @@
 import { tipBaseCase } from "./tip-base.mjs";
 import { MARK } from "../api-fixtures.mjs";
+import { loginSecret } from "../login-secrets.mjs";
 
 export function splitsCases(fx) {
   const { restaurant, table } = fx;
@@ -71,7 +72,7 @@ export function splitsCases(fx) {
     { name: "POST /api/ratings (a rating that is null)", as: "diner", method: "POST", path: "/api/ratings",
       body: { restaurantId: r, ratings: [null] }, expect: [400, 429] },
     { name: "POST /api/signup (a name that is a number)", as: "diner", method: "POST", path: "/api/signup",
-      body: { acceptedTerms: true, restaurantName: 7, email: "a@example.com", password: "abcdefgh" }, expect: [400, 429] },
+      body: () => ({ acceptedTerms: true, restaurantName: 7, email: "a@example.com", password: loginSecret("TEST_PASSWORD") }), expect: [400, 429] },
     { name: "POST /api/split/join (no such split)", as: "diner", method: "POST", path: "/api/split/join",
       body: { splitId: "00000000-0000-0000-0000-000000000000", sessionId: fx.sessionId ?? "",
               diner: "apicheck", restaurantId: r, tableId: table.id },

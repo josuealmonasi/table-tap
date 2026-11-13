@@ -11,6 +11,7 @@ import { memberFixture } from "./table-member-fixture.mjs";
 import { createClient } from "@supabase/supabase-js";
 import { loginByEmail } from "./logins.mjs";
 import { sessionCookieHeader } from "./session-cookie.mjs";
+import { loginSecret } from "./login-secrets.mjs";
 
 export const MARK = "apicheck";
 
@@ -30,11 +31,13 @@ export const PART_TIP = 0.45;
 const PART_TOTAL = (PART_AMOUNT + PART_TIP).toFixed(2);
 
 export async function setup(env, base) {
+  const demo = loginSecret("DEMO_PASSWORD", env);
+  const test = loginSecret("TEST_PASSWORD", env);
   // When this run began: what it reserved in the fee ledger is removed after.
   const startedAt = new Date().toISOString();
   const admin = createClient(env.NEXT_PUBLIC_SUPABASE_URL, env.SUPABASE_SECRET_KEY);
 
-  const cookieFor = async (email, password = "demo123") => {
+  const cookieFor = async (email, password = demo) => {
     const c = createClient(env.NEXT_PUBLIC_SUPABASE_URL, env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY);
     const { data, error } = await c.auth.signInWithPassword({ email, password });
     if (error) throw new Error(`could not sign in as ${email}: ${error.message}`);
@@ -386,7 +389,7 @@ export async function setup(env, base) {
     staffUserId = (await loginByEmail(admin, staffEmail))?.id ?? null;
     if (!staffUserId) {
       const { data: made } = await admin.auth.admin.createUser({
-        email: staffEmail, password: "demo123", email_confirm: true,
+        email: staffEmail, password: test, email_confirm: true,
       });
       staffUserId = made?.user?.id ?? null;
     }

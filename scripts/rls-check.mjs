@@ -23,9 +23,12 @@ import { refuseProduction, watchDevWorker } from "./preflight.mjs";
 import { DEV_URL } from "./dev-url.mjs";
 import { everyLogin } from "./logins.mjs";
 import { sessionCookieHeader } from "./session-cookie.mjs";
+import { loginSecret } from "./login-secrets.mjs";
 
 refuseProduction("rls", "it plants rows, and asks for writes on a real restaurant that must be refused");
 process.loadEnvFile(join(process.cwd(), ".env.development.local"));
+const demo = loginSecret("DEMO_PASSWORD");
+const test = loginSecret("TEST_PASSWORD");
 const BASE = DEV_URL;
 watchDevWorker(BASE);
 
@@ -151,7 +154,7 @@ let signIn = { error: new Error("no restaurant has an owner who can sign in") };
 for (const r of restaurants ?? []) {
   const owner = users.find(u => u.id === r.owner_id);
   if (!owner?.email) continue;
-  for (const password of ["demo123", "test123"]) {
+  for (const password of [demo, test]) {
     const attempt = await asUser.auth.signInWithPassword({ email: owner.email, password });
     if (!attempt.error) { mine = r; signIn = attempt; break; }
   }
@@ -412,7 +415,7 @@ if (!signIn.error && theirs) {
     process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY,
   );
   const kSignIn = await kitchen.auth.signInWithPassword({
-    email: "demo-kitchen@tabletap.dev", password: "demo123",
+    email: "demo-kitchen@tabletap.dev", password: demo,
   });
   if (!kSignIn.error) {
     const kCookie = sessionCookieHeader(kSignIn.data.session, process.env.NEXT_PUBLIC_SUPABASE_URL);
@@ -483,7 +486,7 @@ if (!signIn.error && theirs) {
   const home = rs3.find(r => r.name === "Demo Bistro") ?? rs3[0];
   const away = rs3.find(r => r.id !== home.id);
   const kitchen = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY);
-  const kSignIn = await kitchen.auth.signInWithPassword({ email: "demo-kitchen@tabletap.dev", password: "demo123" });
+  const kSignIn = await kitchen.auth.signInWithPassword({ email: "demo-kitchen@tabletap.dev", password: demo });
   const signInError = kSignIn.error?.message;
   const [{ data: myTable }, { data: theirTable }] = await Promise.all([
     admin.from("restaurant_tables").select("id, label").eq("restaurant_id", home.id).limit(1).maybeSingle(),
@@ -512,7 +515,7 @@ if (!signIn.error && theirs) {
       if (still.status === "open") ok("kitchen cannot write a service request directly");
       else bad(`kitchen wrote a service request directly (${still.status})`);
       const waiter = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY);
-      const { error: waiterError } = await waiter.auth.signInWithPassword({ email: "demo-waiter@tabletap.dev", password: "demo123" });
+      const { error: waiterError } = await waiter.auth.signInWithPassword({ email: "demo-waiter@tabletap.dev", password: demo });
       if (waiterError) bad(`cannot sign in as the waiter — the control did not run: ${waiterError.message}`);
       else {
         await waiter.from("service_requests").update({ status: "done" }).eq("id", probe.id);
@@ -550,7 +553,7 @@ if (!signIn.error && theirs) {
   // anonymous key cannot read these columns either, so a failed sign-in
   // printed four oks about a staff account that never took part.
   const { error: staffErr } = await staff.auth.signInWithPassword({
-    email: "demo-kitchen@tabletap.dev", password: "demo123",
+    email: "demo-kitchen@tabletap.dev", password: demo,
   });
   if (staffErr) {
     bad(`cannot sign in as the kitchen — the staff column checks went unchecked (${staffErr.message})`);
@@ -585,7 +588,7 @@ if (!signIn.error && theirs) {
   );
   const { error: inErr } = await kitchen.auth.signInWithPassword({
     email: "demo-kitchen@tabletap.dev",
-    password: "demo123",
+    password: demo,
   });
   if (inErr) {
     bad("cannot sign in as the kitchen — the takings check did not run");
@@ -608,7 +611,7 @@ if (!signIn.error && theirs) {
     );
     const { error: floorErr } = await floor.auth.signInWithPassword({
       email: "demo-cashier@tabletap.dev",
-      password: "demo123",
+      password: demo,
     });
     const paid = await floor.from("payments").select("id").limit(1);
     if (floorErr) bad(`cannot sign in as the cashier — whether they read payments went unchecked (${floorErr.message})`);
@@ -689,7 +692,7 @@ if (!signIn.error && theirs) {
       process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY,
     );
     if (email) {
-      const { error } = await who.auth.signInWithPassword({ email, password: "demo123" });
+      const { error } = await who.auth.signInWithPassword({ email, password: demo });
       if (error) { bad(`cannot sign in as ${role} — this role went unchecked`); continue; }
     }
     let reads = 0, writes = 0;
@@ -785,7 +788,7 @@ if (!signIn.error && theirs) {
   );
   const { data: kitchenAuth, error: signInError } = await kitchen.auth.signInWithPassword({
     email: "demo-kitchen@tabletap.dev",
-    password: "demo123",
+    password: demo,
   });
   // The socket is a separate connection with its own idea of who is asking,
   // and orders belong to the team under RLS. The client usually carries the

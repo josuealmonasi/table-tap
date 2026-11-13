@@ -10,6 +10,26 @@ us, and what now catches each one.
 
 ## What runs on its own
 
+### Login passwords stay outside the repository
+
+Seeds and the checks signing into those accounts have to agree on the target's
+private password. Public literals in scripts and README survived rotations and
+some checks ignored the configured demo password. `login-secrets.mjs` requires
+`DEMO_PASSWORD` or `TEST_PASSWORD` after the env file is loaded; reset validates
+before deleting anything, and reports point to the env file without printing it.
+`login-secrets.spec.ts` mocks seeded users and missing values.
+`login-password-invariant.spec.ts` scans `git ls-files` except lockfiles, permits
+generic test fakes only under `__tests__`, and plants violations in temporary
+copies to prove the guard rejects them. The retired values are refused even in
+docs and test fakes. Login addresses, roles and access checks stay the same.
+
+### API contract specs narrow optional matchers
+
+The held-cash case and its contract spec must agree that not every API case
+has an error matcher. The unit test passed while TypeScript rejected the
+optional property on the inferred union. The spec now checks the property
+exists before reading it; both translations still run through the same matcher.
+
 The deliberately unsigned legacy terminal example uses
 `mock-terminal-times.mjs` to keep its sale and deposit before `DRAWER_ERA`.
 A rolling three-day sale plus a thirty-hour deposit offset crossed that fixed
@@ -34,6 +54,8 @@ and that a new party cannot see the previous party's waiting phones.
 | A duplicate refund tracks customer completion and fee completion separately (S11 I5) | A failed fee return disappeared behind an already-refunded customer payment |
 | A duplicate refund keeps its original charge currency everywhere (S11 I9) | Changing the menu currency relabelled money owed back and the approval amount |
 |---|---|
+| API contract specs narrow optional error matchers before reading them | `cash-held-api-contract.spec.ts` passed at runtime but failed TypeScript because other cash cases have no matcher; the property check keeps both language assertions and lets static analysis pass |
+| Seeds and checks read the same private login passwords | Public scripts and README published login passwords while some checks ignored rotated env values; `login-password-invariant.spec.ts` scans tracked files and plants violations, and `login-secrets.spec.ts` mocks seed creation |
 | The cash API case checks the cashier's own refusal in both languages | Role-specific instructions were correct, but the case still matched the manager's older wording and reported a false failure; `cash-held-api-contract.spec.ts` checks both translations |
 | Held receipts reuse the existing payment tenant key | The train created a second unique index on the same payment columns; `held-payment-index.spec.ts` keeps the original unique key and rejects the duplicate build |
 | Restaurant deletion archives the account journal with its source books | The restaurant cascade deleted original charge snapshots that the archive list omitted; `account-journal-archive.spec.ts` pins the journal copy, tenant lock and preserved held-receipt/dispute checks |

@@ -3,11 +3,11 @@ import { populateMenu } from "./menu-catalog.mjs";
 // A seeded account that has not accepted the current terms greets whoever
 // opens it with a modal, so the version comes from where the app defines it.
 import { TERMS_VERSION } from "./terms-version.mjs";
+import { loginSecret } from "./login-secrets.mjs";
 
 // Convenience logins created by `pnpm db:seed` / `pnpm db:reset` on BOTH
 // environments (this is a test prod — a reset orphans the surviving auth
 // logins unless seeding re-links them).
-export const TEST_PASSWORD = "test123";
 /**
  * One test restaurant per tier, so every gate can be demonstrated by signing in
  * rather than by editing the database.
@@ -132,6 +132,7 @@ export async function ensurePlatformAdmin(pgClient) {
 }
 
 export async function seedTestUsers(pgClient) {
+  const password = loginSecret("TEST_PASSWORD");
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const secret = process.env.SUPABASE_SECRET_KEY;
   if (!url || !secret) {
@@ -155,7 +156,7 @@ export async function seedTestUsers(pgClient) {
     if (!userId) {
       const { data, error } = await admin.auth.admin.createUser({
         email: user.email,
-        password: TEST_PASSWORD,
+        password,
         email_confirm: true,
       });
       if (error) {
@@ -228,6 +229,7 @@ export async function seedTestUsers(pgClient) {
  * @param {import("pg").Client} pgClient connected Postgres client
  */
 export async function seedTeamLogins(pgClient) {
+  const password = loginSecret("TEST_PASSWORD");
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const secret = process.env.SUPABASE_SECRET_KEY;
   if (!url || !secret) return [];
@@ -255,7 +257,7 @@ export async function seedTeamLogins(pgClient) {
     if (!userId) {
       const { data, error } = await admin.auth.admin.createUser({
         email: member.email,
-        password: TEST_PASSWORD,
+        password,
         email_confirm: true,
       });
       if (error) {

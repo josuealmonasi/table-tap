@@ -34,9 +34,11 @@ import { attackFeeCeiling } from "./attack-fees.mjs";
 import { refuseProduction, watchDevWorker } from "./preflight.mjs";
 import { DEV_URL } from "./dev-url.mjs";
 import { sessionCookieHeader } from "./session-cookie.mjs";
+import { loginSecret } from "./login-secrets.mjs";
 
 refuseProduction("attack", "every case plants an order to attack");
 process.loadEnvFile(".env.development.local");
+const password = loginSecret("DEMO_PASSWORD");
 
 const base = DEV_URL;
 watchDevWorker(base);
@@ -56,7 +58,7 @@ async function cookieFor(email) {
     process.env.NEXT_PUBLIC_SUPABASE_URL,
     process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY,
   );
-  const { data, error } = await c.auth.signInWithPassword({ email, password: "demo123" });
+  const { data, error } = await c.auth.signInWithPassword({ email, password });
   if (error) throw new Error(`could not sign in as ${email}: ${error.message}`);
   return sessionCookieHeader(data.session, process.env.NEXT_PUBLIC_SUPABASE_URL);
 }

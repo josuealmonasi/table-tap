@@ -12,8 +12,10 @@
 // ============================================================================
 import { join } from "node:path";
 import { readFileSync } from "node:fs";
+import { parseEnv } from "node:util";
 import pg from "pg";
 import { seedMock } from "./mock-data.mjs";
+import { loginSecret } from "./login-secrets.mjs";
 
 const only = process.argv.find(a => a === "--dev" || a === "--prod");
 const targets = [
@@ -22,17 +24,14 @@ const targets = [
 ].filter(([name]) => !only || only.slice(2) === name.slice(0, only.length - 2));
 
 function envFrom(file) {
-  const out = {};
-  for (const line of readFileSync(join(process.cwd(), file), "utf8").split("\n")) {
-    const m = line.match(/^([A-Z_]+)=(.*)$/);
-    if (m) out[m[1]] = m[2];
-  }
-  return out;
+  return parseEnv(readFileSync(join(process.cwd(), file), "utf8"));
 }
 
 for (const [name, file] of targets) {
   const env = envFrom(file);
-  // seedMock reads the service key from the environment to create the logins.
+  // seedMock reads the service key and password from the target environment
+  // to create the logins. Never carry the first target's password into the next.
+  process.env.DEMO_PASSWORD = loginSecret("DEMO_PASSWORD", env, file);
   process.env.SUPABASE_SECRET_KEY = env.SUPABASE_SECRET_KEY;
   process.env.NEXT_PUBLIC_SUPABASE_URL = env.NEXT_PUBLIC_SUPABASE_URL;
 
@@ -51,4 +50,4 @@ for (const [name, file] of targets) {
   }
 }
 
-console.log("\nDemo Bistro rebuilt. Logins: demo@tabletap.dev / demo123\n");
+console.log("\nDemo Bistro rebuilt. Login: demo@tabletap.dev; DEMO_PASSWORD is in each target's env file.\n");

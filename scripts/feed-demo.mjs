@@ -11,13 +11,14 @@
 //
 // Only Demo Bistro and its five demo logins are deleted and rebuilt; the
 // seeder refuses anything else. Prices: DEMO_PRICE_SCALE (default 15 here).
-// Password: DEMO_PASSWORD from the env file, if set.
+// Password: DEMO_PASSWORD from the target env file, required before rebuilding.
 // ============================================================================
 import { createInterface } from "node:readline/promises";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { parseEnv } from "node:util";
 import pg from "pg";
+import { loginSecret } from "./login-secrets.mjs";
 
 const isProd = process.argv.includes("--prod");
 const envFile = isProd ? ".env.production.local" : ".env.development.local";
@@ -55,9 +56,7 @@ if (isProd) {
   rl.close();
   if (answer.trim() !== DEMO_RESTAURANT) { console.error("Aborted."); process.exit(1); }
 }
-if (!process.env.DEMO_PASSWORD) {
-  console.warn(`⚠️  DEMO_PASSWORD is not set in ${envFile}: the demo logins get the repo's dev password.`);
-}
+loginSecret("DEMO_PASSWORD");
 
 const client = new pg.Client({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } });
 await client.connect();
@@ -83,7 +82,7 @@ try {
   console.log(`\n✓ [${isProd ? "production" : "development"}] ${DEMO_RESTAURANT} ready`);
   console.log(`  ${counts.orders} orders (${counts.span}), ${counts.dishes} dishes, ${counts.recipes} with a recipe,`);
   console.log(`  ${counts.ingredients} ingredients, ${history.deliveries} deliveries, ${history.waste} waste entries, ${counts.shifts} register shifts`);
-  console.log(`\n  Logins (password: ${process.env.DEMO_PASSWORD ? "DEMO_PASSWORD from " + envFile : "the repo's dev password"}):`);
+  console.log(`\n  Logins (DEMO_PASSWORD in ${envFile}):`);
   console.log(`    ${DEMO_OWNER.email}   owner`);
   for (const t of DEMO_TEAM) console.log(`    ${t.email}   ${t.role}`);
   console.log(`\n  Next: pnpm money${isProd ? ":prod" : ""} and pnpm smoke${isProd ? ":prod" : ""}.`);

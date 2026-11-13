@@ -1,11 +1,13 @@
 import { randomUUID } from "node:crypto";
 import { createClient } from "@supabase/supabase-js";
 import { sessionCookieHeader } from "../session-cookie.mjs";
+import { loginSecret } from "../login-secrets.mjs";
 
 // Resolved receipts are immutable while their restaurant exists. Each case
 // owns a throwaway restaurant: deleting it cascades its receipt and resolution.
 // Never resolve a receipt in the shared demo fixture and leave permanent litter.
 async function arrange(fx) {
+  const password = loginSecret("TEST_PASSWORD");
   const restaurantId = randomUUID(), posRef = randomUUID(), users = [];
   const previous = fx.who.heldResolve;
   const cleanup = async () => {
@@ -23,7 +25,7 @@ async function arrange(fx) {
     if (error) throw error;
     const cookies = {};
     for (const role of ["manager", "waiter"]) {
-      const email = `apicheck-held-${role}-${restaurantId}@tabletap.dev`, password = randomUUID();
+      const email = `apicheck-held-${role}-${restaurantId}@tabletap.dev`;
       const { data, error: userError } = await fx.admin.auth.admin.createUser({ email, password, email_confirm: true });
       if (userError) throw userError;
       users.push(data.user.id);
