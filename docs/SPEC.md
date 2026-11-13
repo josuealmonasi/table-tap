@@ -2402,6 +2402,14 @@ capacity and lists unresolved history or outstanding returns as exceptions,
 without calling them a clean reconciliation. No schema reapplication creates
 new receipts for old paid flags.
 
+The backfill runs from the money writers under the restaurant's money lock. A
+bill coverage read (`order_coverage`) runs it only when
+`payment_allocations_need_backfill` finds something for it to do: a receipt
+still at allocation version 0 or a retryable overlap receipt, or a cancelled
+order whose legacy money has no cancel record, an unreturned allocation, or a
+return still in historical review. Otherwise the read takes no lock and writes
+nothing, and returns the same numbers.
+
 #### Schema-first deployment and enforcement switch
 
 Deploying this schema does not switch existing instances to the allocation
