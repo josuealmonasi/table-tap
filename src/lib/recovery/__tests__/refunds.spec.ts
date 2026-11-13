@@ -116,3 +116,13 @@ it("N9: reminds both concurrently overdue restaurants while the oldest stays stu
   await recoverRefunds(f.context);
   expect(f.tables.notifications.map(row => row.restaurant_id).sort()).toEqual(["r1", "r2"]);
 });
+
+it("N9: a refund recovered in this run needs no overdue reminder", async () => {
+  f.tables.refund_due_attempts = [{ ...attempt, provider_status: "pending" }];
+  f.rpc.mockImplementation(async () => {
+    f.tables.refund_due_attempts = [];
+    return { data: { outcome: "completed" }, error: null };
+  });
+  await recoverRefunds(f.context);
+  expect(f.tables.notifications ?? []).toEqual([]);
+});

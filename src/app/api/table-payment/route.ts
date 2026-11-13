@@ -1,6 +1,7 @@
 import { after } from "next/server";
-import { drainTicketEmails, skipTicketEmails } from "@/lib/ticket-email";
+import { drainTicketEmails } from "@/lib/ticket-email";
 import { checkoutPageRpc } from "@/lib/checkout-page-rpc";
+import { isDinerCurrency } from "@/lib/diner-currency";
 import { formatMoney } from "@/lib/format";
 import { PaymentAttributionRequired } from "@/lib/payment-coverage";
 import { NextResponse, type NextRequest } from "next/server";
@@ -34,22 +35,19 @@ type Settlement = "cash" | "card";
 // through us, so it must not be reachable from a customer's phone, nor from a
 // kitchen screen that everyone in the back has their hands on.
 export async function POST(req: NextRequest): Promise<NextResponse> {
-  // A refused collection leaves no ticket email suppressed (Codex review of #622).
-  const skip: { undo?: () => Promise<void> } = {};
+  // A refused collection leaves no ticket email suppressed: SQL rolls back
+  // its choice with the payment (Codex review of #622, review N7).
   try {
-    const res = await collect(req, skip);
-    if (!res.ok) await skip.undo?.().catch(() => {});
-    return res;
+    return await collect(req);
   }
   catch (error) {
-    // A collection that threw is refused too: its mark comes back off.
-    await skip.undo?.().catch(() => {});
+    // A collection that threw is refused too: its transaction kept no mark.
     if (error instanceof PaymentAttributionRequired) return await apiError("apiErr.attributionRequired", 409);
     throw error;
   }
 }
 
-async function collect(req: NextRequest, skip: { undo?: () => Promise<void> }): Promise<NextResponse> {
+async function collect(req: NextRequest): Promise<NextResponse> {
   const actor = await actingFrontOfHouse();
   if (!actor) return await apiError("apiErr.forbidden", 403);
 
@@ -81,9 +79,7 @@ async function collect(req: NextRequest, skip: { undo?: () => Promise<void> }): 
   // Tickets this request's payment queued for the card's email go out once it
   // has answered; registered only once the caller and the request are valid.
   after(() => drainTicketEmails());
-  if (body.skipTicketEmail === true) {
-    skip.undo = await skipTicketEmails(actor.restaurantId, tableId ? { tableId, currency: body.currency } : { orderId });
-  }
+
   if (tableId) return settleReviewedTable(actor, tableId, body, settlement!);
 
   // From here on it is a counter order, collected whole. Nothing can be added
@@ -120,7 +116,7 @@ async function collect(req: NextRequest, skip: { undo?: () => Promise<void> }): 
   // it came to. Part payments and sittings belong to tables, which went
   // through the reviewed path above.
   const collectedNow = total(updated);
-  if (typeof body.expected !== "number" || Math.abs(collectedNow - body.expected) > 0.005) {
+  if (!Number.isFinite(body.expected) || !isDinerCurrency(body.currency) || body.currency !== updated[0].currency || Math.abs(collectedNow - Number(body.expected)) > 0.005) {
     return await apiError("apiErr.collectionBalanceChanged", 409, { owed: formatMoney(collectedNow, updated[0].currency) });
   }
 
@@ -133,6 +129,7 @@ async function collect(req: NextRequest, skip: { undo?: () => Promise<void> }): 
     p_method: settlement,
     p_actor: actor.email,
     p_sittings: null,
+    p_expected: body.expected, p_currency: body.currency, p_skip_ticket_email: body.skipTicketEmail === true,
   });
   if (settleError?.message === "paying") return await apiError("apiErr.accountBillPaying", 409);
   if (settleError?.message === "not_owed") return await apiError("apiErr.billChanged", 409);

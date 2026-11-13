@@ -5,7 +5,7 @@ import { createHash } from "node:crypto";
 // address in `ticket_email_outbox`; this sends them: one email per card per
 // payment (a table's orders paid together are one ticket), with the 80 mm PDF
 // attached and the "stop" link. Called with `after()` by every route that
-// takes a payment, and by the daily recovery cron for anything left over.
+// takes a payment, and by the five-minute recovery cron for anything left over.
 // The receipt is the accounting record; a ticket that cannot be emailed never
 // fails the payment that queued it.
 // ============================================================================
@@ -76,7 +76,7 @@ export async function drainTicketEmails(limit = 20): Promise<void> {
 }
 
 /**
- * The daily cron: claim and send until nothing is left, so a backlog larger
+ * The recovery cron: claim and send until nothing is left, so a backlog larger
  * than one claim is not left to expire before the next run (Codex review of
  * #622). Bounded by rounds and by its own deadline, and it stops once a claim
  * brings back only rows it has already tried.

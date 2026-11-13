@@ -59,7 +59,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   // Scoped to the actor's own restaurant, so an id from elsewhere finds nothing.
   let query = db
     .from("orders")
-    .select("id, total, paid, written_off, status, coupon_code, table_id, table_label")
+    .select("id, total, tip, paid, written_off, status, coupon_code, table_id, table_label")
     .is("account_id", null)
     .eq("restaurant_id", actor.restaurantId);
   query = orderId ? query.eq("id", orderId) : query.eq("table_id", tableId!);

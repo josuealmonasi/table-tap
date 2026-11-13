@@ -1498,9 +1498,10 @@ When a sale carrying that card becomes paid, `queue_ticket_email` puts it in
 `ticket_email_outbox` (no address stored there) unless the cashier chose "No
 enviar esta vez" (`orders.ticket_email_skip`, from the till, from table
 collection, and from a divided bill's part, where `/api/split/collect` marks
-only that split's frozen orders). Every route that takes a payment drains the outbox with `after()`
-once it has answered (`src/lib/ticket-email.ts`), and the daily recovery cron
-catches the rest; a ticket a day old expires unsent. A failed send waits 1
+only that split's frozen orders inside the payment transaction; refused or
+duplicate collections never change the winning collection's choice). Every route that takes a payment drains the outbox with `after()`
+once it has answered (`src/lib/ticket-email.ts`), and the recovery cron runs every five minutes to
+catch the rest; a ticket a day old expires unsent. A failed send waits 1
 minute, then 10, then an hour before it is claimed again, and the fourth
 failure, or a refusal no retry changes, finishes it as `failed` with
 `failure_reason`; fresh tickets are claimed before retries. The email is
@@ -3260,3 +3261,22 @@ and `/api/loyalty/attach` should include the role-filtered `card.email` for an
 immediate collection notice. An absent projection remains unread in the UI;
 it does not claim the card has no email. Server grants, consent enforcement
 and delivery are outside this client change.
+
+### Second-pass collection consistency (2026-11-13)
+
+A counter collection checks the amount and currency shown by its screen under
+the same money lock that writes its receipt. A discount or currency change
+between the route read and that lock refuses the collection without recording
+less money. Staff coupons discount unpaid principal only; existing tips stay
+owed in full, in both direct and approved discounts.
+
+The owner's split switch travels through both public menu readers and refuses
+new split creation under the money lock. Existing parts remain payable. Raw
+cached menu collections page by stable keys before schedule filtering, so the
+Data API row cap cannot hide dishes on the currently serving menu.
+
+Held-sale history pages one indexed decision clock in the database. Approvals
+keep the original line notes and component extras for interrupted kitchen work.
+Subscription recovery reserves time for unpaid, expired and unknown-period
+sources; duplicate-refund reminders inspect each pending case on the bounded
+rotating page, with the existing per-case deduplication key.

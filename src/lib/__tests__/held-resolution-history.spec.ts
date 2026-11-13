@@ -11,8 +11,8 @@ vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({ from: () =>
     is: (k: string) => { empty.push(k); return q; }, not: (k: string) => { clock = k; return q; }, order: () => q,
     range: (from: number, to: number) => {
       state.reads.push({ tenant, clock, columns, from, to });
-      const rows = state.rows.filter(r => r.restaurant_id === tenant && (!clock || r[clock]) && empty.every(k => !r[k]))
-        .sort((a, b) => String(b[clock]).localeCompare(String(a[clock])) || String(a.pos_ref).localeCompare(String(b.pos_ref)))
+      const rows = state.rows.filter(r => r.restaurant_id === tenant && (!clock || (clock === "decision_at" ? r.resolved_at ?? r.approved_at : r[clock])) && empty.every(k => !r[k]))
+        .sort((a, b) => String(clock === "decision_at" ? b.resolved_at ?? b.approved_at : b[clock]).localeCompare(String(clock === "decision_at" ? a.resolved_at ?? a.approved_at : a[clock])) || String(a.pos_ref).localeCompare(String(b.pos_ref)))
         .slice(from, Math.min(to + 1, from + state.cap))
         .map(r => columns.includes("resolution:") ? r : Object.fromEntries(Object.entries(r).filter(([k]) => k !== "resolution")));
       const result = { data: rows, error: null };
@@ -20,7 +20,7 @@ vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({ from: () =>
     },
     // A head count of the decided rows on one clock.
     then: (done: (value: { count: number; error: null }) => void) => Promise.resolve({
-      count: state.rows.filter(r => r.restaurant_id === tenant && (!clock || r[clock])).length, error: null }).then(done),
+      count: state.rows.filter(r => r.restaurant_id === tenant && (!clock || (clock === "decision_at" ? r.resolved_at ?? r.approved_at : r[clock]))).length, error: null }).then(done),
   }; return q;
 } }) }));
 import { GET } from "@/app/api/pos/recover/route";
@@ -32,7 +32,7 @@ it("includes resolution audit alongside approvals in decision order", async () =
   state.rows = [row("approved", "2026-11-10T12:00:00Z", null), { ...row("resolved", null, resolution.resolved_at), resolution: [resolution] },
     row("pending", null, null), { ...row("other", null, "2026-11-12T12:00:00Z", "other"), resolution }];
   const res = await get("?view=history");
-  const resolvedRead = state.reads.find(read => "clock" in read && read.clock === "resolved_at") as { columns: string };
+  const resolvedRead = state.reads.find(read => "clock" in read && read.clock === "decision_at") as { columns: string };
   for (const key of ["cash_receipt_id", "payment_id", "payout_id"]) expect(resolvedRead.columns).toContain(key);
   expect({ status: res.status, body: await res.json() }).toEqual({ status: 200, body: { restaurantId: "r", hasMore: false, sales: [
     { ...row("resolved", null, resolution.resolved_at), resolution }, { ...row("approved", "2026-11-10T12:00:00Z", null), resolution: null },

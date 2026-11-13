@@ -67,21 +67,23 @@ export async function runBatch<T extends PendingItem>(
   const offset = pages > 1 ? Math.floor(Math.random() * pages) * BATCH_SIZE : 0;
   if (offset) batch = await load(BATCH_SIZE, offset);
   if (batch.error) throw new Error(`${name} discovery failed: ${batch.error.message}`);
-  // The oldest global row is only a metric. Every overdue case on the
-  // bounded, rotating page needs its own reminder, including other tenants.
-  if (onOverdue) for (const item of batch.data ?? []) {
-    if ((Date.now() - Date.parse(item.created_at)) / 1000 <= OVERDUE_SECONDS) continue;
-    try { await onOverdue(item); }
-    catch (error) { result.failed++; console.error("Recovery reminder failed", name, error); }
-  }
+  // The oldest global row is only a metric. Every still-pending overdue
+  // case on the bounded rotating page needs its own reminder, across tenants.
   for (const item of batch.data ?? []) {
-    if (!hasTime(context)) break;
-    try {
-      const done = await recover(item);
-      result.done += Number(done);
-    } catch (error) {
-      result.failed++;
-      console.error("Recovery item failed", name, item.restaurant_id, error);
+    let done = false;
+    if (hasTime(context)) {
+      try {
+        const recovered = await recover(item);
+        result.done += Number(recovered);
+        done = Boolean(recovered);
+      } catch (error) {
+        result.failed++;
+        console.error("Recovery item failed", name, item.restaurant_id, error);
+      }
+    }
+    if (onOverdue && !done && (Date.now() - Date.parse(item.created_at)) / 1000 > OVERDUE_SECONDS) {
+      try { await onOverdue(item); }
+      catch (error) { result.failed++; console.error("Recovery reminder failed", name, error); }
     }
   }
   try {
