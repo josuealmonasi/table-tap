@@ -2855,6 +2855,22 @@ invocation, including unchanged sales, payment and stock records. Set
 `CRON_SECRET` in the dev server environment for that authorized case. Cron
 setup follows [Vercel's authorization contract](https://vercel.com/docs/cron-jobs/manage-cron-jobs#securing-cron-jobs).
 
+## Legal texts (13 Nov 2026)
+
+The terms and the privacy notice (`src/lib/legal/*.json`, version
+`2026-11-13`) were reviewed against the LFPDPPP of 20 March 2025 (authority:
+Secretaría Anticorrupción y Buen Gobierno), the LFPC, the Código de Comercio and
+the Código Civil Federal. What they now say the app does: the restaurant is the
+merchant of record and bears chargebacks; our per-order fee is flat, capped at
+5% of the food and never on the tip, returned in proportion on any refund and
+not on a chargeback; published prices are what is charged, IVA included; the
+restaurant is the data controller for diners, customer accounts and staff, and
+TableTap the processor with Supabase (Oregon), Vercel (Portland), Resend and
+Stripe as sub-processors; the deletion archive is kept blocked for the legal
+retention period and then deleted. Placeholders for the legal identity are
+listed in `docs/before-launch.md` §6. Gaps between these texts and the code are
+in `loop/reviews/legal-review-20261113.md` (tabletap-release checkout).
+
 ## Owner email verification and review fixes (9 Nov 2026)
 
 Self-serve signup creates an unconfirmed auth user and a restaurant with

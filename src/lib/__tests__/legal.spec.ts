@@ -42,6 +42,17 @@ describe("the text and the version cannot drift apart", () => {
       .digest("hex")
       .slice(0, 16);
 
+  // 2026-11-13, bumped from 2026-11-12: the legal review under the 2025 data
+  // protection law. The terms gained who TableTap is and how the contract is
+  // made, the restaurant as merchant of record, refunds and chargebacks, the
+  // fee's 5% cap and that it never touches the tip, prices with IVA included,
+  // CFDI, the restaurant's consumer-law and privacy-notice duties, the
+  // processor clause, a fair change clause and a named jurisdiction. The
+  // notice gained the elements its article 15 requires (identity, sensitive
+  // data, purposes split, ways to limit use, ARCO procedure and deadlines,
+  // the new authority), the providers and their countries, cookies, auth
+  // logs, the deletion archive, and a model short notice for diners — new
+  // categories and new commitments, so every restaurant is asked again.
   // 2026-11-12, bumped from 2026-11-11: a diner may link an email to their
   // visit card to receive every ticket there — the notice stopped promising
   // that no diner email is ever kept, so every restaurant is asked again.
@@ -68,15 +79,15 @@ describe("the text and the version cannot drift apart", () => {
   // kept the version as a clarification.)
   it("has terms that match the version in force", () => {
     expect({ version: TERMS_VERSION, text: fingerprint("terms-es") }).toEqual({
-      version: "2026-11-12",
-      text: "21015364f21d4e53",
+      version: "2026-11-13",
+      text: "7bbbcf21b773fe67",
     });
   });
 
   it("has a privacy notice that matches the version in force", () => {
     expect({ version: TERMS_VERSION, text: fingerprint("privacy-es") }).toEqual({
-      version: "2026-11-12",
-      text: "0922b8bc438bfb34",
+      version: "2026-11-13",
+      text: "02461d350c063e16",
     });
   });
 });

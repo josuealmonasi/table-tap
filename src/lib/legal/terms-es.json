@@ -1,56 +1,68 @@
 {
   "title": "Términos y Condiciones",
-  "intro": "Estos son los términos del servicio TableTap. Están redactados para ser comprensibles; si algún punto no resulta claro, le pedimos escribirnos antes de aceptarlos.",
+  "intro": "Estos términos son el contrato entre «[RAZÓN SOCIAL]» (en adelante, «TableTap»), RFC «[RFC]», con domicilio en «[DOMICILIO]», y el restaurante que contrata el servicio en https://tabletap.shop. Están redactados para ser comprensibles; si algún punto no resulta claro, le pedimos escribirnos a «[CORREO DE CONTACTO]» antes de aceptarlos.",
   "version": "__VERSION__",
   "clauses": [
     {
-      "title": "1. Qué es TableTap y qué no es",
+      "title": "1. Quiénes somos y cómo se celebra este contrato",
       "paragraphs": [
-        "TableTap es una herramienta de software: menús con código QR, toma de pedidos, cuentas y reportes para su restaurante.",
-        "TableTap no vende alimentos. Cuando un comensal ordena, el contrato de compraventa se celebra entre su restaurante y esa persona. El restaurante es responsable de los alimentos, de sus precios, de su descripción, de la información sobre alérgenos y de la factura fiscal que esa persona solicite."
+        "El servicio lo presta «[RAZÓN SOCIAL]», RFC «[RFC]», con domicilio en «[DOMICILIO]». Para aclaraciones, reclamaciones y avisos puede escribirnos a «[CORREO DE CONTACTO]» o llamar al «[TELÉFONO DE CONTACTO]».",
+        "El contrato se celebra por medios electrónicos y queda perfeccionado cuando usted acepta estos términos al crear su cuenta o, si cambian, en el aviso que se muestra al ingresar al panel. Esa aceptación expresa por medios electrónicos tiene la misma validez que una firma en papel.",
+        "De cada aceptación se registra la versión aceptada, la fecha y hora, y el correo de la cuenta que la otorgó. El texto de cada versión se puede consultar y descargar en PDF en cualquier momento, con su fecha al pie."
       ]
     },
     {
-      "title": "2. Su cuenta",
+      "title": "2. Qué es TableTap y qué no es",
+      "paragraphs": [
+        "TableTap es una herramienta de software: menús con código QR, toma de pedidos, cuentas y reportes para su restaurante.",
+        "TableTap no vende alimentos. Cuando un comensal ordena, el contrato de compraventa se celebra entre su restaurante y esa persona: el restaurante es el proveedor frente al comensal y el comercio que recibe sus pagos. El restaurante es responsable de los alimentos, de sus precios, de su descripción, de la información sobre alérgenos, de atender las quejas y devoluciones de sus comensales y de la factura fiscal que esa persona solicite."
+      ]
+    },
+    {
+      "title": "3. Su cuenta",
       "paragraphs": [
         "Se requiere una cuenta para utilizar el panel. El titular es responsable del uso de dicha cuenta y de los accesos que cree para su equipo, incluidos los pedidos, descuentos y cobros que realicen.",
         "Los datos que registre deben ser veraces. Si abre la cuenta a nombre de una persona moral, declara contar con facultades suficientes para obligarla."
       ]
     },
     {
-      "title": "3. Planes, precios y comisiones",
+      "title": "4. Planes, precios y comisiones",
       "paragraphs": [
-        "Los planes, sus límites y sus precios están publicados en el panel, en la sección Plan. Ahí aparece en todo momento el precio vigente, la comisión por pedido pagado con tarjeta y el tope mensual de esa comisión.",
-        "Los precios pueden modificarse. Si cambia el precio de su plan, se le notificará por correo electrónico con al menos 30 días naturales de anticipación, y el cambio surtirá efecto hasta su siguiente periodo de facturación. Si no está de acuerdo, podrá cancelar antes de esa fecha sin penalización alguna. Lo anterior no aplica a los precios de fundador, que no se incrementan.",
-        "Precio de fundador: los primeros restaurantes que contratan un plan de paga conservan el precio con el que ingresaron mientras mantengan ese plan, aun cuando posteriormente se incrementen los precios de lista. Si cambia de plan, o si cancela y contrata nuevamente, aplicará el precio vigente en ese momento. El panel indica si su restaurante cuenta con este beneficio.",
-        "Los precios están expresados en pesos mexicanos y no incluyen impuestos, salvo que se indique lo contrario.",
-        "La caja del mostrador está incluida únicamente en los planes de pago. Al no procesarse esos cobros a través de nuestra plataforma, no generan comisión por pedido y su costo está cubierto por la suscripción."
+        "Los planes, sus límites y sus precios están publicados en el panel, en la sección Plan. Ahí aparecen en todo momento el precio vigente de la suscripción, la comisión por pedido pagado con tarjeta a través de la plataforma y el tope mensual de esa comisión.",
+        "La comisión por pedido es un monto fijo por cada pago con tarjeta procesado a través de la plataforma, que nunca excede el 5 % del consumo de ese pago ni, sumada en el mes, el tope publicado en su plan. No se calcula sobre la propina. Se descuenta del propio pago con tarjeta en el momento del cobro, como se describe en la cláusula 7.",
+        "Los precios y las comisiones pueden modificarse. Si aumenta el precio de su plan, la comisión por pedido o su tope mensual, se le notificará por correo electrónico con al menos 30 días naturales de anticipación, y el cambio surtirá efecto hasta su siguiente periodo de facturación. Si no está de acuerdo, podrá cancelar antes de esa fecha sin penalización alguna. Lo anterior no aplica a los precios de fundador, que no se incrementan.",
+        "Precio de fundador: los primeros restaurantes que contratan un plan de paga conservan el precio de suscripción con el que ingresaron mientras mantengan ese plan, aun cuando posteriormente se incrementen los precios de lista. El beneficio se refiere a la suscripción, no a la comisión por pedido. Si cambia de plan, o si cancela y contrata nuevamente, aplicará el precio vigente en ese momento. El panel indica si su restaurante cuenta con este beneficio.",
+        "Los precios están expresados en pesos mexicanos. El importe que se cobra es el que aparece publicado en la sección Plan, con el impuesto al valor agregado incluido; no se agrega ningún cargo que no esté publicado ahí.",
+        "La caja del mostrador está incluida únicamente en los planes de pago. Al no procesarse esos cobros a través de nuestra plataforma, no generan comisión por pedido y su costo está cubierto por la suscripción.",
+        "Si cambia de plan a mitad de un periodo, el cobro se ajusta de forma proporcional: al subir de plan se cobra en ese momento la diferencia por los días que faltan, y al bajar, el saldo a su favor se aplica a los cobros siguientes."
       ]
     },
     {
-      "title": "4. Periodo de prueba",
+      "title": "5. Periodo de prueba",
       "paragraphs": [
-        "Se ofrecen 30 días de prueba sin necesidad de tarjeta, sobre el plan Servicio. La prueba se otorga por una sola ocasión por restaurante.",
+        "Se ofrecen 30 días de prueba sin necesidad de tarjeta, sobre el plan Servicio, contados desde que confirma su correo electrónico. La prueba se otorga por una sola ocasión por restaurante.",
         "Al concluir, si no se contrata un plan de paga, el restaurante pasa al plan gratuito.",
         "No se elimina información alguna al terminar la prueba: el menú, las mesas y los pedidos permanecen disponibles. Lo que deja de estar disponible son las funciones propias del plan de paga, entre ellas el servicio en mesa y el conteo de existencias. Las existencias que ya haya capturado se conservan, pero dejan de descontarse con cada pedido y los platillos dejan de retirarse solos de la carta al llegar a cero: la disponibilidad vuelve a depender del interruptor de cada platillo."
       ]
     },
     {
-      "title": "5. Cobros, cancelación y devoluciones",
+      "title": "6. Cobros, cancelación y devoluciones",
       "paragraphs": [
-        "La suscripción se cobra por adelantado cada mes. La comisión por pedido se genera sobre los pedidos pagados con tarjeta a través de la plataforma, con el tope mensual publicado en su plan.",
-        "Puede cancelar en cualquier momento desde la sección Plan. La cancelación surte efecto al concluir el periodo ya pagado: el servicio se conserva hasta esa fecha y posteriormente el restaurante pasa al plan gratuito.",
+        "La suscripción es un cargo automático recurrente: se cobra por adelantado cada mes, en la misma fecha en que se contrató, a la tarjeta que usted registre al contratar, y por el importe publicado para su plan. Al contratar se le muestra el importe y la periodicidad, y su contratación es su consentimiento expreso para esos cargos. La comisión por pedido se genera sobre los pedidos pagados con tarjeta a través de la plataforma, con el tope mensual publicado en su plan.",
+        "Puede cancelar en cualquier momento desde la sección Plan, de inmediato y sin necesidad de solicitarlo a nadie. La cancelación surte efecto al concluir el periodo ya pagado: el servicio se conserva hasta esa fecha, no se realizan más cargos y posteriormente el restaurante pasa al plan gratuito.",
         "Los periodos ya pagados no son reembolsables, salvo que la legislación aplicable lo exija o que el cobro se haya originado en un error nuestro, supuesto en el cual será corregido.",
         "Si un cobro no se completa, se le notificará y se reintentará. De no resolverse, el panel podrá quedar en modo de solo lectura. El menú de sus comensales continuará operando: no se interrumpe el servicio a las personas que se encuentran en su restaurante por una controversia de cobranza con usted."
       ]
     },
     {
-      "title": "6. Pagos con tarjeta",
+      "title": "7. Pagos con tarjeta",
       "paragraphs": [
-        "Los pagos con tarjeta se procesan a través de Stripe. Para recibirlos se requiere una cuenta conectada de Stripe a nombre del restaurante y la aceptación de los términos de dicho proveedor.",
-        "El cobro se realiza en su cuenta de Stripe: el importe de sus ventas le corresponde y se le entrega directamente, descontadas la comisión de Stripe y la nuestra. TableTap no retiene el importe de sus ventas.",
+        "Los pagos con tarjeta de los comensales se procesan a través de Stripe. Para recibirlos se requiere una cuenta conectada de Stripe a nombre del restaurante y la aceptación de los términos de dicho proveedor. El cargo se realiza en esa cuenta, a nombre del restaurante: el restaurante es el comercio frente al comensal y frente a Stripe.",
+        "El importe de sus ventas le corresponde y Stripe se lo entrega directamente, descontadas la comisión de Stripe y la nuestra. TableTap no recibe, no retiene ni administra el importe de sus ventas, y no es una institución de fondos de pago ni un transmisor de dinero.",
         "Cuando el restaurante permite que la cuenta se liquide al final, un comensal puede pagar en línea una parte del consumo y dejar el resto en la cuenta abierta. Lo pagado en línea se registra como cubierto, se muestra en la cuenta a título informativo y queda excluido del importe por cobrar, de modo que no se cobre dos veces.",
         "Si un comensal paga con tarjeta una cuenta que ya había sido cobrada por otro medio, ese pago no se aplica a la cuenta: el panel lo registra como reembolso pendiente y lo muestra en Cuentas abiertas. Ese importe pertenece al comensal y el restaurante es responsable de devolverlo. Al reembolsarlo desde TableTap, el importe se devuelve a la tarjeta del comensal y TableTap reintegra la comisión por pedido correspondiente a ese pago; si el restaurante lo devolvió directamente en Stripe, puede solicitar el reintegro de esa comisión desde la misma sección. La comisión de Stripe por el procesamiento del pago se rige por las condiciones de Stripe.",
+        "Cuando el restaurante devuelve un pago con tarjeta, total o parcialmente, desde TableTap o directamente en Stripe, TableTap reintegra la parte proporcional de la comisión por pedido de ese pago. La comisión de Stripe por el procesamiento se rige por las condiciones de Stripe. Las devoluciones a los comensales son decisión y responsabilidad del restaurante.",
+        "Si un comensal desconoce un cargo ante su banco (contracargo), Stripe lo descuenta de la cuenta del restaurante junto con la comisión que Stripe aplique a la disputa, y es el restaurante quien la responde y aporta las pruebas, desde su panel de Stripe, al que se accede desde Ajustes. TableTap puede mostrar en el panel los contracargos que Stripe le informe, como apoyo para sus reportes, pero no es parte de la disputa ni responde por su resultado. La comisión por pedido de un pago disputado no se reintegra por el contracargo.",
         "TableTap no almacena datos de tarjetas bancarias. Esa información es tratada directamente por Stripe.",
         "Los cobros que el restaurante realiza por sí mismo —en el mostrador o en la mesa, en efectivo o con su propia terminal bancaria— no pasan por Stripe ni por TableTap. Ese dinero es recibido directamente por el restaurante y en ningún momento es procesado, retenido ni intermediado por nosotros; sobre esas ventas no se cobra comisión por pedido. TableTap únicamente registra la venta y el corte correspondiente.",
         "La cuenta de una mesa puede liquidarse en varias exhibiciones. TableTap lleva el saldo pendiente restando de lo consumido lo que se haya recibido, y da la cuenta por liquidada cuando ese saldo llega a cero. Ese saldo es una herramienta de apoyo operativo: la verificación de que el dinero recibido corresponde a lo registrado es responsabilidad del restaurante.",
@@ -58,11 +70,12 @@
       ]
     },
     {
-      "title": "7. Obligaciones del restaurante",
+      "title": "8. Obligaciones del restaurante",
       "paragraphs": [
         "Utilizar el servicio conforme a la legislación aplicable y para el negocio que registró.",
         "Abstenerse de vulnerar la plataforma, de extraer información de otros restaurantes y de revender el servicio como propio.",
         "Mantener su menú veraz. Los precios, las descripciones y las etiquetas de dieta y alérgenos son responsabilidad del restaurante, incluidas las que cree, modifique o elimine desde el panel. TableTap proporciona un conjunto inicial de etiquetas como sugerencia; su exactitud frente a cada platillo corresponde al restaurante.",
+        "Cumplir con la legislación de protección al consumidor frente a sus comensales. En particular: publicar en su menú el precio total de cada producto, con impuestos incluidos y sin cargos adicionales que no se muestren; no presentar como obligatoria la propina, que es voluntaria y que TableTap ofrece siempre en cero para que el comensal decida si la deja y cuánto; no cobrar cargos por servicio ni otros cargos que el comensal no haya aceptado; y dar a conocer a sus comensales su nombre o razón social, su domicilio y un medio de contacto para quejas y aclaraciones, en el local, en su ticket o en su menú.",
         "Cumplir con sus obligaciones fiscales, incluida la expedición de comprobantes a sus comensales cuando los soliciten. Los datos fiscales y el domicilio que el restaurante registra para sus tickets se imprimen tal como los capturó: su exactitud y que el ticket reúna los requisitos que le correspondan son responsabilidad del restaurante. El ticket que genera TableTap no es un comprobante fiscal digital por Internet (CFDI).",
         "Cuando el restaurante utiliza la caja del mostrador, es el único responsable del manejo del efectivo, de la operación de su terminal bancaria, de la entrega de comprobantes fiscales y del cumplimiento de sus obligaciones fiscales por esas ventas. Los registros de venta y de corte que ofrece TableTap son una herramienta de apoyo operativo y no sustituyen la contabilidad ni la facturación del restaurante.",
         "Cuando el restaurante abre cuentas de clientes para que paguen después, decide a quién le da crédito y hasta qué límite, y es el único responsable de cobrar lo que se cargue a ellas. TableTap registra lo que se carga a cada cuenta, quién lo cargó y cuándo, y lo que se paga, pero no es parte de ese crédito, no garantiza que se pague y no cobra en nombre del restaurante, salvo los pagos con tarjeta que el cliente hace en línea, que llegan a la cuenta del restaurante como cualquier otro pago con tarjeta. El estado de cuenta puede consultarlo y pagarlo quien tenga su código; el restaurante puede emitir un código nuevo en cualquier momento. Una cuenta solo se cierra cuando no debe nada, y cambiar de plan no borra lo que se debe.",
@@ -70,11 +83,12 @@
         "Las propinas que el personal recibe en efectivo o en su propia terminal bancaria son recibidas directamente por el restaurante. TableTap las registra junto con el cobro para efectos de corte y de reportes, sin procesarlas, retenerlas ni intermediarlas, y sin cobrar comisión sobre ellas. La entrega, el reparto y el tratamiento fiscal y laboral de las propinas corresponden exclusivamente al restaurante, conforme a la legislación aplicable y a sus acuerdos con su personal.",
         "El restaurante es responsable de las operaciones que su personal realiza desde el panel con las cuentas de acceso que él mismo crea, incluidas la toma de pedidos en mesa, los cobros, los descuentos que se apliquen, los turnos de caja y lo que se registre sobre los costos: merma, conteos de existencias, compras y cambios en ingredientes y recetas. TableTap deja registro de quién realizó cada una de esas operaciones.",
         "Cuando el restaurante ofrece la tarjeta de visitas, define sus recompensas —de una a cuatro— y cuántas visitas gana cada una, y es responsable de entregarlas a quien las gane y de informar sus condiciones conforme a la legislación de protección al consumidor. Las recompensas de una tarjeta se canjean en orden y una vez por ronda; al canjear la última, la ronda termina y las visitas de más pasan a la siguiente. Una tarjeta conserva las recompensas con las que empezó su ronda aunque el restaurante las cambie después, y una recompensa ya ganada se respeta aunque el restaurante pause su programa o cambie de plan. TableTap registra las visitas y los canjes que realiza el personal del restaurante, y no responde por los sellos que ese personal otorgue. Una tarjeta presentada antes de pagar gana su visita al confirmarse el pago, una vez por día, aunque la mesa pague en varias partes.",
-        "El personal del restaurante puede vincular, cambiar o quitar el correo de la tarjeta de un comensal solo a petición de éste y con su consentimiento expreso, que el restaurante es responsable de obtener; ese correo se utiliza exclusivamente para enviarle sus tickets y el restaurante no debe usarlo para ningún otro fin."
+        "El personal del restaurante puede vincular, cambiar o quitar el correo de la tarjeta de un comensal solo a petición de éste y con su consentimiento expreso, que el restaurante es responsable de obtener; ese correo se utiliza exclusivamente para enviarle sus tickets y el restaurante no debe usarlo para ningún otro fin.",
+        "Respecto de los datos personales de sus comensales y de su personal, el restaurante es el responsable: debe poner a su disposición su propio aviso de privacidad, que puede elaborar a partir del modelo para comensales que contiene el Aviso de Privacidad de TableTap, completándolo con su identidad y domicilio, y debe atender las solicitudes que esas personas le presenten, con el apoyo de TableTap descrito en la cláusula 11."
       ]
     },
     {
-      "title": "8. Disponibilidad del servicio",
+      "title": "9. Disponibilidad del servicio",
       "paragraphs": [
         "TableTap procura la disponibilidad continua del servicio, sin garantizar que opere libre de interrupciones. Pueden presentarse labores de mantenimiento, fallas de proveedores o causas ajenas a nuestro control.",
         "TableTap funciona en línea. Una conexión a internet estable es un requisito de operación, no una recomendación: sin ella el panel y el menú de los comensales dejan de estar disponibles. La excepción es la caja del mostrador: en un dispositivo donde ya se abrió con conexión, puede seguir cobrando en efectivo o con la terminal propia del restaurante. Cada una de esas ventas se guarda en ese dispositivo y se envía sola al volver la conexión, con la hora en que ocurrió y el monto que se cobró; si el menú cambió mientras tanto, se registra el monto cobrado y se le señala al restaurante la diferencia. Mientras no se envíe, una venta no aparece en el corte ni en los reportes, y si se borran los datos de ese navegador o se pierde el dispositivo antes de enviarla, se pierde su registro; por eso, mientras ese dispositivo tenga ventas por enviar, no se puede cerrar en él el turno de caja ni la sesión. Sin conexión no se pueden cargar ventas a cuentas de clientes ni recibir pagos en línea. El restaurante es responsable de contar con esa conexión en su local; las interrupciones de su proveedor de internet, de su red interna o de sus propios equipos quedan fuera de nuestro control y no constituyen una falla del servicio.",
@@ -82,48 +96,60 @@
       ]
     },
     {
-      "title": "9. Limitación de responsabilidad",
+      "title": "10. Limitación de responsabilidad",
       "paragraphs": [
         "El servicio se proporciona en el estado en que se encuentra. TableTap no responde por daños indirectos, lucro cesante, ni por las decisiones de negocio que se adopten a partir de la información del panel.",
         "En todo caso, la responsabilidad total de TableTap frente al restaurante se limita al importe que este haya pagado en los tres meses anteriores al hecho que la origine.",
-        "Ninguna disposición de esta cláusula limita responsabilidades que la ley no permita limitar."
+        "Ninguna disposición de esta cláusula limita la responsabilidad que derive de dolo o culpa grave de TableTap, ni otras responsabilidades que la ley no permita limitar."
       ]
     },
     {
-      "title": "10. Datos personales",
+      "title": "11. Datos personales",
       "paragraphs": [
         "Los datos personales se tratan conforme al Aviso de Privacidad, que forma parte integrante de estos términos.",
-        "Respecto de los datos de sus comensales, el restaurante determina las finalidades de su tratamiento y TableTap los trata por su cuenta, en calidad de encargado, únicamente para prestar el servicio."
+        "Respecto de los datos de sus comensales, de los clientes a quienes abre una cuenta y de su personal, el restaurante es el responsable y determina las finalidades de su tratamiento; TableTap los trata por su cuenta, en calidad de encargado, únicamente para prestar el servicio y conforme a estas instrucciones: no los usa para fines propios, no los vende ni los transfiere, guarda confidencialidad sobre ellos, aplica medidas de seguridad administrativas, técnicas y físicas, y le ayuda a atender las solicitudes de acceso, rectificación, cancelación u oposición que reciba.",
+        "El restaurante autoriza a TableTap a apoyarse, para prestar el servicio, en los proveedores que el Aviso de Privacidad enumera (alojamiento, base de datos, envío de correo electrónico y procesamiento de pagos), algunos de los cuales almacenan los datos en los Estados Unidos de América. TableTap les exige las mismas obligaciones que asume en esta cláusula y avisará en el panel antes de incorporar un proveedor nuevo que trate esos datos.",
+        "Si TableTap conoce una vulneración de seguridad que afecte de forma significativa los datos del restaurante o de sus comensales, se lo informará sin demora, con lo que se sepa de lo ocurrido y de las medidas tomadas, para que pueda informar a las personas afectadas.",
+        "Al terminar el contrato, TableTap conserva únicamente lo que se describe en la cláusula 13, que el restaurante instruye conservar para cumplir con sus propias obligaciones contables y fiscales, y suprime lo demás."
       ]
     },
     {
-      "title": "11. Propiedad intelectual",
+      "title": "12. Propiedad intelectual",
       "paragraphs": [
         "El software, la marca y el diseño de TableTap son de nuestra titularidad. El menú, las fotografías, la marca y los datos del restaurante son de su titularidad.",
         "El restaurante otorga autorización para utilizar su contenido con el fin exclusivo de operar el servicio: mostrar el menú a sus comensales, generar sus códigos QR y realizar respaldos."
       ]
     },
     {
-      "title": "12. Suspensión y terminación",
+      "title": "13. Suspensión y terminación",
       "paragraphs": [
         "TableTap podrá suspender o dar por terminada una cuenta que incumpla estos términos, que utilice el servicio con fines ilícitos, o que ponga en riesgo la plataforma o a otros restaurantes. Cuando resulte razonable, se notificará previamente.",
         "Si TableTap da por terminada la cuenta sin que exista incumplimiento del restaurante, se devolverá la parte proporcional de lo pagado por adelantado.",
         "El restaurante puede solicitar la exportación de sus datos mientras su cuenta esté activa y hasta 30 días naturales después de su cierre.",
-        "El cierre no extingue las devoluciones pendientes. No se elimina de forma permanente un restaurante mientras deba devolver dinero o falte confirmar un pago o una devolución. Una vez resuelto lo pendiente, se puede eliminar el restaurante; sus pedidos, recibos, devoluciones y demás registros contables se conservan en una copia separada, conforme al Aviso de Privacidad."
+        "El cierre no extingue las devoluciones pendientes. No se elimina de forma permanente un restaurante mientras deba devolver dinero o falte confirmar un pago o una devolución. Una vez resuelto lo pendiente, se puede eliminar el restaurante; sus pedidos, recibos, devoluciones y demás registros contables se conservan en una copia separada, bloqueada y fuera del alcance del panel, durante el plazo que exijan las disposiciones fiscales y mercantiles aplicables, conforme al Aviso de Privacidad, y al concluir ese plazo se suprimen."
       ]
     },
     {
-      "title": "13. Modificaciones a estos términos",
+      "title": "14. Impuestos y facturación",
       "paragraphs": [
-        "Estos términos pueden actualizarse. Cuando la modificación sea relevante, se mostrará al ingresar al panel y se solicitará su aceptación nuevamente.",
+        "TableTap expide el comprobante fiscal digital por Internet (CFDI) por la suscripción y por las comisiones por pedido que cobra. Para recibirlo a nombre de su restaurante, envíe su constancia de situación fiscal a «[CORREO DE FACTURACIÓN]»; sin esos datos, el ingreso se incluye en el comprobante global a público en general, como lo permite la legislación fiscal.",
+        "Las comisiones de Stripe las factura Stripe conforme a sus propias condiciones.",
+        "Las ventas a sus comensales son del restaurante, y le corresponde expedirles el CFDI que soliciten. El ticket que genera TableTap no es un CFDI."
+      ]
+    },
+    {
+      "title": "15. Modificaciones a estos términos",
+      "paragraphs": [
+        "Estos términos pueden actualizarse para reflejar cambios en el servicio o en la ley. Cuando la modificación sea relevante, se le mostrará al ingresar al panel y se solicitará su aceptación nuevamente. Una modificación nunca se aplica hacia atrás: lo ocurrido antes de su aceptación se rige por la versión entonces vigente.",
+        "Si no está de acuerdo con la nueva versión, puede cancelar su suscripción sin penalización; en ese caso, a su solicitud, se le devolverá la parte proporcional del periodo ya pagado que no haya utilizado. Mientras no acepte la nueva versión, su menú sigue atendiendo a sus comensales.",
         "La versión vigente y su fecha aparecen siempre al final de este documento."
       ]
     },
     {
-      "title": "14. Legislación aplicable",
+      "title": "16. Legislación aplicable y jurisdicción",
       "paragraphs": [
-        "Estos términos se rigen por las leyes de los Estados Unidos Mexicanos.",
-        "Para la interpretación y cumplimiento de estos términos, las partes se someten a los tribunales competentes en México, sin perjuicio de los derechos que la ley reconozca al restaurante en su carácter de consumidor, cuando resulte aplicable.",
+        "Estos términos se rigen por las leyes federales de los Estados Unidos Mexicanos.",
+        "Para la interpretación y cumplimiento de estos términos, las partes se someten a los tribunales competentes de «[CIUDAD DE JURISDICCIÓN]», renunciando a cualquier otro fuero que pudiera corresponderles por razón de su domicilio presente o futuro. Lo anterior no limita los derechos que la ley reconozca al restaurante en su carácter de consumidor, cuando resulte aplicable, incluido acudir a la Procuraduría Federal del Consumidor.",
         "La versión en español es la que rige. Cualquier traducción se proporciona únicamente por comodidad."
       ]
     }
