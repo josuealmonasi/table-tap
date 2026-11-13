@@ -34,5 +34,6 @@ export async function checkDisputes(db, all, { ok, bad }) {
   const errors = disputeStructuralErrors(cases, movements);
   errors.forEach(bad);
   if (!errors.length) ok(`dispute structural checks passed (${movements.length} transactions); provider completeness unverified`);
-  console.log(`    –        disputes: ${pending.length} pending inbox events; ${cases.filter(d => d.reconciliation_state !== "reconciled").length} cases need reconciliation/review; historical discovery deferred to PR 3`);
+  const review = pending.filter(e => e.state === "review").length;
+  console.log(`    –        disputes: ${pending.length - review} pending inbox events; ${review} events set aside for review after repeated failures; ${cases.filter(d => d.reconciliation_state !== "reconciled").length} cases need reconciliation/review; historical discovery deferred to PR 3`);
 }

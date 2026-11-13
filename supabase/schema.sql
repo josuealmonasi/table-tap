@@ -1798,6 +1798,11 @@ create index if not exists orders_platform_fee_idx
 -- cancelled: the plan screen reads this to say "termina el 3 de septiembre"
 -- without another round trip to Stripe on every render.
 alter table restaurants add column if not exists plan_ends_at timestamptz;
+-- When the subscription's current paid period runs out, renewing or not. A
+-- renewal moves it forward through the webhook; the daily recovery re-reads
+-- Stripe for a paid tier whose period ended days ago, so a cancellation or an
+-- unpaid renewal whose every webhook delivery failed cannot keep the tier.
+alter table restaurants add column if not exists plan_period_ends_at timestamptz;
 
 -- ── Terms of service ───────────────────────────────────────────────────────
 -- Which version of the terms the owner accepted, and when. Versioned rather
@@ -3709,6 +3714,20 @@ drop trigger if exists fix_loyalty_card_on_payment on orders;
 create trigger fix_loyalty_card_on_payment before insert or update of paid on orders
   for each row execute function public.fix_loyalty_card_on_payment();
 
+-- A sale closed by forgiving a walkout is not a visit nor a ticket to email
+-- (owner's decision, 2026-11-12): the walkout writer marks its transaction,
+-- and a forgive adjustment marks the order for good.
+create or replace function public.settled_by_write_off(p_restaurant uuid, p_order uuid)
+returns boolean language plpgsql stable security definer set search_path = public as $$
+begin
+  -- plpgsql: order_adjustments is created further down this file.
+  return coalesce(current_setting('tabletap.walkout_writer', true), '') <> ''
+    or exists (select 1 from order_adjustments a where a.restaurant_id = p_restaurant
+      and a.order_id = p_order and a.kind = 'forgive');
+end;
+$$;
+revoke all on function public.settled_by_write_off(uuid, uuid) from public, anon, authenticated;
+
 -- Paying stamps the card the sale carries (fixed onto it above): one visit a
 -- day, in the restaurant's zone, like "Sellar tarjeta". Never on a cancelled
 -- sale, never for another restaurant's card, never while the program is off.
@@ -3719,7 +3738,8 @@ create or replace function public.stamp_loyalty_on_payment()
 returns trigger language plpgsql security definer set search_path = public as $$
 declare v_card uuid; v_day date;
 begin
-  if not new.paid or new.status = 'cancelled' or (tg_op = 'UPDATE' and old.paid) then return null; end if;
+  if not new.paid or new.status = 'cancelled' or (tg_op = 'UPDATE' and old.paid)
+    or public.settled_by_write_off(new.restaurant_id, new.id) then return null; end if;
   v_card := new.loyalty_card_id;
   if v_card is null or not public.loyalty_open(new.restaurant_id)
     or not exists (select 1 from loyalty_cards c where c.id = v_card and c.restaurant_id = new.restaurant_id) then
@@ -3788,6 +3808,15 @@ alter table ticket_email_outbox add column if not exists address_key uuid;
 -- A failed send keeps its group and its idempotency key for the retry, so a
 -- later payment joining the group cannot turn the retry into a second email.
 alter table ticket_email_outbox add column if not exists batch_key text;
+-- A failed send waits before it is claimed again (1 min, 10 min, 1 h), so a
+-- short provider outage or a 429 does not burn every attempt in seconds.
+alter table ticket_email_outbox add column if not exists next_attempt_at timestamptz;
+-- Why a ticket finished as failed: the provider's refusal, or retries spent.
+alter table ticket_email_outbox add column if not exists failure_reason text;
+-- The email as first rendered, kept until the batch finishes: a retry sends
+-- the identical body under the same idempotency key, which the provider
+-- answers with the original email instead of refusing a changed payload.
+alter table ticket_email_outbox add column if not exists mail_body jsonb;
 create index if not exists ticket_email_outbox_pending on ticket_email_outbox(created_at) where finished_at is null;
 alter table ticket_email_outbox enable row level security;
 revoke all on ticket_email_outbox from anon, authenticated;
@@ -3796,7 +3825,8 @@ create or replace function public.queue_ticket_email()
 returns trigger language plpgsql security definer set search_path = public as $$
 begin
   if not new.paid or new.status = 'cancelled' or (tg_op = 'UPDATE' and old.paid)
-    or new.loyalty_card_id is null or new.ticket_email_skip then
+    or new.loyalty_card_id is null or new.ticket_email_skip
+    or public.settled_by_write_off(new.restaurant_id, new.id) then
     return null;
   end if;
   insert into ticket_email_outbox (restaurant_id, card_id, order_id, session_id, address_key)
@@ -3824,7 +3854,7 @@ begin
   perform pg_advisory_xact_lock(hashtext('claim_ticket_emails'));
   -- A batch expires as a unit, a day after its oldest ticket, and never while a
   -- sender holds part of it.
-  update ticket_email_outbox o set finished_at = now(), outcome = 'expired'
+  update ticket_email_outbox o set finished_at = now(), outcome = 'expired', mail_body = null
    where o.finished_at is null
      and coalesce(o.batch_key, o.id::text) in (
        select coalesce(t.batch_key, t.id::text) from ticket_email_outbox t
@@ -3833,12 +3863,15 @@ begin
        having min(t.created_at) < now() - interval '24 hours'
           and bool_and(t.claimed_at is null or t.claimed_at < now() - interval '5 minutes'));
   -- A keyed batch is claimed whole: the limit must not split it, or its retry
-  -- would reuse the key with fewer orders.
+  -- would reuse the key with fewer orders. A failed send waits out its
+  -- backoff, and fresh tickets come before retries, so rows that keep failing
+  -- never fill every claim ahead of newer ones.
   return query
   with seed as (
     select t.id, t.batch_key from ticket_email_outbox t
      where t.finished_at is null and (t.claimed_at is null or t.claimed_at < now() - interval '5 minutes')
-     order by t.created_at limit greatest(1, least(p_limit, 50))
+       and (t.next_attempt_at is null or t.next_attempt_at <= now())
+     order by t.attempts, t.created_at limit greatest(1, least(p_limit, 50))
      for update
   ), mates as (
     select t.id from ticket_email_outbox t
@@ -8941,7 +8974,10 @@ begin
   if p_intent is null then raise exception 'invalid charge'; end if;
   v_gen := public.bump_fee_revision(p_restaurant, p_intent);
   insert into fee_reconcile_queue (restaurant_id, stripe_payment_intent, generation) values (p_restaurant, p_intent, v_gen)
-    on conflict (restaurant_id, stripe_payment_intent) do update set generation = excluded.generation, enqueued_at = now();
+    -- Only the generation moves: enqueued_at stays the first time this charge
+    -- was queued, so a charge re-queued by every refund event still ages into
+    -- the overdue warning instead of looking new each time.
+    on conflict (restaurant_id, stripe_payment_intent) do update set generation = excluded.generation;
   return v_gen;
 end;
 $$;
@@ -10067,7 +10103,7 @@ begin
   if exists (select 1 from stripe_disputes where restaurant_id = p_restaurant
       and reconciliation_state <> 'review'
       and (reconciliation_state <> 'reconciled' or status not in ('won', 'lost', 'warning_closed', 'prevented')))
-    or exists (select 1 from stripe_dispute_events e where e.state <> 'done' and (
+    or exists (select 1 from stripe_dispute_events e where e.state not in ('done', 'review') and (
       e.restaurant_id = p_restaurant
       or e.stripe_account_id in (select stripe_account_id from restaurants where id = p_restaurant)
       or e.stripe_account_id in (select stripe_account_id from diner_checkouts where restaurant_id = p_restaurant)
@@ -11854,6 +11890,12 @@ create table if not exists stripe_dispute_events (
   unique (restaurant_id, id, livemode, stripe_account_id)
 );
 create index if not exists dispute_events_pending on stripe_dispute_events(created_at, id) where state <> 'done';
+-- An event that keeps failing is set aside for platform review after a capped
+-- number of attempts: polled no more by recovery, archived with the
+-- restaurant, and never blocking its deletion.
+alter table stripe_dispute_events drop constraint if exists stripe_dispute_events_state_check;
+alter table stripe_dispute_events add constraint stripe_dispute_events_state_check
+  check (state in ('pending', 'processing', 'error', 'review', 'done'));
 create table if not exists stripe_dispute_movements (
   id uuid primary key default gen_random_uuid(),
   restaurant_id uuid references restaurants(id) on delete cascade,
@@ -12013,7 +12055,9 @@ end $$;
 create or replace function public.fail_stripe_dispute_event(p_event uuid, p_claim uuid, p_error text)
 returns void language plpgsql security definer set search_path = public as $$
 begin
-  update stripe_dispute_events set state = 'error', last_error = left(p_error, 1000), claim_token = null, lease_until = null
+  -- Ten tries (webhook deliveries and daily recovery together), then review.
+  update stripe_dispute_events set state = case when attempts >= 10 then 'review' else 'error' end,
+    last_error = left(p_error, 1000), claim_token = null, lease_until = null
     where id = p_event and claim_token = p_claim and state = 'processing';
 end $$;
 revoke all on function public.enqueue_stripe_dispute_event(text, boolean, text, text, text, text, timestamptz) from public, anon, authenticated;
@@ -12694,6 +12738,9 @@ begin
     return jsonb_build_object('outcome', 'changed', 'owed_cents', v_owed + v_whole);
   end if;
 
+  -- Orders this settles earn no loyalty visit and queue no ticket email
+  -- (settled_by_write_off); cleared right after the loop.
+  perform set_config('tabletap.walkout_writer', p_ref::text, true);
   for o in select x.id, x.total, x.tip, x.service_fee, public.retained_order_coverage(p_restaurant, x.id) as covered
     from orders x where x.id = any(p_orders) order by x.id loop
     v_ids := v_ids || o.id;
@@ -12732,6 +12779,7 @@ begin
      where id = o.id and restaurant_id = p_restaurant;
   end loop;
   perform set_config('tabletap.forgive_writer', '', true);
+  perform set_config('tabletap.walkout_writer', '', true);
 
   -- The loss, written with the change itself: the corte and analytics read
   -- it from here, and a log written afterwards could fail and leave the loss
@@ -12823,6 +12871,8 @@ alter table order_adjustments add column if not exists request jsonb;
 -- Several returns per order; still one cancellation.
 alter table order_adjustments drop constraint if exists order_adjustments_order_id_kind_key;
 create unique index if not exists order_adjustments_one_cancel on order_adjustments (order_id) where kind = 'cancel';
+-- settled_by_write_off asks this on every order that becomes paid.
+create index if not exists order_adjustments_forgiven_order on order_adjustments (order_id) where kind = 'forgive';
 create unique index if not exists order_adjustments_return_once on order_adjustments (restaurant_id, operation_ref)
   where kind = 'return';
 alter table order_adjustments drop constraint if exists order_adjustments_return_check;

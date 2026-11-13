@@ -23,7 +23,21 @@ export interface Mail {
   headers?: Record<string, string>;
 }
 
-export type MailResult = { sent: true } | { sent: false; reason: "unconfigured" | "failed" };
+/**
+ * A failure says whether trying again can help: a 429, a 5xx, a dropped
+ * connection or an idempotent request still in flight may succeed later; a
+ * validation refusal never will. `code` is the provider's error name.
+ */
+export type MailResult = { sent: true }
+  | { sent: false; reason: "unconfigured" | "failed"; retryable?: boolean; status?: number; code?: string };
+
+/** What a provider refusal means for a retry. */
+export function mailFailure(status: number, body: string): { retryable: boolean; status: number; code?: string } {
+  let code: unknown;
+  try { code = (JSON.parse(body) as { name?: unknown }).name; } catch { code = undefined; }
+  const retryable = status === 429 || status >= 500 || code === "concurrent_idempotent_requests";
+  return { retryable, status, ...(typeof code === "string" ? { code } : {}) };
+}
 
 /** Whether mail can actually leave this deployment. */
 export function mailConfigured(): boolean {
@@ -57,12 +71,13 @@ export async function sendMail(mail: Mail): Promise<MailResult> {
       }),
     });
     if (!res.ok) {
-      console.error("receipt mail failed", res.status, await res.text().catch(() => ""));
-      return { sent: false, reason: "failed" };
+      const body = await res.text().catch(() => "");
+      console.error("receipt mail failed", res.status, body);
+      return { sent: false, reason: "failed", ...mailFailure(res.status, body) };
     }
     return { sent: true };
   } catch (err) {
     console.error("receipt mail error", err);
-    return { sent: false, reason: "failed" };
+    return { sent: false, reason: "failed", retryable: true };
   }
 }

@@ -10,56 +10,44 @@ import { createHash } from "node:crypto";
 // fails the payment that queued it.
 // ============================================================================
 import { createAdminClient } from "@/lib/supabase/admin";
-import { buildReceipt, receiptModel } from "@/lib/receipt";
-import { readOrderReceipt } from "@/lib/receipt-source";
-import { ticketPdf } from "@/lib/ticket-pdf";
-import { ticketPlace, ticketText } from "@/lib/ticket-place";
-import { ticketLoyalty } from "@/lib/ticket-loyalty";
 import { sendMail, mailConfigured } from "@/lib/mail";
-import { DEFAULT_TIME_ZONE } from "@/lib/open-menus";
-import { DEFAULT_LOCALE, messagesFor, translate } from "@/lib/i18n";
+import { renderTicketMail, ticketMail, type StoredTicketMail } from "@/lib/ticket-email-body";
+import { outboxPatch, ticketOutcome, type TicketOutcome } from "@/lib/ticket-email-retry";
 
-interface OutboxRow { id: string; restaurant_id: string; card_id: string; order_id: string; session_id: string | null; attempts: number; address_key: string | null; batch_key: string | null; claim: string }
-type Outcome = "sent" | "failed" | "unconfigured" | "no_email";
-
-function siteOrigin(): string {
-  if (process.env.VERCEL_PROJECT_PRODUCTION_URL) return `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`;
-  return process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
+interface OutboxRow {
+  id: string; restaurant_id: string; card_id: string; order_id: string; session_id: string | null; attempts: number;
+  address_key: string | null; batch_key: string | null; claim: string; mail_body?: StoredTicketMail | null;
 }
+type Db = ReturnType<typeof createAdminClient>;
 
-/** One email for a group of orders paid together on one card. */
-async function sendGroup(rows: OutboxRow[], key: string): Promise<Outcome> {
-  const db = createAdminClient();
-  const { restaurant_id: restaurantId, card_id: cardId } = rows[0];
+/** One email for a group of orders paid together on one card; "lost" when
+ * this sender no longer owns every row of the group. */
+async function sendGroup(db: Db, rows: OutboxRow[]): Promise<TicketOutcome | "lost"> {
+  const { restaurant_id: restaurantId, card_id: cardId, claim } = rows[0];
+  const ids = rows.map(r => r.id);
   const { data: card } = await db.from("loyalty_cards").select("email, email_unsubscribe")
     .eq("id", cardId).eq("restaurant_id", restaurantId).maybeSingle();
   // Changed or removed since the payment queued it: never the new address.
-  if (!card?.email || !card.email_unsubscribe || rows.some(r => r.address_key !== card.email_unsubscribe)) return "no_email";
-  if (!mailConfigured()) return "unconfigured";
-  const { data: place } = await db.from("restaurants").select("name, timezone").eq("id", restaurantId).single();
-  const messages = messagesFor(DEFAULT_LOCALE);
-  const t = (key: string, vars?: Record<string, string | number>) => translate(messages, key, vars);
-  const where = { name: place?.name ?? "TableTap", timeZone: (place?.timezone as string | null) ?? DEFAULT_TIME_ZONE, locale: "es-MX" };
-  const source = await readOrderReceipt(db, rows.map(r => r.order_id), true, rows.map(r => r.order_id));
-  const receipt = buildReceipt(source.orders, where, t, source.payment);
-  const model = receiptModel(source.orders, where, t, source.payment);
-  const site = siteOrigin();
-  const pdf = await ticketPdf(model, await ticketPlace(db, restaurantId, t), ticketText(t), ticketLoyalty(source, t),
-    new URL(`/dashboard/bills?order=${rows[0].order_id}`, site).toString());
-  const stop = new URL(`/tickets/stop?t=${card.email_unsubscribe}`, site).toString();
-  const footer = t("cardEmail.footer", { restaurant: where.name });
-  // The receipt's own footer promises the address is not kept; this one is
-  // kept on the card, so that line is replaced, not contradicted (Codex review).
-  const kept = (text: string) => text.split(t("receipt.footer")).join("");
-  const result = await sendMail({
-    to: card.email, fromName: where.name, subject: receipt.subject,
-    text: `${kept(receipt.text)}\n\n${footer}\n${t("cardEmail.stopLink")}: ${stop}`,
-    html: `${kept(receipt.html)}<p style="margin-top:24px;color:#6E7A74;font-size:12px">${footer} <a href="${stop}">${t("cardEmail.stopLink")}</a></p>`,
-    attachments: [{ filename: `ticket-${model.code}.pdf`, content: pdf }],
-    headers: { "List-Unsubscribe": `<${stop}>` },
-    idempotencyKey: key,
-  });
-  return result.sent ? "sent" : result.reason;
+  if (!card?.email || !card.email_unsubscribe || rows.some(r => r.address_key !== card.email_unsubscribe)) return { outcome: "no_email" };
+  if (!mailConfigured()) return { outcome: "unconfigured" };
+  const key = rows[0].batch_key ?? batchKeyFor(ids);
+  let body = rows.find(r => r.mail_body)?.mail_body ?? null;
+  // The group's key and body are written before the provider is called: a
+  // sender that dies after the email went out leaves both behind, and the
+  // retry sends the same body with the same key, so the provider answers
+  // with the email it already sent.
+  if (!body || !rows[0].batch_key) {
+    body ??= await renderTicketMail(db, restaurantId, rows.map(r => r.order_id), card.email_unsubscribe);
+    let write = db.from("ticket_email_outbox").update({ ...(rows[0].batch_key ? {} : { batch_key: key }), mail_body: body })
+      .eq("restaurant_id", restaurantId).eq("claim", claim);
+    if (!rows[0].batch_key) write = write.is("batch_key", null);
+    const { data: kept, error } = await write.in("id", ids).select("id");
+    // Not recorded on every row this sender still owns, not sent: a lease
+    // that lapsed belongs to whoever claimed it since, and a later drain
+    // sends the group whole (Codex review of the delta, 2026-11-12).
+    if (error || kept?.length !== ids.length) return "lost";
+  }
+  return ticketOutcome(await sendMail(ticketMail(body, card.email, key)));
 }
 
 let lastDrain = 0;
@@ -88,13 +76,13 @@ export async function drainTicketEmails(limit = 20): Promise<void> {
 /**
  * The daily cron: claim and send until nothing is left, so a backlog larger
  * than one claim is not left to expire before the next run (Codex review of
- * #622). Bounded, and it stops once a claim brings back only rows it has
- * already tried (failed sends released for a later retry).
+ * #622). Bounded by rounds and by its own deadline, and it stops once a claim
+ * brings back only rows it has already tried.
  */
-export async function drainTicketEmailQueue(rounds = 20, limit = 50): Promise<void> {
+export async function drainTicketEmailQueue(rounds = 20, limit = 50, deadline = Infinity): Promise<void> {
   const seen = new Set<string>();
-  for (let round = 0; round < rounds; round++) {
-    const ids = await drainOnce(limit);
+  for (let round = 0; round < rounds && Date.now() < deadline; round++) {
+    const ids = await drainOnce(limit, deadline);
     const fresh = ids.filter(id => !seen.has(id));
     ids.forEach(id => seen.add(id));
     if (ids.length < limit || !fresh.length) return;
@@ -106,8 +94,9 @@ export function batchKeyFor(ids: string[]): string {
   return `ticket-${createHash("sha256").update([...ids].sort().join(",")).digest("hex").slice(0, 32)}`;
 }
 
-/** One claim of up to `limit` rows, sent; returns the ids it claimed. */
-async function drainOnce(limit: number): Promise<string[]> {
+/** One claim of up to `limit` rows, sent; returns the ids it claimed. Groups
+ * left when the deadline passes are released for the next drain. */
+async function drainOnce(limit: number, deadline = Infinity): Promise<string[]> {
   try {
     const db = createAdminClient();
     const { data, error } = await db.rpc("claim_ticket_emails", { p_limit: limit });
@@ -122,28 +111,18 @@ async function drainOnce(limit: number): Promise<string[]> {
     }
     for (const rows of groups.values()) {
       const ids = rows.map(r => r.id);
-      const batch = rows[0].batch_key ?? batchKeyFor(ids);
-      // The group's identity is written before the provider is called: a
-      // sender that dies after the email went out leaves the key behind, and
-      // the retry sends with it, so the provider answers with the same email.
-      if (!rows[0].batch_key) {
-        const { data: keyed, error: keyError } = await db.from("ticket_email_outbox").update({ batch_key: batch })
-          .eq("restaurant_id", rows[0].restaurant_id).eq("claim", rows[0].claim).is("batch_key", null).in("id", ids)
-          .select("id");
-        // Not recorded on every row this sender still owns, not sent: a lease
-        // that lapsed belongs to whoever claimed it since, and a later drain
-        // sends the group whole (Codex review of the delta, 2026-11-12).
-        if (keyError || keyed?.length !== ids.length) continue;
-      }
-      const outcome = await sendGroup(rows, batch).catch((err: unknown) => {
-        console.error("ticket email failed", err);
-        return "failed" as const;
-      });
-      // A failure is tried again by a later drain, up to three times.
-      const retry = outcome === "failed" && rows.every(r => r.attempts < 3);
-      await db.from("ticket_email_outbox")
-        .update(retry ? { claimed_at: null, claim: null } : { finished_at: new Date().toISOString(), outcome })
+      const writeRows = (patch: Record<string, unknown>) => db.from("ticket_email_outbox").update(patch)
         .eq("restaurant_id", rows[0].restaurant_id).eq("claim", rows[0].claim).in("id", ids);
+      if (Date.now() >= deadline) {
+        await writeRows({ claimed_at: null, claim: null });
+        continue;
+      }
+      const result = await sendGroup(db, rows).catch((err: unknown): TicketOutcome => {
+        console.error("ticket email failed", err);
+        return { outcome: "failed", retryable: true, reason: `error: ${err instanceof Error ? err.message : String(err)}` };
+      });
+      if (result === "lost") continue;
+      await writeRows(outboxPatch(result, Math.max(...rows.map(r => r.attempts))));
     }
     return (data as OutboxRow[]).map(r => r.id);
   } catch (err) {
@@ -151,6 +130,7 @@ async function drainOnce(limit: number): Promise<string[]> {
     return [];
   }
 }
+
 
 /**
  * The cashier's "don't send it this time" when staff collect a table or a

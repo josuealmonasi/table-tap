@@ -394,6 +394,7 @@ drop table if exists stripe_dispute_events cascade;
 drop table if exists stripe_disputes cascade;
 -- Loyalty stamped by payment.
 drop function if exists public.stamp_loyalty_on_payment() cascade;
+drop function if exists public.settled_by_write_off(uuid, uuid);
 drop function if exists public.fix_loyalty_card_on_payment() cascade;
 drop function if exists public.queue_ticket_email() cascade;
 drop function if exists public.claim_ticket_emails(int);

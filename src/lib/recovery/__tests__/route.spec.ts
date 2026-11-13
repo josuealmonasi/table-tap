@@ -1,7 +1,8 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
 
-const { jobs, context } = vi.hoisted(() => ({ jobs: { stock: vi.fn(), refunds: vi.fn(), fees: vi.fn(), subscriptions: vi.fn(), disputes: vi.fn() }, context: vi.fn() }));
+const { jobs, context, drain } = vi.hoisted(() => ({ jobs: { stock: vi.fn(), refunds: vi.fn(), fees: vi.fn(), subscriptions: vi.fn(), disputes: vi.fn() }, context: vi.fn(), drain: vi.fn() }));
+vi.mock("@/lib/ticket-email", () => ({ drainTicketEmailQueue: drain }));
 vi.mock("../context", () => ({ recoveryContext: context }));
 vi.mock("../stock", () => ({ recoverStock: jobs.stock }));
 vi.mock("../refunds", () => ({ recoverRefunds: jobs.refunds }));
@@ -18,6 +19,7 @@ beforeEach(() => {
   vi.stubEnv("CRON_SECRET", "cron-test-secret");
   context.mockReturnValue({});
   Object.values(jobs).forEach(job => job.mockResolvedValue(clean));
+  drain.mockResolvedValue(undefined);
 });
 afterEach(() => vi.unstubAllEnvs());
 
@@ -47,4 +49,15 @@ it("a failed job cannot prevent the other jobs from running", async () => {
   expect(jobs.refunds).toHaveBeenCalledOnce();
   expect(jobs.fees).toHaveBeenCalledOnce();
   expect(jobs.subscriptions).toHaveBeenCalledOnce();
+});
+it("finding 5: drains ticket emails alongside the jobs, with its own deadline, before answering", async () => {
+  let finished = false;
+  drain.mockImplementation(() => new Promise<void>(done => setTimeout(() => { finished = true; done(); }, 20)));
+  const started = Date.now();
+  expect((await GET(request("Bearer cron-test-secret"))).status).toBe(200);
+  expect(finished).toBe(true);
+  const [, , deadline] = drain.mock.calls[0];
+  expect(deadline - started).toBeGreaterThanOrEqual(30_000);
+  expect(deadline - started).toBeLessThanOrEqual(45_000);
+  expect(drain.mock.invocationCallOrder[0]).toBeLessThan(jobs.stock.mock.invocationCallOrder[0]);
 });

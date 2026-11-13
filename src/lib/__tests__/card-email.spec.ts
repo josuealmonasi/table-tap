@@ -3,7 +3,7 @@ import { beforeEach, expect, it, vi } from "vitest";
 type Row = Record<string, unknown> & { id: string };
 const state = vi.hoisted(() => ({
   claimed: [] as Row[], updates: [] as unknown[], sent: [] as unknown[], steps: [] as string[], claims: 0,
-  mail: "sent" as "sent" | "failed", crashAfterSend: false, batches: [] as Row[][],
+  mail: "sent" as "sent" | "failed", result: null as unknown, renders: 0, sendMs: 0, crashAfterSend: false, batches: [] as Row[][],
   card: { email: "ana@example.invalid", email_unsubscribe: "11111111-1111-4111-8111-111111111111" } as unknown,
 }));
 vi.mock("@/lib/supabase/admin", () => ({
@@ -54,14 +54,15 @@ vi.mock("@/lib/supabase/admin", () => ({
 vi.mock("@/lib/mail", () => ({ mailConfigured: () => true, sendMail: async (m: unknown) => {
   state.steps.push("send");
   state.sent.push(m);
-  return state.mail === "sent" ? { sent: true } : { sent: false, reason: "failed" };
+  if (state.sendMs) vi.advanceTimersByTime(state.sendMs);
+  return state.result ?? (state.mail === "sent" ? { sent: true } : { sent: false, reason: "failed" });
 } }));
 vi.mock("@/lib/receipt-source", () => ({ readOrderReceipt: async () => ({ orders: [], restaurantId: "r", tableId: null }) }));
 vi.mock("@/lib/receipt", () => ({
   buildReceipt: () => ({ subject: "Tu recibo", text: "Total", html: "<p>Total</p>" }),
   receiptModel: () => ({ code: "ORD-1" }),
 }));
-vi.mock("@/lib/ticket-pdf", () => ({ ticketPdf: async () => Buffer.from("%PDF-") }));
+vi.mock("@/lib/ticket-pdf", () => ({ ticketPdf: async () => Buffer.from(`%PDF-${++state.renders}`) }));
 vi.mock("@/lib/ticket-place", () => ({ ticketPlace: async () => ({ name: "Demo Bistro" }), ticketText: () => ({}) }));
 vi.mock("@/lib/ticket-loyalty", () => ({ ticketLoyalty: () => null }));
 
@@ -74,7 +75,7 @@ const drain = async () => { vi.advanceTimersByTime(5000); await drainTicketEmail
 
 beforeEach(() => {
   vi.useFakeTimers({ toFake: ["Date"] });
-  Object.assign(state, { claimed: [], updates: [], sent: [], steps: [], claims: 0, mail: "sent", crashAfterSend: false, batches: [] });
+  Object.assign(state, { claimed: [], updates: [], sent: [], steps: [], claims: 0, mail: "sent", result: null, renders: 0, sendMs: 0, crashAfterSend: false, batches: [] });
 });
 const keys = () => (state.sent as { idempotencyKey: string }[]).map(m => m.idempotencyKey);
 const finished = () => (state.updates as { patch: Record<string, unknown>; ids: string[] }[]).filter(u => "finished_at" in u.patch);
@@ -126,7 +127,8 @@ it("writes the group's key before calling the provider, derived from its rows (C
   expect(state.steps).toEqual(["persist", "send", "finish"]);
   expect(keys()).toEqual([batchKeyFor(["1", "2"])]);
   expect(batchKeyFor(["2", "1"])).toBe(batchKeyFor(["1", "2"]));
-  expect(state.updates[0]).toEqual({ patch: { batch_key: batchKeyFor(["1", "2"]) }, ids: ["2", "1"] });
+  expect(state.updates[0]).toEqual({ patch: { batch_key: batchKeyFor(["1", "2"]), mail_body: expect.objectContaining({ subject: "Tu recibo" }) },
+    ids: ["2", "1"] });
 });
 
 it("a sender that dies after the provider accepted re-sends with the same key", async () => {
@@ -146,7 +148,8 @@ it("a failed send retries with its key, and a later ticket of the same sitting i
   state.claimed = [row("1", "o1", "s")];
   state.mail = "failed";
   await drain();
-  expect(state.updates.at(-1)).toEqual({ patch: { claimed_at: null, claim: null }, ids: ["1"] });
+  expect(state.updates.at(-1)).toEqual({ patch: { claimed_at: null, claim: null, failure_reason: "network",
+    next_attempt_at: new Date(Date.now() + 60_000).toISOString() }, ids: ["1"] });
   state.mail = "sent";
   state.claimed.push(row("2", "o2", "s"));
   await drain();
@@ -204,4 +207,59 @@ it("a sender whose lease another sender took sends nothing and finishes nothing"
   await drainTicketEmailQueue(1);
   expect(state.sent).toHaveLength(0);
   expect(finished()).toHaveLength(0);
+});
+
+it("finding 12: a retry resends the stored body under the same key, never a re-render", async () => {
+  state.claimed = [row("1", "o1", "s")];
+  state.crashAfterSend = true;
+  await drainTicketEmailQueue(1);
+  state.crashAfterSend = false;
+  await drainTicketEmailQueue(1);
+  expect(state.renders).toBe(1);
+  const [first, retry] = state.sent as { idempotencyKey: string; attachments: { content: Buffer }[]; html: string }[];
+  expect(retry.idempotencyKey).toBe(first.idempotencyKey);
+  expect(retry.attachments[0].content.equals(first.attachments[0].content)).toBe(true);
+  expect(retry.html).toBe(first.html);
+  // The stored body is dropped once the batch finishes.
+  expect(finished()).toEqual([{ patch: expect.objectContaining({ outcome: "sent", mail_body: null }), ids: ["1"] }]);
+});
+
+it("finding 12: the provider saying the key was used for another body counts as sent", async () => {
+  state.claimed = [row("1", "o1", "s", { attempts: 2 })];
+  state.result = { sent: false, reason: "failed", retryable: false, status: 409, code: "invalid_idempotent_request" };
+  await drainTicketEmailQueue(1);
+  expect(finished()).toEqual([{ patch: expect.objectContaining({ outcome: "sent", failure_reason: null }), ids: ["1"] }]);
+});
+
+it("finding 2: a validation refusal finishes as failed at once, with the reason", async () => {
+  state.claimed = [row("1", "o1", "s")];
+  state.result = { sent: false, reason: "failed", retryable: false, status: 422, code: "validation_error" };
+  await drainTicketEmailQueue(1);
+  expect(finished()).toEqual([{ patch: expect.objectContaining({ outcome: "failed", failure_reason: "refused: 422 validation_error" }), ids: ["1"] }]);
+});
+
+it("finding 2: a 429 waits longer each time and gives up after the fourth attempt", async () => {
+  state.result = { sent: false, reason: "failed", retryable: true, status: 429, code: "rate_limit_exceeded" };
+  const waits: number[] = [];
+  for (const attempts of [1, 2, 3]) {
+    state.claimed = [row("1", "o1", "s", { attempts })];
+    await drainTicketEmailQueue(1);
+    const patch = (state.updates.at(-1) as { patch: { next_attempt_at: string } }).patch;
+    waits.push(Date.parse(patch.next_attempt_at) - Date.now());
+  }
+  expect(waits).toEqual([60_000, 600_000, 3_600_000]);
+  state.claimed = [row("1", "o1", "s", { attempts: 4 })];
+  await drainTicketEmailQueue(1);
+  expect(finished().at(-1)).toEqual({ patch: expect.objectContaining({ outcome: "failed",
+    failure_reason: "retries exhausted: 429 rate_limit_exceeded" }), ids: ["1"] });
+});
+
+it("finding 5: the cron drain stops at its own deadline and releases what it claimed unsent", async () => {
+  state.batches = [[row("1", "o1", null), row("2", "o2", null)]];
+  state.claimed = [row("1", "o1", null), row("2", "o2", null)];
+  state.sendMs = 10;
+  await drainTicketEmailQueue(20, 2, Date.now() + 5);
+  expect(state.claims).toBe(1);
+  expect(state.sent).toHaveLength(1);
+  expect(state.updates.at(-1)).toEqual({ patch: { claimed_at: null, claim: null }, ids: ["2"] });
 });
