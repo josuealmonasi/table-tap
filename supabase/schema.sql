@@ -14531,3 +14531,111 @@ alter table account_movements add constraint account_movements_debt check (
     or (kind in ('collection', 'credit') and amount_cents > 0 and debt_delta_cents = -amount_cents and provenance = 'live')
     or (kind = 'collection' and amount_cents > 0 and debt_delta_cents = 0 and provenance = 'backfill')
     or (kind in ('return_approved', 'refund_paid', 'historical_observation') and debt_delta_cents = 0));
+
+-- Batch the polled list without making a second version of the money rules.
+create or replace function public.refund_operations_progress_v1(p_restaurant uuid, p_ids uuid[])
+returns table (operation_id uuid, outstanding_cents int, unresolved boolean)
+language sql stable security definer set search_path = public as $$
+  select o.id, progress.outstanding_cents, progress.unresolved
+  from refund_operations o
+  cross join lateral jsonb_to_record(public.refund_operation_progress_v1(o.id))
+    as progress(outstanding_cents int, unresolved boolean)
+  where o.restaurant_id = p_restaurant and o.id = any(p_ids);
+$$;
+revoke all on function public.refund_operations_progress_v1(uuid, uuid[]) from public, anon, authenticated;
+grant execute on function public.refund_operations_progress_v1(uuid, uuid[]) to service_role;
+
+-- Takings need only this window's events, not a materialized refund history.
+-- Keep the two-argument signature for deployed readers and inclusive trails.
+create or replace function public.order_return_events_v1(p_restaurant uuid, p_currency text, p_from timestamptz, p_to timestamptz)
+returns table (id text, operation_id uuid, order_id uuid, kind text, source text, currency text, amount_cents int,
+  succeeded_at timestamptz, payout_actor text, confirmed_by text, historical_log_id uuid)
+language plpgsql stable security definer set search_path = public as $$
+declare v_operations uuid[]; v_refunds text[];
+begin
+  if p_from is null or p_to is null or p_from > p_to then raise exception 'invalid return window'; end if;
+  -- Pick operations by event time BEFORE checking their full evidence. A
+  -- conflicting record outside the day must still fail an in-window refund.
+  -- Undated successes stay candidates: missing dates cannot look like zero.
+  v_operations := array(
+    select o.id from refund_operations o
+    where o.restaurant_id = p_restaurant and (p_currency is null or o.currency = p_currency)
+      and ((o.completed_at >= p_from and o.completed_at < p_to)
+        or (o.status = 'succeeded' and o.completed_at is null))
+    union
+    select o.id from refund_attempts a join refund_operations o on o.id = a.operation_id and o.restaurant_id = a.restaurant_id
+    where o.restaurant_id = p_restaurant and (p_currency is null or o.currency = p_currency)
+      and a.provider_status = 'succeeded' and a.stripe_refund_id is not null
+      and ((coalesce(a.succeeded_at, o.completed_at) >= p_from and coalesce(a.succeeded_at, o.completed_at) < p_to)
+        or a.succeeded_at is null));
+  v_refunds := array(
+    select a.stripe_refund_id from refund_attempts a
+      where a.restaurant_id = p_restaurant and a.operation_id = any(v_operations) and a.stripe_refund_id is not null
+    union select o.stripe_refund_id from refund_operations o
+      where o.restaurant_id = p_restaurant and o.id = any(v_operations) and o.stripe_refund_id is not null);
+
+  if exists (
+    select 1 from refund_operations o join refund_attempts a on a.operation_id = o.id and a.restaurant_id = o.restaurant_id
+    where o.restaurant_id = p_restaurant and o.id = any(v_operations) and (p_currency is null or o.currency = p_currency)
+      and a.provider_status = 'succeeded' and a.stripe_refund_id is not null and a.succeeded_at is null
+      and not exists (select 1 from refund_failures f where f.restaurant_id = a.restaurant_id and f.stripe_refund_id = a.stripe_refund_id)
+      -- Before success times were kept: a single refund that proves the whole
+      -- operation is dated by the operation's own completion.
+      and not (o.status = 'succeeded' and o.completed_at is not null and round(a.amount * 100) = round(o.amount * 100)
+        and (select count(distinct b.stripe_refund_id) from refund_attempts b where b.operation_id = o.id
+          and b.provider_status = 'succeeded' and b.stripe_refund_id is not null) = 1)) then
+    raise exception 'a succeeded refund has no success time';
+  end if;
+  -- Every writer now keeps one refund to one obligation; one that predates it
+  -- would be counted twice, so it fails the read (verification 2, V7).
+  if exists (select 1 from (
+        select a.stripe_refund_id r, a.operation_id op from refund_attempts a where a.restaurant_id = p_restaurant and a.stripe_refund_id = any(v_refunds)
+        union select o.stripe_refund_id, o.id from refund_operations o where o.restaurant_id = p_restaurant and o.stripe_refund_id = any(v_refunds)) owners
+      group by r having count(distinct op) > 1) then
+    raise exception 'a provider refund is counted by two returns';
+  end if;
+  -- Two records of one refund must agree; which one a report picks must
+  -- never decide its amount or its day (verification 4).
+  if exists (select 1 from refund_attempts a where a.restaurant_id = p_restaurant and a.operation_id = any(v_operations) and a.provider_status = 'succeeded'
+      and a.stripe_refund_id is not null
+      group by a.operation_id, a.stripe_refund_id
+      having count(distinct round(a.amount * 100)) > 1 or count(distinct a.succeeded_at) > 1) then
+    raise exception 'two records of one refund disagree';
+  end if;
+  -- A completed operation's events must be exactly its amount: money a report
+  -- cannot place is a failed read, never a quiet day (verification 7).
+  if exists (select 1 from refund_operations o where o.restaurant_id = p_restaurant and o.id = any(v_operations)
+      and (p_currency is null or o.currency = p_currency) and o.status = 'succeeded' and o.source <> 'review'
+      and ((o.source in ('cash', 'terminal') and o.completed_at is null)
+        or (o.source = 'stripe' and not exists (select 1 from refund_attempts a where a.operation_id = o.id)
+          and (o.stripe_refund_id is null or o.completed_at is null))
+        or (o.source = 'stripe' and exists (select 1 from refund_attempts a where a.operation_id = o.id)
+          and (public.refund_operation_progress_v1(o.id)->>'outstanding_cents')::int <> 0))) then
+    raise exception 'a completed return does not reconcile with its refunds';
+  end if;
+  return query
+  select distinct on (o.id, a.stripe_refund_id) 'refund:' || a.stripe_refund_id, o.id, d.order_id, d.kind, o.source, o.currency,
+      round(a.amount * 100)::int, coalesce(a.succeeded_at, o.completed_at), o.payout_actor, o.confirmed_by, o.historical_log_id
+    from refund_operations o
+    join order_adjustments d on d.id = o.adjustment_id and d.restaurant_id = o.restaurant_id
+    join refund_attempts a on a.operation_id = o.id and a.restaurant_id = o.restaurant_id
+    where o.restaurant_id = p_restaurant and o.id = any(v_operations) and o.source = 'stripe'
+      and coalesce(a.succeeded_at, o.completed_at) >= p_from and coalesce(a.succeeded_at, o.completed_at) < p_to and (p_currency is null or o.currency = p_currency)
+      and a.provider_status = 'succeeded' and a.stripe_refund_id is not null
+      and not exists (select 1 from refund_failures f where f.restaurant_id = a.restaurant_id and f.stripe_refund_id = a.stripe_refund_id)
+    order by o.id, a.stripe_refund_id, a.attempt_no, a.id;
+  -- A Stripe operation completed before attempts existed has only its own record.
+  return query
+  select case when o.source = 'stripe' then 'refund:' || o.stripe_refund_id else 'operation:' || o.id end,
+      o.id, d.order_id, d.kind, o.source, o.currency, round(o.amount * 100)::int,
+      o.completed_at, o.payout_actor, o.confirmed_by, o.historical_log_id
+    from refund_operations o join order_adjustments d on d.id = o.adjustment_id and d.restaurant_id = o.restaurant_id
+    where o.restaurant_id = p_restaurant and o.id = any(v_operations) and (p_currency is null or o.currency = p_currency)
+      and o.status = 'succeeded' and o.completed_at >= p_from and o.completed_at < p_to
+      and (o.source in ('cash', 'terminal')
+        or (o.source = 'stripe' and not exists (select 1 from refund_attempts a where a.operation_id = o.id)
+          and o.stripe_refund_id is not null
+          and not exists (select 1 from refund_failures f where f.restaurant_id = o.restaurant_id and f.stripe_refund_id = o.stripe_refund_id)));
+end $$;
+revoke all on function public.order_return_events_v1(uuid, text, timestamptz, timestamptz) from public, anon, authenticated;
+grant execute on function public.order_return_events_v1(uuid, text, timestamptz, timestamptz) to service_role;

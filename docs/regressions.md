@@ -34,6 +34,9 @@ and that a new party cannot see the previous party's waiting phones.
 | A duplicate refund tracks customer completion and fee completion separately (S11 I5) | A failed fee return disappeared behind an already-refunded customer payment |
 | A duplicate refund keeps its original charge currency everywhere (S11 I9) | Changing the menu currency relabelled money owed back and the approval amount |
 |---|---|
+| Takings bound return evidence before grouping (SQL read cost 2) | The day filter reached PostgREST only after SQL had materialized the restaurant's refund history |
+| Cash case tests narrow optional matchers | A runtime assertion did not tell TypeScript which API cases have an error matcher, so the new contract spec broke type checking |
+| Return polling batches SQL progress (SQL read cost 1) | The list needed every outstanding balance, but sent one RPC per refund every 15 seconds |
 | The cash API case checks the cashier's own refusal in both languages | Role-specific instructions were correct, but the case still matched the manager's older wording and reported a false failure; `cash-held-api-contract.spec.ts` checks both translations |
 | The cash API contract spec typechecks from a clean checkout | The spec and the inferred case union must agree: some cases have no refusal matcher. A property guard keeps that distinction; a clean `tsc --noEmit` catches an unsafe read |
 | The POS retry fixture leaves journal sources for its restaurant cascade | The retry case used the demo restaurant and deleted its charged order individually; the journal correctly refused cleanup. `api-retry-account-fixture.spec.ts` checks the disposable tenant and retained sources |
@@ -7358,3 +7361,36 @@ keeps the receipt paragraphs and gives the stop URL its own line, while still
 replacing the receipt's promise not to keep the address with the card's footer.
 `mail-plaintext.spec.ts` snapshots both languages; `card-email.spec.ts` checks
 the actual outbox sender with its database and mail provider mocked.
+
+## Return polling batches SQL progress (SQL read cost 1)
+
+The Returns list and the SQL progress rules had to agree for every open refund.
+Limiting concurrency protected the pool, but still sent one RPC per refund on
+every poll. `refund_operations_progress_v1` delegates to the existing per-id
+function, scoped to the restaurant and requested ids. The reader joins balances
+by operation id and continues a capped response; missing, repeated or invalid
+balances fail the read instead of looking paid. `progress-reads.spec.ts` compares
+batched balances with per-id answers, checks one ordinary batch, capped pages,
+identity, errors and the absence of fee recovery on this read path.
+
+## Takings bound return evidence before grouping (SQL read cost 2)
+
+The day shown by Orders and the SQL event reader had to agree on where the
+window applies. Filtering the function's output still built the whole refund
+history first. The required `p_from` and `p_to` overload selects candidate
+operations before evidence aggregation and filters each event before
+`distinct on`. It checks all evidence for those operations, including conflicting
+records outside the window and other owners of the same provider refund.
+Undated successes still fail the read. The existing signature remains for
+inclusive shift trails. Open-ended reads pass `infinity`, preserving their
+existing lower-bound-only behavior. `money-read-sql.spec.ts` pins SQL ordering,
+shared progress rules, permissions and reset coverage; `takings-window.spec.ts`
+checks the takings RPC arguments and partial refunds on either side of midnight.
+
+## Cash case tests narrow optional matchers
+
+The API case list and the contract test had to agree that only some cases carry
+`expectError`. Checking the value with `instanceof` happened after an invalid
+property access on the inferred union. The test now checks the property first;
+its two language assertions are unchanged. `tsc --noEmit` checks the narrowing,
+and `cash-held-api-contract.spec.ts` still checks both actual refusal messages.
