@@ -1492,7 +1492,14 @@ enviar esta vez" (`orders.ticket_email_skip`, from the till, from table
 collection, and from a divided bill's part, where `/api/split/collect` marks
 only that split's frozen orders). Every route that takes a payment drains the outbox with `after()`
 once it has answered (`src/lib/ticket-email.ts`), and the daily recovery cron
-catches the rest; a ticket two hours old expires unsent. Orders of one card
+catches the rest; a ticket a day old expires unsent. A failed send waits 1
+minute, then 10, then an hour before it is claimed again, and the fourth
+failure, or a refusal no retry changes, finishes it as `failed` with
+`failure_reason`; fresh tickets are claimed before retries. The email is
+rendered once and kept on its rows (`mail_body`) until the batch finishes,
+so a retry resends the identical body under the same idempotency key. A sale
+closed by forgiving a walkout queues no ticket and stamps no visit (owner's
+decision, 2026-11-12). Orders of one card
 and one sitting claimed together are one email: the receipt, the 80 mm PDF
 attached, and the "Dejar de recibir mis tickets por correo" link
 (`/tickets/stop`, a button that POSTs — mail scanners open links — plus the
@@ -2920,7 +2927,7 @@ Vercel sends it as a Bearer authorization header. Missing, empty and incorrect
 secrets return 401 before any recovery client is created. The route compares
 fixed-size hashes in constant time and never needs a signed-in user.
 
-Four isolated jobs use the admin client and the existing locked writers:
+Five isolated jobs use the admin client and the existing locked writers:
 
 - Stock calls `recover_stock_reservations` across restaurants. SQL keeps its
   one-hour grace period, checks that no order owns the reservation, and releases
@@ -2934,11 +2941,24 @@ Four isolated jobs use the admin client and the existing locked writers:
   generation checks and provider requests as Bills.
 - Linked subscriptions for locally locked or past-due restaurants are read
   from Stripe and passed through the webhook's revision-checked transition.
+  So are active or trialing paid tiers whose scheduled end (`plan_ends_at`)
+  or paid period (`plan_period_ends_at`) passed more than three days ago: a
+  cancellation or unpaid renewal whose webhooks all failed ends the tier the
+  same way the webhook would. A failed Stripe read changes nothing. Paid
+  tiers with no stored period end (synced before the column existed) are read
+  once, a page per run, to store it.
   Recovery cannot relink a subscription that an admin has since replaced.
+- Dispute events still pending or in error are refreshed; after ten failed
+  attempts an event moves to `review`, which recovery no longer polls and
+  restaurant deletion does not wait on. Costs, Analytics and the order
+  history show such a case as "Requiere revisión" / "Needs review", counted
+  apart from pending.
 
 Each job has ten seconds, with bounded network requests and no Stripe network
-retries. Each source reads at most ten items per batch (refunds have two
-sources sharing one budget). A rotating page prevents a full batch of pending
+retries. Each source reads at most 25 items per batch (refunds and
+subscriptions have two sources sharing one budget). The ticket-email drain
+runs alongside the jobs with its own 40-second budget, and the route answers
+once it has stopped. A rotating page prevents a full batch of pending
 items from permanently hiding later restaurants. Work stops before the budget
 to leave time for observation; five jobs fit within the route's 60-second limit.
 An item or job failure does not prevent subsequent items or jobs from running.
@@ -2950,7 +2970,7 @@ zero. Subscription age is explicitly a restaurant-creation upper bound: the
 schema has no date for entering locked or past-due status. Over-six-hour work
 is logged with the affected restaurant. Duplicate-payment refunds also reuse
 the existing bilingual `refund_due` bell message, with one conflict-safe
-reminder per restaurant, including repeated or overlapping invocations. Other
+reminder per stuck refund, including repeated or overlapping invocations. Other
 jobs have no matching bell kind and only log. Reading a reminder does not cause
 cron to ring it again. Recovery does not block selling, paying or signing out.
 

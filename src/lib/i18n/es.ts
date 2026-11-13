@@ -15,6 +15,8 @@ export const es: Messages = {
     exposure: "Importe actualmente disputado",
     outcomes: "Resultados actuales: {won} ganados · {lost} perdidos",
     pending: "{count} contracargo(s) pendientes de conciliación o revisión. Ganar no confirma la restitución.",
+    needsReview: "Requiere revisión: {count} contracargo(s) cuya actualización de Stripe TableTap no pudo registrar automáticamente. TableTap los revisa; sus importes pueden faltar aquí.",
+    needsReviewState: "Requiere revisión",
     incomplete: "Total incompleto: se excluyen los movimientos pendientes o en otra moneda de liquidación. Cada importe conserva su moneda.",
     empty: "Sin movimientos por contracargos en este periodo.",
     history: "{date} · Contracargo de {amount} · {status}",

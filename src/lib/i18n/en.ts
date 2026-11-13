@@ -13,6 +13,8 @@ export const en = {
     exposure: "Current disputed exposure",
     outcomes: "Current outcomes: {won} won · {lost} lost",
     pending: "{count} chargeback(s) awaiting reconciliation or review. A win does not confirm reinstatement.",
+    needsReview: "Needs review: {count} chargeback(s) whose Stripe update TableTap could not record automatically. TableTap reviews them; their amounts may be missing here.",
+    needsReviewState: "Needs review",
     incomplete: "Incomplete total: pending evidence or another settlement currency is excluded. Amounts retain their own currency.",
     empty: "No chargeback movements in this period.",
     history: "{date} · Chargeback {amount} · {status}",

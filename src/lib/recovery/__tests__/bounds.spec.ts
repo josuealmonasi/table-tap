@@ -1,5 +1,5 @@
 import { afterEach, expect, it, vi } from "vitest";
-import { runBatch } from "../job";
+import { BATCH_SIZE, runBatch } from "../job";
 import { fixture, old } from "./fixtures";
 
 afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks(); });
@@ -7,11 +7,11 @@ afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks(); });
 it("rotates past a full batch that stays pending instead of starving later restaurants", async () => {
   vi.spyOn(Math, "random").mockReturnValue(0.75);
   const f = fixture();
-  const rows = Array.from({ length: 11 }, (_, i) => ({ restaurant_id: `r${i}`, created_at: old }));
+  const rows = Array.from({ length: BATCH_SIZE + 1 }, (_, i) => ({ restaurant_id: `r${i}`, created_at: old }));
   const recover = vi.fn(async () => false);
-  const load = vi.fn(async (limit: number, offset = 0) => ({ data: rows.slice(offset, offset + limit), count: 11, error: null }));
+  const load = vi.fn(async (limit: number, offset = 0) => ({ data: rows.slice(offset, offset + limit), count: BATCH_SIZE + 1, error: null }));
   await runBatch("test", f.context, load, recover);
-  expect(recover).toHaveBeenCalledWith(rows[10]);
+  expect(recover).toHaveBeenCalledWith(rows[BATCH_SIZE]);
   expect(recover).toHaveBeenCalledTimes(1);
 });
 
@@ -36,15 +36,15 @@ it("does not call a failed queue observation empty or discard earlier successes"
 
 it("reaches every page from a once-a-day schedule (E1)", async () => {
   // The clock rotation drew page 0 on every daily run: 144 ten-minute buckets apart.
-  const rows = Array.from({ length: 20 }, (_, i) => ({ restaurant_id: `r${i}`, created_at: old }));
+  const rows = Array.from({ length: 2 * BATCH_SIZE }, (_, i) => ({ restaurant_id: `r${i}`, created_at: old }));
   const seen = new Set<string>();
   for (const draw of [0.1, 0.6]) {
     vi.spyOn(Math, "random").mockReturnValue(draw);
     const f = fixture();
     const recover = vi.fn(async (row: { restaurant_id: string }) => { seen.add(row.restaurant_id); return false; });
-    const load = vi.fn(async (limit: number, offset = 0) => ({ data: rows.slice(offset, offset + limit), count: 20, error: null }));
+    const load = vi.fn(async (limit: number, offset = 0) => ({ data: rows.slice(offset, offset + limit), count: 2 * BATCH_SIZE, error: null }));
     await runBatch("test", f.context, load, recover);
     vi.restoreAllMocks();
   }
-  expect(seen.has("r0") && seen.has("r10")).toBe(true);
+  expect(seen.has("r0") && seen.has(`r${BATCH_SIZE}`)).toBe(true);
 });

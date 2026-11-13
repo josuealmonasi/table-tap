@@ -7051,3 +7051,70 @@ Bill, split, slots and account payment have to refuse the same bad tip. The
 account route turned `tipAmount: "abc"` into no tip, silently dropping it
 (full review M3); it now answers `invalidRequest` 400 before anything opens.
 `unresolved-account-routes.spec.ts` pins it.
+## Background jobs: what a stuck job tells, and when it stops (2026-11-12)
+
+A full review of the background work (`loop/reviews/full-review-background.md`)
+found eight places where a job and its promise had to agree with nothing
+checking that they did. Each is now pinned:
+
+- **The overdue duplicate-refund bell rang once per restaurant, ever.** Its ID
+  was the restaurant alone, written with "ignore duplicates", so a second stuck
+  refund months later rang nothing and the bell kept the first case's amount.
+  The key is now the restaurant and the stuck `refunds_due` row
+  (`src/lib/recovery/overdue.ts`). `refunds.spec.ts` resolves one case, sticks
+  another, and checks a second reminder with the new amount and table.
+- **A ticket email retried within seconds and gave up after three blips.** A
+  failure released the claim at once and the next drain took the same rows.
+  `ticket_email_outbox.next_attempt_at` now holds 1 min, 10 min, then 1 h; the
+  fourth failure, or a refusal no retry changes (a 4xx other than 429 and an
+  idempotent request in flight), finishes the rows as `failed` with
+  `failure_reason`. The claim skips rows waiting out their backoff and takes
+  fresh tickets before retries, so failing rows never fill every claim.
+  `card-email.spec.ts`, `background-reliability.spec.ts`.
+- **A ticket retry rebuilt a different body under the same key.** Resend
+  refuses a reused key with a changed payload, so a ticket delivered on the
+  first try (reply lost) finished as `failed`. The rendered body is stored on
+  the batch's rows (`mail_body`, cleared when it finishes) before the first
+  send and resent as is (`src/lib/ticket-email-body.ts`); Resend's
+  `invalid_idempotent_request` means an email went out under that key and
+  counts as sent. `card-email.spec.ts` sends, crashes, retries, and compares
+  the two bodies byte for byte.
+- **A missed cancellation kept a paid tier forever.** Recovery only re-read
+  locked and past-due restaurants. `restaurants.plan_period_ends_at` now keeps
+  the paid period's end, and recovery re-reads Stripe for an active or
+  trialing paid tier whose cancellation date or period end passed more than
+  three days ago, storing the answer through the webhook's transition (so a
+  cancelled subscription goes to Carta, an unpaid one locks). A failed Stripe
+  read writes nothing. Restaurants synced before the column existed are read
+  once (a page per run) to store their period end, without waiting for a
+  webhook. `recovery/__tests__/subscriptions.spec.ts`.
+- **The ticket drain got only the cron's leftovers.** It ran in `after()` once
+  five 10-second jobs had finished. It now runs alongside them with its own
+  40-second budget, stops between groups at the deadline and releases what it
+  had claimed; the route answers after it. Each job's page grew from 10 to 25
+  items (each item still stops at the job's time budget). `route.spec.ts`,
+  `card-email.spec.ts`, `bounds.spec.ts`.
+- **A re-queued fee looked new.** `enqueue_fee_reconcile` reset `enqueued_at`
+  on every refund event, so a stuck charge never aged into the overdue
+  warning. Only the generation moves now. `background-reliability.spec.ts`.
+- **A dispute event in error was polled forever and blocked deletion.** After
+  ten attempts `fail_stripe_dispute_event` sets the event to `review`:
+  recovery no longer polls it, `admin_delete_restaurant` does not wait on it,
+  it is archived with the restaurant, and `pnpm money` lists it. A new webhook
+  delivery may still claim and finish it. The restaurant's dispute readers
+  (Costs and Analytics summary, order history) show it as "Requiere revisión"
+  / "Needs review", counted apart from pending, never as both
+  (`DisputeReport.review`, `NEEDS_REVIEW`). `disputes/__tests__/recovery.spec.ts`,
+  `read.spec.ts`, `disputes.react-component.spec.tsx`.
+- **A forgiven walkout stamped the visit card and emailed a ticket** (owner's
+  decision, 2026-11-12: it does neither). Both triggers now skip an order
+  settled by `write_off_remainder_v1` (`tabletap.walkout_writer`, set only
+  around the loop that settles the orders) or carrying a `forgive`
+  adjustment (`settled_by_write_off`). `background-reliability.spec.ts`.
+
+Schema: `ticket_email_outbox.next_attempt_at`, `failure_reason`, `mail_body`;
+`restaurants.plan_period_ends_at`; `stripe_dispute_events.state` accepts
+`review`; `settled_by_write_off(uuid, uuid)` is new (in `drop.sql`), with the
+partial index `order_adjustments_forgiven_order` it reads. The
+code writes `plan_period_ends_at` and the outbox columns, so production is
+migrated before this merges.
