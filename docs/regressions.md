@@ -35,6 +35,8 @@ and that a new party cannot see the previous party's waiting phones.
 | A duplicate refund keeps its original charge currency everywhere (S11 I9) | Changing the menu currency relabelled money owed back and the approval amount |
 |---|---|
 | The cash API case checks the cashier's own refusal in both languages | Role-specific instructions were correct, but the case still matched the manager's older wording and reported a false failure; `cash-held-api-contract.spec.ts` checks both translations |
+| The cash API contract spec typechecks from a clean checkout | The spec and the inferred case union must agree: some cases have no refusal matcher. A property guard keeps that distinction; a clean `tsc --noEmit` catches an unsafe read |
+| The POS retry fixture leaves journal sources for its restaurant cascade | The retry case used the demo restaurant and deleted its charged order individually; the journal correctly refused cleanup. `api-retry-account-fixture.spec.ts` checks the disposable tenant and retained sources |
 | Held receipts reuse the existing payment tenant key | The train created a second unique index on the same payment columns; `held-payment-index.spec.ts` keeps the original unique key and rejects the duplicate build |
 | Restaurant deletion archives the account journal with its source books | The restaurant cascade deleted original charge snapshots that the archive list omitted; `account-journal-archive.spec.ts` pins the journal copy, tenant lock and preserved held-receipt/dispute checks |
 | Printed IVA keeps each order's saved rate | A second current restaurant rate could relabel an older sale; `ticket-vat.spec.ts` and `receipt-vat-source.spec.ts` check saved rates, missing evidence and mixed-rate splits |
@@ -7159,3 +7161,24 @@ It reported a failure even though the route refused the close with 409.
 The case now recognizes the cashier's instruction. The contract spec feeds
 it the real English and Spanish strings, so a copy change cannot silently
 leave the live gate checking words the route no longer sends.
+
+## The cash contract spec and its case union
+
+The spec and the JavaScript case list have to agree about optional fields.
+The list includes successful cases with no refusal matcher, so reading
+`expectError` before checking that it exists failed the clean CI typecheck.
+The spec now checks the property first, then still requires a real regular
+expression. Both language assertions and a clean typecheck cover the fix.
+
+## The POS retry fixture and its retained account charge
+
+The retry fixture's lifetime and the account journal's source rows have to
+agree. The POS retry charged an account in the demo restaurant, then tried
+to delete its order before the account. The journal correctly kept that
+source, so cleanup threw and stopped the API gate before the later cases.
+
+That retry now uses the existing disposable account restaurant and leaves
+its order, account and dish for the final restaurant cascade. Its borrowed
+menu and restaurant switches are still restored after the case. The focused
+spec reproduces the foreign-key refusal, checks the private fixture, and
+proves cleanup restores the switches without deleting retained sources.

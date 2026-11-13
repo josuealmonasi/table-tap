@@ -8,7 +8,7 @@ it.each([en, es])("the held-cash API case accepts the cashier's actual refusal",
     .find((item: { name: string }) => item.name === "POST /api/cash-shift (offline cash still awaits review)");
   expect(check?.as).toBe("cashier");
   expect(check?.expect).toEqual([409]);
-  const refusal = check?.expectError;
+  const refusal = check && "expectError" in check ? check.expectError : undefined;
   if (!(refusal instanceof RegExp)) throw new Error("Held-cash API case has no refusal matcher");
   expect(messages.apiErr.shiftHeldCashCashier.replace("{n}", "1")).toMatch(refusal);
 });
