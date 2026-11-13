@@ -7182,3 +7182,17 @@ skeleton is unchanged. CardEmail says a failed read once.
 paid and was divided by the shares again. `splitTipPrincipal` uses the
 `amount` it froze, in the preview and the pay route alike.
 `tip-base.react-component.spec.tsx`.
+
+**Every bill read ran the allocation backfill.** `order_coverage` called
+`backfill_payment_allocations` on each read, so every bill, split, checkout and
+cancel preview took the restaurant's money lock, scanned the receipts and
+re-locked cancelled legacy orders, even with nothing to backfill. It was the
+database's largest cost (45,559 calls, 6,900 s and 116 MB of WAL on dev in
+eight days) and made readers queue behind money writers. A read now runs the
+backfill only when `payment_allocations_need_backfill` says it could change
+something, a check that mirrors both of the backfill's loops and may say yes
+for nothing but never no for something. The two places that must agree are
+that check and the backfill's own conditions; `coverage-read-no-write.spec.ts`
+compares them, and `scripts/probe-coverage-no-write.mjs` runs `order_coverage`
+inside `begin read only` on the demo data and compares its numbers with the
+old body's.

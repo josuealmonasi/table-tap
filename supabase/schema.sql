@@ -6330,6 +6330,33 @@ $$;
 revoke all on function public.backfill_payment_allocations(uuid) from public, anon, authenticated;
 grant execute on function public.backfill_payment_allocations(uuid) to service_role;
 
+-- True when backfill_payment_allocations could still change something for this
+-- restaurant: a receipt it would rewrite (its first loop), or a cancelled order
+-- whose legacy money import_historical_return has not finished (its second
+-- loop: a missing cancel record, an unreturned legacy allocation, or a return
+-- still in historical review). When this is false the backfill only takes the
+-- money lock and finds nothing, so a coverage read skips it and writes nothing.
+-- It may say true when the backfill then does nothing; never the reverse.
+create index if not exists payments_backfill_pending_idx on payments(restaurant_id)
+  where allocation_version = 0 or (allocation_quality = 'unresolved' and allocation_origin = 'legacy'
+    and allocation_reason = 'Overlap receipt needs manager evidence');
+create or replace function public.payment_allocations_need_backfill(p_restaurant uuid)
+returns boolean language sql stable security definer set search_path = public as $$
+  select exists (select 1 from payments where restaurant_id = p_restaurant
+      and (allocation_version = 0 or (allocation_quality = 'unresolved' and allocation_origin = 'legacy'
+        and allocation_reason = 'Overlap receipt needs manager evidence')))
+    or exists (select 1 from orders o
+      join payment_allocations a on a.restaurant_id = o.restaurant_id and a.order_id = o.id
+      join payments p on p.id = a.payment_id
+      left join refund_allocations r on r.allocation_id = a.id
+      left join refund_operations f on f.id = r.operation_id
+      where o.restaurant_id = p_restaurant and o.status = 'cancelled' and p.allocation_origin = 'legacy'
+        and (r.id is null or (f.historical_review and f.status = 'review')
+          or not exists (select 1 from order_adjustments d where d.order_id = o.id and d.kind = 'cancel')));
+$$;
+revoke all on function public.payment_allocations_need_backfill(uuid) from public, anon, authenticated;
+grant execute on function public.payment_allocations_need_backfill(uuid) to service_role;
+
 -- Versioned to keep old application instances from adding this tip twice.
 -- Its full writer is defined below, after the reconciliation helpers.
 
@@ -6641,10 +6668,16 @@ create trigger immutable_allocation before update or delete on refund_allocation
 
 -- One authoritative live balance for every table reader. Unresolved historical
 -- pooled money is refused rather than charged a second time.
+-- A read backfills only when there is something to backfill: running it on
+-- every read took the money lock and scanned the receipts each time, and was
+-- the database's largest cost (loop/reviews/gate-db-io.md). The numbers are
+-- the same either way, because a backfill with nothing to do changes nothing.
 create or replace function public.order_coverage(p_restaurant uuid, p_orders uuid[])
 returns jsonb language plpgsql security definer set search_path = public as $$
 begin
-  perform public.backfill_payment_allocations(p_restaurant);
+  if public.payment_allocations_need_backfill(p_restaurant) then
+    perform public.backfill_payment_allocations(p_restaurant);
+  end if;
   return (select coalesce(jsonb_agg(jsonb_build_object('id', o.id,
     'unresolved', exists(select 1 from payments p where p.restaurant_id = p_restaurant and p.allocation_quality = 'unresolved'
       and (p.order_id = o.id or (p.order_id is null and ((p.account_id is not null and p.account_id = o.account_id)
