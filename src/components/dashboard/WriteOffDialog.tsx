@@ -69,35 +69,41 @@ export default function WriteOffDialog({
         <strong style={{ fontSize: 18 }}>{formatMoney(amount, currency)}</strong>
       </div>
 
-      <div className="tt-mod-label" style={{ marginTop: 16 }}>
-        {t("writeOff.reason")}
-      </div>
-      <div className="tt-tip-row" style={{ flexWrap: "wrap" }}>
-        {WRITE_OFF_REASONS.map(key => (
-          <button
-            key={key}
-            type="button"
-            className={`tt-tip-chip ${reason === key ? "tt-tip-chip-active" : ""}`}
-            aria-pressed={reason === key}
-            onClick={() => setReason(key)}
-          >
-            {t(`writeOff.reasons.${key}`)}
-          </button>
-        ))}
-      </div>
+      <div className="tt-writeoff-fields">
+        <div className="tt-field" role="group" aria-labelledby="tt-writeoff-reason">
+          <div className="tt-mod-label" id="tt-writeoff-reason">
+            {t("writeOff.reason")}
+          </div>
+          <div className="tt-tip-row" style={{ flexWrap: "wrap" }}>
+            {WRITE_OFF_REASONS.map(key => (
+              <button
+                key={key}
+                type="button"
+                className={`tt-tip-chip ${reason === key ? "tt-tip-chip-active" : ""}`}
+                aria-pressed={reason === key}
+                onClick={() => setReason(key)}
+              >
+                {t(`writeOff.reasons.${key}`)}
+              </button>
+            ))}
+          </div>
+        </div>
 
-      <label className="tt-mod-label" htmlFor="tt-writeoff-note" style={{ marginTop: 16 }}>
-        {noteRequired(reason) ? t("writeOff.noteRequired") : t("writeOff.noteOptional")}
-      </label>
-      <textarea
-        id="tt-writeoff-note"
-        className="tt-input"
-        style={{ width: "100%", minHeight: 72, resize: "vertical" }}
-        maxLength={NOTE_MAX}
-        placeholder={t("writeOff.notePlaceholder")}
-        value={note}
-        onChange={e => setNote(e.target.value)}
-      />
+        <div className="tt-field">
+          <label className="tt-mod-label" htmlFor="tt-writeoff-note">
+            {noteRequired(reason) ? t("writeOff.noteRequired") : t("writeOff.noteOptional")}
+          </label>
+          <textarea
+            id="tt-writeoff-note"
+            className="tt-input"
+            style={{ width: "100%", minHeight: 72, resize: "vertical" }}
+            maxLength={NOTE_MAX}
+            placeholder={t("writeOff.notePlaceholder")}
+            value={note}
+            onChange={e => setNote(e.target.value)}
+          />
+        </div>
+      </div>
 
       {paymentCheck}
       {error && <p className="tt-field-error" role="alert">{error}</p>}

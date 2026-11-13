@@ -58,6 +58,7 @@ and that a new party cannot see the previous party's waiting phones.
 | Failed loyalty reads cannot open an empty editor (E2E D7) | A read failure looked like a program that had never existed |
 | Replay waits for the online send and preserves preparation (E2E C5) | Background replay raced a live request and completed food nobody had made |
 | Processing fees keep the payment currency (E2E D4) | A dollar charge used the fixed peso processing fee |
+| An elapsed time goes through `src/lib/elapsed.ts`; no dictionary key outside `elapsed` takes a raw count of minutes, hours or days, and no screen divides by 60 000 itself (`invariants/elapsed.spec.ts`) | The Pedidos board read "hace 1741 min" for a ticket a day and five hours old |
 | Terminal bank movements keep their sign (E2E C7) | A refund-heavy day's bank debit could not be recorded |
 | New owners prove email ownership before their trial starts (E2E E4) | Signup confirmed an address nobody had verified |
 | A retried financial operation writes one activity row (Sweep 1 #8) | One saved withdrawal, shift close, waste entry or count appeared two or more times after a lost reply |
@@ -6695,3 +6696,99 @@ now suppresses automatic card mail for this sale, before the held copy is
 written. The existing sender delivers today's ticket; the saved card delivers
 future ones. The lost-save-reply spec proves the skip reaches both the request
 and held replay, while charging remains available.
+
+
+## Pedidos: a fixed-interval poll slower than its interval never goes idle
+
+The floor's phone-admission poll and the speed of the database had to agree:
+`usePendingPhones` read `/api/table-membership` on a fixed 5 s `setInterval`,
+and each read was a serial chain of auth, a rate-limit write, the membership
+lookup and the phones. When the dev database ran short on I/O that chain took
+close to or more than 5 s, so a request was always in flight. The page never
+had the 300 ms of quiet the layout gate calls ready, and Pedidos timed out on
+whichever role and width the gate visited — never the kitchen, the one role
+without the poll. The failure only said "did not become ready", or "readiness
+sample timed out after 9ms", which was the same thing with the last sample's
+remaining budget.
+
+The poll now schedules its next read 5 s after the last one settles, so there
+is never more than one in flight and always 5 s of quiet between them. The
+route asks who is calling while the limiter counts the hit, and the API guard
+asks the auth server once instead of twice (React's `cache` does nothing in a
+route handler; `/api/orders/takings` asked three times). The returns panel's
+15 s read keeps at most six progress RPCs in flight and no longer schedules
+fee recovery, a write path that may call Stripe; opening Bills still does,
+and the recover cron drains the fee queue every completion enqueues. Order
+history no longer re-reads on the dashboard's 30 s clock; it re-reads when the
+live board sees an order close.
+
+What catches it:
+- `pending-phones-cadence.spec.tsx`: a read slower than the interval, with
+  fake timers — one in flight at most, the next one at least 5 s after the
+  last settled, failed or not, and nothing scheduled after unmount.
+- `invariants/polls.spec.ts`: no `setInterval` in `src/hooks` or
+  `src/components` whose callback reaches `fetch`, following same-file
+  functions. Older pollers are grandfathered by name and the list only
+  shrinks; a self-test proves the old floor poll trips it.
+- `auth-round-trips.spec.ts`: one `auth.getUser` and one membership lookup per
+  floor poll and per takings read, and a limited or refused caller still
+  refused before any phone is read.
+- `progress-reads.spec.ts` and `order-history-refresh.spec.tsx`: bounded
+  progress reads with no fee recovery from the polled list, and history that
+  does not refresh on a timer but does when an order closes.
+- `browser-ready.mjs` now names the requests still in flight when readiness
+  times out, so the next one names its culprit instead of the page.
+## Elapsed times read as hours and days (owner report, 2026-11-12)
+
+The Pedidos board said "hace 1741 min" on a ticket left open since the day
+before. Three screens showed how long something had waited, and each did its
+own arithmetic: the ticket's key took a raw count of minutes with no upper
+unit at all, the request chips rounded to whole hours and then whole days, and
+the bills list wrote "2h 15m" in no language in particular. Nothing made them
+agree, and nothing said a count of minutes had to stop at 59.
+
+`src/lib/elapsed.ts` is now the only place that turns a time difference into
+words: under a minute "ahora", then "hace 12 min", "hace 2 h 15 min",
+"hace 1 d 5 h", and from seven days the date ("el 3 nov"). A length with no
+"ago" (the bills list's "esperando …") uses the same units. The words come
+from the `elapsed` block of both dictionaries. The ticket's amber and red still
+count minutes against the restaurant's thresholds; only the text changed.
+`elapsed.spec.ts` checks every boundary in both languages, and
+`invariants/elapsed.spec.ts` fails on a dictionary key that takes a raw count
+of time, on a screen that divides by a minute itself, and on any of the three
+screens no longer importing the formatter. Under 24 hours the longest text is
+"hace 23 h 59 min", three characters wider than "hace 1741 min"; the
+board's header row wraps, so it drops the status pills to the next line rather
+than overflow. `pnpm layout` is the check that it still reads.
+## Visit-card scanner: one gap spaces every block
+
+The staff "Tarjeta de visitas" dialog spaced hint, camera and typed code with
+a margin on each child, and two of those margins did nothing. The camera was
+an inline `<video>`, so it sat on a text line with a baseline gap under it;
+the code's label was an inline `<label class="tt-mod-label">`, which ignores
+its `margin-bottom: 10px`, so it touched the input (0.5px apart) while the
+camera-to-label gap came out at 19.5px against 13–14px everywhere else. Now
+`.tt-scan-view` is a block, the hint, camera, code entry, error and retry sit
+in `.tt-scan-stage` (a flex column with `gap: 14px`, the dialog title's own
+margin), and the code entry is a `.tt-field` (label 6px above the input, as
+on every other labelled field). `QrScanner` uses the same stage, so every
+other camera dialog (scan to collect, the accounts and waiter-pad scanners,
+the visit-card attach at the till and the bill, the diner menu's scanner)
+shares the rhythm. A browser invariant (`a scanner dialog spaces
+its blocks with one gap`) fails if a dialog renders the camera outside the
+stage or the stage stops using `gap`; `pnpm layout` now also opens "scan to
+collect" on Cuentas abiertas.
+
+Now caught: the same inline label was in eight more places. The write-off
+dialog's note label sat 2px under the reason chips and 0.5px above its
+textarea; the account dialog's limit label sat 0.5px above its input; the
+waiter calculator's amount, the bill code picker, both diner split cards, the
+diner's dish note and the dish photo field each had a label whose margin did
+nothing or did something different from every other field. Each label and
+its control is now a `.tt-field` (6px, by the field's gap), and the
+write-off's reason and note are two field groups 16px apart
+(`.tt-writeoff-fields`, the account credit dialog's rule). A second browser
+invariant (`a field label is a block`) parses every component and fails on
+any `<label>` or `<span>` with `tt-mod-label` that is neither inside a
+`.tt-field` nor given `display: block|flex|grid` by another of its classes.
+It has no allow-list.

@@ -27,7 +27,7 @@ export default function NoteField({
   const t = useT();
   const near = value.length >= NOTE_MAX * 0.6;
   return (
-    <div>
+    <div className="tt-field">
       <div className="tt-note-head">
         <span className="tt-mod-label">{label}</span>
         {near && (

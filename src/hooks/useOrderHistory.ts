@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import useSWR from "swr";
 import { createClient } from "@/lib/supabase/client";
 import { filterValue, orderCodeRange, tableLabelQuery } from "@/lib/order-code";
@@ -56,7 +56,7 @@ async function fetchHistory([, restaurantId, page, debounced]: readonly [string,
  * real one serves that before lunch. Searching server-side also means a code
  * from last month is findable, which it never was inside a loaded window.
  */
-export function useOrderHistory(restaurantId: string) {
+export function useOrderHistory(restaurantId: string, closedOnBoard = "") {
   const [page, setPage] = useState(1);
   const [query, setQuery] = useState("");
 
@@ -72,8 +72,18 @@ export function useOrderHistory(restaurantId: string) {
   const { data, error, isLoading, mutate } = useSWR(
     ["order-history", restaurantId, page, debounced] as const,
     fetchHistory,
-    { keepPreviousData: true },
+    // No timer. History changes only when an order closes, and the board hears
+    // that over realtime (`closedOnBoard`). Polled every 30 s it was a second
+    // read-on-a-clock keeping Pedidos from ever going quiet.
+    { keepPreviousData: true, refreshInterval: 0 },
   );
+  // An order the live board saw close is the moment history changes.
+  const seen = useRef(closedOnBoard);
+  useEffect(() => {
+    if (seen.current === closedOnBoard) return;
+    seen.current = closedOnBoard;
+    void mutate().catch(() => undefined);
+  }, [closedOnBoard, mutate]);
   // Previous pages can remain useful during a failed read; another venue's
   // rows must never be shown while its replacement is loading or unavailable.
   const current = data?.restaurantId === restaurantId ? data : undefined;

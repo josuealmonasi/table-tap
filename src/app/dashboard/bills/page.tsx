@@ -1,6 +1,6 @@
 import PaymentAttribution from "@/components/dashboard/PaymentAttribution";
 import OrderRefunds from "@/components/dashboard/OrderRefunds";
-import { orderRefunds } from "@/lib/refunds/operations";
+import { orderRefunds, recoverOrderRefundFeesLater } from "@/lib/refunds/operations";
 import { paymentCoverage } from "@/lib/payment-coverage";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { everyRow } from "@/lib/paged";
@@ -117,6 +117,9 @@ export default async function BillsPage() {
   // route that refunds them. The Stripe account is read with the secret key
   // because a browser's own client is not granted that column.
   const refunds = MANAGES(membership.role) ? await refundsDue(r.id) : [];
+  // Opening Bills still nudges fee recovery, after the response. The returns
+  // list Pedidos polls no longer does: a 15 s read is no place for it.
+  if (MANAGES(membership.role)) recoverOrderRefundFeesLater(r.id);
   const stripeAccount = refunds.length
     ? (unwrap(
         await db.from("restaurants").select("stripe_account_id").eq("id", r.id).single(),

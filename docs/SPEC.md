@@ -2299,7 +2299,8 @@ original amounts; money checks report that exception separately.
 Customer refund completion commits before fee reconciliation. The customer's
 completion time is unchanged by later fee recovery. `fee_reconciled_at` is set
 only by a verified cumulative provider fee read; until then the month's ceiling
-conservatively counts the fee as retained. Bills reads schedule completed-order fee recovery after the response,
+conservatively counts the fee as retained. Opening Bills schedules completed-order fee recovery after the response
+(the returns list Pedidos polls every 15 s does not; the recover cron drains the fee queue),
 so provider delays cannot block collection. Duplicate-charge refunds use immutable numbered
 `refund_due_attempts`, preserving unknown outcomes and separately keying only
 confirmed terminal failures. Managers can keep returning money while fee work

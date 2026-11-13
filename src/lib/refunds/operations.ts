@@ -25,11 +25,37 @@ export interface RefundOperation {
   kind?: "cancel" | "return" | null;
 }
 
-export async function orderRefunds(restaurantId: string, adjustmentId?: string): Promise<RefundOperation[]> {
-  // Fee recovery runs after the response so an unavailable provider cannot
-  // hold up opening Bills or collecting the next customer's payment.
-  if (!adjustmentId) after(() => recoverOrderRefundFees(restaurantId, "fee recovery")
+/**
+ * How many progress reads one list sends at once. The progress is one RPC per
+ * operation because its rules live in SQL and must not be copied here; a
+ * restaurant with 38 open returns sent 38 at once into a small PostgREST pool
+ * every 15 s, and every other request on the page queued behind them.
+ */
+export const PROGRESS_READS_AT_ONCE = 6;
+
+/** Fee recovery after the response, so an unavailable provider cannot hold up
+ *  opening Bills. Never from the returns list Pedidos polls: a read every 15 s
+ *  is no place for a write path that may call Stripe. The recover cron drains
+ *  the fee queue every completion enqueues. */
+export function recoverOrderRefundFeesLater(restaurantId: string): void {
+  after(() => recoverOrderRefundFees(restaurantId, "fee recovery")
     .catch(error => console.error("Order refund fee recovery remains pending", error)));
+}
+
+/** At most `limit` calls in flight, in input order; a slot frees as soon as one answers. */
+async function mapLimited<T, R>(items: T[], limit: number, work: (item: T) => Promise<R>): Promise<R[]> {
+  const out = new Array<R>(items.length);
+  let next = 0;
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, async () => {
+    while (next < items.length) {
+      const i = next++;
+      out[i] = await work(items[i]);
+    }
+  }));
+  return out;
+}
+
+export async function orderRefunds(restaurantId: string, adjustmentId?: string): Promise<RefundOperation[]> {
   const db = createAdminClient();
   const rows = await everyRow<RefundOperation>((from, to) => {
     let q = db.from("refund_operations")
@@ -45,7 +71,7 @@ export async function orderRefunds(restaurantId: string, adjustmentId?: string):
   const orders = await everyRowIn<{ id: string; table_label: string | null }>(
     adjustments.map(a => a.order_id), (ids, a, b) => db.from("orders").select("id, table_label")
       .eq("restaurant_id", restaurantId).in("id", ids).order("id").range(a, b), "the returns' tables");
-  return await Promise.all(rows.map(async row => {
+  return await mapLimited(rows, PROGRESS_READS_AT_ONCE, async row => {
     const adjustment = adjustments.find(a => a.id === row.adjustment_id);
     const identity = { order_id: adjustment?.order_id ?? null, kind: adjustment?.kind ?? null,
       table_label: orders.find(o => o.id === adjustment?.order_id)?.table_label ?? null };
@@ -54,7 +80,7 @@ export async function orderRefunds(restaurantId: string, adjustmentId?: string):
       throw new Error("Could not verify the outstanding return");
     }
     return { ...row, ...identity, outstanding_cents: data.outstanding_cents };
-  }));
+  });
 }
 
 /** Persist provider state before showing completion. A lost response reuses

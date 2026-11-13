@@ -59,16 +59,26 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
 /** The floor polls the same row of open requests; approved phones see only their sitting. */
 export async function GET(req: NextRequest): Promise<NextResponse> {
+  const restaurantId = req.nextUrl.searchParams.get("restaurantId");
+  const tableId = req.nextUrl.searchParams.get("tableId");
+  const wellFormed = valid(restaurantId) && (!tableId || valid(tableId));
+  // The floor's poll asks who is calling while the limiter counts the hit:
+  // neither needs the other, and in series they were most of every 5 s poll.
+  // Only the identity is read early. A limited caller still gets 429, and a
+  // refused one 403, before any phone is read.
+  const floorActor = wellFormed && !tableId
+    ? actingFrontOfHouse().then(actor => ({ actor }), (error: unknown) => ({ error }))
+    : null;
   if (await isRateLimited(`table-member-list:${clientKey(req)}`, forTheRoom(perMinute(MEMBER_POLL_MS)), 60)) {
     return await apiError("apiErr.tooManyRequests", 429);
   }
-  const restaurantId = req.nextUrl.searchParams.get("restaurantId");
-  const tableId = req.nextUrl.searchParams.get("tableId");
-  if (!valid(restaurantId) || (tableId && !valid(tableId))) return await apiError("apiErr.invalidRequest", 400);
+  if (!wellFormed) return await apiError("apiErr.invalidRequest", 400);
   try {
     const member = tableId ? await tableMember(req, restaurantId, tableId) : null;
     if (member) return NextResponse.json({ pending: await pendingPhones(restaurantId, member.sessionId) });
-    const actor = await actingFrontOfHouse();
+    const read = floorActor ? await floorActor : { actor: await actingFrontOfHouse() };
+    if ("error" in read) throw read.error;
+    const { actor } = read;
     if (!actor || actor.restaurantId !== restaurantId) return await apiError("apiErr.forbidden", 403);
     return NextResponse.json({ pending: await pendingPhones(restaurantId) });
   } catch {

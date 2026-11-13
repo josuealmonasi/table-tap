@@ -164,7 +164,7 @@ export default function AccountDialog({ account, onClose, currency, timeZone, ca
 
         {canManage && account.status === "open" && (
           <form
-            className="tt-account-limit"
+            className="tt-field tt-account-limit"
             onSubmit={e => {
               e.preventDefault();
               void change({ action: "limit", limit: Number(limit) }, t("accounts.limitChanged"));

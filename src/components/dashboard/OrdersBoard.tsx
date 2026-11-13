@@ -105,6 +105,9 @@ export default function OrdersBoard({
   // This screen's station sees only orders it makes something in, each in
   // the column its own part has reached.
   const live = orders.filter(o => isPreparationOrder(o) && !inactiveOrderIds.has(o.id) && inStation(o, station));
+  // History refreshes when an order leaves the board, not on a clock.
+  const closedOnBoard = orders.filter(o => o.status === "completed" || o.status === "cancelled" || inactiveOrderIds.has(o.id))
+    .map(o => `${o.id}:${o.status}`).sort().join(",");
   const byId = new Map(live.map(o => [o.id, o]));
   const viewed = live.map(o => ({ ...o, status: viewStatus(o, station) }));
 
@@ -262,7 +265,7 @@ export default function OrdersBoard({
         )}
         {canApprove && !kitchen && <>
           <OrderReturnsPanel restaurantId={restaurant.id} />
-          <OrderHistory restaurantId={restaurant.id} currency={restaurant.currency} canReturn />
+          <OrderHistory restaurantId={restaurant.id} currency={restaurant.currency} canReturn closedOnBoard={closedOnBoard} />
         </>}
       </div>
     </div>
