@@ -39,11 +39,33 @@ beforeEach(() => {
 afterEach(async () => { await act(async () => root.unmount()); document.body.replaceChildren(); vi.unstubAllGlobals(); });
 const select = (): HTMLSelectElement => [...container.querySelectorAll("select")].find(e => e.value === "MXN")!;
 
-it("locks the currency only while this UTC month has unreleased, unreturned card fees", () => {
+it("locks the currency only while this fee month has unreleased, unreturned card fees", () => {
   const sql = fn("currency_locked_until");
-  expect(sql).toContain("f.period = date_trunc('month', now() at time zone 'utc')::date");
+  expect(sql).toContain("f.period = public.fee_month(p_restaurant)");
   expect(sql).toContain("f.status <> 'released' and f.cents > f.refunded_cents");
-  expect(sql).toContain("(date_trunc('month', now() at time zone 'utc') + interval '1 month')::date");
+  expect(sql).toContain("(public.fee_month(p_restaurant) + interval '1 month')::date");
+});
+
+// Review bg10: the cap and the lock rolled over in UTC, at 18:00 on the last
+// day in Mexico City. One function names the month for every reader.
+it("the fee month is the restaurant's own calendar month, read by the cap, the session fee and the lock", () => {
+  const month = fn("fee_month");
+  expect(month).toContain("date_trunc('month', now() at time zone coalesce(");
+  expect(month).toContain("select r.timezone from restaurants r where r.id = p_restaurant");
+  expect(fn("reserve_platform_fee")).toContain("v_period date := public.fee_month(p_restaurant);");
+  expect(fn("record_session_fee")).toContain("public.fee_month(p_restaurant), p_cents, 'taken', 'session'");
+  for (const name of ["reserve_platform_fee", "record_session_fee", "currency_locked_until"]) {
+    expect(fn(name)).not.toMatch(/time zone 'utc'/i);
+  }
+  expect(schema).toContain("revoke all on function public.fee_month(uuid) from public, anon, authenticated;");
+  expect(drop).toContain("drop function if exists public.fee_month(uuid);");
+  // What `date_trunc('month', now() at time zone tz)` names at 18:00 on 30 Nov
+  // in Mexico City (00:00 UTC on 1 Dec): still November there.
+  const at = new Date("2026-12-01T00:00:00Z");
+  const monthIn = (timeZone: string) => new Intl.DateTimeFormat("en-CA", { timeZone, year: "numeric", month: "2-digit" }).format(at);
+  expect(new Intl.DateTimeFormat("en-GB", { timeZone: "America/Mexico_City", hour: "2-digit", day: "2-digit" }).format(at)).toBe("30, 18");
+  expect(monthIn("America/Mexico_City")).toBe("2026-11");
+  expect(monthIn("UTC")).toBe("2026-12");
 });
 
 it("the database refuses the change itself, only when the currency actually changes", () => {

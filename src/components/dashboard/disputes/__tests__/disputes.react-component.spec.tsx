@@ -55,14 +55,13 @@ it("Analytics renders Spanish chargebacks while retaining sales, order count and
 });
 it("history renders dated status, principal, actual fee and shared-charge explanation in Spanish", () => {
   state.rows = [{ ...dispute, shared: true, movements: [movement] }];
-  const html = renderToStaticMarkup(<History orderId="order" restaurantId="r" />);
+  const html = renderToStaticMarkup(<History disputes={state.rows} />);
   expect(html).toContain("Contracargo de MX$100.00"); expect(html).toContain("Ganado");
   expect(html).toContain("Capital retirado"); expect(html).toContain("MX$15.00");
   expect(html).toContain("varios pedidos"); expect(html).toContain("2026"); expect(html).toContain("pendientes de conciliación");
 });
-it("a history failure is explicit rather than silently empty", () => {
-  state.error = true;
-  expect(renderToStaticMarkup(<History orderId="order" restaurantId="r" />)).toContain("No se pudo cargar");
+it("an order with no chargeback renders nothing of its own", () => {
+  expect(renderToStaticMarkup(<History disputes={[]} />)).toBe("");
 });
 it("all dispute statuses and reporting labels have English and Spanish copy", () => {
   for (const locale of ["es", "en"] as const) {
@@ -75,5 +74,5 @@ it("all dispute statuses and reporting labels have English and Spanish copy", ()
 it("manager order history mounts the shared-charge lines for the current page", async () => {
   const { readFileSync } = await import("node:fs");
   expect(readFileSync("src/components/dashboard/OrderHistory.tsx", "utf8"))
-    .toContain("{canReturn && <DisputeHistoryLines orderId={order.id} restaurantId={restaurantId} orderIds={orders.map(o => o.id)} />}");
+    .toContain("{canReturn && <DisputeHistoryLines disputes={disputes.data?.[order.id] ?? []} />}");
 });

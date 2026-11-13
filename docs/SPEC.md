@@ -46,7 +46,14 @@ to `restaurant_accounting_records` before cascading the live restaurant away.
 Each copy keeps its source table, original row ID and contents under the
 restaurant ID, with no restaurant FK. Orders, receipts and their allocations,
 returns and attempts, adjustments, cash records, customer accounts, purchases,
-checkout provenance, activity and visit/admission records survive. Customer
+checkout provenance, activity and visit/admission records survive, and so do
+the evidence and approvals behind them: fee returns, refund failures and
+coverage, fee epochs, coupon and loyalty redemptions, write-off and discount
+requests, and every bill split table (tables keyed by something other than an
+id get an md5 id of their key). A spec walks every `on delete cascade` path
+from `restaurants` and fails on a table that is neither archived nor named as
+outside the books. A queued fee reconciliation holds the deletion only while a
+record says TableTap made that charge; the rest are closed as not ours. Customer
 account email and statement access codes are excluded. RLS denies clients;
 only the guarded definer inserts, and service-only reads/deletes support
 accounting retention and expiry under the privacy notice. No profile, menu or
@@ -579,8 +586,9 @@ dishes on a bill the restaurant has just cancelled.
   to take (its row gone) is recorded from what it carries, once. None from
   before the ledger can be open: no restaurant could take cards when it went
   live, and its migration refuses to apply while one can. A refund records the share of the fee that went
-  back, rounded down and once per refund id. A month is the UTC month the
-  fee was reserved in. What nobody confirms keeps counting: a little over,
+  back, rounded down and once per refund id. A month is the restaurant's own
+  calendar month, in its timezone (`fee_month`), the fee was reserved in; the
+  cap and the currency lock read the same function. What nobody confirms keeps counting: a little over,
   never under. The costs screen reads the same ledger
   (`src/lib/platform-fee.ts`). `orders.platform_fee` is no longer written: it
   is the frozen record of fees from before the ledger, which the schema

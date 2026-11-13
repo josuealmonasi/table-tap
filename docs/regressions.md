@@ -6989,3 +6989,68 @@ parts leave the line off; they never stop the receipt. `ticket-vat.spec.ts`,
 
 ### Split payment answered a Stripe refusal with "Algo salió mal" (2026-11-12)
 Bill and account payments answer a checkout Stripe refused with `apiErr.checkoutFailed` ("El pago falló"); split payment alone used the generic error, so a diner paying their share was told nothing about what failed. The api gate's food-only tip case caught it on the whole-queue train. Now: all three pay routes answer `checkoutFailed`; the gate's tip-base account case restores the shared account restaurant's card settings, so the later "no card reader" case is judged on its own.
+
+## Review leftovers (2026-11-12)
+
+Ten confirmed findings from the full review of `train/queue-all`
+(`loop/reviews/full-review-*.md`), each two places that had to agree.
+
+**bg4, the fee queue took refunds of charges that were never ours.** The
+Connect webhook enqueued every `charge.refunded` / `refund.*` on the account,
+the recovery only knew four tables to find the charge's account in, and a row
+it could not resolve stayed forever and held `admin_delete_restaurant` at
+`provider`. Now one list, `FEE_ACCOUNT_SOURCES` in `refunds/fee-queue.ts`
+(fee returns, diner checkouts, refund operations, refunds due, payments), is
+what the webhook checks before enqueueing, where the recovery reads the
+account, and what the deletion guard waits on. A row none of them explains is
+acked at its generation as not ours. `fee-queue-scope.spec.ts` and
+`fee-returns-schema.spec.ts` pin all three.
+
+**bg8, the delete archive missed money tables.** The archive was pinned
+against its own list, so fee returns, refund failures and coverage, fee
+epochs, coupon redemptions, write-off and discount approvals, loyalty
+redemptions and every bill split table cascaded away uncopied. They are
+archived now (keyless tables get an md5 id of their key), and
+`admin-safety-schema.spec.ts` walks every `on delete cascade` path from
+`restaurants` and fails on any table that is neither archived nor named in
+`NOT_BOOKS` with its reason.
+
+**bg9, one Stripe account, one restaurant.** Every webhook helper finds the
+restaurant with `maybeSingle()`; a duplicate account made each refund event
+raise and answer 500. A partial unique index now refuses the duplicate. The
+gate scripts that borrow a fake account give a second restaurant its own
+(`acct_api_check_other`, `acct_api_check_account`).
+
+**bg10, the fee month rolled over in UTC.** The cap and the currency lock
+used the UTC month, so in Mexico City both rolled at 18:00 on the last day.
+`fee_month(restaurant)` reads the restaurant's timezone and is the only month
+`reserve_platform_fee`, `record_session_fee` and `currency_locked_until` use.
+`fee-month-currency.spec.tsx`.
+
+**access1, a table member could take over the sitting's card.** Removing a
+card took its code; replacing it took nothing, so one phone could redirect the
+table's ticket emails and stamps to its own card. `attach_loyalty_card_v2`
+refuses a diner replacing a different card without that card's code
+(`taken`), under the row lock. Staff replace as before.
+
+**access2, the diner's "taken" was an address oracle.** A diner's link now
+answers `submitted` whether the address was linked or already on another
+card, in the card-email route and in card creation, and is limited per network
+address as well as per card. Staff still learn which card holds it. The diner
+screen notes what `submitted` means. `diner-answer.spec.ts`, `card-email.spec.tsx`.
+
+**access3, a far history page read the whole history.** The held-sales
+history page is clamped to the last page there is, counted per clock, before
+either clock is read. `held-sales-history-route.spec.ts`.
+
+**screens4 and screens5, errors said more than once.** Order history reads a
+page's chargebacks once (`useDisputeHistory`), only for orders a card could
+have paid, shows one alert when that fails and no per-row loading line, so the
+skeleton is unchanged. CardEmail says a failed read once.
+`order-history-disputes.spec.tsx`, `card-email.spec.tsx`.
+
+**M4, a legacy split under-tipped later shares.** A v1 split locked before
+`food_principal` read what its orders still owed, which shrank as shares were
+paid and was divided by the shares again. `splitTipPrincipal` uses the
+`amount` it froze, in the preview and the pay route alike.
+`tip-base.react-component.spec.tsx`.

@@ -33,6 +33,7 @@ export const es: Messages = {
   cardEmail: {
     ownReadFailed: "No pudimos consultar el correo de tu tarjeta. Puedes escribir uno nuevo.",
     takenDiner: "Ese correo ya está en la tarjeta ···· {suffix}. Usa esa tarjeta.",
+    submittedDiner: "Listo. Si este correo ya está en otra tarjeta de visitas de aquí, tus tickets le siguen llegando con esa tarjeta.",
     scanToRead: "Escanea la tarjeta para consultar su correo.",
     differentCard: "Escanea la tarjeta ···· {suffix} para cambiar su correo.",
     title: "Tickets por correo",
@@ -73,6 +74,7 @@ export const es: Messages = {
     off: "La tarjeta de visitas está apagada o no está disponible en este plan.",
     paid: "Esta venta ya está pagada. Presenta la tarjeta antes de pagar.",
     gone: "Esta venta o mesa ya no está abierta.",
+    taken: "Esta mesa ya tiene otra tarjeta de visitas. Pide al personal que la cambie.",
     progress: "Tarjeta de visitas ···· {code}: {progress} de {goal} · te faltan {n} para {reward}",
     earned: "Tarjeta de visitas ···· {code}: ¡Ganaste {reward}! Pídelo en tu próxima visita.",
     pending: "Tarjeta de visitas ···· {code}: tu visita se confirmará cuando se reconecte la venta.",

@@ -1,6 +1,6 @@
 import { after } from "next/server";
 import { drainTicketEmails } from "@/lib/ticket-email";
-import { frozenTipPrincipal, ordersTipBase, splitTipBase, tipFromPercent } from "@/lib/tip-base";
+import { ordersTipBase, splitTipBase, splitTipPrincipal, tipFromPercent } from "@/lib/tip-base";
 import { paySplitSlots } from "@/lib/split-slots-pay";
 import { tableMember } from "@/lib/table-membership";
 import { dinerCheckoutOrders } from "@/lib/diner-checkout-orders";
@@ -192,7 +192,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     return await apiError("apiErr.mixedCurrencies", 409);
   }
 
-  const tipBase = splitTipBase(frozenTipPrincipal(split.food_principal, frozenOrders), shares, [claim.share_no], ordersTipBase(own));
+  const tipBase = splitTipBase(splitTipPrincipal(split, frozenOrders), shares, [claim.share_no], ordersTipBase(own));
   const asked = tipAmount != null ? Number(tipAmount) : tipFromPercent(tipBase, Number(tipPct));
   const tip = Math.min(Math.max(0, round2(asked)), payable);
   const cents = Math.round(round2(payable + tip) * 100);
