@@ -1,22 +1,33 @@
 {
   "title": "Aviso de Privacidad",
-  "intro": "Qué datos tratamos, con qué finalidad, y qué puede solicitarnos respecto de ellos.",
+  "intro": "Aviso de privacidad integral de TableTap: quién trata sus datos, cuáles, con qué finalidad, con quién se comparten, cuánto tiempo se conservan y cómo puede ejercer sus derechos. Se emite conforme a la Ley Federal de Protección de Datos Personales en Posesión de los Particulares publicada el 20 de marzo de 2025.",
   "version": "__VERSION__",
   "clauses": [
     {
-      "title": "1. Responsable del tratamiento",
+      "title": "1. Identidad y domicilio del responsable",
       "paragraphs": [
-        "TableTap es responsable del tratamiento de los datos personales que recaba de los restaurantes que contratan el servicio.",
-        "Respecto de los datos de los comensales, el responsable es el restaurante. TableTap los trata en calidad de encargado, por cuenta de aquel y siguiendo sus instrucciones."
+        "«[RAZÓN SOCIAL]» («TableTap»), RFC «[RFC]», con domicilio en «[DOMICILIO]», es responsable del tratamiento de los datos personales de quienes contratan el servicio y administran la cuenta de su restaurante, y de los registros técnicos con los que protege la plataforma.",
+        "Las solicitudes y dudas sobre datos personales las atiende «[PERSONA O ÁREA DE DATOS PERSONALES]», en el correo «[CORREO DE PRIVACIDAD]» o en el domicilio indicado.",
+        "Sitio: https://tabletap.shop. Los correos con tickets y recibos se envían desde ticket@tabletap.shop, a nombre del restaurante que realizó la venta."
       ]
     },
     {
-      "title": "2. Datos que tratamos",
+      "title": "2. Quién responde de los datos de los comensales",
+      "paragraphs": [
+        "Respecto de los datos de los comensales, de los clientes a quienes un restaurante abre una cuenta y del personal del restaurante, el responsable es el restaurante: su nombre aparece en el menú, en la cuenta y en el ticket. TableTap los trata en calidad de encargado, por cuenta de aquel, siguiendo sus instrucciones y únicamente para prestarle el servicio; no los utiliza para fines propios.",
+        "Cada restaurante debe poner a disposición de sus comensales su propio aviso de privacidad con su identidad y domicilio; el apartado 13 contiene un modelo. Este documento describe con detalle lo que la plataforma hace con esos datos, para que el comensal pueda conocerlo en todo momento desde el enlace «Aviso de privacidad» que aparece al pie de cada página.",
+        "La única excepción son los códigos con los que la plataforma limita solicitudes abusivas, descritos en el apartado 3, de los que TableTap es responsable para proteger el servicio de todos los restaurantes."
+      ]
+    },
+    {
+      "title": "3. Datos que tratamos",
       "paragraphs": [
         "Del restaurante: nombre del negocio, nombre y correo electrónico de quien administra la cuenta, datos de contacto y datos fiscales cuando solicita factura. Si el restaurante los registra para sus tickets, también su razón social, RFC, régimen fiscal, domicilio y teléfono, que se imprimen en el ticket de sus ventas; son opcionales, solo el titular de la cuenta los modifica y no se muestran en el menú.",
         "Del personal del restaurante: correo electrónico, rol y, si lo registra en su perfil, su nombre, con el fin de otorgar acceso al panel y de dejar constancia de quién realizó cada operación — pedidos, cobros, descuentos, cancelaciones, cambios en el equipo, turnos de caja, merma, conteos de existencias, compras y cambios en los costos —, como se describe en los Términos.",
+        "De quien crea la cuenta: la contraseña, que se guarda cifrada de forma que nadie puede leerla; la versión de los Términos y de este aviso que aceptó, con la fecha, la hora y el correo con que lo hizo; y la confirmación de su correo electrónico. El proveedor de autenticación registra además, por seguridad, la dirección de red (IP) y el navegador desde los que se inicia cada sesión del panel.",
+        "Del cobro de la suscripción: Stripe trata los datos de la tarjeta con que el restaurante paga su plan; TableTap solo conserva el identificador de cliente y de suscripción que Stripe le asigna, el plan y el estado de los pagos. Para que el restaurante reciba pagos con tarjeta, quien lo representa proporciona sus datos de identidad y bancarios directamente a Stripe, que los trata conforme a su propio aviso; TableTap solo recibe el identificador de la cuenta y si puede cobrar.",
         "Del comensal: lo estrictamente necesario para que su pedido opere — qué ordenó, en qué mesa, la nota que escriba para la cocina, el código de promoción que utilice, si dejó propina y la calificación del platillo si la otorga.",
-        "Nombre del comensal: únicamente en los pedidos que se recogen en el mostrador, y de manera opcional. Sirve para llamarle cuando su pedido está listo. Puede dejarlo en blanco: su pedido se identifica por su código de recogida, que se le muestra siempre. No se solicita en el servicio en mesa, donde la mesa cumple esa función, ni se solicita su teléfono, ni se crean cuentas de comensal.",
+        "Nombre del comensal: únicamente en los pedidos que se recogen en el mostrador, y de manera opcional. Sirve para llamarle cuando su pedido está listo. Puede dejarlo en blanco: su pedido se identifica por su código de recogida, que se le muestra siempre. No se solicita en el servicio en mesa, donde la mesa cumple esa función, ni se solicita su teléfono, ni se crean cuentas de usuario para el comensal.",
         "Correo electrónico del comensal para un recibo: si lo escribe solo para recibir el recibo de un pedido, no se conserva. Se utiliza para enviar ese único correo y se descarta; no se incorpora a nuestra base de datos, no se da de alta en lista alguna y no se le remite publicidad.",
         "Correo electrónico vinculado a la tarjeta de visitas: de manera opcional y con su consentimiento expreso, el comensal puede vincular un correo a su tarjeta —al crearla, al sellarla o al pagar—, por sí mismo o a través del personal del restaurante, para recibir ahí automáticamente el ticket de cada venta en la que presente su tarjeta, con el PDF del ticket adjunto. Se registran el correo, la fecha de su consentimiento, la versión de este aviso vigente entonces y si lo vinculó el comensal o qué miembro del personal. Ese correo queda asociado a la tarjeta y, a través de ella, a las ventas en las que el comensal la presentó —con lo que esas ventas registren, como el nombre que haya dado en el mostrador o la cuenta de cliente a la que se cargaron—; se utiliza únicamente para enviarle sus tickets: no se le remite publicidad ni se da de alta en lista alguna. El personal de piso lo ve parcialmente oculto; solo el titular y el gerente del restaurante lo ven completo. De cada envío se registra la venta y el resultado, sin la dirección. El cajero puede omitir el envío de una venta.",
         "En el propio dispositivo del comensal, la aplicación conserva un registro local — los pedidos que hizo desde ese teléfono, la mesa en la que está sentado, el contenido de su carrito, los platillos que más pide en cada restaurante con sus extras y sus notas y, en el mostrador, el nombre que haya dado — con el fin de que pueda seguir sus pedidos, no tener que escribir su nombre en cada uno, pagar su cuenta y volver a pedir «Lo de siempre» con un toque. El nombre guardado así se descarta solo a las pocas horas, y «Lo de siempre» se borra desde la propia carta con «Olvidar». Salvo el identificador descrito en el párrafo siguiente, esa información permanece en su navegador, no se transmite a terceros y se elimina al borrar los datos del sitio.",
@@ -24,58 +35,105 @@
         "Una credencial de mesa: cuando un teléfono hace el primer pedido en una mesa libre, o pide entrar a una mesa que ya está ocupada, el servidor genera al azar una credencial que el navegador guarda en una cookie que solo el servidor puede leer. No procede de ningún dato suyo y no lo identifica a usted. De ella se conserva únicamente una huella que no permite reconstruirla, junto con la visita a la mesa a la que pertenece, si se dejó entrar o no a ese teléfono y cuándo, y el correo del miembro del personal que lo decidió o la indicación de que lo decidió otro teléfono de la mesa. Su única finalidad es que solo quienes están en esa mesa vean su cuenta, pidan sobre ella y la paguen. La cookie se conserva hasta un año en el teléfono, y borrar los datos del sitio hace que reciba una nueva.",
         "Tarjeta de visitas: cuando el restaurante la ofrece y el comensal la acepta, se genera un código aleatorio que identifica a la tarjeta, no a la persona. Se registran los días en que el personal del restaurante la sella y las recompensas que se canjean con ella, junto con el correo del miembro del personal que lo hizo, y la fecha en que el comensal guardó por última vez la imagen de su tarjeta, para avisarle cuando esa imagen ya no muestre las recompensas que su tarjeta tiene. El comensal puede presentar su tarjeta antes de pagar —en caja, al mesero, en la cuenta de su mesa o desde su propio teléfono—: la tarjeta queda asociada a esa venta o a la cuenta de la mesa, y al confirmarse el pago se registra la visita, una por día, indicando que la registró el pago. El ticket de esa venta muestra únicamente los cuatro últimos caracteres del código y el avance de la tarjeta. No se solicita el nombre ni el teléfono del comensal, y el correo solo si decide vincularlo para recibir sus tickets, como se describe en este apartado. La tarjeta es una imagen que el comensal guarda en su propio teléfono; el navegador de ese teléfono recuerda el código, o que el comensal pidió no volver a ver la oferta, y esa información no sale del dispositivo.",
         "Cuenta de cliente: cuando el restaurante abre una cuenta para que un cliente pague después, se registran el nombre del cliente, el límite que el restaurante le fijó, lo que se carga a la cuenta con la fecha, la hora y el correo del miembro del personal que lo cargó, y los pagos que la saldan. El correo electrónico del cliente se registra solo si él lo proporciona para recibir su estado de cuenta. Se genera un código aleatorio para consultar la cuenta: quien lo tenga puede ver el nombre, lo cargado y lo pagado, y pagarla.",
-        "En el dispositivo del restaurante, sin conexión: la caja del mostrador guarda en ese dispositivo las ventas que cobre mientras no haya conexión — los productos, el monto, la hora, el método de pago y, si se dieron, el nombre para llamar al cliente, la nota del pedido y el número de autorización del voucher de la terminal — hasta enviarlas al volver la conexión, y en cuanto se reciben se borran de ahí. Para poder abrirse sin conexión, ese dispositivo conserva además la última página de la caja y la del tablero de cocina que cargó, que se borran al cerrar sesión.",
+        "En el dispositivo del restaurante, sin conexión: la caja del mostrador guarda en ese dispositivo las ventas que cobre mientras no haya conexión — los productos, el monto, la hora, el método de pago y, si se dieron, el nombre para llamar al cliente, la nota del pedido, el código de la tarjeta de visitas presentada, quién cobró y el número de autorización del voucher de la terminal — hasta enviarlas al volver la conexión, y en cuanto se reciben se borran de ahí. Para poder abrirse sin conexión, ese dispositivo conserva además la última página de la caja y la del tablero de cocina que cargó, que se borran al cerrar sesión.",
         "La cámara del dispositivo del restaurante: el panel la utiliza para leer los códigos QR de una mesa, de una cuenta o de una tarjeta de visitas, de modo que quien atiende no tenga que buscarlos en una lista. La imagen se procesa en el propio navegador para decodificar el código; no se graba, no se almacena y no se transmite a nosotros ni a terceros. El permiso puede negarse y el panel sigue funcionando por búsqueda y por lista. La cámara del comensal se solicita solo si él pulsa el botón de escanear del menú, para leer el código de su estado de cuenta, de su tarjeta de visitas o de una mesa, y se procesa de la misma manera: en su navegador, sin grabarse, almacenarse ni transmitirse. Si la niega, el menú funciona igual.",
-        "Para proteger el servicio de solicitudes abusivas, al recibir una solicitud se calcula un código a partir de la dirección de red (IP) desde la que llega —y, cuando la solicitud se hace desde una mesa, otro a partir de esa dirección junto con la mesa—, mediante una función criptográfica con una clave que solo conoce nuestro servidor. Se conservan esos códigos, no la dirección, junto con el número de solicitudes recientes; no se asocian a pedidos, cuentas ni personas, y se eliminan en un plazo máximo de un día.",
+        "Para proteger el servicio de solicitudes abusivas, al recibir una solicitud se calcula un código a partir de la dirección de red (IP) desde la que llega —y, cuando la solicitud se hace desde una mesa, otro a partir de esa dirección junto con la mesa—, mediante una función criptográfica con una clave que solo conoce nuestro servidor. Se conservan esos códigos, no la dirección, junto con el número de solicitudes recientes; no se asocian a pedidos, cuentas ni personas, y se eliminan en un plazo máximo de un día. Por su parte, los proveedores de alojamiento y de base de datos registran la dirección de red de cada solicitud en sus registros técnicos de operación y seguridad, que conservan conforme a sus propias políticas.",
         "No se almacenan datos de tarjetas bancarias. Los pagos son procesados por Stripe conforme a su propia política de privacidad."
       ]
     },
     {
-      "title": "3. Finalidades del tratamiento",
+      "title": "4. Datos personales sensibles",
       "paragraphs": [
+        "No solicitamos datos personales sensibles, como los relativos a la salud, al origen étnico, a las creencias o a la preferencia sexual.",
+        "Las etiquetas de dieta y de alérgenos describen platillos, no personas. Si un comensal escribe en la nota de su pedido una alergia o una indicación de salud, esa nota se utiliza solo para preparar su pedido, la ven únicamente el restaurante y su personal, y se conserva con el pedido. Le recomendamos escribir solo lo necesario para que su platillo se prepare con seguridad."
+      ]
+    },
+    {
+      "title": "5. Finalidades del tratamiento",
+      "paragraphs": [
+        "Finalidades necesarias para el servicio, que no requieren un consentimiento adicional porque sin ellas el servicio no puede prestarse:",
         "Prestar el servicio: mostrar el menú, tomar pedidos, transmitirlos a la cocina, procesar cobros y generar los reportes del restaurante.",
         "Facturar al restaurante, brindarle soporte y notificarle cambios relevantes en el servicio o en los precios.",
         "Preservar la seguridad de la plataforma y prevenir usos indebidos.",
         "Enviar el recibo de un pedido al correo electrónico que el comensal proporcionó con esa finalidad, y para ningún otro fin.",
-        "Enviar automáticamente el ticket de cada venta al correo que el comensal vinculó a su tarjeta de visitas, y para ningún otro fin.",
         "Llevar la cuenta de las visitas de una tarjeta de visitas y de sus recompensas, y mostrarle al comensal su avance cuando consulte su tarjeta con el código impreso en ella.",
         "Llevar las cuentas de clientes que el restaurante abre, mostrarle al cliente su estado de cuenta y enviárselo al correo que él proporcione con esa finalidad.",
-        "No se comercializan datos personales ni se utilizan para publicidad de terceros."
+        "Finalidad que requiere su consentimiento expreso: enviar automáticamente el ticket de cada venta al correo que el comensal vinculó a su tarjeta de visitas, y para ningún otro fin. Ese consentimiento se registra al vincular el correo y puede revocarse en cualquier momento, como se indica en el apartado 6.",
+        "No tratamos datos personales para finalidades secundarias: no se envía publicidad, no se elaboran perfiles, no se comercializan datos ni se utilizan para publicidad de terceros. Si en el futuro quisiéramos tratarlos para una finalidad distinta, le pediremos antes su consentimiento."
       ]
     },
     {
-      "title": "4. Transferencias y remisiones",
+      "title": "6. Cómo limitar el uso o la divulgación de sus datos",
       "paragraphs": [
-        "A proveedores que hacen posible la operación del servicio: alojamiento y base de datos, Stripe para el procesamiento de pagos, y un proveedor de envío de correo electrónico para entregar los recibos que el comensal solicite y los tickets que envíe a su correo vinculado. Cada uno trata los datos únicamente para esa función.",
-        "A las autoridades competentes, cuando exista una obligación legal."
+        "El comensal puede dejar en blanco su nombre en el mostrador, no proporcionar su correo, negar el permiso de la cámara y pedir al cajero que no le envíe el ticket de una venta.",
+        "Puede dejar de recibir sus tickets con el enlace «Dejar de recibir mis tickets por correo» incluido en cada envío, quitar el correo de su tarjeta o borrar su tarjeta de visitas desde la página de la tarjeta, con el código impreso en ella.",
+        "Puede borrar «Lo de siempre» desde la carta con «Olvidar», y todo lo que la aplicación guarda en su teléfono borrando los datos del sitio en su navegador.",
+        "El restaurante y su personal pueden solicitar lo que se describe en el apartado 10."
       ]
     },
     {
-      "title": "5. Plazo de conservación",
+      "title": "7. Cookies, almacenamiento local y tecnologías similares",
       "paragraphs": [
-        "Mientras la cuenta esté activa y, posteriormente, durante el plazo que exijan las obligaciones fiscales y legales aplicables.",
+        "TableTap no utiliza cookies de publicidad ni de analítica, ni herramientas de rastreo de terceros.",
+        "Utiliza únicamente lo necesario para funcionar: las cookies de sesión del panel, que mantienen iniciada la sesión del personal; la cookie de la credencial de mesa descrita en el apartado 3, que dura hasta un año; y una cookie que recuerda el idioma elegido, que dura un año.",
+        "En el navegador se guarda además el almacenamiento local descrito en el apartado 3 —pedidos, carrito, mesa, «Lo de siempre», tarjeta de visitas y, en la caja del restaurante, las ventas sin conexión— y, en los dispositivos del restaurante, una copia de las páginas de la caja y de la cocina para poder abrirlas sin conexión.",
+        "Al pagar con tarjeta, el comensal pasa a la página de pago de Stripe, que utiliza sus propias cookies para prevenir fraudes conforme a su aviso de privacidad.",
+        "Todo lo anterior puede eliminarse desde la configuración del navegador; al hacerlo, la aplicación deja de recordar lo guardado."
+      ]
+    },
+    {
+      "title": "8. Proveedores y transferencias",
+      "paragraphs": [
+        "Para prestar el servicio, TableTap se apoya en proveedores que tratan los datos por su cuenta y bajo su instrucción, sin usarlos para fines propios: Supabase (base de datos, autenticación y almacenamiento de archivos), cuyos servidores están en Oregón, Estados Unidos; Vercel (alojamiento de la aplicación), cuyos servidores de aplicación están en Portland, Oregón, Estados Unidos; Resend (envío de los recibos, tickets y estados de cuenta por correo), en Estados Unidos; y Stripe (cobro de la suscripción), en Estados Unidos y otros países donde opera. Estas comunicaciones a encargados no son transferencias y no requieren su consentimiento.",
+        "Los pagos con tarjeta de los comensales los procesa Stripe en la cuenta del propio restaurante, conforme al contrato entre el restaurante y Stripe y al aviso de privacidad de Stripe.",
+        "TableTap no transfiere datos personales a terceros que los utilicen para sus propios fines, por lo que no le solicita consentimiento para transferencias. Solo los comunicará a las autoridades competentes cuando una ley, una orden judicial o un mandato fundado y motivado lo exija, o cuando sea necesario para el reconocimiento, ejercicio o defensa de un derecho en un proceso judicial, casos en los que la ley no exige su consentimiento."
+      ]
+    },
+    {
+      "title": "9. Plazo de conservación",
+      "paragraphs": [
+        "Los datos de la cuenta del restaurante se conservan mientras la cuenta esté activa y, posteriormente, durante el plazo que exijan las obligaciones fiscales y mercantiles aplicables y el de prescripción de las acciones derivadas del contrato.",
         "Los pedidos y sus importes se conservan por constituir registro contable del restaurante. El nombre que un comensal proporciona en el mostrador se conserva junto con su pedido y por el mismo plazo. La huella de una credencial de mesa, con la decisión de dejar entrar o no a ese teléfono, se conserva junto con el registro de esa visita y por el mismo plazo que sus pedidos.",
         "El correo electrónico que un comensal proporciona para su recibo no se conserva: del envío únicamente queda la fecha en que se realizó, sin la dirección. No existe información posterior que suprimir.",
         "Una tarjeta de visitas, con sus visitas y recompensas, se conserva mientras el restaurante mantenga su programa, o hasta que el comensal la borre desde la página de su tarjeta con el código impreso en ella; al borrarla se eliminan también sus visitas y sus recompensas.",
         "El correo vinculado a una tarjeta de visitas se conserva mientras esté vinculado: se elimina al pulsar «Dejar de recibir mis tickets por correo» en cualquiera de los correos, cuando el comensal o el personal lo quitan de la tarjeta, o al borrarse la tarjeta.",
-        "Una cuenta de cliente, con lo cargado y lo pagado, se conserva como registro contable del restaurante mientras exista y, cerrada, durante el plazo que exijan sus obligaciones fiscales. El correo que el cliente proporciona para su estado de cuenta se conserva mientras la cuenta esté abierta, o se usa una sola vez si lo escribe al pedir el envío.",
+        "Una cuenta de cliente, con lo cargado y lo pagado, se conserva como registro contable del restaurante mientras exista y, cerrada, durante el plazo que exijan sus obligaciones fiscales. El correo que el cliente proporciona para recibir su estado de cuenta se conserva junto con la cuenta; si desea que se elimine antes, puede solicitarlo como se indica en el apartado 10. El correo que escribe al pedir un envío se usa una sola vez y no se guarda.",
+        "Cuando un restaurante se elimina, sus pedidos, recibos, devoluciones, movimientos de caja, cuentas de clientes —sin su correo ni su código de acceso—, registros de actividad y demás registros contables se conservan en una copia separada, bloqueada y fuera del alcance de cualquier usuario, durante diez años contados desde la eliminación, plazo que cubre las obligaciones fiscales y mercantiles de conservación; concluido ese plazo, se suprimen. El perfil, el menú y el directorio del personal no se copian.",
+        "El registro de cada aceptación de los Términos y de este aviso se conserva mientras exista la cuenta y, después, durante el plazo de conservación que la ley exige para los documentos en que constan contratos.",
         "Los códigos calculados a partir de la dirección de red para limitar solicitudes abusivas se eliminan en un plazo máximo de un día."
       ]
     },
     {
-      "title": "6. Derechos ARCO",
+      "title": "10. Derechos ARCO y revocación del consentimiento",
       "paragraphs": [
-        "Puede solicitar el acceso, rectificación, cancelación u oposición al tratamiento de sus datos personales, así como revocar su consentimiento.",
-        "Para ejercerlos, le pedimos escribir al correo de contacto publicado en el sitio. Se dará respuesta dentro de los plazos que señala la ley.",
-        "Si usted es comensal de un restaurante que utiliza TableTap, le solicitamos dirigir su petición a ese restaurante; TableTap le brindará el apoyo necesario para atenderla.",
+        "Usted puede solicitar el acceso a sus datos personales, su rectificación, su cancelación u oponerse a su tratamiento (derechos ARCO), así como revocar su consentimiento.",
+        "Para ejercerlos, escriba a «[CORREO DE PRIVACIDAD]» indicando su nombre y un medio para responderle; un documento que acredite su identidad o, si actúa en representación de otra persona, la de su representante y su representación; los datos y el derecho que desea ejercer y, en una rectificación, la corrección y su soporte; y cualquier elemento que ayude a localizar sus datos.",
+        "Le comunicaremos nuestra respuesta en un plazo máximo de veinte días hábiles desde que recibamos su solicitud y, si procede, la haremos efectiva dentro de los quince días hábiles siguientes; ambos plazos pueden ampliarse una sola vez por un periodo igual cuando el caso lo justifique. El acceso se entrega en un archivo electrónico. El trámite es gratuito; solo podrían cobrarse los costos de envío o de reproducción que la ley permite.",
+        "La cancelación da lugar a un periodo de bloqueo, durante el cual los datos solo se conservan para atender las responsabilidades derivadas de su tratamiento, y concluido el cual se suprimen. No procede respecto de los datos que deban conservarse por disposición legal, como los registros contables y fiscales.",
+        "Si no recibe respuesta o no está conforme con ella, puede presentar una solicitud de protección de datos ante la Secretaría Anticorrupción y Buen Gobierno, autoridad en la materia, dentro de los quince días hábiles siguientes a nuestra respuesta o al vencimiento del plazo para darla.",
+        "Si usted es comensal de un restaurante que utiliza TableTap, le solicitamos dirigir su petición a ese restaurante; TableTap le brindará el apoyo necesario para atenderla y, si la recibe directamente, la hará llegar al restaurante.",
         "La cancelación de una tarjeta de visitas no requiere solicitud: el comensal puede borrarla en cualquier momento desde la página de su tarjeta, con el código impreso en ella.",
         "La cancelación del correo vinculado a una tarjeta de visitas tampoco requiere solicitud: basta el enlace «Dejar de recibir mis tickets por correo» incluido en cada envío."
       ]
     },
     {
-      "title": "7. Modificaciones a este aviso",
+      "title": "11. Seguridad",
       "paragraphs": [
-        "En caso de modificación, se publicará la nueva versión en esta página y, cuando el cambio sea relevante, se mostrará al ingresar al panel."
+        "TableTap aplica medidas de seguridad administrativas, técnicas y físicas para proteger los datos personales: comunicaciones cifradas, acceso por rol y limitado a cada restaurante, contraseñas cifradas, y un registro de quién realiza cada operación.",
+        "Si ocurre una vulneración de seguridad que afecte de forma significativa sus derechos, se le informará sin demora, para que pueda tomar las medidas que correspondan a su defensa."
+      ]
+    },
+    {
+      "title": "12. Modificaciones a este aviso",
+      "paragraphs": [
+        "Cualquier modificación se publicará en esta página y en el documento PDF, con la fecha de la versión vigente al pie. Cuando el cambio sea relevante, se mostrará al ingresar al panel y se solicitará a cada restaurante su aceptación. Si el cambio afecta una finalidad para la que usted otorgó su consentimiento, se le pedirá de nuevo antes de aplicarlo."
+      ]
+    },
+    {
+      "title": "13. Modelo de aviso de privacidad simplificado para comensales",
+      "paragraphs": [
+        "Cada restaurante puede mostrar a sus comensales el siguiente aviso, completando sus datos donde se indica:",
+        "«[NOMBRE O RAZÓN SOCIAL DEL RESTAURANTE]», con domicilio en «[DOMICILIO DEL RESTAURANTE]», es responsable de los datos personales que usted proporciona al ordenar y pagar desde este menú: lo que ordena, su mesa, la nota para la cocina, la propina y, si lo da, su nombre para llamarle o un correo para recibir su recibo o sus tickets. Los utilizamos para preparar, entregar y cobrar su pedido, llevar su tarjeta de visitas y enviarle el recibo o los tickets que pida; no los usamos para publicidad. Puede dejar de recibir sus tickets con el enlace incluido en cada correo y borrar su tarjeta desde su página. La plataforma TableTap trata estos datos por nuestra cuenta. Consulte el aviso de privacidad integral en https://tabletap.shop/privacidad."
       ]
     }
   ]
