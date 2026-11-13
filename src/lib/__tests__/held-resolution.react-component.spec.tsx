@@ -111,3 +111,19 @@ it.each(["es", "en"] as const)("history exposes each accounting link and copies 
   }
   expect(host.textContent).not.toContain("undefined"); expect(host.textContent).not.toContain("null");
 });
+
+it("offers only payouts the server accepts, named by a readable time when they have no note (full review M2, screens #3)", async () => {
+  const base = state.fetch.getMockImplementation()!;
+  const at = "2026-11-10T18:05:00.000Z";
+  const w = { amount: 12.5, currency: "MXN", created_at: at, purpose: "other", linked: false };
+  state.fetch.mockImplementation(async (url: string, init?: RequestInit) => url.endsWith("/resolve") && !init?.method
+    ? Response.json({ restaurantId, shiftId: "open", shiftCurrency: "MXN", withdrawals: [
+      { ...w, id: link, note: null }, { ...w, id: "used", note: "Backs another", linked: true }, { ...w, id: "tips", note: "Tips", purpose: "tips" }] })
+    : base(url, init));
+  await mount(); await click("heldResolve.action"); await radio("returned_cash");
+  const options = [...[...host.querySelectorAll<HTMLSelectElement>('[role="dialog"] select')].at(-1)!.querySelectorAll("option")];
+  expect(options.map(o => o.value)).toEqual(["", link]);
+  const when = new Date(at).toLocaleString("en-US", { dateStyle: "short", timeStyle: "short" });
+  expect(options[1].textContent).toContain(when);
+  expect(options[1].textContent).not.toContain("2026-11-10T");
+});

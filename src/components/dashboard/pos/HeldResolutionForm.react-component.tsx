@@ -1,8 +1,8 @@
 "use client";
 import { useEffect, useState } from "react";
 import { Modal } from "@/components/ui/Modal";
-import { useT } from "@/lib/i18n/context";
-import { formatMoney } from "@/lib/format";
+import { useLocale, useT } from "@/lib/i18n/context";
+import { dateLocale, formatMoney } from "@/lib/format";
 import { HELD_DISPOSITIONS, type HeldResolutionDetails, type HeldDisposition } from "@/lib/held-resolution";
 import type { HeldSale } from "@/lib/offline-sales";
 import type { CashMovement } from "@/lib/cash-drawer";
@@ -22,6 +22,9 @@ function localTime(at: string): string {
 
 export default function HeldResolutionForm({ sale, currentCurrency, busy, onClose, onSubmit }: Props) {
   const t = useT();
+  const { locale } = useLocale();
+  // A withdrawal with no note is named by when it was taken, as a person reads it.
+  const takenAt = (iso: string) => new Date(iso).toLocaleString(dateLocale(locale), { dateStyle: "short", timeStyle: "short" });
   const [disposition, setDisposition] = useState<HeldDisposition>("retained_cash");
   const [amount, setAmount] = useState(String(sale.charge.total));
   const [reason, setReason] = useState("");
@@ -50,7 +53,9 @@ export default function HeldResolutionForm({ sale, currentCurrency, busy, onClos
   }, [sale.restaurantId]);
   const noCash = disposition === "no_cash";
   const value = noCash ? 0 : Number(amount);
-  const matching = withdrawals.filter(w => w.currency === currency && w.amount === value);
+  // A tips payout or a withdrawal already backing another resolution is
+  // refused by the server, so it is never offered (full review M2, screens #3).
+  const matching = withdrawals.filter(w => w.currency === currency && w.amount === value && w.purpose !== "tips" && !w.linked);
   const needsPayout = disposition === "returned_cash" && currency === shiftCurrency;
   const ready = reason.trim().length >= 8 && collector.trim() && at && Number.isFinite(Date.parse(at))
     && Number.isFinite(value) && value >= 0 && value <= 1_000_000 && (noCash || value > 0)
@@ -92,7 +97,7 @@ export default function HeldResolutionForm({ sale, currentCurrency, busy, onClos
           {needsPayout && <label className="tt-field"><span>{t("heldResolve.payout")}</span>
             <select className="tt-input" required value={payoutId} onChange={e => setPayoutId(e.target.value)}>
               <option value="">{t("heldResolve.choosePayout")}</option>
-              {matching.map(w => <option key={w.id} value={w.id}>{formatMoney(w.amount, w.currency)} · {w.note ?? w.created_at}</option>)}
+              {matching.map(w => <option key={w.id} value={w.id}>{formatMoney(w.amount, w.currency)} · {w.note || takenAt(w.created_at)}</option>)}
             </select>
           </label>}
           {needsPayout && shiftState === "open" && !matching.length && <p>{t("heldResolve.recordPayout")}</p>}

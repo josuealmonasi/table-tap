@@ -6989,3 +6989,60 @@ parts leave the line off; they never stop the receipt. `ticket-vat.spec.ts`,
 
 ### Split payment answered a Stripe refusal with "Algo salió mal" (2026-11-12)
 Bill and account payments answer a checkout Stripe refused with `apiErr.checkoutFailed` ("El pago falló"); split payment alone used the generic error, so a diner paying their share was told nothing about what failed. The api gate's food-only tip case caught it on the whole-queue train. Now: all three pay routes answer `checkoutFailed`; the gate's tip-base account case restores the shared account restaurant's card settings, so the later "no card reader" case is judged on its own.
+
+## Retained held cash counts in the shift that collected it (2026-11-12)
+
+Approving a held cash receipt and resolving it as `retained_cash` have to put
+the same cash in the same shift. Approval dates the payment at the sale's time,
+so `cash_shift_totals` counts it in the shift that was open then, even one
+already signed. `resolve_held_sale` counted retained cash in whichever shift
+was open when the manager decided: the collecting shift kept an unexplained
+overage and the open shift got a matching false shortage (full review M1). Now
+it picks the shift whose window holds `p_collected_at`, closed or open, and
+dates the receipt there; only a collection no shift covers falls back to the
+open drawer. `cash_shifts_for_day` brings back a closed shift corrected that
+way, as it does for a late approval. `held-resolve-shift-schema.spec.ts` pins
+both SQL paths to the same window; `scripts/probe-held-resolve.mjs` runs both
+decisions on one receipt from a closed shift and asserts the same shift moves.
+Returned cash still nets in the open drawer, where its withdrawal is recorded.
+
+## Returned held cash cannot be backed by a tips payout (2026-11-12)
+
+The withdrawal behind a `returned_cash` resolution and the shift's tips line
+have to agree about what the cash was. A tips payout (`purpose='tips'`) could
+be linked, and the shift then showed a customer's refund as tips paid to staff
+(full review M2). `resolve_held_sale` now accepts only `purpose='other'`; the
+payout picker's read (`GET /api/pos/recover/resolve`) and the form offer only
+those, and never one already backing another resolution (screens #3, which
+the server refused with `heldResolveLinkUsed`). A withdrawal without a note is
+named by its local date and time, not a raw ISO string.
+`held-resolve-shift-schema.spec.ts`, `held-resolution-route.spec.ts`,
+`held-resolution.react-component.spec.tsx` and the probe pin it.
+
+## The drawer offered "Quitar" on a withdrawal it never removes (2026-11-12)
+
+`delete_cash_withdrawal` refuses a withdrawal that pays out a resolved held
+receipt, but the drawer showed "Quitar" on it (full review, screens #2).
+`shiftWithdrawals` now marks `linked` from `held_sale_resolutions`, and
+`ShiftBlock` shows a hint in place of the button.
+`shift-linked-withdrawal.react-component.spec.tsx` covers the read and both
+languages.
+
+## The till said nothing about held cash until after the blind count (2026-11-12)
+
+The till's "Cerrar caja" and `close_cash_shift` have to agree about held cash.
+The till blocked only on this device's unsent sales; the server refuses on
+every cash sale in the restaurant waiting for review, and told a cashier to
+review them in a screen only managers can use (full review, screens #1). The
+till page now reads the same `heldCashWaiting` count with its open shift,
+disables the close and says a manager must review N held sales; the route
+tells a cashier to call a manager (`apiErr.shiftHeldCashCashier`) and a
+manager to review them. `till-held-cash-close.react-component.spec.tsx` and
+`shift-held-cash.spec.ts` pin it.
+
+## Account card payment read a tip that is not a number as MX$0 (2026-11-12)
+
+Bill, split, slots and account payment have to refuse the same bad tip. The
+account route turned `tipAmount: "abc"` into no tip, silently dropping it
+(full review M3); it now answers `invalidRequest` 400 before anything opens.
+`unresolved-account-routes.spec.ts` pins it.

@@ -1157,11 +1157,17 @@ now catches each one.
 ## The counter till
 
 Managers can resolve a held cash receipt without creating a sale, payment or
-stock movement. Retained cash is disclosed apart from sales in the open shift
-and its printed sheet; foreign cash is listed with other-currency takings and
-never added to the drawer's expected count. Returned cash in the drawer currency
-requires a recorded withdrawal, which cannot be removed once linked. Foreign
-returned cash takes no withdrawal or new receipt. Resolution history exposes
+stock movement. Retained cash is disclosed apart from sales in the shift an
+approval would count it in: the one open when it was collected, even if that
+shift has since closed (it then reappears in that day's handover); only a
+collection no shift covers falls back to the open shift. Foreign cash is listed
+with other-currency takings and never added to the drawer's expected count.
+Returned cash in the drawer currency requires a recorded withdrawal in the open
+shift whose purpose is not tips and that backs no other resolution; once linked
+it cannot be removed, and the drawer shows why instead of "Quitar". Foreign
+returned cash takes no withdrawal or new receipt. While any cash sale from any
+till waits for review, the till disables "Cerrar caja" and says a manager must
+review them; a cashier's refused close says to call a manager. Resolution history exposes
 copyable full cash-receipt, payment and withdrawal IDs for later duplicate links.
 
 A cashier rings a sale face to face, takes cash or a card on the restaurant's

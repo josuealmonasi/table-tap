@@ -48,14 +48,27 @@ export async function todaysShifts(restaurantId: string, dayStart: Date): Promis
   return rows.map(numbers);
 }
 
-/** The withdrawals taken during a shift, oldest first. */
+/**
+ * The withdrawals taken during a shift, oldest first. Each says whether it
+ * backs a returned-cash resolution: the server never deletes or relinks one
+ * that does, so no screen should offer to (full review, screens #2 and #3).
+ */
 export async function shiftWithdrawals(restaurantId: string, shiftId: string): Promise<CashMovement[]> {
-  const { data, error } = await createAdminClient()
-    .from("cash_movements").select("id, currency, kind, amount, note, actor_email, created_at")
+  const db = createAdminClient();
+  const { data, error } = await db
+    .from("cash_movements").select("id, currency, kind, amount, note, actor_email, created_at, purpose")
     .eq("restaurant_id", restaurantId).eq("shift_id", shiftId).eq("kind", "withdrawal")
     .order("created_at", { ascending: true });
   if (error) throw new Error(`the shift's withdrawals: ${error.message}`);
-  return (data ?? []).map(m => ({ ...m, amount: Number(m.amount) })) as CashMovement[];
+  const ids = (data ?? []).map(m => m.id as string);
+  const linked = new Set<string>();
+  if (ids.length) {
+    const { data: links, error: linkError } = await db.from("held_sale_resolutions").select("payout_id")
+      .eq("restaurant_id", restaurantId).in("payout_id", ids);
+    if (linkError) throw new Error(`the shift's linked withdrawals: ${linkError.message}`);
+    for (const l of links ?? []) if (l.payout_id) linked.add(l.payout_id as string);
+  }
+  return (data ?? []).map(m => ({ ...m, amount: Number(m.amount), linked: linked.has(m.id as string) })) as CashMovement[];
 }
 
 /**

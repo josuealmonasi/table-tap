@@ -26,14 +26,17 @@ let shift;
 let item;
 let transactionStarted = false;
 const value = async (sql, args) => (await db.query(sql, args)).rows[0].value;
-const totals = () => value("select cash_shift_totals($1,$2,clock_timestamp()) value", [restaurant, shift]);
+const totalsOf = id => value("select cash_shift_totals($1,$2,clock_timestamp()) value", [restaurant, id]);
+const totals = () => totalsOf(shift);
+// A day before any probe shift opened: no shift covers it, so retained cash
+// falls back to the open drawer.
 const at = new Date(Date.now() - 86_400_000).toISOString();
 
-async function held(amount, method = "cash", currency = "MXN") {
+async function held(amount, method = "cash", currency = "MXN", when = at) {
   const ref = randomUUID();
   const body = { posRef: ref, restaurantId: restaurant, method, currency,
     items: [{ itemId: item, name: "Coffee", price: amount, qty: 1, mods: {} }],
-    offline: { at, subtotal: amount, serviceFee: 0, tip: 0, discount: 0, total: amount } };
+    offline: { at: when, subtotal: amount, serviceFee: 0, tip: 0, discount: 0, total: amount } };
   await db.query(`insert into offline_sale_queue(restaurant_id,pos_ref,body,collector,currency,submitted_by,reason)
     values($1,$2,$3::jsonb,$4,$5,$4,'probe')`, [restaurant, ref, JSON.stringify(body), collector, currency]);
   return ref;
@@ -42,11 +45,11 @@ const accounting = () => value(`select jsonb_build_object(
   'orders', (select count(*) from orders where restaurant_id=$1),
   'payments', (select count(*) from payments where restaurant_id=$1),
   'stock', (select jsonb_agg(jsonb_build_array(id,stock,available) order by id) from menu_items where restaurant_id=$1)) value`, [restaurant]);
-async function resolve(ref, actor, disposition, amount, links = {}, currency = "MXN") {
+async function resolve(ref, actor, disposition, amount, links = {}, currency = "MXN", collectedAt = at) {
   const before = await accounting();
   const result = await value(
   "select resolve_held_sale($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) value",
-  [restaurant, ref, actor, "Probe resolution reason", disposition, collector, amount, currency, at,
+  [restaurant, ref, actor, "Probe resolution reason", disposition, collector, amount, currency, collectedAt,
     links.payment ?? null, links.receipt ?? null, links.payout ?? null]);
   assert.deepEqual(await accounting(), before, "resolution must not create orders/payments or change stock");
   return result;
@@ -102,6 +105,8 @@ try {
     const r = await resolve(ref, owner, "retained_cash", 50);
     assert.equal(r.disposition, "retained_cash");
     assert.ok(r.cash_receipt_id);
+    assert.equal(await value("select shift_id value from held_cash_receipts where id=$1", [r.cash_receipt_id]), shift,
+      "a collection no shift covers falls back to the open drawer");
     const after = await totals();
     assert.equal(Number(after.unclassifiedCash), 50);
     assert.equal(Number(after.unclassifiedCashByCurrency.MXN), 50);
@@ -192,6 +197,54 @@ try {
     assert.deepEqual(deletion, { outcome: "linked" });
     assert.equal(await value("select count(*)::int value from cash_movements where id=$1", [payout]), 1);
     assert.equal(Number((await totals()).expected), Number(before.expected));
+  });
+
+  await check("returned cash cannot be backed by a tips payout (full review M2)", async () => {
+    const ref = await held(45);
+    const tips = (await value("select create_cash_withdrawal($1,$2,45,'tips','probe','tips') value", [restaurant, shift])).id;
+    await refused(() => resolve(ref, owner, "returned_cash", 45, { payout: tips }), /matching recorded payout required/);
+    const other = (await value("select create_cash_withdrawal($1,$2,45,'returned','probe','other') value", [restaurant, shift])).id;
+    assert.equal((await resolve(ref, owner, "returned_cash", 45, { payout: other })).payout_id, other);
+  });
+
+  await check("retained and approved held cash both count in the shift that collected it, even once closed (full review M1)", async () => {
+    const shiftA = shift;
+    const collectedAt = await value("select clock_timestamp() value");
+    // Shift A closes with the offline sale's MX$60 already in its drawer: 60 over.
+    const openA = await totalsOf(shiftA);
+    const closedA = await value("select close_cash_shift($1,$2,$3,'probe') value", [restaurant, shiftA, Number(openA.expected) + 60]);
+    assert.equal(Number(closedA.difference), 60);
+    // The till queues the receipt only after A closed; shift B is open when it is decided.
+    const ref = await held(60, "cash", "MXN", collectedAt.toISOString());
+    const shiftB = await value("select open_cash_shift($1,'probe',100) value", [restaurant]);
+    assert.ok(shiftB, "shift B must open");
+    const dayStart = await value("select clock_timestamp() value");
+    const listed = async () => value("select count(*)::int value from cash_shifts_for_day($1,$2) where id=$3", [restaurant, dayStart, shiftA]);
+    assert.equal(await listed(), 0);
+    const baseA = await totalsOf(shiftA), baseB = await totalsOf(shiftB);
+    const moved = async () => {
+      const a = await totalsOf(shiftA), b = await totalsOf(shiftB);
+      return { a: Number(a.expected) - Number(baseA.expected), b: Number(b.expected) - Number(baseB.expected) };
+    };
+
+    await db.query("savepoint decision");
+    const r = await resolve(ref, owner, "retained_cash", 60, {}, "MXN", collectedAt);
+    assert.equal(await value("select shift_id value from held_cash_receipts where id=$1", [r.cash_receipt_id]), shiftA);
+    const retained = await moved();
+    assert.equal(await listed(), 1, "the corrected closed shift shows in today's handover");
+    await db.query("rollback to savepoint decision");
+
+    const order = { subtotal: 60, service_fee: 0, tip: 0, discount: 0, total: 60, tax_pct: 0, currency: "MXN",
+      items: [{ itemId: item, name: "Coffee", price: 60, qty: 1, mods: {} }], note: null, customer_name: null,
+      offline_drift: null, preparation_pending: false, ticket_email_skip: false };
+    const ticket = await value(`select record_offline_sale($1,$2,$3::jsonb,'cash',$4,$5,null,'[]'::jsonb,$6,
+      'Approved late probe receipt',null,'manager_attested') value`, [restaurant, ref, JSON.stringify(order), collector, collectedAt, owner]);
+    assert.equal(ticket.outcome, "settled");
+    const approved = await moved();
+    await db.query("release savepoint decision");
+
+    assert.deepEqual(retained, { a: 60, b: 0 });
+    assert.deepEqual(approved, retained, "both decisions must land in the same shift");
   });
 
   await check("a resolved receipt is frozen: no late approval, no edits", async () => {

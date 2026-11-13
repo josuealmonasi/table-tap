@@ -38,6 +38,9 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   const expected = Number(body?.expected);
   if (!code || !Number.isFinite(expected) || expected <= 0) return await apiError("apiErr.invalidRequest", 400);
   if (body?.currency !== undefined && !isDinerCurrency(body.currency)) return await apiError("apiErr.invalidRequest", 400);
+  // A tip that is not a number is refused, as bill, split and slots refuse it:
+  // read as MX$0, the diner's chosen tip silently vanished (full review M3).
+  if (body?.tipAmount != null && !Number.isFinite(Number(body.tipAmount))) return await apiError("apiErr.invalidRequest", 400);
 
   const account = await accountByCode(code).catch(() => undefined);
   if (account === undefined) return await apiError("apiErr.generic", 500);

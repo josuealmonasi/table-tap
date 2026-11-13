@@ -80,11 +80,13 @@ it.each([{ data: null, error: { message: "network" } }, { data: null, error: nul
   state.rpc.mockResolvedValue(result);
   expect((await post(body)).status).toBe(503);
 });
-it("returns only the acting restaurant's open-shift withdrawals", async () => {
-  state.open.mockResolvedValue({ id, currency: "USD" }); state.withdrawals.mockResolvedValue([{ id: "payout", amount: 12 }]);
+it("returns only the acting restaurant's open-shift withdrawals that can still back a payout (full review M2, screens #3)", async () => {
+  const payout = { id: "payout", amount: 12, purpose: "other", linked: false };
+  state.open.mockResolvedValue({ id, currency: "USD" });
+  state.withdrawals.mockResolvedValue([payout, { ...payout, id: "tips", purpose: "tips" }, { ...payout, id: "used", linked: true }]);
   const res = await GET();
   expect({ status: res.status, body: await res.json(), open: state.open.mock.calls, withdrawals: state.withdrawals.mock.calls }).toEqual({
-    status: 200, body: { restaurantId: body.restaurantId, shiftId: id, shiftCurrency: "USD", withdrawals: [{ id: "payout", amount: 12 }] },
+    status: 200, body: { restaurantId: body.restaurantId, shiftId: id, shiftCurrency: "USD", withdrawals: [payout] },
     open: [[body.restaurantId]], withdrawals: [[body.restaurantId, id]],
   });
 });

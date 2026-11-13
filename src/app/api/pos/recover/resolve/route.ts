@@ -8,13 +8,18 @@ import { RESOLUTION_ERRORS, validResolution } from "@/lib/held-resolution";
 
 export const runtime = "nodejs";
 
-/** Only recorded withdrawals in this manager's open shift can back returned cash. */
+/**
+ * Only recorded withdrawals in this manager's open shift can back returned
+ * cash, and only the ones resolve_held_sale accepts: not a tips payout, and
+ * not one already backing another resolution (full review M2, screens #3).
+ */
 export async function GET(): Promise<NextResponse> {
   const actor = await actingManager();
   if (!actor) return await apiError("apiErr.forbidden", 403);
   try {
     const shift = await openShift(actor.restaurantId);
-    const withdrawals = shift ? await shiftWithdrawals(actor.restaurantId, shift.id) : [];
+    const withdrawals = (shift ? await shiftWithdrawals(actor.restaurantId, shift.id) : [])
+      .filter(w => w.purpose === "other" && !w.linked);
     return NextResponse.json({ restaurantId: actor.restaurantId, shiftId: shift?.id ?? null, shiftCurrency: shift?.currency ?? null, withdrawals });
   } catch { return await apiError("apiErr.generic", 503); }
 }

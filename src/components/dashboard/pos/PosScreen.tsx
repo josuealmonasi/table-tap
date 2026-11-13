@@ -69,6 +69,7 @@ export default function PosScreen({
   shiftOpen = false,
   shiftCurrency,
   shiftId,
+  heldCashWaiting = 0,
   counterOrders = [],
   bestSellers = [],
 }: {
@@ -96,6 +97,8 @@ export default function PosScreen({
   shiftOpen?: boolean;
   shiftCurrency?: string;
   shiftId?: string;
+  /** Cash sales from any till, waiting for a manager's review: the drawer cannot close until then. */
+  heldCashWaiting?: number;
   /** The counter's orders still with the kitchen, for the pickup strip. */
   counterOrders?: Order[];
   /** The ids of the dishes that sell most, most first. */
@@ -242,7 +245,7 @@ export default function PosScreen({
                 onFound={id => router.push(`/dashboard/bills?order=${id}`)}
               />
               {loyalty && <StampCard />}
-              <PosCashDrawer shiftId={shiftId} shiftOpen={shiftOpen} shiftCurrency={shiftCurrency} currency={restaurant.currency} heldSales={offline.held.length} />
+              <PosCashDrawer shiftId={shiftId} shiftOpen={shiftOpen} shiftCurrency={shiftCurrency} currency={restaurant.currency} heldSales={offline.held.length} heldCash={heldCashWaiting} />
             </div>
           </header>
 

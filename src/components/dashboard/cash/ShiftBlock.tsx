@@ -152,9 +152,15 @@ export default function ShiftBlock({ shifts, currency, timeZone, restaurantName 
                     </span>
                     {withdrawalError?.id === w.id && <span role="alert">{withdrawalError.message}</span>}
                   </span>
-                  <button className="tt-btn tt-btn-ghost tt-btn-sm" disabled={busy === w.id} onClick={() => void strike(w)}>
-                    {t("corte.removeWithdrawal")}
-                  </button>
+                  {/* The server never removes a withdrawal that pays out a
+                      resolved held receipt; say why instead of offering it. */}
+                  {w.linked ? (
+                    <span className="tt-muted tt-costs-hint">{t("corte.withdrawalLinked")}</span>
+                  ) : (
+                    <button className="tt-btn tt-btn-ghost tt-btn-sm" disabled={busy === w.id} onClick={() => void strike(w)}>
+                      {t("corte.removeWithdrawal")}
+                    </button>
+                  )}
                 </li>
               ))}
             </ul>
