@@ -5997,6 +5997,24 @@ create or replace function public.snapshot_payment_scope()
 returns trigger language plpgsql security definer set search_path = public as $$
 begin
   if current_setting('tabletap.allocation_writer', true) is distinct from 'v1' then
+    -- Synthetic history already names its order. Write the backfill's exact
+    -- shape now, including unknown old tips, instead of rewriting every receipt
+    -- on the first bill read. Real legacy writers still take the path below.
+    if current_setting('tabletap.allocation_origin', true) = 'fixture_history'
+      and new.order_id is not null and exists
+        (select 1 from orders where id = new.order_id and restaurant_id = new.restaurant_id) then
+      new.allocation_origin := 'legacy';
+      new.allocation_version := 1;
+      new.allocation_quality := 'exact';
+      new.allocation_scope := array[new.order_id];
+      new.unallocated_amount := 0;
+      new.unallocated_tip := 0;
+      new.currency := (select currency from orders where id = new.order_id);
+      new.stripe_account_id := (select stripe_account_id from restaurants where id = new.restaurant_id);
+      new.breakdown_unknown := exists(select 1 from orders where id = new.order_id and tip <> new.tip);
+      new.allocation_reason := 'Historical explicit order; tip metadata preserved';
+      return new;
+    end if;
     select currency, stripe_account_id into new.currency, new.stripe_account_id from restaurants where id = new.restaurant_id;
     if new.order_id is not null then
       new.allocation_scope := array[new.order_id];
@@ -6147,11 +6165,21 @@ grant execute on function public.allocate_receipt(uuid) to service_role;
 create or replace function public.finish_payment_allocation()
 returns trigger language plpgsql security definer set search_path = public as $$
 begin
-  perform public.allocate_receipt(new.id);
+  if new.allocation_version = 1 and new.allocation_origin = 'legacy'
+    and new.allocation_reason = 'Historical explicit order; tip metadata preserved' then
+    -- The seed has the same evidence as an explicit historical backfill.
+    -- The live allocator infers missing tips and caps order coverage;
+    -- neither may change the demo's historical review examples.
+    insert into payment_allocations(restaurant_id, payment_id, order_id, amount, tip, provenance)
+      values(new.restaurant_id, new.id, new.order_id, new.amount, new.tip, 'exact');
+  else
+    perform public.allocate_receipt(new.id);
+  end if;
   return null;
 end;
 $$;
 revoke all on function public.finish_payment_allocation() from public, anon, authenticated;
+grant execute on function public.finish_payment_allocation() to service_role;
 drop trigger if exists finish_payment_allocation on payments;
 create constraint trigger finish_payment_allocation after insert on payments
   deferrable initially deferred for each row execute function public.finish_payment_allocation();
@@ -6343,8 +6371,9 @@ grant execute on function public.backfill_payment_allocations(uuid) to service_r
 -- restaurant: a receipt it would rewrite (its first loop), or a cancelled order
 -- whose legacy money import_historical_return has not finished (its second
 -- loop: a missing cancel record, an unreturned legacy allocation, or a return
--- still in historical review). When this is false the backfill only takes the
--- money lock and finds nothing, so a coverage read skips it and writes nothing.
+-- still in historical review with new evidence). When this is false the
+-- backfill only takes the money lock and finds nothing, so a coverage read
+-- skips it and writes nothing.
 -- It may say true when the backfill then does nothing; never the reverse.
 create index if not exists payments_backfill_pending_idx on payments(restaurant_id)
   where allocation_version = 0 or (allocation_quality = 'unresolved' and allocation_origin = 'legacy'
@@ -6360,7 +6389,15 @@ returns boolean language sql stable security definer set search_path = public as
       left join refund_allocations r on r.allocation_id = a.id
       left join refund_operations f on f.id = r.operation_id
       where o.restaurant_id = p_restaurant and o.status = 'cancelled' and p.allocation_origin = 'legacy'
-        and (r.id is null or (f.historical_review and f.status = 'review')
+        -- A review with no unused matching log cannot gain evidence. Keep it
+        -- pending, without making every bill read retry the same old import.
+        -- Match only the order code here: the importer still proves the amount,
+        -- collector, currency and unique log before accepting any return.
+        and (r.id is null or (f.historical_review and f.status = 'review'
+          and exists (select 1 from user_logs l where l.restaurant_id = o.restaurant_id
+            and l.entity = 'order' and l.action = 'refunded'
+            and substring(l.detail from '(?:^| )order=([^ ]+)') = left(o.id::text, 8)
+            and not exists (select 1 from refund_operations used where used.historical_log_id = l.id)))
           or not exists (select 1 from order_adjustments d where d.order_id = o.id and d.kind = 'cancel')));
 $$;
 revoke all on function public.payment_allocations_need_backfill(uuid) from public, anon, authenticated;

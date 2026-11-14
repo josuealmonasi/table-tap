@@ -669,6 +669,7 @@ export async function setup(env, base) {
 
 /** Everything marked goes, whatever happened to the tests. */
 export async function teardown(fx) {
+  const sharedCleanup = await Promise.allSettled([fx.splitSlotFixtures?.cleanup(), fx.readOnlyFixtures?.cleanup()]);
   await fx.accountFixture?.cleanup();
   await fx.phoneMembers?.cleanup();
   const { admin, restaurant } = fx;
@@ -852,4 +853,6 @@ export async function teardown(fx) {
   const { data: hired } = await admin.from("staff").select("user_id").eq("email", `${MARK}@tabletap.dev`).maybeSingle();
   await admin.from("staff").delete().eq("email", `${MARK}@tabletap.dev`);
   if (hired?.user_id) await admin.auth.admin.deleteUser(hired.user_id).catch(() => {});
+  const failedCleanup = sharedCleanup.find(result => result.status === "rejected");
+  if (failedCleanup) throw failedCleanup.reason;
 }

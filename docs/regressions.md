@@ -48,6 +48,9 @@ and that a new party cannot see the previous party's waiting phones.
 | A duplicate refund keeps its original charge currency everywhere (S11 I9) | Changing the menu currency relabelled money owed back and the approval amount |
 |---|---|
 | Seeds and checks read the same private login passwords | Public scripts and README published login passwords while some checks ignored rotated env values; `login-password-invariant.spec.ts` scans tracked files and plants violations, and `login-secrets.spec.ts` mocks seed creation |
+| Seed receipts and allocation backfill keep the same historical evidence | Every seed inserted version-0 receipts, so reading a bill rewrote hundreds of rows; `seed-payment-allocations.spec.ts` compares every explicit-order field and allocation value with the backfill |
+| Read-only gate cases share their run's fixtures | Identical refusals repeatedly inserted and deleted orders, tables and splits; `gate-fixture-reuse.spec.ts`, `api-readonly-fixtures.spec.ts` and `run-fixtures.spec.ts` check reuse, writer isolation and cleanup |
+| Reseeding restores demo logins without replacing their identities | Deleting the restaurant also deleted five healthy logins and sessions; `seed-logins.spec.ts` and `mock-logins.spec.ts` check identity reuse, changed passwords, metadata reset and explicit drop |
 | Takings bound return evidence before grouping (SQL read cost 2) | The day filter reached PostgREST only after SQL had materialized the restaurant's refund history |
 | Cash case tests narrow optional matchers | A runtime assertion did not tell TypeScript which API cases have an error matcher, so the new contract spec broke type checking |
 | Return polling batches SQL progress (SQL read cost 1) | The list needed every outstanding balance, but sent one RPC per refund every 15 seconds |
@@ -7184,6 +7187,49 @@ It reported a failure even though the route refused the close with 409.
 The case now recognizes the cashier's instruction. The contract spec feeds
 it the real English and Spanish strings, so a copy change cannot silently
 leave the live gate checking words the route no longer sends.
+
+## Seed receipts and historical allocation evidence
+
+The seed's explicit receipts and `backfill_payment_allocations` must describe
+the same money. The seed wrote version 0, then the first bill read inserted
+allocations and rewrote hundreds of payments. Synthetic history now writes
+version 1 and its exact allocations at insertion. The contract spec compares
+all eight backfill fields and the allocation values, including preserved tip
+metadata, unknown breakdowns and legacy provenance. Live and unmarked legacy
+writers keep their existing paths. `mock-history.mjs` reads receipts for daily
+shifts; it does not insert payments.
+
+Cancelled legacy sales retain their historical review examples. A review
+without an unused refund log for that order cannot gain evidence, so the
+coverage check now skips that no-op import. Missing cancellations and
+unreturned allocations still request repair; a new unused refund log still
+retries the importer, which proves the amount, collector, currency and
+uniqueness as before. `seed-backfill-noop.spec.ts` pins these conditions. No
+review or return evidence is fabricated to make a read look clean.
+
+## Read-only gate cases and fixture ownership
+
+The fixture lifecycle and each case's effects have to agree. Refused split,
+inactive-order and frozen-offer requests repeatedly created the same rows.
+One run now owns each unchanged fixture set; case cleanup returns the borrowed
+rows without deleting them. Run cleanup removes them, including after failed
+requests. Frozen offers leave after their last case so an active promotion
+cannot discount a later case's sale; run cleanup remains their fallback. Failed
+group deletions remain reachable for that final cleanup, and their errors do
+not stop teardown of the API gate's other rows. Specs check reuse, incompatible
+states, separate runs, failed setup and private writer cleanup. Every gate verdict stays unchanged. The exact
+shared cases and cases that still need private rows are listed in
+`docs/gate-fixture-ownership.md`.
+
+## Demo logins and a restaurant reset
+
+The seed's clean restaurant and the gate's existing login must agree. Reseeding
+deleted five auth users, their identities, profiles and sessions before
+recreating the same people. It now retains the auth IDs, restores passwords
+only if changed, clears demo metadata and bans, removes accidental admin
+grants and restores names. Unchanged passwords never go through GoTrue's
+password update. Explicit `dropMock` still removes all five users. Mocked
+database and admin-client specs check both lifetimes without sending mail.
 
 ## The cash contract spec and its case union
 
