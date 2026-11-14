@@ -4,7 +4,9 @@ import { describe, expect, it } from "vitest";
 const schema = readFileSync("supabase/schema.sql", "utf8");
 const latest = (name: string): string => {
   const sql = [...schema.matchAll(/create or replace function public\.([a-z_0-9]+)\([\s\S]*?\$\$;/g)]
-    .filter(m => m[1] === name).at(-1)?.[0] ?? "";
+    // Ticket-choice overloads delegate to these retained money writers;
+    // review2-money-schema.spec.ts checks their locks and rollback separately.
+    .filter(m => m[1] === name && !m[0].split("returns")[0].includes("p_skip_ticket_email")).at(-1)?.[0] ?? "";
   // Compatibility signatures must retain the guard through their delegate.
   const delegated = sql.match(/begin\s+return public\.(\w+)\(/)?.[1];
   return delegated ? `${sql}\n${latest(delegated)}` : sql;

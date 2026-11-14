@@ -1,5 +1,6 @@
 "use client";
 
+import { pollAfterSettle } from "@/lib/poll-after-settle";
 import { useCallback, useEffect, useState } from "react";
 import { requestPhoneMembership, type PhoneMembership } from "@/lib/table-member-client";
 export type { PhoneMembership } from "@/lib/table-member-client";
@@ -47,15 +48,11 @@ export function useTableMembership(restaurantId: string, tableId: string | null)
         if (active) setResult(previous => ({ ...(previous.scope === scope ? previous : emptyRead(scope)), error: true }));
       } finally { running = false; }
     };
-    read();
-    const timer = setInterval(read, MEMBER_POLL_MS);
-    const visible = () => { if (document.visibilityState === "visible") read(); };
-    document.addEventListener("visibilitychange", visible);
+    const poll = pollAfterSettle(read, MEMBER_POLL_MS, { refreshOnVisible: true });
     return () => {
       active = false;
       controller.abort();
-      clearInterval(timer);
-      document.removeEventListener("visibilitychange", visible);
+      poll.stop();
     };
   }, [restaurantId, tableId, scope, revision]);
 

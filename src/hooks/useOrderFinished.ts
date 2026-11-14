@@ -1,5 +1,6 @@
 "use client";
 
+import { pollAfterSettle } from "@/lib/poll-after-settle";
 import { useEffect, useState } from "react";
 import { ORDER_HEARTBEAT_MS } from "@/lib/poll";
 
@@ -60,19 +61,12 @@ export function useFinishedOrders(orderIds: string[]): string[] {
     // Only with the tab in view, like the menu refresh: a phone in a pocket has no
     // business asking, and the moment the diner looks again is exactly when being
     // up to date matters.
-    const tick = () => {
-      if (document.visibilityState === "visible") void read();
-    };
-
-    tick();
     // The background heartbeat, for the button sitting on the menu; the open
     // tracker goes faster.
-    const timer = setInterval(tick, ORDER_HEARTBEAT_MS);
-    document.addEventListener("visibilitychange", tick);
+    const poll = pollAfterSettle(read, ORDER_HEARTBEAT_MS, { pauseWhenHidden: true, refreshOnVisible: true });
     return () => {
       alive = false;
-      clearInterval(timer);
-      document.removeEventListener("visibilitychange", tick);
+      poll.stop();
     };
   }, [key]);
 

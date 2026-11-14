@@ -1498,9 +1498,10 @@ When a sale carrying that card becomes paid, `queue_ticket_email` puts it in
 `ticket_email_outbox` (no address stored there) unless the cashier chose "No
 enviar esta vez" (`orders.ticket_email_skip`, from the till, from table
 collection, and from a divided bill's part, where `/api/split/collect` marks
-only that split's frozen orders). Every route that takes a payment drains the outbox with `after()`
-once it has answered (`src/lib/ticket-email.ts`), and the daily recovery cron
-catches the rest; a ticket a day old expires unsent. A failed send waits 1
+only that split's frozen orders inside the payment transaction; refused or
+duplicate collections never change the winning collection's choice). Every route that takes a payment drains the outbox with `after()`
+once it has answered (`src/lib/ticket-email.ts`), and the independent recovery schedule runs about every five minutes to
+catch the rest; a ticket a day old expires unsent. A failed send waits 1
 minute, then 10, then an hour before it is claimed again, and the fourth
 failure, or a refusal no retry changes, finishes it as `failed` with
 `failure_reason`; fresh tickets are claimed before retries. The email is
@@ -2946,13 +2947,27 @@ and reference form the Resend idempotency key (provider retention: 24 hours).
 The existing IP, account and restaurant mail rate limits also apply to retries.
 ## Scheduled recovery
 
-`GET /api/cron/recover` runs in production once a day (09:00 UTC, 03:00 in
-Mexico City) through Vercel Cron: the schedule every plan accepts, since a
-schedule the plan refuses fails the deploy. On a plan that allows it, set
-`vercel.json` to every ten minutes; the jobs are bounded per run either way. Configure a random `CRON_SECRET` in Vercel production before deploying;
+`GET /api/cron/recover` runs in production about every five minutes through
+`.github/workflows/recovery.yml`, independently of customer traffic. GitHub may
+delay scheduled jobs; the workflow avoids the busiest minute of each hour.
+Vercel Cron also runs it once a day (09:00 UTC, 03:00 in Mexico City) as a
+fallback: the schedule every plan accepts, since a schedule the plan refuses
+fails the deploy. The jobs are bounded per run either way. Configure a random
+`CRON_SECRET` in Vercel production before deploying;
 Vercel sends it as a Bearer authorization header. Missing, empty and incorrect
-secrets return 401 before any recovery client is created. The route compares
+credentials return 401 before any recovery client is created. The route compares
 fixed-size hashes in constant time and never needs a signed-in user.
+
+The GitHub job uses a signed, short-lived OpenID Connect identity instead of
+copying that production secret. Only production accepts it. The server checks
+GitHub's public signing key, issuer, exact endpoint audience, five-minute age,
+expiry and not-before time, immutable repository and owner IDs, the recovery
+workflow on `main`, and a scheduled or manually dispatched GitHub-hosted job.
+Forks, pull requests, other branches and other workflows cannot start recovery.
+The job checks out a pinned action with credentials disabled, sends no token or
+response body to the public log, and fails when recovery cannot observe a queue.
+Overlapping scheduled runs are queued rather than cancelling a running writer.
+No additional production secret or paid scheduler is required.
 
 Five isolated jobs use the admin client and the existing locked writers:
 
@@ -3279,3 +3294,22 @@ and `/api/loyalty/attach` should include the role-filtered `card.email` for an
 immediate collection notice. An absent projection remains unread in the UI;
 it does not claim the card has no email. Server grants, consent enforcement
 and delivery are outside this client change.
+
+### Second-pass collection consistency (2026-11-13)
+
+A counter collection checks the amount and currency shown by its screen under
+the same money lock that writes its receipt. A discount or currency change
+between the route read and that lock refuses the collection without recording
+less money. Staff coupons discount unpaid principal only; existing tips stay
+owed in full, in both direct and approved discounts.
+
+The owner's split switch travels through both public menu readers and refuses
+new split creation under the money lock. Existing parts remain payable. Raw
+cached menu collections page by stable keys before schedule filtering, so the
+Data API row cap cannot hide dishes on the currently serving menu.
+
+Held-sale history pages one indexed decision clock in the database. Approvals
+keep the original line notes and component extras for interrupted kitchen work.
+Subscription recovery reserves time for unpaid, expired and unknown-period
+sources; duplicate-refund reminders inspect each pending case on the bounded
+rotating page, with the existing per-case deduplication key.

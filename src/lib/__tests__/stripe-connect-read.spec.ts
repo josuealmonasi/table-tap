@@ -33,7 +33,10 @@ vi.mock("@/lib/supabase/admin", () => ({
     return q;
   } }),
 }));
-vi.mock("@/lib/api-guard", () => ({ actingOwner: async () => ({ restaurantId: "r1", email: "owner@example.com" }) }));
+vi.mock("@/lib/api-guard", () => ({
+  actingOwner: async () => ({ restaurantId: "r1", email: "owner@example.com" }),
+  actingManagerWithRestaurant: async () => ({ actor: { restaurantId: "r1", email: "owner@example.com", role: "owner" }, restaurant: { currency: "MXN" } }),
+}));
 vi.mock("@/lib/membership", () => ({ getMembership: async () => ({ restaurant: { currency: "MXN" } }) }));
 vi.mock("@/lib/site-origin", () => ({ siteOrigin: () => "https://tabletap.test" }));
 vi.mock("@/lib/api-error", () => ({ apiError: async (key: string, status: number) => Response.json({ error: key }, { status }) }));

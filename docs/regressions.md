@@ -44,15 +44,34 @@ and that a new party cannot see the previous party's waiting phones.
 `src/lib/__tests__/invariants.spec.ts` enforces the rules that span files:
 
 | Rule | The bug it came from |
+| The retry schedule must run on the hosting plan and identify its caller | Vercel rejected the five-minute cron on Hobby; `recovery-schedule-platform.spec.ts`, `github-cron-auth.spec.ts` and `recovery-scheduler-client.spec.ts` pin the daily fallback and the exact signed main-branch job |
+|---|---|
 | The account promise opens its own unsplit bill | The first Collect could open another table's divided bill, which correctly offers parts instead of an account charge; `promise-account-bill.spec.ts` checks the target and cleanup |
 | A duplicate refund tracks customer completion and fee completion separately (S11 I5) | A failed fee return disappeared behind an already-refunded customer payment |
 | A duplicate refund keeps its original charge currency everywhere (S11 I9) | Changing the menu currency relabelled money owed back and the approval amount |
 |---|---|
 | Seeds and checks read the same private login passwords | Public scripts and README published login passwords while some checks ignored rotated env values; `login-password-invariant.spec.ts` scans tracked files and plants violations, and `login-secrets.spec.ts` mocks seed creation |
+| Seed receipts and allocation backfill keep the same historical evidence | Every seed inserted version-0 receipts, so reading a bill rewrote hundreds of rows; `seed-payment-allocations.spec.ts` compares every explicit-order field and allocation value with the backfill |
+| Read-only gate cases share their run's fixtures | Identical refusals repeatedly inserted and deleted orders, tables and splits; `gate-fixture-reuse.spec.ts`, `api-readonly-fixtures.spec.ts` and `run-fixtures.spec.ts` check reuse, writer isolation and cleanup |
+| Reseeding restores demo logins without replacing their identities | Deleting the restaurant also deleted five healthy logins and sessions; `seed-logins.spec.ts` and `mock-logins.spec.ts` check identity reuse, changed passwords, metadata reset and explicit drop |
+| A counter quote is checked under the payment lock (review N1) | A discount after the route read could record less than the cash received; `counter-collection-race.spec.ts` and `review2-money-schema.spec.ts` hold the quote and writer together |
+| Staff discounts preserve existing gratuities (review N2) | Both pricing and SQL discounted tips below the order total; `staff-discount-tip.spec.ts` and `staff-discount-tip-route.spec.ts` check direct and approved principal-only discounts |
+| Each subscription source has time to run (review N8) | Persistently unpaid reads starved cancellation recovery; `subscriptions.spec.ts` advances the clock across all three sources |
+| Overdue refunds remind each restaurant (review N9) | Only the globally oldest case got a reminder; `refunds.spec.ts` keeps two tenants pending and checks both bells |
+| Ticket retries run before tickets expire (review N10) | Daily recovery missed the backoff window; `ticket-email-schedule.spec.ts` models recovery without payment traffic |
+| A table payment check names the actual table relation (review N3) | `payment-check-route.spec.ts` rejects unknown relations and checks the tenant and table before Stripe |
+| Held approval keeps the kitchen's saved instructions (review N4) | `offline-sale.spec.ts` keeps notes and component extras without duplicating flattened extras |
+| New split offers follow the owner's switch (review N5) | Both menu readers omitted it and both creation paths ignored it; `public-menu-cache.spec.ts`, `ordering-split-setting.spec.ts` and `legacy-split-setting.spec.ts` cover the readers and writers |
+| An unread ticket address remains retryable (review N6) | `card-email.spec.ts` fails the card read, then sends after recovery |
+| The successful collector alone chooses ticket email (review N7) | A refused colleague could overwrite the choice before payment; `ticket-email-skip-race.spec.ts` interleaves opposite choices and `review2-money-schema.spec.ts` pins transactional rollback |
+| Cached menus page before schedule filtering (review N11) | A capped page of breakfast rows hid the serving dinner menu; `public-menu-cache.spec.ts` keeps the dinner dish behind that page |
+| Held history reads only the requested decision page (review N13) | Clamping a huge page still loaded the full history prefix; `held-sales-history-route.spec.ts` bounds retrieval and `held-resolution-history.spec.ts` checks both clocks under a small row cap |
 | Takings bound return evidence before grouping (SQL read cost 2) | The day filter reached PostgREST only after SQL had materialized the restaurant's refund history |
 | Cash case tests narrow optional matchers | A runtime assertion did not tell TypeScript which API cases have an error matcher, so the new contract spec broke type checking |
 | Return polling batches SQL progress (SQL read cost 1) | The list needed every outstanding balance, but sent one RPC per refund every 15 seconds |
 | Orders and pass feeds build their allowed restaurant list once per read | History called `has_role` for every order; the same pattern affected service requests and kitchen feeds. `orders-rls-equivalence.spec.ts` pins the old audience, and `probe-orders-rls-equivalence.mjs` compares counts and row identities under real RLS |
+| Every fetch poll waits for its last read and then its full interval | Slow reads stacked requests, or busy guards retried too soon; `poller-cadence.spec.tsx`, `poll-after-settle.spec.ts` and `invariants/polls.spec.ts` cover all nine former exceptions |
+| Connect onboarding uses the owner and currency from one membership lookup | The guard and route each asked for membership because React cache was assumed to memoise route handlers; `auth-round-trips.spec.ts` counts auth and table reads and refuses every non-owner |
 | The cash API case checks the cashier's own refusal in both languages | Role-specific instructions were correct, but the case still matched the manager's older wording and reported a false failure; `cash-held-api-contract.spec.ts` checks both translations |
 | The cash API contract spec typechecks from a clean checkout | The spec and the inferred case union must agree: some cases have no refusal matcher. A property guard keeps that distinction; a clean `tsc --noEmit` catches an unsafe read |
 | The POS retry fixture leaves journal sources for its restaurant cascade | The retry case used the demo restaurant and deleted its charged order individually; the journal correctly refused cleanup. `api-retry-account-fixture.spec.ts` checks the disposable tenant and retained sources |
@@ -7184,6 +7203,48 @@ The case now recognizes the cashier's instruction. The contract spec feeds
 it the real English and Spanish strings, so a copy change cannot silently
 leave the live gate checking words the route no longer sends.
 
+## Seed receipts and historical allocation evidence
+
+The seed's explicit receipts and `backfill_payment_allocations` must describe
+the same money. The seed wrote version 0, then the first bill read inserted
+allocations and rewrote hundreds of payments. Synthetic history now writes
+version 1 and its exact allocations at insertion. The contract spec compares
+all eight backfill fields and the allocation values, including preserved tip
+metadata, unknown breakdowns and legacy provenance. Live and unmarked legacy
+writers keep their existing paths. `mock-history.mjs` reads receipts for daily
+shifts; it does not insert payments.
+
+Cancelled legacy sales retain their historical review examples. A review
+without an unused refund log for that order cannot gain evidence, so the
+coverage check now skips that no-op import. Missing cancellations and
+unreturned allocations still request repair; a new unused refund log still
+retries the importer, which proves the amount, collector, currency and
+uniqueness as before. `seed-backfill-noop.spec.ts` pins these conditions. No
+review or return evidence is fabricated to make a read look clean.
+
+## Read-only gate cases and fixture ownership
+
+The fixture lifecycle and each case's effects have to agree. Refused split,
+inactive-order and frozen-offer requests repeatedly created the same rows.
+One run now owns each unchanged fixture set; case cleanup returns the borrowed
+rows without deleting them. Run cleanup removes them, including after failed
+requests. Frozen offers leave after their last case so an active promotion
+cannot discount a later case's sale; run cleanup remains their fallback. Failed
+group deletions remain reachable for that final cleanup, and their errors do
+not stop teardown of the API gate's other rows. Specs check reuse, incompatible
+states, separate runs, failed setup and private writer cleanup. Every gate verdict stays unchanged. The exact
+shared cases and cases that still need private rows are listed in
+`docs/gate-fixture-ownership.md`.
+
+## Demo logins and a restaurant reset
+
+The seed's clean restaurant and the gate's existing login must agree. Reseeding
+deleted five auth users, their identities, profiles and sessions before
+recreating the same people. It now retains the auth IDs, restores passwords
+only if changed, clears demo metadata and bans, removes accidental admin
+grants and restores names. Unchanged passwords never go through GoTrue's
+password update. Explicit `dropMock` still removes all five users. Mocked
+database and admin-client specs check both lifetimes without sending mail.
 ## The account promise and the bill it opens
 
 The account control and the bill selected by the promise case must agree.
@@ -7334,8 +7395,9 @@ address as well as per card. Staff still learn which card holds it. The diner
 screen notes what `submitted` means. `diner-answer.spec.ts`, `card-email.spec.tsx`.
 
 **access3, a far history page read the whole history.** The held-sales
-history page is clamped to the last page there is, counted per clock, before
-either clock is read. `held-sales-history-route.spec.ts`.
+history page is clamped to the last page there is before reading. That first
+fix still read each clock's full prefix; review N13 below replaces those reads
+with one indexed decision clock. `held-sales-history-route.spec.ts`.
 
 **screens4 and screens5, errors said more than once.** Order history reads a
 page's chargebacks once (`useDisputeHistory`), only for orders a card could
@@ -7450,3 +7512,132 @@ again with `--compare /tmp/orders-before.json` afterward, without reseeding
 between captures. `--explain` includes the actual authenticated plans.
 The probe refuses a comparison if the underlying rows or memberships changed;
 equal counts alone cannot hide a different restaurant's rows.
+## A slow poll and its next wait must agree
+
+Nine older pollers still used fixed intervals: table membership, the diner bill,
+the other-table notice, finished orders, the connection probe, held sales, split
+receipts, the staff calculator and the order tracker. A slow read could overlap
+the next one; the ones with busy guards still started again before a full wait
+had passed. They now share `pollAfterSettle`, which waits for the whole read
+before scheduling its next timeout, even on failure. Each keeps its interval,
+first-read timing, visibility rules and stop conditions. Held-sale retries join
+the active send rather than mistaking a busy guard for a completed upload.
+
+`poller-cadence.spec.tsx` fails against all nine original pollers and checks slow
+reads, the full wait after completion, teardown and hidden tabs.
+Focus and visibility events also join an unfinished read. Stop-condition checks
+keep the connection probe and closed-table recheck stopped, while the tracker
+keeps following delivered food until payment arrives.
+`poll-after-settle.spec.ts` checks retries, focus/visibility events, delayed starts,
+one-shot bills and cleanup. `invariants/polls.spec.ts` has no exceptions left.
+
+## Onboarding's owner and currency must come from the same lookup
+
+The Connect onboarding guard resolved an owner, then the route asked for the
+membership again to get the restaurant currency. React cache memoises a server
+render, not a route handler, so that second call repeated auth and both table
+reads. The route now reuses `actingManagerWithRestaurant` and still explicitly
+requires the owner role before calling Stripe. `auth-round-trips.spec.ts` counts
+one auth call and one read each of restaurants and staff, checks the owner's
+currency and email, and refuses managers, waiters, cashiers, kitchen logins,
+non-members and signed-out callers before Stripe is reached.
+
+## Review N3 — Checking a table payment
+
+The identity reader and schema had to agree on `restaurant_tables`. A typo
+returned an unverified payment without ever checking the saved Stripe page.
+The schema-aware route spec now checks the relation and both identity filters.
+
+## Review N4 — Approving interrupted kitchen work
+
+The saved order and held-line parser had to agree on `notes` and component
+extras. Approval now keeps bounded copies of both, with the original flattened
+extras unchanged so the receipt never adds an extra twice.
+
+## Review N6 — Retrying an unread ticket address
+
+The database read and outbox outcome had to agree on absence. A failed read
+now throws into the existing backoff path; only a successful read can finish
+a ticket as having no email. The spec retries after the database recovers.
+
+## Review N8 — Each subscription source has time to run
+
+Unpaid subscription reads and cancellation recovery had to share time fairly. Each source now has a reserved part of the job budget, so a persistently unpaid queue cannot hide expired paid tiers or period backfills.
+
+## Review N9 — Overdue refunds remind each restaurant
+
+The global oldest-age metric and per-case reminders had to agree on their scope. Reminders now inspect the bounded rotating page, retaining the existing per-case notification key across repeated runs.
+
+## Review N10 — Ticket retries run before tickets expire
+
+The retry clock and worker schedule had to agree. An independent scheduled
+GitHub job now requests recovery about every five minutes within the existing
+24-hour email lifetime. Vercel keeps the daily fallback. More frequent bounded
+runs also raise queue throughput; neither path waits for another payment.
+
+## The retry schedule and the production plan
+
+The five-minute retry change passed unit tests but Vercel rejected the deploy:
+Hobby only accepts a daily cron. The schedule and the plan have to agree before
+an email can ever be retried. The frequent job now runs in GitHub Actions,
+without copying the production cron secret, and Vercel's daily job remains.
+
+The server verifies GitHub's signature and the exact main-branch recovery job,
+including repository and owner IDs. A similarly named fork, a pull request,
+another workflow or a token for another endpoint must not open this global
+writer. The client refuses an unknown identity provider, follows no redirect,
+and prints no identity or response body to the public job log.
+
+`github-cron-auth.spec.ts` signs real fixture tokens and rejects forged,
+expired and wrongly scoped callers. `recovery-scheduler-client.spec.ts` checks
+the two requests and failed observations. `ticket-email-schedule.spec.ts`
+models recovery without new traffic, including a delayed runner, before the
+unchanged 24-hour expiration. `recovery-schedule-platform.spec.ts` keeps the
+fallback deployable and the scheduled job on its approved branch.
+
+## Review N1 — Collecting the counter quote
+
+The cashier's quote and locked receipt had to agree. Counter collection now
+sends the expected amount and currency to a required-argument SQL overload.
+It checks both after taking the money and order locks, before changing the
+ticket choice or marking anything paid. A concurrent discount or currency
+change refuses the stale quote without recording a smaller receipt.
+
+## Review N2 — Discounts leave gratuities owed
+
+The route's coupon base and both discount writers had to agree on principal.
+They now subtract existing tips before pricing and distributing the discount.
+A full coupon on MX$100 food plus MX$20 tip leaves MX$20 owed. Direct manager
+discounts and waiter requests use the same base, and approval refuses an old
+request that included gratuities. SQL also refuses inconsistent components.
+
+## Review N5 — The split switch reaches the menu and writers
+
+The owner's setting and diner payment controls had to agree. Cached and live
+restaurant projections now carry `split_enabled`; both the current locked
+writer and the legacy proposal route refuse new splits when it is off.
+Existing parts remain payable, and ordinary bill payment stays available.
+
+## Review N7 — The payment keeps its own email choice
+
+The successful receipt and ticket trigger had to agree on the cashier's choice.
+Counter, table and split collection pass that choice into the locked payment
+transaction. Refused, failed and duplicate collections roll back any tentative
+flag change. The latest successful split collection still decides for only its
+frozen orders; a new round at the table is outside that choice.
+
+## Review N11 — Cached menu pages precede schedule filtering
+
+The Data API page and currently serving menus had to agree on completeness.
+Cached raw menus, categories, items and dietary tags now use uniquely ordered
+pages before the time-sensitive filter runs. A thousand scheduled-closed
+breakfast items cannot hide a dinner dish on the next page. Anonymous menu
+reads retain their existing RLS filters.
+
+## Review N13 — History pages one decision clock
+
+The page boundary and merged decision order had to agree in the database.
+A stored `decision_at` column and tenant-scoped index merge approval and
+resolution clocks before paging. A request past the end counts once, clamps
+to the last page and retrieves at most that page plus one lookahead row,
+including its resolution evidence, even under a smaller Data API row cap.

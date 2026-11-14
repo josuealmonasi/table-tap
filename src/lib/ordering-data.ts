@@ -149,7 +149,7 @@ export async function loadOrderingData(
     supabase
       .from("restaurants")
       .select(
-        "id, name, tagline, logo, logo_url, currency, service_pct, service_enabled, accepting_orders, tax_pct, tax_show_breakdown, cover_url, cover_enabled, allow_pay_later, deals_tab_enabled",
+        "id, name, tagline, logo, logo_url, currency, service_pct, service_enabled, accepting_orders, tax_pct, tax_show_breakdown, cover_url, cover_enabled, allow_pay_later, deals_tab_enabled, split_enabled",
       )
       .eq("id", restaurantId)
       .single(),

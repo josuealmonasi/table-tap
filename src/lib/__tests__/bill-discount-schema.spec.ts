@@ -36,7 +36,7 @@ function sharesInSchema(f: string, totals: number[], approved: number): number[]
     shares[0] += approved - shares.reduce((a, b) => a + b, 0);
     return shares.map((v, i) => Math.max(0, Math.min(totals[i], v)));
   }
-  expect(f).toContain("floor(p_amount * 100 * total / v_total) cents");
+  expect(f).toContain("floor(p_amount * 100 * greatest(total - tip, 0) / v_total) cents");
   const shares = totals.map(v => Math.floor(approved * v / total));
   const ranked = totals.map((v, i) => ({ i, remainder: approved * v % total }))
     .sort((a, b) => b.remainder - a.remainder || a.i - b.i);
@@ -53,7 +53,7 @@ it.each(writers)("F4 %s removes exactly MX$0.03 across six one-peso orders", nam
 
 it.each(writers)("F4 %s ranks remainders deterministically and checks the written sum", name => {
   const f = body(name);
-  expect(f).toContain("mod(p_amount * 100 * total, v_total) remainder");
+  expect(f).toContain("mod(p_amount * 100 * greatest(total - tip, 0), v_total) remainder");
   expect(f).toContain("row_number() over (order by remainder desc, id) position");
   expect(f).toContain("position <= round(p_amount * 100) - sum(cents) over ()");
   expect(f).toContain("returning a.amount");

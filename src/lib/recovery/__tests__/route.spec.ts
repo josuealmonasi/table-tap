@@ -1,7 +1,8 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
 
-const { jobs, context, drain } = vi.hoisted(() => ({ jobs: { stock: vi.fn(), refunds: vi.fn(), fees: vi.fn(), subscriptions: vi.fn(), disputes: vi.fn() }, context: vi.fn(), drain: vi.fn() }));
+const { jobs, context, drain, githubAuth } = vi.hoisted(() => ({ jobs: { stock: vi.fn(), refunds: vi.fn(), fees: vi.fn(), subscriptions: vi.fn(), disputes: vi.fn() }, context: vi.fn(), drain: vi.fn(), githubAuth: vi.fn() }));
+vi.mock("@/lib/github-cron-auth", () => ({ githubCronAuthorized: githubAuth }));
 vi.mock("@/lib/ticket-email", () => ({ drainTicketEmailQueue: drain }));
 vi.mock("../context", () => ({ recoveryContext: context }));
 vi.mock("../stock", () => ({ recoverStock: jobs.stock }));
@@ -16,6 +17,7 @@ const request = (authorization?: string) => new NextRequest("https://test/api/cr
 });
 beforeEach(() => {
   vi.clearAllMocks();
+  githubAuth.mockResolvedValue(false);
   vi.stubEnv("CRON_SECRET", "cron-test-secret");
   context.mockReturnValue({});
   Object.values(jobs).forEach(job => job.mockResolvedValue(clean));
@@ -40,6 +42,14 @@ it("runs every job without a user session and returns uncached per-job counts", 
   expect(result.status).toBe(200);
   expect(result.headers.get("cache-control")).toBe("no-store");
   expect(await result.json()).toEqual({ jobs: { stock: clean, refunds: clean, fees: clean, subscriptions: clean, disputes: clean } });
+  expect(context).toHaveBeenCalledTimes(5);
+  expect(githubAuth).not.toHaveBeenCalled();
+});
+it("accepts the verified scheduler identity without a shared cron secret", async () => {
+  vi.stubEnv("CRON_SECRET", undefined);
+  githubAuth.mockResolvedValue(true);
+  expect((await GET(request("Bearer fixture-identity"))).status).toBe(200);
+  expect(githubAuth).toHaveBeenCalledOnce();
   expect(context).toHaveBeenCalledTimes(5);
 });
 it("a failed job cannot prevent the other jobs from running", async () => {
