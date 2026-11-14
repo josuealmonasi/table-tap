@@ -10,6 +10,19 @@ us, and what now catches each one.
 
 ## What runs on its own
 
+### Login passwords stay outside the repository
+
+Seeds and the checks signing into those accounts have to agree on the target's
+private password. Public literals in scripts and README survived rotations and
+some checks ignored the configured demo password. `login-secrets.mjs` requires
+`DEMO_PASSWORD` or `TEST_PASSWORD` after the env file is loaded; reset validates
+before deleting anything, and reports point to the env file without printing it.
+`login-secrets.spec.ts` mocks seeded users and missing values.
+`login-password-invariant.spec.ts` scans `git ls-files` except lockfiles, permits
+generic test fakes only under `__tests__`, and plants violations in temporary
+copies to prove the guard rejects them. The retired values are refused even in
+docs and test fakes. Login addresses, roles and access checks stay the same.
+
 The deliberately unsigned legacy terminal example uses
 `mock-terminal-times.mjs` to keep its sale and deposit before `DRAWER_ERA`.
 A rolling three-day sale plus a thirty-hour deposit offset crossed that fixed
@@ -31,9 +44,11 @@ and that a new party cannot see the previous party's waiting phones.
 `src/lib/__tests__/invariants.spec.ts` enforces the rules that span files:
 
 | Rule | The bug it came from |
+| The account promise opens its own unsplit bill | The first Collect could open another table's divided bill, which correctly offers parts instead of an account charge; `promise-account-bill.spec.ts` checks the target and cleanup |
 | A duplicate refund tracks customer completion and fee completion separately (S11 I5) | A failed fee return disappeared behind an already-refunded customer payment |
 | A duplicate refund keeps its original charge currency everywhere (S11 I9) | Changing the menu currency relabelled money owed back and the approval amount |
 |---|---|
+| Seeds and checks read the same private login passwords | Public scripts and README published login passwords while some checks ignored rotated env values; `login-password-invariant.spec.ts` scans tracked files and plants violations, and `login-secrets.spec.ts` mocks seed creation |
 | Takings bound return evidence before grouping (SQL read cost 2) | The day filter reached PostgREST only after SQL had materialized the restaurant's refund history |
 | Cash case tests narrow optional matchers | A runtime assertion did not tell TypeScript which API cases have an error matcher, so the new contract spec broke type checking |
 | Return polling batches SQL progress (SQL read cost 1) | The list needed every outstanding balance, but sent one RPC per refund every 15 seconds |
@@ -7168,6 +7183,18 @@ It reported a failure even though the route refused the close with 409.
 The case now recognizes the cashier's instruction. The contract spec feeds
 it the real English and Spanish strings, so a copy change cannot silently
 leave the live gate checking words the route no longer sends.
+
+## The account promise and the bill it opens
+
+The account control and the bill selected by the promise case must agree.
+The case opened the first Collect on the page, which can belong to a divided
+bill. That bill correctly offers its remaining parts rather than moving the
+whole debt to an account, so the case reported a missing working control.
+
+The case now owns an unsplit fixture and opens its exact order's bill. Its
+existing text and control assertions stay unchanged. `promise-account-bill.spec.ts`
+puts an unrelated divided bill first and checks that the case still visits its
+own bill, then checks cleanup when the browser fails.
 
 ## The cash contract spec and its case union
 

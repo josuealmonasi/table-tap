@@ -25,10 +25,10 @@ import {
   ensurePlatformAdmin,
   seedTeamLogins,
   seedTestUsers,
-  TEST_PASSWORD,
 } from "./test-users.mjs";
-import { seedMock, dropMock, DEMO_OWNER, DEMO_TEAM, DEMO_PASSWORD } from "./mock-data.mjs";
+import { seedMock, dropMock, DEMO_OWNER, DEMO_TEAM } from "./mock-data.mjs";
 import { DEV_URL } from "./dev-url.mjs";
+import { loginSecret } from "./login-secrets.mjs";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -105,6 +105,9 @@ if (isProd && config.destructive) {
   }
 }
 
+// Check before reset drops anything; a missing password must leave data alone.
+if (command === "mock") loginSecret("DEMO_PASSWORD");
+if (command === "seed" || command === "reset") loginSecret("TEST_PASSWORD");
 const client = new pg.Client({ connectionString, ssl: { rejectUnauthorized: false } });
 
 console.log(`▸ [${target}] ${config.label}…`);
@@ -130,7 +133,7 @@ try {
     }
     console.log(`\n✓ [${target}] Demo Bistro ready — ${summary.orders} orders.`);
     console.log(`  Menu: ${DEV_URL}/r/${summary.restaurantId}/t/${summary.tableId}`);
-    console.log(`\n  Demo logins at /login (password: ${DEMO_PASSWORD}):`);
+    console.log(`\n  Demo logins at /login (DEMO_PASSWORD in ${envFile}):`);
     console.log(`    ${DEMO_OWNER.email}   (owner)`);
     for (const t of DEMO_TEAM) console.log(`    ${t.email}   (${t.role})`);
   } else if (config.custom === "dropmock") {
@@ -185,7 +188,7 @@ async function runSqlCommand() {
       );
     }
     if (testEmails.length) {
-      console.log(`\n  Test logins at /login (password: ${TEST_PASSWORD}):`);
+      console.log(`\n  Test logins at /login (TEST_PASSWORD in ${envFile}):`);
       for (const email of testEmails) console.log(`    ${email}`);
     }
   } else {

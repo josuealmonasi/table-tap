@@ -13,9 +13,11 @@ import { requireServer, retryFetch } from "./preflight.mjs";
 import { DEV_URL } from "./dev-url.mjs";
 import { apiInScope, pageInScope, reportScope } from "./gate-scope.mjs";
 import { sessionCookieHeader } from "./session-cookie.mjs";
+import { loginSecret } from "./login-secrets.mjs";
 
 const prod = process.argv.includes("--prod");
 process.loadEnvFile(join(process.cwd(), prod ? ".env.production.local" : ".env.development.local"));
+const password = loginSecret("DEMO_PASSWORD");
 const BASE = prod
   ? (process.env.PROD_SITE_URL ?? "https://table-tap-star.vercel.app")
   : DEV_URL;
@@ -26,11 +28,11 @@ const { createClient } = await import("@supabase/supabase-js");
 const admin = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.SUPABASE_SECRET_KEY);
 
 const ROLES = [
-  { email: "demo@tabletap.dev", password: "demo123", role: "owner" },
-  { email: "demo-manager@tabletap.dev", password: "demo123", role: "manager" },
-  { email: "demo-waiter@tabletap.dev", password: "demo123", role: "waiter" },
-  { email: "demo-cashier@tabletap.dev", password: "demo123", role: "cashier" },
-  { email: "demo-kitchen@tabletap.dev", password: "demo123", role: "kitchen" },
+  { email: "demo@tabletap.dev", password, role: "owner" },
+  { email: "demo-manager@tabletap.dev", password, role: "manager" },
+  { email: "demo-waiter@tabletap.dev", password, role: "waiter" },
+  { email: "demo-cashier@tabletap.dev", password, role: "cashier" },
+  { email: "demo-kitchen@tabletap.dev", password, role: "kitchen" },
 ];
 
 // Page → who should be able to open it, and text ONLY that page prints.

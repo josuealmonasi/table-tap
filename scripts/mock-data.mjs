@@ -32,12 +32,12 @@ import { seedTerminal } from "./mock-terminal.mjs";
 import { legacyTerminalTimes } from "./mock-terminal-times.mjs";
 import { finalizeMockCashShift } from "./mock-cash-shift.mjs";
 import { bulkInsert, randInt, sample } from "./menu-catalog.mjs";
+import { loginSecret } from "./login-secrets.mjs";
 
 export const DEMO_RESTAURANT = "Demo Bistro";
 // Read when the seeder runs, after its caller loaded the env file: production's
 // demo logins can carry a password of their own (feed-demo).
-export const demoPassword = () => process.env.DEMO_PASSWORD || "demo123";
-export const DEMO_PASSWORD = "demo123";
+export const demoPassword = () => loginSecret("DEMO_PASSWORD");
 export const DEMO_OWNER = { email: "demo@tabletap.dev", name: "Diego Owner" };
 export const DEMO_TEAM = [
   { email: "demo-manager@tabletap.dev", role: "manager", name: "María Manager" },
@@ -188,6 +188,7 @@ function pickTip(subtotal) {
 }
 
 export async function seedMock(pg) {
+  demoPassword(); // Refuse missing credentials before deleting the demo.
   await pg.query("select set_config('tabletap.allocation_origin', 'fixture_history', false)");
   if (!process.env.SUPABASE_SECRET_KEY) {
     throw new Error("SUPABASE_SECRET_KEY missing — needed to create demo logins.");

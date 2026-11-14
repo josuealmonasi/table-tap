@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { createClient } from "@supabase/supabase-js";
 import { sessionCookieHeader } from "./session-cookie.mjs";
 import { TERMS_VERSION } from "./terms-version.mjs";
+import { loginSecret } from "./login-secrets.mjs";
 
 export async function checked(query) {
   const { data, error } = await query;
@@ -11,6 +12,7 @@ export async function checked(query) {
 
 /** Retained journal sources leave only through the restaurant cascade. */
 export async function disposableAccountRestaurant(admin, env, name, roles = []) {
+  const password = roles.length ? loginSecret("TEST_PASSWORD", env) : undefined;
   const users = [], who = { diner: "" }, emails = {};
   let restaurant;
   const cleanup = async () => {
@@ -24,7 +26,7 @@ export async function disposableAccountRestaurant(admin, env, name, roles = []) 
       terms_version: TERMS_VERSION, terms_accepted_at: new Date().toISOString(),
     }).select("*").single());
     for (const role of roles) {
-      const email = `${name}-${role}-${randomUUID()}@tabletap.dev`, password = randomUUID();
+      const email = `${name}-${role}-${randomUUID()}@tabletap.dev`;
       const { user } = await checked(admin.auth.admin.createUser({ email, password, email_confirm: true }));
       users.push(user.id);
       if (role === "owner") await checked(admin.from("restaurants").update({ owner_id: user.id }).eq("id", restaurant.id));

@@ -1,5 +1,6 @@
 import { MARK } from "../api-fixtures.mjs";
 import { loginByEmail } from "../logins.mjs";
+import { loginSecret } from "../login-secrets.mjs";
 
 export function signupCases() {
   return [
@@ -29,7 +30,7 @@ export function signupCases() {
       },
       body: async f => ({
         restaurantName: f.signupName, email: f.signupEmail,
-        password: "longenough1", acceptedTerms: true,
+        password: loginSecret("TEST_PASSWORD"), acceptedTerms: true,
       }),
       expect: [200],
       known: "five signups a minute is the ceiling; this run spent it",
