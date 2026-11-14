@@ -1,0 +1,105 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`plain-text emails in en > separates POS and diner receipt paragraphs and keeps each item and total on one line 1`] = `
+"Demo Bistro
+Receipt ORD-1960
+Table 6
+November 10, 2026, 12:13 PM
+
+1× Apple Pie  MX$200.00
+1× Tea  MX$50.00
+
+Total  MX$250.00
+
+Thanks for coming. This receipt was sent because you asked for it — we do not keep your email.
+
+This receipt is not a tax invoice (CFDI). If you need one, ask the restaurant."
+`;
+
+exports[`plain-text emails in en > separates card ticket paragraphs and puts the unsubscribe link on its own line 1`] = `
+"Demo Bistro
+Receipt ORD-1960
+Table 6
+November 10, 2026, 12:13 PM
+
+1× Apple Pie  MX$200.00
+1× Tea  MX$50.00
+
+Total  MX$250.00
+
+This receipt is not a tax invoice (CFDI). If you need one, ask the restaurant.
+
+You get this ticket because you linked this email to your Demo Bistro visit card. It is only used to send you your tickets.
+
+Stop emailing me my tickets:
+https://tabletap.test/tickets/stop?t=token"
+`;
+
+exports[`plain-text emails in en > separates statement days, dishes, balance and payment link 1`] = `
+"Hi Ana, here is your account statement at Demo Bistro.
+
+Tuesday, November 10 — MX$250.00
+  12:13 PM · 1× Apple Pie — MX$200.00
+  12:13 PM · 1× Tea — MX$50.00
+
+Wednesday, November 11 — MX$250.00
+  12:13 PM · 1× Apple Pie — MX$200.00
+  12:13 PM · 1× Tea — MX$50.00
+
+To pay: MX$500.00
+
+Check it or pay it here:
+https://tabletap.test/cuenta/code"
+`;
+
+exports[`plain-text emails in es > separates POS and diner receipt paragraphs and keeps each item and total on one line 1`] = `
+"Demo Bistro
+Recibo ORD-1960
+Mesa 6
+10 de noviembre de 2026, 12:13 p.m.
+
+1× Apple Pie  MX$200.00
+1× Tea  MX$50.00
+
+Total  MX$250.00
+
+Gracias por tu visita. Este recibo se envió porque lo pediste — no guardamos tu correo.
+
+Este recibo no es un comprobante fiscal (CFDI). Si necesitas factura, pídesela al restaurante."
+`;
+
+exports[`plain-text emails in es > separates card ticket paragraphs and puts the unsubscribe link on its own line 1`] = `
+"Demo Bistro
+Recibo ORD-1960
+Mesa 6
+10 de noviembre de 2026, 12:13 p.m.
+
+1× Apple Pie  MX$200.00
+1× Tea  MX$50.00
+
+Total  MX$250.00
+
+Este recibo no es un comprobante fiscal (CFDI). Si necesitas factura, pídesela al restaurante.
+
+Recibes este ticket porque vinculaste este correo a tu tarjeta de visitas de Demo Bistro. Solo se usa para enviarte tus tickets.
+
+Dejar de recibir mis tickets por correo:
+https://tabletap.test/tickets/stop?t=token"
+`;
+
+exports[`plain-text emails in es > separates statement days, dishes, balance and payment link 1`] = `
+"Hola, Ana: este es tu estado de cuenta en Demo Bistro.
+
+martes, 10 de noviembre — MX$250.00
+  12:13 p.m. · 1× Apple Pie — MX$200.00
+  12:13 p.m. · 1× Tea — MX$50.00
+
+miércoles, 11 de noviembre — MX$250.00
+  12:13 p.m. · 1× Apple Pie — MX$200.00
+  12:13 p.m. · 1× Tea — MX$50.00
+
+Por pagar: MX$500.00
+
+Revísalo o págalo aquí:
+https://tabletap.test/cuenta/code"
+`;

@@ -1,4 +1,4 @@
-import { runBatch, isolateJob, type RecoveryContext } from "./job";
+import { runBatch, isolateJob, combineResults, type RecoveryContext } from "./job";
 import { reconcileSavedRefund, type SavedRefund } from "./refund-item";
 import { notifyOverdueDue } from "./overdue";
 
@@ -16,9 +16,5 @@ export async function recoverRefunds(context: RecoveryContext) {
     .or("provider_status.is.null,provider_status.in.(pending,requires_action)")
     .order("created_at").order("id").range(offset, offset + limit - 1).returns<SavedRefund[]>(), row => reconcileSavedRefund(context, row),
   "created_at", row => notifyOverdueDue(context, row)));
-  const oldest = [orders, dues].filter(r => r.oldest_pending_at).sort((a, b) => a.oldest_pending_at!.localeCompare(b.oldest_pending_at!))[0];
-  return { done: orders.done + dues.done, failed: orders.failed + dues.failed,
-    pending: orders.pending === null || dues.pending === null ? null : orders.pending + dues.pending,
-    oldest_pending_at: oldest?.oldest_pending_at ?? null, oldest_pending_age_seconds: oldest?.oldest_pending_age_seconds ?? null,
-    age_basis: "created_at", ...(orders.observation_failed || dues.observation_failed ? { observation_failed: true } : {}) };
+  return combineResults([orders, dues], "created_at");
 }

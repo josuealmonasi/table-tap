@@ -5,6 +5,10 @@ export const DISPUTE_EVENTS = new Set([
   "charge.dispute.created", "charge.dispute.updated", "charge.dispute.closed",
   "charge.dispute.funds_withdrawn", "charge.dispute.funds_reinstated",
 ]);
+/** A case whose latest Stripe update was set aside after repeated failures
+ * (stripe_dispute_events.state = 'review'): shown to the restaurant as
+ * "Needs review", never as pending. Not the platform-only 'review' case. */
+export const NEEDS_REVIEW = "needs_review";
 export interface DisputeEvent {
   id: string;
   restaurant_id: string | null;
@@ -51,6 +55,8 @@ export interface DisputeCurrencySummary {
 export interface DisputeReport {
   currencies: DisputeCurrencySummary[];
   pending: number;
+  /** Cases waiting on a person, not on Stripe: their update failed repeatedly. */
+  review: number;
   won: number;
   lost: number;
 }

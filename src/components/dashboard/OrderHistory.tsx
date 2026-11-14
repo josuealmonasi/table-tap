@@ -9,6 +9,7 @@ import { useLocale, useT } from "@/lib/i18n/context";
 import { LogRowsSkeleton } from "@/components/ui/DashSkeletons";
 import { SearchIcon } from "@/components/ui/icons";
 import DisputeHistoryLines from "./disputes/DisputeHistory.react-component";
+import { disputableOrders, useDisputeHistory } from "@/hooks/useDisputeHistory";
 import OrderReturn from "./OrderReturn";
 import OrderDetailDialog from "./OrderDetailDialog";
 import { SEP } from "@/lib/separator";
@@ -45,6 +46,7 @@ export default function OrderHistory({
   const { orders, loading, error, retry, page, pages, total, setPage, query, setQuery } =
     useOrderHistory(restaurantId, closedOnBoard);
   const [open, setOpen] = useState<Order | null>(null);
+  const disputes = useDisputeHistory(restaurantId, canReturn && !loading ? disputableOrders(orders) : []);
 
   return (
     <div className="tt-section">
@@ -78,6 +80,7 @@ export default function OrderHistory({
         </div>
       )}
       {loading && <LogRowsSkeleton rows={6} />}
+      {!loading && disputes.error && <p role="alert" className="tt-field-error">{t("disputes.unavailable")}</p>}
 
       {!loading && !error && orders.length === 0 && (
         <p className="tt-muted" style={{ fontSize: 13, margin: "12px 0 0" }}>
@@ -129,7 +132,7 @@ export default function OrderHistory({
               </span>
             </span>
           </button>
-          {canReturn && <DisputeHistoryLines orderId={order.id} restaurantId={restaurantId} orderIds={orders.map(o => o.id)} />}
+          {canReturn && <DisputeHistoryLines disputes={disputes.data?.[order.id] ?? []} />}
           {canReturn && <OrderReturn order={order} onPrepared={retry} />}
           </div>
         ))}

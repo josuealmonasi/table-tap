@@ -47,7 +47,7 @@ export function tipBaseCase(kind) {
         if (kind === "account") cardsBefore = await checked(f.admin.from("restaurants")
           .select("stripe_account_id, stripe_charges_enabled").eq("id", f.restaurant.id).single());
         if (kind === "account") await checked(f.admin.from("restaurants")
-          .update({ stripe_account_id: "acct_api_check", stripe_charges_enabled: true }).eq("id", f.restaurant.id));
+          .update({ stripe_account_id: "acct_api_check_account", stripe_charges_enabled: true }).eq("id", f.restaurant.id));
         else reader = await f.withCardReader();
         if (kind === "bill" || kind === "split") await checked(f.admin.from("table_sessions")
           .update({ opened_by: null }).eq("id", fixture.scope.sessionId));

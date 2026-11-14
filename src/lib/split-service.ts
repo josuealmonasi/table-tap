@@ -1,5 +1,5 @@
 import { dinerCheckoutOrders } from "@/lib/diner-checkout-orders";
-import { frozenTipPrincipal, ordersTipBase } from "@/lib/tip-base";
+import { ordersTipBase, splitTipPrincipal } from "@/lib/tip-base";
 import { splitResumptions } from "@/lib/split-slots-resume";
 import { splitSlots, splitFrozen } from "@/lib/split-slots-state";
 import type { SplitSlot } from "@/lib/split-slots";
@@ -141,7 +141,7 @@ export async function currentSplit(
 
   const frozen = split.status === "locked" ? await dinerCheckoutOrders(split.order_ids ?? []) : [];
   if (split.status === "locked" && frozen.length !== split.order_ids?.length) throw new Error("Could not read frozen food");
-  const tipPrincipal = frozenTipPrincipal(split.food_principal, frozen);
+  const tipPrincipal = splitTipPrincipal(split, frozen);
 
   if (split.model_version === 2) {
     const slots = await splitSlots(restaurantId, split.id);
