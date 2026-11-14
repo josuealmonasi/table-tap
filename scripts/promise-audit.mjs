@@ -537,8 +537,8 @@ for (const state of STATES) {
   };
 
   try {
-    if (state.splitSlots) {
-      const fixture = await splitScreenFixture(admin, restaurant.id);
+    if (state.splitSlots || state.unsplitBill) {
+      const fixture = await splitScreenFixture(admin, restaurant.id, !state.unsplitBill);
       try { await visit(`/dashboard/bills?order=${fixture.orderId}`); }
       finally { await fixture.cleanup(); }
     } else if (state.as === "tracker") await withCounterOrder(id => visit(`/order/${id}`));
