@@ -32,13 +32,28 @@ describe("unchanged API fixtures", () => {
   it.each(["coupons", "promotions"])("shares the active %s only for refused writes", async table => {
     const f = fixture();
     const cases = frozenOfferCases().filter(c => c.path === `/api/${table}`);
-    for (const test of cases.filter(c => c.expect[0] === 402 && !c.name.includes("resuming"))) await (await test.arrange(f))();
+    const restoreEdit = await cases[1].arrange(f);
+    await restoreEdit();
+    const restoreDelete = await cases[3].arrange(f);
     expect(f.writes.filter(w => w.table === table && w.op === "insert")).toHaveLength(1);
     expect(f.writes.filter(w => w.op === "delete")).toHaveLength(0);
+    await restoreDelete();
+    expect(f.writes.filter(w => w.table === table && w.op === "delete")).toHaveLength(1);
     await (await cases[0].arrange(f))();
     expect(f.writes.filter(w => w.table === table && w.op === "insert")).toHaveLength(2);
-    expect(f.writes.filter(w => w.table === table && w.op === "delete")).toHaveLength(1);
+    expect(f.writes.filter(w => w.table === table && w.op === "delete")).toHaveLength(2);
     await f.readOnlyFixtures!.cleanup();
     expect(f.writes.filter(w => w.table === table && w.op === "delete")).toHaveLength(2);
+  });
+  it("removes every frozen offer before later cases can sell a discounted dish", async () => {
+    const f = fixture();
+    for (const test of frozenOfferCases()) await (await test.arrange(f))();
+    for (const table of ["promotions", "coupons"]) {
+      expect(f.writes.filter(w => w.table === table && w.op === "insert")).toHaveLength(3);
+      expect(f.writes.filter(w => w.table === table && w.op === "delete")).toHaveLength(3);
+    }
+    const removed = f.writes.length;
+    await f.readOnlyFixtures!.cleanup();
+    expect(f.writes).toHaveLength(removed);
   });
 });

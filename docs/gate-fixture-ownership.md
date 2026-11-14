@@ -2,7 +2,9 @@
 
 Read-only means the request leaves its fixture rows unchanged. It can still
 write a rate-limit counter or read the restaurant's existing books. Shared
-rows are created lazily, owned by one run and deleted in its final cleanup.
+rows are created lazily and owned by one run. Frozen offers leave after their
+last case so their promotions cannot discount later sales; final run cleanup
+removes any remaining shared rows.
 The existing effect and refusal assertions are unchanged.
 
 ## Shared by the API gate
@@ -46,12 +48,17 @@ are source-level counts, not measured database I/O. No gate was run here.
 
 ## Claude's validation
 
-Apply the two updated trigger functions in `supabase/schema.sql`, then run a
+Apply the two updated trigger functions and the updated
+`payment_allocations_need_backfill(uuid)` in `supabase/schema.sql`, then run a
 rolled-back probe comparing seeded explicit receipts with legacy backfill,
 including tipped and cancelled orders. No signatures or objects were added.
 After seeding, inspect allocation version, preserved tips and historical
-review rows. The complete seed can still request a no-op historical import
-under #638 while those review examples remain.
+review rows. Verify `payment_allocations_need_backfill` is false and run
+`scripts/probe-coverage-no-write.mjs --prove-noop`: the first bill read must
+work inside a read-only transaction and agree with the old coverage body.
+Also probe a review with no logs, a used log, and newly added unused refund
+evidence: only the new evidence should retry the importer, whose existing
+amount, collector, currency and uniqueness checks must still apply.
 
 The seed reaches every screen: run all gates without page or API scoping
 under `loop/gate-policy.md` section 3. Leave `GATE_PAGES` and `GATE_API` unset.

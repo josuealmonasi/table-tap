@@ -11,12 +11,15 @@ export function runFixtures() {
       }
       return { ...await shared.get(key), cleanup: async () => {} };
     },
-    async cleanup() {
-      const fixtures = [...shared.values()];
-      shared.clear();
+    async cleanup(keys = [...shared.keys()]) {
+      const fixtures = keys.filter(key => shared.has(key)).map(key => [key, shared.get(key)]);
       // Try every sitting even if one deletion fails; one failed cleanup must
       // not leave all the other cases' rows on the floor.
-      const results = await Promise.allSettled(fixtures.map(async pending => (await pending).cleanup()));
+      const results = await Promise.allSettled(fixtures.map(async ([key, pending]) => {
+        await (await pending).cleanup();
+        // Keep a failed group deletion reachable for the run's final cleanup.
+        if (shared.get(key) === pending) shared.delete(key);
+      }));
       const failed = results.find(result => result.status === "rejected");
       if (failed) throw failed.reason;
     },

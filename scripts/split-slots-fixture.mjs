@@ -5,7 +5,7 @@ const checked = async query => {
   if (error) throw new Error(error.message);
   return data;
 };
-/** A private sitting per case. Cleanup never borrows another case's orders or money. */
+/** A private sitting per owner. Cleanup never borrows another fixture's orders or money. */
 export async function splitSlotFixture(admin, restaurantId, { currency = "MXN", totalCents = 11000, shares = 2, start = true } = {}) {
   const tableId = randomUUID(), sessionId = randomUUID(), orderId = randomUUID(), ref = randomUUID();
   let splitId;

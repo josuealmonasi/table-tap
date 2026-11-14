@@ -70,7 +70,14 @@ export function frozenOfferCases() {
       body: f => ({ id: f.frozenOffer.before.id, active: true }), expect: [402],
       effect: f => unchangedExceptActive(f) },
     { name: `DELETE /api/${table} (frozen: deleting is refused)`, as: "manager", method: "DELETE",
-      path: `/api/${table}`, arrange: f => frozenOffer(f, table, true, true),
+      path: `/api/${table}`, arrange: async f => {
+        const restore = await frozenOffer(f, table, true, true);
+        return async () => {
+          try { await restore(); }
+          // Active promotions must leave before later cases ring real sales.
+          finally { await sharedRunFixtures(f).cleanup([`frozen-${table}-true`, `frozen-${table}-false`]); }
+        };
+      },
       body: f => ({ id: f.frozenOffer.before.id }), expect: [402],
       effect: f => unchangedExceptActive(f) },
   ]);

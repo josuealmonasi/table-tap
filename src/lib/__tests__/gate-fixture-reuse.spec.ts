@@ -35,6 +35,21 @@ describe("API split fixtures", () => {
     expect(make).toHaveBeenCalledTimes(2);
     for (const result of make.mock.results) expect((await result.value).cleanup).toHaveBeenCalledOnce();
   });
+  it("uses exactly two sittings for all eleven unchanged API split cases", async () => {
+    const fx = { admin: {}, restaurant: { id: "restaurant" }, withCardReader: async () => async () => {} };
+    const cases = splitSlotCases(fx);
+    const names = ["start (stale)", "start (currency)", "start (busy)", "start (same request returns its split)",
+      "resize (stale)", "resize (gone)", "cancel (stale)", "cancel (gone)",
+      "collect (stale)", "collect (currency)", "pay (model 2 stale)"];
+    for (const name of names) {
+      const test = cases.find(c => c.name === `POST /api/split/${name}`)!;
+      await (await test.arrange!(fx))();
+    }
+    expect(make).toHaveBeenCalledTimes(2);
+    for (const result of make.mock.results) expect((await result.value).cleanup).not.toHaveBeenCalled();
+    await (fx as typeof fx & { splitSlotFixtures: ReturnType<typeof splitSlotFixtures> }).splitSlotFixtures.cleanup();
+    for (const result of make.mock.results) expect((await result.value).cleanup).toHaveBeenCalledOnce();
+  });
   it("shares the two unchanged attack cases and cleans them at the end", async () => {
     const ok = vi.fn(), bad = vi.fn();
     await attackSplitSlots({ admin: {}, home: { id: "home" }, neighbour: { id: "foreign" },

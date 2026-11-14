@@ -73,7 +73,7 @@ async function ensureUser(pg, admin, email, name) {
  */
 let keptStripe = null;
 
-/** Removes Demo Bistro (cascades all its data) and the demo logins. */
+/** Removes Demo Bistro (cascades all its data); reseeding keeps the logins. */
 export async function dropMock(pg, { keepLogins = false } = {}) {
   const { rows } = await pg.query(
     "select id, stripe_account_id, stripe_charges_enabled from restaurants where name = $1",

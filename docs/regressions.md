@@ -35,7 +35,7 @@ and that a new party cannot see the previous party's waiting phones.
 | A duplicate refund keeps its original charge currency everywhere (S11 I9) | Changing the menu currency relabelled money owed back and the approval amount |
 |---|---|
 | Seed receipts and allocation backfill keep the same historical evidence | Every seed inserted version-0 receipts, so reading a bill rewrote hundreds of rows; `seed-payment-allocations.spec.ts` compares every explicit-order field and allocation value with the backfill |
-| Read-only gate cases share their run's fixtures | Identical refusals repeatedly inserted and deleted orders, tables and splits; `gate-fixture-reuse.spec.ts` and `api-readonly-fixtures.spec.ts` check reuse, writer isolation and cleanup |
+| Read-only gate cases share their run's fixtures | Identical refusals repeatedly inserted and deleted orders, tables and splits; `gate-fixture-reuse.spec.ts`, `api-readonly-fixtures.spec.ts` and `run-fixtures.spec.ts` check reuse, writer isolation and cleanup |
 | Reseeding restores demo logins without replacing their identities | Deleting the restaurant also deleted five healthy logins and sessions; `seed-logins.spec.ts` and `mock-logins.spec.ts` check identity reuse, changed passwords, metadata reset and explicit drop |
 | Takings bound return evidence before grouping (SQL read cost 2) | The day filter reached PostgREST only after SQL had materialized the restaurant's refund history |
 | Cash case tests narrow optional matchers | A runtime assertion did not tell TypeScript which API cases have an error matcher, so the new contract spec broke type checking |
@@ -7183,12 +7183,13 @@ metadata, unknown breakdowns and legacy provenance. Live and unmarked legacy
 writers keep their existing paths. `mock-history.mjs` reads receipts for daily
 shifts; it does not insert payments.
 
-Cancelled legacy sales still retain their historical review examples. PR #638
-conservatively asks for backfill while those reviews remain, even when the
-importer has no new evidence to write. Current allocation rows remove the
-receipt rewrite; skipping that remaining no-op import needs a separate,
-evidence-aware review predicate. No review or return evidence is fabricated
-to make a read look clean.
+Cancelled legacy sales retain their historical review examples. A review
+without an unused refund log for that order cannot gain evidence, so the
+coverage check now skips that no-op import. Missing cancellations and
+unreturned allocations still request repair; a new unused refund log still
+retries the importer, which proves the amount, collector, currency and
+uniqueness as before. `seed-backfill-noop.spec.ts` pins these conditions. No
+review or return evidence is fabricated to make a read look clean.
 
 ## Read-only gate cases and fixture ownership
 
@@ -7196,8 +7197,11 @@ The fixture lifecycle and each case's effects have to agree. Refused split,
 inactive-order and frozen-offer requests repeatedly created the same rows.
 One run now owns each unchanged fixture set; case cleanup returns the borrowed
 rows without deleting them. Run cleanup removes them, including after failed
-requests. Specs check reuse, incompatible states, separate runs, failed setup
-and private writer cleanup. Every gate verdict stays unchanged. The exact
+requests. Frozen offers leave after their last case so an active promotion
+cannot discount a later case's sale; run cleanup remains their fallback. Failed
+group deletions remain reachable for that final cleanup, and their errors do
+not stop teardown of the API gate's other rows. Specs check reuse, incompatible
+states, separate runs, failed setup and private writer cleanup. Every gate verdict stays unchanged. The exact
 shared cases and cases that still need private rows are listed in
 `docs/gate-fixture-ownership.md`.
 
@@ -7210,6 +7214,7 @@ only if changed, clears demo metadata and bans, removes accidental admin
 grants and restores names. Unchanged passwords never go through GoTrue's
 password update. Explicit `dropMock` still removes all five users. Mocked
 database and admin-client specs check both lifetimes without sending mail.
+
 ## The cash contract spec and its case union
 
 The spec and the JavaScript case list have to agree about optional fields.
