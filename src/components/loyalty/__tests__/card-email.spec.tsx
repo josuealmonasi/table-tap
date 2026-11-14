@@ -54,6 +54,23 @@ it("read failures stay distinct from a card without email and allow retry", asyn
   vi.mocked(fetch).mockResolvedValue(Response.json({}, { status: 503 }));
   await render(); expect(host.querySelector('[role="alert"]')).not.toBeNull(); expect(host.textContent).not.toContain("Sin correo");
 });
+it("screens5: a failed read is said once, not as a placeholder and an alert", async () => {
+  vi.mocked(fetch).mockResolvedValue(Response.json({}, { status: 503 }));
+  await render();
+  const said = translate(messagesFor("es"), "cardEmail.readFailed");
+  expect(host.textContent!.split(said)).toHaveLength(2);
+  expect(host.querySelector('[role="alert"]')?.textContent).toBe(said);
+});
+it("access2: a diner's submitted address shows with the note that covers an address already on another card", async () => {
+  await render({ diner: true, initialEmail: null });
+  await act(async () => button("Agregar/cambiar correo").click()); await type("ana@example.com");
+  await act(async () => host.querySelector<HTMLInputElement>('input[type="checkbox"]')!.click());
+  vi.mocked(fetch).mockResolvedValueOnce(Response.json({ outcome: "submitted", email: "ana@example.com" }));
+  await act(async () => button("Guardar correo").click());
+  expect(host.textContent).toContain("ana@example.com");
+  expect(host.querySelector('[role="status"]')?.textContent).toBe(translate(messagesFor("es"), "cardEmail.submittedDiner"));
+  expect(host.querySelector('[role="alert"]')).toBeNull();
+});
 it("a new staff reader never flashes a previous reader's full email from a shared cache", async () => {
   vi.mocked(fetch).mockResolvedValueOnce(Response.json({ email: "owner-visible@example.com" }));
   const cache = new Map();

@@ -11,3 +11,12 @@ it("passes a statement operation's idempotency key to Resend", async () => {
   expect(fetcher.mock.calls[0][1].headers["Idempotency-Key"]).toBe("statement/account/operation-1");
   expect(JSON.parse(fetcher.mock.calls[0][1].body)).not.toHaveProperty("idempotencyKey");
 });
+
+it("preserves paragraph and item breaks in the provider's plain-text payload", async () => {
+  vi.stubEnv("RESEND_API_KEY", "test-key"); vi.stubEnv("RECEIPT_FROM_EMAIL", "test@example.com");
+  const fetcher = vi.fn().mockResolvedValue(new Response("{}", { status: 200 }));
+  vi.stubGlobal("fetch", fetcher);
+  const text = "Statement\n\nTuesday\n1× Apple Pie\n1× Tea\n\nTotal: MX$250.00\n\nhttps://tabletap.test/cuenta/code";
+  await sendMail({ to: "diner@example.com", subject: "Statement", html: "<p>Statement</p>", text });
+  expect(JSON.parse(fetcher.mock.calls[0][1].body).text).toBe(text);
+});

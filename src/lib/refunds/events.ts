@@ -17,7 +17,12 @@ interface EventFilters {
 export async function readReturnEvents(db: ReturnType<typeof createAdminClient>, restaurant: string,
   from: string, to?: string, filters: EventFilters = {}): Promise<ReturnEvent[]> {
   const rows = await everyRow<ReturnEvent>((a, b) => {
-    let query = db.rpc("order_return_events_v1", { p_restaurant: restaurant, p_currency: filters.currency ?? null })
+    // Push the window into SQL before deduplication. Shift trails still use
+    // the legacy inclusive end; moving it would drop a refund at close time.
+    let query = (filters.inclusiveEnd
+      ? db.rpc("order_return_events_v1", { p_restaurant: restaurant, p_currency: filters.currency ?? null })
+      : db.rpc("order_return_events_v1", { p_restaurant: restaurant, p_currency: filters.currency ?? null,
+        p_from: from, p_to: to ?? "infinity" }))
       .gte("succeeded_at", from);
     if (to) query = filters.inclusiveEnd ? query.lte("succeeded_at", to) : query.lt("succeeded_at", to);
     if (filters.kind) query = query.eq("kind", filters.kind);

@@ -72,5 +72,14 @@ it("coverage completes a duplicate-charge refund only when active refunds pay it
 it("deletion waits for every open fee return and queued charge", () => {
   const del = body("admin_delete_restaurant");
   expect(del).toContain("from fee_returns where restaurant_id = p_restaurant and status in ('prepared', 'dispatched', 'unresolved')");
-  expect(del).toContain("from fee_reconcile_queue where restaurant_id = p_restaurant");
+  expect(del).toContain("from fee_reconcile_queue q where q.restaurant_id = p_restaurant");
+});
+
+it("bg4: deletion waits only on queued charges the recovery can resolve an account for", async () => {
+  const { FEE_ACCOUNT_SOURCES } = await import("@/lib/refunds/fee-queue");
+  const guard = body("admin_delete_restaurant").split("from fee_reconcile_queue q")[1]?.split("then")[0] ?? "";
+  for (const table of FEE_ACCOUNT_SOURCES) {
+    expect(guard).toContain(`select 1 from ${table} x where x.restaurant_id = q.restaurant_id and x.stripe_payment_intent = q.stripe_payment_intent`);
+  }
+  expect(guard.match(/select 1 from (\w+) x/g)).toHaveLength(FEE_ACCOUNT_SOURCES.length);
 });

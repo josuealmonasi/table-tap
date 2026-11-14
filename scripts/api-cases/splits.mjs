@@ -115,7 +115,9 @@ export function splitsCases(fx) {
           .eq("restaurant_id", other.id).order("label").limit(1).single();
         f.otherRestaurant = other.id;
         f.otherTable = otherTable.id;
-        await f.admin.from("restaurants").update({ stripe_account_id: "acct_api_check", stripe_charges_enabled: true }).eq("id", other.id);
+        // Its own fake account: one account belongs to one restaurant (bg9),
+        // and the borrowed reader may hold acct_api_check on the demo.
+        await f.admin.from("restaurants").update({ stripe_account_id: "acct_api_check_other", stripe_charges_enabled: true }).eq("id", other.id);
         return async () => {
           await f.admin.from("restaurants").update({
             stripe_account_id: other.stripe_account_id, stripe_charges_enabled: other.stripe_charges_enabled,

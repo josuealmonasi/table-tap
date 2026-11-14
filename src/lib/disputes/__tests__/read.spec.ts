@@ -44,3 +44,14 @@ it("review cases and their money stay out of the tenant's books and pending note
   expect(read).toMatchObject({ cases: [{ id: "case" }], movements: [movement], pending: 0 });
   expect(read.cases).toHaveLength(1);
 });
+it("an event set aside for review counts as needs-review, not pending, and marks its case", async () => {
+  const f = fixture();
+  f.tables.stripe_disputes = [{ ...dispute, restaurant_id: "original", reconciliation_state: "reconciled" },
+    { ...dispute, id: "other", stripe_dispute_id: "dp_other", restaurant_id: "original", reconciliation_state: "reconciled" }];
+  f.tables.stripe_dispute_events = [{ ...dispute, restaurant_id: "original", state: "review" },
+    { ...dispute, stripe_dispute_id: "dp_other", restaurant_id: "original", state: "error" }];
+  const read = await readDisputes(f.db, "original");
+  expect(read).toMatchObject({ pending: 1, review: 1 });
+  expect(read.cases.find(d => d.id === "case")?.reconciliation_state).toBe("needs_review");
+  expect(read.cases.find(d => d.id === "other")?.reconciliation_state).toBe("pending");
+});

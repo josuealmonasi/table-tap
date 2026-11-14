@@ -1,7 +1,10 @@
 import type Stripe from "stripe";
 import type { createAdminClient } from "@/lib/supabase/admin";
 
-export const BATCH_SIZE = 10;
+// Items per page. Every item still stops at the job's time budget, so a larger
+// page only lets a fast queue (stock, settled refunds) clear more per run; it
+// was ten, and a queue growing by more than ten a day never caught up.
+export const BATCH_SIZE = 25;
 export const JOB_BUDGET_MS = 10_000;
 const OVERDUE_SECONDS = 6 * 3600;
 
@@ -30,6 +33,16 @@ export async function isolateJob(name: string, run: () => Promise<RecoveryResult
     return { done: 0, pending: null, failed: 1, oldest_pending_at: null,
       oldest_pending_age_seconds: null, age_basis: "unknown", observation_failed: true };
   }
+}
+
+/** One job's result from several sources sharing its budget: an unknown
+ * source count stays unknown, and the oldest pending item of any source wins. */
+export function combineResults(results: RecoveryResult[], ageBasis: string): RecoveryResult {
+  const oldest = results.filter(r => r.oldest_pending_at).sort((a, b) => a.oldest_pending_at!.localeCompare(b.oldest_pending_at!))[0];
+  return { done: results.reduce((n, r) => n + r.done, 0), failed: results.reduce((n, r) => n + r.failed, 0),
+    pending: results.some(r => r.pending === null) ? null : results.reduce((n, r) => n + r.pending!, 0),
+    oldest_pending_at: oldest?.oldest_pending_at ?? null, oldest_pending_age_seconds: oldest?.oldest_pending_age_seconds ?? null,
+    age_basis: ageBasis, ...(results.some(r => r.observation_failed) ? { observation_failed: true } : {}) };
 }
 
 /** Reserve time to count what remains, rather than calling a partial batch a drained queue. */

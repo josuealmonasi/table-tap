@@ -11,6 +11,9 @@ vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({ from: () =>
     select: () => q, eq: (key: string, value: string) => { if (key === "restaurant_id") tenant = value; return q; }, order: () => q,
     is: () => { status = "pending"; return q; }, not: (clock: string) => { status = clock === "resolved_at" ? "resolved" : "history"; return q; },
     range: (from: number, to: number) => ({ returns: async () => result(from, to), then: (done: (value: ReturnType<typeof result>) => void) => Promise.resolve(result(from, to)).then(done) }),
+    // A head count: 43 approved, none resolved.
+    then: (done: (value: { count: number; error: { message: string } | null }) => void) =>
+      Promise.resolve({ count: status === "history" ? 43 : 0, error: state.failed ? { message: "offline" } : null }).then(done),
   };
   function result(from: number, to: number) {
       state.reads.push({ tenant, status, from, to });
@@ -35,6 +38,12 @@ it("returns stable, bounded approved history pages with a next-page indicator", 
   expect(first.sales).toHaveLength(20); expect(first.hasMore).toBe(true);
   expect(next.sales[0].pos_ref).toBe("approved-20"); expect(last.sales).toHaveLength(3); expect(last.hasMore).toBe(false);
   expect(state.reads.every(r => ["history", "resolved"].includes(r.status) && r.tenant === "r" && r.to - r.from <= 60)).toBe(true);
+});
+it("access3: a page past the end is clamped to the last page before any history is read", async () => {
+  const far = await (await get("?view=history&page=999999")).json();
+  expect(far.sales).toHaveLength(3); expect(far.sales[0].pos_ref).toBe("approved-40"); expect(far.hasMore).toBe(false);
+  expect(state.reads.length).toBeGreaterThan(0);
+  expect(Math.max(...state.reads.map(r => r.to))).toBeLessThanOrEqual(60);
 });
 it.each(["cashier", "waiter", "kitchen"])("refuses %s before reading saved money", async role => { state.role = role; expect((await get()).status).toBe(403); expect(state.reads).toEqual([]); });
 it.each(["-1", "1.5", "wat", "99999999999999"])("refuses invalid history page %s", async page => { expect((await get(`?view=history&page=${page}`)).status).toBe(400); expect(state.reads).toEqual([]); });
