@@ -102,7 +102,10 @@ export async function POST(req: NextRequest) {
       let emailLinked: SetEmailResult["outcome"] | undefined;
       const email = normalizeEmail(body?.email);
       if (email && body?.consent === true) emailLinked = (await setCardEmail(restaurantId, code, email, "diner").catch(() => null))?.outcome;
-      return NextResponse.json({ code, face, qr: qrGrid(face.qrPayload), ...(emailLinked ? { email: emailLinked } : {}) });
+      // Linked or already on another card here answer alike, or this would
+      // say whether an address has a card at this restaurant (review access2).
+      const emailAnswer = emailLinked === "saved" || emailLinked === "taken" ? "submitted" : emailLinked;
+      return NextResponse.json({ code, face, qr: qrGrid(face.qrPayload), ...(emailAnswer ? { email: emailAnswer } : {}) });
     }
     if (error.code !== "23505") {
       console.error("loyalty card create failed:", error.message);

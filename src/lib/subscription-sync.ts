@@ -91,6 +91,9 @@ export async function applySubscription(
         stripe_subscription_id: latest.id,
         subscribed_price: !ended && typeof charged === "number" ? charged / 100 : null,
         plan_ends_at: !ended && endsAt ? new Date(endsAt * 1000).toISOString() : null,
+        // The paid period, renewing or not: recovery re-reads Stripe once it
+        // has passed, in case the renewal or the cancellation never arrived.
+        plan_period_ends_at: !ended && item?.current_period_end ? new Date(item.current_period_end * 1000).toISOString() : null,
         trial_ends_at: null,
       } : {}),
     }).eq("id", restaurantId)

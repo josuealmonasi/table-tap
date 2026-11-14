@@ -22,6 +22,7 @@ export default function CardEmail({ code, diner = false, initialEmail, disabled 
   const [consent, setConsent] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [submitted, setSubmitted] = useState(false);
   const linked = diner ? ownEmail : data?.email;
 
   async function save(remove = false): Promise<void> {
@@ -40,9 +41,13 @@ export default function CardEmail({ code, diner = false, initialEmail, disabled 
           : t(res.status === 400 ? "cardEmail.invalid" : "cardEmail.failed"));
         return;
       }
-      if (answer.outcome !== "removed" && answer.outcome !== "saved") throw new Error("Missing save outcome");
+      // A diner is answered "submitted" whether the address was linked or is
+      // already on another card here, so the answer cannot be used to probe
+      // addresses (review access2); the note says what that means.
+      if (!["removed", "saved", "submitted"].includes(answer.outcome)) throw new Error("Missing save outcome");
       const next = answer.outcome === "removed" ? null : answer.email;
       if (next !== null && typeof next !== "string") throw new Error("Missing saved email");
+      setSubmitted(answer.outcome === "submitted");
       if (diner) setOwnEmail(next);
       else await publish({ email: next });
       setEditing(false); setEmail(""); setConsent(false);
@@ -53,7 +58,9 @@ export default function CardEmail({ code, diner = false, initialEmail, disabled 
   return <fieldset disabled={busy || disabled} style={{ border: 0, padding: 0, margin: "12px 0", minWidth: 0 }}>
     <legend>{t("cardEmail.title")}</legend>
     {linked !== undefined ? <p style={{ overflowWrap: "anywhere" }}>{linked || t("cardEmail.none")}</p>
-      : <p className="tt-muted">{t(diner ? "cardEmail.ownReadFailed" : readError ? "cardEmail.readFailed" : "common.loading")}</p>}
+      // A failed read is said once, by the alert below (review screens5).
+      : !readError && <p className="tt-muted">{t(diner ? "cardEmail.ownReadFailed" : "common.loading")}</p>}
+    {submitted && linked && <p className="tt-muted" role="status">{t("cardEmail.submittedDiner")}</p>}
     {readError && <p role="alert" className="tt-field-error">{t("cardEmail.readFailed")}</p>}
     {readError && <button type="button" className="tt-btn tt-btn-ghost tt-btn-sm" onClick={() => void mutate()}>{t("settle.retry")}</button>}
     {editing ? <>

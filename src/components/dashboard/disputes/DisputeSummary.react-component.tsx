@@ -9,7 +9,7 @@ interface Props { report: DisputeReport; contribution?: number; currency?: strin
 export default function DisputeSummary({ report, contribution, currency }: Props) {
   const t = useT();
   const adjustment = report.currencies.find(c => c.currency === currency)?.net ?? 0;
-  const incomplete = report.pending > 0 || report.currencies.some(c => c.currency !== currency && c.net !== 0);
+  const incomplete = report.pending > 0 || report.review > 0 || report.currencies.some(c => c.currency !== currency && c.net !== 0);
   return <section className="tt-section" aria-label={t("disputes.title")}>
     <h3 className="tt-serif">{t("disputes.title")}</h3>
     <p className="tt-muted">{t("disputes.help")}</p>
@@ -24,6 +24,7 @@ export default function DisputeSummary({ report, contribution, currency }: Props
     {report.currencies.length === 0 && <p>{t("disputes.empty")}</p>}
     <p>{t("disputes.outcomes", { won: report.won, lost: report.lost })}</p>
     {report.pending > 0 && <p role="note">{t("disputes.pending", { count: report.pending })}</p>}
+    {report.review > 0 && <p role="note">{t("disputes.needsReview", { count: report.review })}</p>}
     {contribution !== undefined && currency && <>
       <p>{t("disputes.adjustments")}: <strong>{formatMoney(adjustment, currency)}</strong></p>
       <p>{t("disputes.after")}: <strong>{formatMoney(contribution + adjustment, currency)}</strong></p>

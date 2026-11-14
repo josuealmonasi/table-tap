@@ -18,6 +18,9 @@ vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({ from: () =>
       const result = { data: rows, error: null };
       return { returns: async () => result, then: (done: (value: typeof result) => void) => Promise.resolve(result).then(done) };
     },
+    // A head count of the decided rows on one clock.
+    then: (done: (value: { count: number; error: null }) => void) => Promise.resolve({
+      count: state.rows.filter(r => r.restaurant_id === tenant && (!clock || r[clock])).length, error: null }).then(done),
   }; return q;
 } }) }));
 import { GET } from "@/app/api/pos/recover/route";
