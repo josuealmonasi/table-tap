@@ -71,6 +71,11 @@ it.each(pollers)("$name waits a full interval after a slow read", async ({ View,
   expect(calls).toHaveBeenCalledTimes(1);
   await advance(interval * 2 + 100);
   expect(calls).toHaveBeenCalledTimes(1);
+  await act(async () => {
+    document.dispatchEvent(new Event("visibilitychange"));
+    window.dispatchEvent(new Event("focus"));
+  });
+  expect(calls).toHaveBeenCalledTimes(1);
   await act(async () => finish(name === "useOnline" || name === "useOfflineSales" ? Response.json({}, { status: 503 }) : reply()));
   await advance(interval - 1);
   expect(calls).toHaveBeenCalledTimes(1);
@@ -100,4 +105,34 @@ it.each(pollers)("$name keeps its hidden-tab behaviour", async ({ View, interval
   await act(async () => document.dispatchEvent(new Event("visibilitychange")));
   await act(async () => window.dispatchEvent(new Event("focus")));
   expect(calls).toHaveBeenCalledTimes(1);
+});
+
+it("stops probing once the server answers successfully", async () => {
+  await act(async () => root.render(<Online />));
+  await advance(8_000);
+  expect(calls).toHaveBeenCalledOnce();
+  await act(async () => finish(Response.json({})));
+  await advance(32_000);
+  expect(calls).toHaveBeenCalledOnce();
+});
+
+it("stops rechecking once the other table is closed", async () => {
+  await act(async () => root.render(<Sitting />));
+  await act(async () => finish(reply()));
+  await advance(15_000);
+  expect(calls).toHaveBeenCalledTimes(2);
+  await act(async () => finish(Response.json({ open: false })));
+  await advance(60_000);
+  expect(calls).toHaveBeenCalledTimes(2);
+});
+
+it.each([false, true])("keeps tracking delivered food until it is paid: %s", async paid => {
+  await act(async () => root.render(<Tracker />));
+  await act(async () => finish(reply()));
+  await advance(5_000);
+  expect(calls).toHaveBeenCalledTimes(2);
+  await act(async () => finish(Response.json({ id: "order", status: "completed", paid, restaurant_id: "restaurant", table_id: "table" })));
+  await advance(20_000);
+  // A paid order asks about ratings once; only its status poll must stop.
+  expect(calls.mock.calls.filter(([url]) => String(url).startsWith("/api/order-status"))).toHaveLength(paid ? 2 : 3);
 });

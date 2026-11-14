@@ -7175,6 +7175,9 @@ the active send rather than mistaking a busy guard for a completed upload.
 
 `poller-cadence.spec.tsx` fails against all nine original pollers and checks slow
 reads, the full wait after completion, teardown and hidden tabs.
+Focus and visibility events also join an unfinished read. Stop-condition checks
+keep the connection probe and closed-table recheck stopped, while the tracker
+keeps following delivered food until payment arrives.
 `poll-after-settle.spec.ts` checks retries, focus/visibility events, delayed starts,
 one-shot bills and cleanup. `invariants/polls.spec.ts` has no exceptions left.
 
