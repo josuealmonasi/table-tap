@@ -1,6 +1,7 @@
 import { after } from "next/server";
 import { syncReturnedFee } from "./fee";
 import { recoverQueuedFees } from "./fee-queue";
+import { refundProgress } from "./progress";
 import type Stripe from "stripe";
 import { stripe } from "@/lib/stripe";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -25,11 +26,21 @@ export interface RefundOperation {
   kind?: "cancel" | "return" | null;
 }
 
-export async function orderRefunds(restaurantId: string, adjustmentId?: string): Promise<RefundOperation[]> {
-  // Fee recovery runs after the response so an unavailable provider cannot
-  // hold up opening Bills or collecting the next customer's payment.
-  if (!adjustmentId) after(() => recoverOrderRefundFees(restaurantId, "fee recovery")
+/** Fee recovery after the response, so an unavailable provider cannot hold up
+ *  opening Bills. Never from the returns list Pedidos polls: a read every 15 s
+ *  is no place for a write path that may call Stripe. The recover cron drains
+ *  the fee queue every completion enqueues. */
+export function recoverOrderRefundFeesLater(restaurantId: string): void {
+  after(() => recoverOrderRefundFees(restaurantId, "fee recovery")
     .catch(error => console.error("Order refund fee recovery remains pending", error)));
+}
+
+/**
+ * Progress rules stay in SQL. One batch replaces the per-operation calls that
+ * a restaurant with 38 open returns sent into a small PostgREST pool every
+ * 15 s, making every other request on the page queue behind them.
+ */
+export async function orderRefunds(restaurantId: string, adjustmentId?: string): Promise<RefundOperation[]> {
   const db = createAdminClient();
   const rows = await everyRow<RefundOperation>((from, to) => {
     let q = db.from("refund_operations")
@@ -45,16 +56,13 @@ export async function orderRefunds(restaurantId: string, adjustmentId?: string):
   const orders = await everyRowIn<{ id: string; table_label: string | null }>(
     adjustments.map(a => a.order_id), (ids, a, b) => db.from("orders").select("id, table_label")
       .eq("restaurant_id", restaurantId).in("id", ids).order("id").range(a, b), "the returns' tables");
-  return await Promise.all(rows.map(async row => {
+  const progress = await refundProgress(db, restaurantId, rows.map(row => row.id));
+  return rows.map(row => {
     const adjustment = adjustments.find(a => a.id === row.adjustment_id);
     const identity = { order_id: adjustment?.order_id ?? null, kind: adjustment?.kind ?? null,
       table_label: orders.find(o => o.id === adjustment?.order_id)?.table_label ?? null };
-    const { data, error } = await db.rpc("refund_operation_progress_v1", { p_operation: row.id });
-    if (error || !data || !Number.isSafeInteger(data.outstanding_cents) || data.outstanding_cents < 0) {
-      throw new Error("Could not verify the outstanding return");
-    }
-    return { ...row, ...identity, outstanding_cents: data.outstanding_cents };
-  }));
+    return { ...row, ...identity, outstanding_cents: progress.get(row.id)! };
+  });
 }
 
 /** Persist provider state before showing completion. A lost response reuses

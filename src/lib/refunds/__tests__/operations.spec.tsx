@@ -6,7 +6,7 @@ vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({ rpc, from }
 vi.mock("next/server", () => ({ after }));
 vi.mock("@/lib/stripe", () => ({ stripe: {} }));
 vi.mock("../fee", () => ({ syncReturnedFee: syncFee }));
-const { executeOrderRefund, orderRefunds } = await import("../operations");
+const { executeOrderRefund, orderRefunds, recoverOrderRefundFeesLater } = await import("../operations");
 let fixture: ReturnType<typeof returnFixture>;
 const attempt = { id: "attempt-1", operation_status: "pending", attempt_no: 1,
   amount: 33.34, outstanding_cents: 3334, created_at: new Date().toISOString(), currency: "MXN", stripe_account_id: "acct_original", stripe_payment_intent: "pi_original", idempotency_key: "cancel-original" };
@@ -83,6 +83,9 @@ describe("durable order returns", () => {
     });
     rpc.mockResolvedValue({ data: { ...attempt, operation_status: "succeeded" }, error: null });
     expect(await orderRefunds("tenant")).toEqual([]);
+    // The list Pedidos polls every 15 s schedules no write path; Bills does.
+    expect(after).not.toHaveBeenCalled();
+    recoverOrderRefundFeesLater("tenant");
     expect(syncFee).not.toHaveBeenCalled();
     expect(after).toHaveBeenCalledWith(expect.any(Function));
     await after.mock.calls[0][0]();

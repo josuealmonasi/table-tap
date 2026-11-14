@@ -4,6 +4,7 @@ import { orderMovePatch } from "@/lib/order-flow";
 
 import { useCallback, useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { liveUpdatesEnabled } from "@/lib/supabase/live-updates";
 import { badgesChanged } from "@/hooks/useBadges";
 import { useOnline } from "@/hooks/useOnline";
 import { afterFlush, enqueue, readQueue, writeQueue, type QueuedMove } from "@/lib/offline-queue";
@@ -96,6 +97,8 @@ export function useRestaurantOrders(restaurantId: string, initialOrders: BoardOr
       if (cancelled) return;
       if (session) supabase.realtime.setAuth(session.access_token);
 
+      // Off only in the gate build: see liveUpdatesEnabled.
+      if (!liveUpdatesEnabled()) return;
       channel = supabase
         .channel(`orders-${restaurantId}`)
         .on(

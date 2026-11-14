@@ -830,7 +830,12 @@ drop policy if exists "owner reads orders" on orders; -- superseded by team read
 drop policy if exists "team reads orders" on orders;
 create policy "team reads orders"
   on orders for select
-  using (has_role(restaurant_id, array['manager', 'waiter', 'cashier']));
+  -- Build the allowed restaurant ids once, not once per order in all history.
+  -- Keep has_role: founding owners and co-owners qualify outside this role list.
+  using (restaurant_id = any (array(
+    select r.id from public.restaurants r
+    where public.has_role(r.id, array['manager', 'waiter', 'cashier'])
+  )));
 
 -- INSERT/UPDATE on orders is done ONLY server-side via the secret key, which
 -- bypasses RLS. So we intentionally add NO insert/update policies here:
@@ -844,7 +849,11 @@ drop policy if exists "owner reads service requests" on service_requests;
 drop policy if exists "team reads service requests" on service_requests;
 create policy "team reads service requests"
   on service_requests for select
-  using (has_role(restaurant_id, array['manager', 'waiter', 'cashier']));
+  -- The same audience as orders, with one restaurant list for the whole read.
+  using (restaurant_id = any (array(
+    select r.id from public.restaurants r
+    where public.has_role(r.id, array['manager', 'waiter', 'cashier'])
+  )));
 drop policy if exists "owner updates service requests" on service_requests;
 drop policy if exists "team updates service requests" on service_requests;
 create policy "team updates service requests"
@@ -6330,6 +6339,33 @@ $$;
 revoke all on function public.backfill_payment_allocations(uuid) from public, anon, authenticated;
 grant execute on function public.backfill_payment_allocations(uuid) to service_role;
 
+-- True when backfill_payment_allocations could still change something for this
+-- restaurant: a receipt it would rewrite (its first loop), or a cancelled order
+-- whose legacy money import_historical_return has not finished (its second
+-- loop: a missing cancel record, an unreturned legacy allocation, or a return
+-- still in historical review). When this is false the backfill only takes the
+-- money lock and finds nothing, so a coverage read skips it and writes nothing.
+-- It may say true when the backfill then does nothing; never the reverse.
+create index if not exists payments_backfill_pending_idx on payments(restaurant_id)
+  where allocation_version = 0 or (allocation_quality = 'unresolved' and allocation_origin = 'legacy'
+    and allocation_reason = 'Overlap receipt needs manager evidence');
+create or replace function public.payment_allocations_need_backfill(p_restaurant uuid)
+returns boolean language sql stable security definer set search_path = public as $$
+  select exists (select 1 from payments where restaurant_id = p_restaurant
+      and (allocation_version = 0 or (allocation_quality = 'unresolved' and allocation_origin = 'legacy'
+        and allocation_reason = 'Overlap receipt needs manager evidence')))
+    or exists (select 1 from orders o
+      join payment_allocations a on a.restaurant_id = o.restaurant_id and a.order_id = o.id
+      join payments p on p.id = a.payment_id
+      left join refund_allocations r on r.allocation_id = a.id
+      left join refund_operations f on f.id = r.operation_id
+      where o.restaurant_id = p_restaurant and o.status = 'cancelled' and p.allocation_origin = 'legacy'
+        and (r.id is null or (f.historical_review and f.status = 'review')
+          or not exists (select 1 from order_adjustments d where d.order_id = o.id and d.kind = 'cancel')));
+$$;
+revoke all on function public.payment_allocations_need_backfill(uuid) from public, anon, authenticated;
+grant execute on function public.payment_allocations_need_backfill(uuid) to service_role;
+
 -- Versioned to keep old application instances from adding this tip twice.
 -- Its full writer is defined below, after the reconciliation helpers.
 
@@ -6641,10 +6677,16 @@ create trigger immutable_allocation before update or delete on refund_allocation
 
 -- One authoritative live balance for every table reader. Unresolved historical
 -- pooled money is refused rather than charged a second time.
+-- A read backfills only when there is something to backfill: running it on
+-- every read took the money lock and scanned the receipts each time, and was
+-- the database's largest cost (loop/reviews/gate-db-io.md). The numbers are
+-- the same either way, because a backfill with nothing to do changes nothing.
 create or replace function public.order_coverage(p_restaurant uuid, p_orders uuid[])
 returns jsonb language plpgsql security definer set search_path = public as $$
 begin
-  perform public.backfill_payment_allocations(p_restaurant);
+  if public.payment_allocations_need_backfill(p_restaurant) then
+    perform public.backfill_payment_allocations(p_restaurant);
+  end if;
   return (select coalesce(jsonb_agg(jsonb_build_object('id', o.id,
     'unresolved', exists(select 1 from payments p where p.restaurant_id = p_restaurant and p.allocation_quality = 'unresolved'
       and (p.order_id = o.id or (p.order_id is null and ((p.account_id is not null and p.account_id = o.account_id)
@@ -9679,7 +9721,10 @@ grant select on kitchen_tickets to authenticated;
 grant all on kitchen_tickets to service_role;
 drop policy if exists "team reads kitchen tickets" on kitchen_tickets;
 create policy "team reads kitchen tickets" on kitchen_tickets for select to authenticated
-  using (works_at(restaurant_id));
+  -- The pass keeps its wider team audience without a lookup per ticket.
+  using (restaurant_id = any (array(
+    select r.id from public.restaurants r where public.works_at(r.id)
+  )));
 
 -- Build from an allowlist at every depth: removing just price missed extras,
 -- combo components and any new money field added to order snapshots later.
@@ -9762,7 +9807,10 @@ grant select on kitchen_requests to authenticated;
 grant all on kitchen_requests to service_role;
 drop policy if exists "team reads kitchen calls" on kitchen_requests;
 create policy "team reads kitchen calls" on kitchen_requests for select to authenticated
-  using (works_at(restaurant_id));
+  -- Match ticket access without checking membership again for every call.
+  using (restaurant_id = any (array(
+    select r.id from public.restaurants r where public.works_at(r.id)
+  )));
 
 create or replace function public.sync_kitchen_request()
 returns trigger language plpgsql security definer set search_path = public as $$
@@ -14498,6 +14546,114 @@ alter table account_movements add constraint account_movements_debt check (
     or (kind in ('collection', 'credit') and amount_cents > 0 and debt_delta_cents = -amount_cents and provenance = 'live')
     or (kind = 'collection' and amount_cents > 0 and debt_delta_cents = 0 and provenance = 'backfill')
     or (kind in ('return_approved', 'refund_paid', 'historical_observation') and debt_delta_cents = 0));
+
+-- Batch the polled list without making a second version of the money rules.
+create or replace function public.refund_operations_progress_v1(p_restaurant uuid, p_ids uuid[])
+returns table (operation_id uuid, outstanding_cents int, unresolved boolean)
+language sql stable security definer set search_path = public as $$
+  select o.id, progress.outstanding_cents, progress.unresolved
+  from refund_operations o
+  cross join lateral jsonb_to_record(public.refund_operation_progress_v1(o.id))
+    as progress(outstanding_cents int, unresolved boolean)
+  where o.restaurant_id = p_restaurant and o.id = any(p_ids);
+$$;
+revoke all on function public.refund_operations_progress_v1(uuid, uuid[]) from public, anon, authenticated;
+grant execute on function public.refund_operations_progress_v1(uuid, uuid[]) to service_role;
+
+-- Takings need only this window's events, not a materialized refund history.
+-- Keep the two-argument signature for deployed readers and inclusive trails.
+create or replace function public.order_return_events_v1(p_restaurant uuid, p_currency text, p_from timestamptz, p_to timestamptz)
+returns table (id text, operation_id uuid, order_id uuid, kind text, source text, currency text, amount_cents int,
+  succeeded_at timestamptz, payout_actor text, confirmed_by text, historical_log_id uuid)
+language plpgsql stable security definer set search_path = public as $$
+declare v_operations uuid[]; v_refunds text[];
+begin
+  if p_from is null or p_to is null or p_from > p_to then raise exception 'invalid return window'; end if;
+  -- Pick operations by event time BEFORE checking their full evidence. A
+  -- conflicting record outside the day must still fail an in-window refund.
+  -- Undated successes stay candidates: missing dates cannot look like zero.
+  v_operations := array(
+    select o.id from refund_operations o
+    where o.restaurant_id = p_restaurant and (p_currency is null or o.currency = p_currency)
+      and ((o.completed_at >= p_from and o.completed_at < p_to)
+        or (o.status = 'succeeded' and o.completed_at is null))
+    union
+    select o.id from refund_attempts a join refund_operations o on o.id = a.operation_id and o.restaurant_id = a.restaurant_id
+    where o.restaurant_id = p_restaurant and (p_currency is null or o.currency = p_currency)
+      and a.provider_status = 'succeeded' and a.stripe_refund_id is not null
+      and ((coalesce(a.succeeded_at, o.completed_at) >= p_from and coalesce(a.succeeded_at, o.completed_at) < p_to)
+        or a.succeeded_at is null));
+  v_refunds := array(
+    select a.stripe_refund_id from refund_attempts a
+      where a.restaurant_id = p_restaurant and a.operation_id = any(v_operations) and a.stripe_refund_id is not null
+    union select o.stripe_refund_id from refund_operations o
+      where o.restaurant_id = p_restaurant and o.id = any(v_operations) and o.stripe_refund_id is not null);
+
+  if exists (
+    select 1 from refund_operations o join refund_attempts a on a.operation_id = o.id and a.restaurant_id = o.restaurant_id
+    where o.restaurant_id = p_restaurant and o.id = any(v_operations) and (p_currency is null or o.currency = p_currency)
+      and a.provider_status = 'succeeded' and a.stripe_refund_id is not null and a.succeeded_at is null
+      and not exists (select 1 from refund_failures f where f.restaurant_id = a.restaurant_id and f.stripe_refund_id = a.stripe_refund_id)
+      -- Before success times were kept: a single refund that proves the whole
+      -- operation is dated by the operation's own completion.
+      and not (o.status = 'succeeded' and o.completed_at is not null and round(a.amount * 100) = round(o.amount * 100)
+        and (select count(distinct b.stripe_refund_id) from refund_attempts b where b.operation_id = o.id
+          and b.provider_status = 'succeeded' and b.stripe_refund_id is not null) = 1)) then
+    raise exception 'a succeeded refund has no success time';
+  end if;
+  -- Every writer now keeps one refund to one obligation; one that predates it
+  -- would be counted twice, so it fails the read (verification 2, V7).
+  if exists (select 1 from (
+        select a.stripe_refund_id r, a.operation_id op from refund_attempts a where a.restaurant_id = p_restaurant and a.stripe_refund_id = any(v_refunds)
+        union select o.stripe_refund_id, o.id from refund_operations o where o.restaurant_id = p_restaurant and o.stripe_refund_id = any(v_refunds)) owners
+      group by r having count(distinct op) > 1) then
+    raise exception 'a provider refund is counted by two returns';
+  end if;
+  -- Two records of one refund must agree; which one a report picks must
+  -- never decide its amount or its day (verification 4).
+  if exists (select 1 from refund_attempts a where a.restaurant_id = p_restaurant and a.operation_id = any(v_operations) and a.provider_status = 'succeeded'
+      and a.stripe_refund_id is not null
+      group by a.operation_id, a.stripe_refund_id
+      having count(distinct round(a.amount * 100)) > 1 or count(distinct a.succeeded_at) > 1) then
+    raise exception 'two records of one refund disagree';
+  end if;
+  -- A completed operation's events must be exactly its amount: money a report
+  -- cannot place is a failed read, never a quiet day (verification 7).
+  if exists (select 1 from refund_operations o where o.restaurant_id = p_restaurant and o.id = any(v_operations)
+      and (p_currency is null or o.currency = p_currency) and o.status = 'succeeded' and o.source <> 'review'
+      and ((o.source in ('cash', 'terminal') and o.completed_at is null)
+        or (o.source = 'stripe' and not exists (select 1 from refund_attempts a where a.operation_id = o.id)
+          and (o.stripe_refund_id is null or o.completed_at is null))
+        or (o.source = 'stripe' and exists (select 1 from refund_attempts a where a.operation_id = o.id)
+          and (public.refund_operation_progress_v1(o.id)->>'outstanding_cents')::int <> 0))) then
+    raise exception 'a completed return does not reconcile with its refunds';
+  end if;
+  return query
+  select distinct on (o.id, a.stripe_refund_id) 'refund:' || a.stripe_refund_id, o.id, d.order_id, d.kind, o.source, o.currency,
+      round(a.amount * 100)::int, coalesce(a.succeeded_at, o.completed_at), o.payout_actor, o.confirmed_by, o.historical_log_id
+    from refund_operations o
+    join order_adjustments d on d.id = o.adjustment_id and d.restaurant_id = o.restaurant_id
+    join refund_attempts a on a.operation_id = o.id and a.restaurant_id = o.restaurant_id
+    where o.restaurant_id = p_restaurant and o.id = any(v_operations) and o.source = 'stripe'
+      and coalesce(a.succeeded_at, o.completed_at) >= p_from and coalesce(a.succeeded_at, o.completed_at) < p_to and (p_currency is null or o.currency = p_currency)
+      and a.provider_status = 'succeeded' and a.stripe_refund_id is not null
+      and not exists (select 1 from refund_failures f where f.restaurant_id = a.restaurant_id and f.stripe_refund_id = a.stripe_refund_id)
+    order by o.id, a.stripe_refund_id, a.attempt_no, a.id;
+  -- A Stripe operation completed before attempts existed has only its own record.
+  return query
+  select case when o.source = 'stripe' then 'refund:' || o.stripe_refund_id else 'operation:' || o.id end,
+      o.id, d.order_id, d.kind, o.source, o.currency, round(o.amount * 100)::int,
+      o.completed_at, o.payout_actor, o.confirmed_by, o.historical_log_id
+    from refund_operations o join order_adjustments d on d.id = o.adjustment_id and d.restaurant_id = o.restaurant_id
+    where o.restaurant_id = p_restaurant and o.id = any(v_operations) and (p_currency is null or o.currency = p_currency)
+      and o.status = 'succeeded' and o.completed_at >= p_from and o.completed_at < p_to
+      and (o.source in ('cash', 'terminal')
+        or (o.source = 'stripe' and not exists (select 1 from refund_attempts a where a.operation_id = o.id)
+          and o.stripe_refund_id is not null
+          and not exists (select 1 from refund_failures f where f.restaurant_id = o.restaurant_id and f.stripe_refund_id = o.stripe_refund_id)));
+end $$;
+revoke all on function public.order_return_events_v1(uuid, text, timestamptz, timestamptz) from public, anon, authenticated;
+grant execute on function public.order_return_events_v1(uuid, text, timestamptz, timestamptz) to service_role;
 
 -- Review N2: gratuities are never coupon principal, for direct or approved discounts.
 create or replace function public.approve_discount_request_v2(

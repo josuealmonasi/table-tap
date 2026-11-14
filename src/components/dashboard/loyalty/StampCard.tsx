@@ -81,17 +81,17 @@ export default function StampCard({ buttonClass = "tt-btn tt-btn-ghost tt-btn-sm
             onAnother={reset}
           />
         ) : (
-          <>
+          <div className="tt-scan-stage">
             {problem ? (
-              <p className="tt-muted" style={{ fontSize: 14, marginTop: 0 }}>{problem}</p>
+              <p className="tt-muted" style={{ fontSize: 14 }}>{problem}</p>
             ) : (
               <>
-                <p className="tt-muted" style={{ fontSize: 13, marginTop: 0 }}>{t("loyalty.scanHint")}</p>
+                <p className="tt-muted" style={{ fontSize: 13 }}>{t("loyalty.scanHint")}</p>
                 {scanning && <video ref={videoRef} className="tt-scan-view" muted playsInline />}
               </>
             )}
             <form
-              className="tt-stamp-type"
+              className="tt-field"
               onSubmit={e => {
                 e.preventDefault();
                 if (typedCode) void send("/api/loyalty/stamp", typedCode, "stamp");
@@ -116,11 +116,11 @@ export default function StampCard({ buttonClass = "tt-btn tt-btn-ghost tt-btn-sm
             </form>
             {error && <p className="tt-field-error" role="alert">{error}</p>}
             {error && (
-              <button type="button" className="tt-btn tt-btn-ghost tt-btn-sm" onClick={reset} style={{ marginTop: 8 }}>
+              <button type="button" className="tt-btn tt-btn-ghost tt-btn-sm" onClick={reset}>
                 {t("loyalty.retry")}
               </button>
             )}
-          </>
+          </div>
         )}
       </Modal>
     </>

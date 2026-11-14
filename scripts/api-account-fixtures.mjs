@@ -21,7 +21,7 @@ export async function apiAccountFixtures(admin, env, base) {
       items: [{ itemId: dish.id, name: dish.name, price: 40, qty: 1, mods: {}, extras: [] }], ...extra,
     }).select("id").single())).id;
     return {
-      ...tenant, admin, base, dish, lineTotal: 40, accountId: account.id, accountCode: account.code,
+      ...tenant, admin, base, menu, dish, lineTotal: 40, accountId: account.id, accountCode: account.code,
       acctOrder: await order({ table_id: table.id, table_label: table.label, session_id: session.id }),
       acctOrder2: await order({}), acctSessionId: session.id,
       // Public account routes use the account code, without table admission.

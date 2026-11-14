@@ -64,7 +64,7 @@ export function cashCases(fx) {
       path: "/api/cash-shift", body: async f => {
         const { data } = await f.admin.from("cash_shifts").select("id").eq("restaurant_id", r).is("closed_at", null).single();
         return { action: "close", shiftId: data.id, ref: crypto.randomUUID(), counted: "1000", confirm: true };
-      }, expect: [409], expectError: /revisión de un gerente|manager review/i },
+      }, expect: [409], expectError: /un gerente debe revisar|a manager must review/i },
     { name: "POST /api/cash-shift (closed on a blind count)", as: "cashier", method: "POST",
       // The seeded held cash is set aside for the close, then put back as it was.
       arrange: f => setAsideHeldCash(f, r),

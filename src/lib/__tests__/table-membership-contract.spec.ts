@@ -48,10 +48,11 @@ it("bill, splits and new orders derive the diner from the verified membership", 
 });
 it("keeps both admission screens live by polling, without granting browsers the credential rows", () => {
   expect(MEMBER_POLL_MS).toBe(5000);
-  for (const path of ["src/hooks/useTableMembership.ts", "src/hooks/usePendingPhones.ts"]) {
-    expect(read(path)).toContain("setInterval(read, MEMBER_POLL_MS)");
-    expect(read(path)).toContain("clearInterval(timer)");
-  }
+  expect(read("src/hooks/useTableMembership.ts")).toContain("setInterval(read, MEMBER_POLL_MS)");
+  expect(read("src/hooks/useTableMembership.ts")).toContain("clearInterval(timer)");
+  // The floor's poll is chained: the next read waits for the last to settle.
+  expect(read("src/hooks/usePendingPhones.ts")).toContain("timer = setTimeout(read, MEMBER_POLL_MS)");
+  expect(read("src/hooks/usePendingPhones.ts")).toContain("clearTimeout(timer)");
   expect(read("src/components/dashboard/ServiceRequestsBar.tsx")).toContain("usePendingPhones(restaurantId, canSettle)");
   expect(read("src/app/api/table-membership/route.ts")).toContain("actingFrontOfHouse()");
 });

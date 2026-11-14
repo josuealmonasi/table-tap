@@ -3,6 +3,7 @@
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { liveUpdatesEnabled } from "@/lib/supabase/live-updates";
 
 /** A breath after the notice: one order moves several dishes at once. */
 const SETTLE_MS = 400;
@@ -51,6 +52,8 @@ export function useLiveStock(restaurantId: string): void {
       if (cancelled) return;
       if (session) supabase.realtime.setAuth(session.access_token);
 
+      // Off only in the gate build: see liveUpdatesEnabled.
+      if (!liveUpdatesEnabled()) return;
       channel = supabase
         .channel(`live-stock-${restaurantId}`)
         .on(

@@ -3,6 +3,7 @@
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { liveUpdatesEnabled } from "@/lib/supabase/live-updates";
 
 /** A breath after the notice: closing a table touches several orders at once
  *  and there is no need to re-render once per order. */
@@ -48,6 +49,8 @@ export function useLiveOrders(restaurantId: string): void {
       if (cancelled) return;
       if (session) supabase.realtime.setAuth(session.access_token);
 
+      // Off only in the gate build: see liveUpdatesEnabled.
+      if (!liveUpdatesEnabled()) return;
       channel = supabase
         .channel(`live-orders-${restaurantId}`)
         .on(

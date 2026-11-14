@@ -1,6 +1,7 @@
 "use client";
 
-import { useT } from "@/lib/i18n/context";
+import { useLocale, useT } from "@/lib/i18n/context";
+import { elapsedMinutes, formatDuration } from "@/lib/elapsed";
 import { formatMoney } from "@/lib/format";
 import { remainingBill, type OpenBill } from "@/lib/open-bills";
 import { BillIcon, TableIcon } from "@/components/ui/icons";
@@ -28,6 +29,7 @@ export default function OpenBillRow({
   onCollect,
 }: OpenBillRowProps) {
   const t = useT();
+  const { locale } = useLocale();
   const currency = bill.currency ?? menuCurrency;
   return (
     <div className="tt-bill-row tt-bill-open" aria-busy={updating}>
@@ -82,7 +84,7 @@ export default function OpenBillRow({
             {now !== null && (
               <>
                 {SEP}
-                {t("dash.billsWaiting", { time: waited(bill.since, now) })}
+                {t("dash.billsWaiting", { time: formatDuration(elapsedMinutes(bill.since, now), locale) })}
               </>
             )}
             {/* Said here, where the line can wrap: as the button's label it
@@ -113,12 +115,4 @@ export default function OpenBillRow({
       )}
     </div>
   );
-}
-
-/** How long the table has been sitting on this bill, in the floor's own units. */
-function waited(since: string, now: number): string {
-  const mins = Math.max(0, Math.floor((now - new Date(since).getTime()) / 60_000));
-  if (mins < 60) return `${mins}m`;
-  const hours = Math.floor(mins / 60);
-  return hours < 24 ? `${hours}h ${mins % 60}m` : `${Math.floor(hours / 24)}d`;
 }

@@ -122,38 +122,40 @@ export default function LegacySplitBillCard({
             it. Inside the label they competed for the same 375px: wide enough
             for "¿Cuántos son?" left the button too narrow and it lost the end
             of its own amount off the edge of the card. */}
-        <label className="tt-mod-label" htmlFor={countId}>
-          {t("split.people")}
-        </label>
-        <div className="tt-split-row">
-          <select
-            id={countId}
-            className="tt-input tt-split-count"
-            value={shares}
-            onChange={e => setPeople(Number(e.target.value))}
-          >
-            {choices.map(n => (
-              <option key={n} value={n}>{n}</option>
-            ))}
-          </select>
-          {/* With no card account there is nothing to agree to: every share
-              is settled with the person standing at the table, so the number
-              IS the answer and a button that froze it would only stop the
-              table changing its mind. */}
-          {cardsEnabled ? (
-            <button
-              type="button"
-              className="tt-btn tt-btn-primary"
-              disabled={busy}
-              onClick={() => propose(shares)}
+        <div className="tt-field">
+          <label className="tt-mod-label" htmlFor={countId}>
+            {t("split.people")}
+          </label>
+          <div className="tt-split-row">
+            <select
+              id={countId}
+              className="tt-input tt-split-count"
+              value={shares}
+              onChange={e => setPeople(Number(e.target.value))}
             >
-              {t("split.propose", { each: formatMoney(outstanding / shares, currency) })}
-            </button>
-          ) : (
-            <strong className="tt-split-each">
-              {t("split.each", { amount: formatMoney(outstanding / shares, currency) })}
-            </strong>
-          )}
+              {choices.map(n => (
+                <option key={n} value={n}>{n}</option>
+              ))}
+            </select>
+            {/* With no card account there is nothing to agree to: every share
+                is settled with the person standing at the table, so the number
+                IS the answer and a button that froze it would only stop the
+                table changing its mind. */}
+            {cardsEnabled ? (
+              <button
+                type="button"
+                className="tt-btn tt-btn-primary"
+                disabled={busy}
+                onClick={() => propose(shares)}
+              >
+                {t("split.propose", { each: formatMoney(outstanding / shares, currency) })}
+              </button>
+            ) : (
+              <strong className="tt-split-each">
+                {t("split.each", { amount: formatMoney(outstanding / shares, currency) })}
+              </strong>
+            )}
+          </div>
         </div>
       </div>
     );

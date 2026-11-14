@@ -92,9 +92,9 @@ export default function DishPhotoField({
       <div className="tt-dish-photo-preview">
         <DishImage url={value} emoji={emoji} name={name} />
       </div>
-      <div className="tt-dish-photo-actions">
+      <div className="tt-field tt-dish-photo-actions">
         <span className="tt-mod-label">{t("img.dishTitle")}</span>
-        <p className="tt-muted" style={{ fontSize: 12, margin: "2px 0 8px" }}>
+        <p className="tt-muted" style={{ fontSize: 12, margin: 0 }}>
           {t("img.dishHint", { w: String(DISH.width) })}
         </p>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>

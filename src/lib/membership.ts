@@ -105,11 +105,6 @@ export interface Membership {
   role: Role;
 }
 
-interface VerifiedMembership {
-  membership: Membership;
-  user: User;
-}
-
 /**
  * The restaurant row as pages may see it: everything but its credentials.
  *
@@ -150,10 +145,25 @@ interface StaffRow {
  *
  * Still runs on the user-scoped client, so RLS applies exactly as before —
  * this is a round-trip change, not a permission change.
+ *
+ * Keep the verified auth user server-side; page membership props stay unchanged.
  */
-export const getMembershipWithUser = cache(async (): Promise<VerifiedMembership | null> => {
+export const getMembership = cache(async (): Promise<Membership | null> => (await getMember()).membership);
+
+/**
+ * The signed-in user and their membership, from one auth round trip.
+ *
+ * React's `cache` memoises inside a server-component render only; a route
+ * handler gets no memo at all. The API guard used to call `getMembership()`
+ * and then `currentUser()` for the email, which in a route is two calls to
+ * the auth server, on every poll Pedidos makes.
+ */
+export const getMember = cache(async (): Promise<{ user: User | null; membership: Membership | null }> => {
   const user = await currentUser();
-  if (!user) return null;
+  return { user, membership: user ? await membershipOf(user) : null };
+});
+
+async function membershipOf(user: User): Promise<Membership | null> {
 
   // With the service key, and always scoped to the id that comes from the session.
   //
@@ -182,7 +192,7 @@ export const getMembershipWithUser = cache(async (): Promise<VerifiedMembership 
   const failed = ownedRes.error ?? staffRes.error;
   if (failed) throw new Error(`membership lookup failed: ${failed.message}`);
 
-  if (ownedRes.data) return { user, membership: { restaurant: withoutCredentials(ownedRes.data as Restaurant), role: "owner" } };
+  if (ownedRes.data) return { restaurant: withoutCredentials(ownedRes.data as Restaurant), role: "owner" };
 
   const staff = staffRes.data;
   if (!staff?.restaurant) return null;
@@ -190,10 +200,5 @@ export const getMembershipWithUser = cache(async (): Promise<VerifiedMembership 
   // map through directly. An unrecognised role falls back to the least
   // privileged one rather than being trusted.
   const role: Role = ROLES.includes(staff.role as Role) ? (staff.role as Role) : "kitchen";
-  return { user, membership: { restaurant: withoutCredentials(staff.restaurant), role } };
-});
-
-/** Keep the verified auth user server-side; page membership props stay unchanged. */
-export const getMembership = cache(async (): Promise<Membership | null> => {
-  return (await getMembershipWithUser())?.membership ?? null;
-});
+  return { restaurant: withoutCredentials(staff.restaurant), role };
+}

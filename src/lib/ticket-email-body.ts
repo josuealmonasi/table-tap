@@ -14,6 +14,7 @@ import { ticketPlace, ticketText } from "@/lib/ticket-place";
 import { ticketLoyalty } from "@/lib/ticket-loyalty";
 import { DEFAULT_TIME_ZONE } from "@/lib/open-menus";
 import { DEFAULT_LOCALE, messagesFor, translate } from "@/lib/i18n";
+import { ticketMail as cardTicketText } from "@/lib/ticket-mail";
 
 /** Everything sent but the recipient, which is read from the card each time. */
 export interface StoredTicketMail {
@@ -49,11 +50,10 @@ export async function renderTicketMail(
   const footer = t("cardEmail.footer", { restaurant: where.name });
   // The receipt's own footer promises the address is not kept; this one is
   // kept on the card, so that line is replaced, not contradicted (Codex review).
-  const kept = (text: string) => text.split(t("receipt.footer")).join("");
+  const mail = cardTicketText(receipt, { receiptFooter: t("receipt.footer"), footer, stopLabel: t("cardEmail.stopLink"), stop });
   return {
     fromName: where.name, subject: receipt.subject,
-    text: `${kept(receipt.text)}\n\n${footer}\n${t("cardEmail.stopLink")}: ${stop}`,
-    html: `${kept(receipt.html)}<p style="margin-top:24px;color:#6E7A74;font-size:12px">${footer} <a href="${stop}">${t("cardEmail.stopLink")}</a></p>`,
+    ...mail,
     attachments: [{ filename: `ticket-${model.code}.pdf`, content: Buffer.from(pdf).toString("base64") }],
     headers: { "List-Unsubscribe": `<${stop}>` },
   };

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { liveUpdatesEnabled } from "@/lib/supabase/live-updates";
 import { useToast } from "@/components/ui/Toast";
 import { useT } from "@/lib/i18n/context";
 import { serviceRequestCutoff } from "@/lib/service-requests";
@@ -69,6 +70,8 @@ export function useServiceRequests(
       if (cancelled) return;
       if (session) supabase.realtime.setAuth(session.access_token);
 
+      // Off only in the gate build: see liveUpdatesEnabled.
+      if (!liveUpdatesEnabled()) return;
       channel = supabase
         .channel(`service-requests-${restaurantId}`)
         .on(

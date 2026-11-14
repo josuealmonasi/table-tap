@@ -1950,9 +1950,20 @@ foundingLeftBody: "Subscribe now and keep this subscription price for as long as
     hint: "On Orders, each ticket shows how long it has been waiting. Past the first time it turns amber; past the second, red.",
     warn: "Amber after (minutes)",
     late: "Red after (minutes)",
-    waiting: "{n} min ago",
-    justNow: "just now",
     placedAt: "Ordered at {time}",
+  },
+  // Every elapsed time on a screen, built by src/lib/elapsed.ts — never a raw
+  // count of minutes past the hour ("1741 min ago" was a day and five hours).
+  elapsed: {
+    justNow: "just now",
+    ago: "{time} ago",
+    on: "on {date}",
+    underMinute: "under 1 min",
+    minutes: "{m} min",
+    hours: "{h} h",
+    hoursMinutes: "{h} h {m} min",
+    days: "{d} d",
+    daysHours: "{d} d {h} h",
   },
   ticketFont: {
     title: "Ticket font",
@@ -2357,10 +2368,6 @@ badgesHint: "Shows how many things are waiting in each section. Applies to the w
     cancelledLabel: "Cancelled",
     refunded: " · refunded",
     done: "Done",
-    justNow: "just now",
-    minsAgo: "{m}m ago",
-    hoursAgo: "{h}h ago",
-    daysAgo: "{d}d ago",
     wantsWaiter: "wants a waiter",
     wantsBill: "wants the bill",
     readyToCarry: "{n} ready to take out",
