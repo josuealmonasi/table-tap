@@ -23,13 +23,6 @@ generic test fakes only under `__tests__`, and plants violations in temporary
 copies to prove the guard rejects them. The retired values are refused even in
 docs and test fakes. Login addresses, roles and access checks stay the same.
 
-### API contract specs narrow optional matchers
-
-The held-cash case and its contract spec must agree that not every API case
-has an error matcher. The unit test passed while TypeScript rejected the
-optional property on the inferred union. The spec now checks the property
-exists before reading it; both translations still run through the same matcher.
-
 The deliberately unsigned legacy terminal example uses
 `mock-terminal-times.mjs` to keep its sale and deposit before `DRAWER_ERA`.
 A rolling three-day sale plus a thirty-hour deposit offset crossed that fixed
@@ -54,7 +47,6 @@ and that a new party cannot see the previous party's waiting phones.
 | A duplicate refund tracks customer completion and fee completion separately (S11 I5) | A failed fee return disappeared behind an already-refunded customer payment |
 | A duplicate refund keeps its original charge currency everywhere (S11 I9) | Changing the menu currency relabelled money owed back and the approval amount |
 |---|---|
-| API contract specs narrow optional error matchers before reading them | `cash-held-api-contract.spec.ts` passed at runtime but failed TypeScript because other cash cases have no matcher; the property check keeps both language assertions and lets static analysis pass |
 | Seeds and checks read the same private login passwords | Public scripts and README published login passwords while some checks ignored rotated env values; `login-password-invariant.spec.ts` scans tracked files and plants violations, and `login-secrets.spec.ts` mocks seed creation |
 | The cash API case checks the cashier's own refusal in both languages | Role-specific instructions were correct, but the case still matched the manager's older wording and reported a false failure; `cash-held-api-contract.spec.ts` checks both translations |
 | The cash API contract spec typechecks from a clean checkout | The spec and the inferred case union must agree: some cases have no refusal matcher. A property guard keeps that distinction; a clean `tsc --noEmit` catches an unsafe read |
