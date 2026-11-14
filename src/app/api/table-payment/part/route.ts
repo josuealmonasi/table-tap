@@ -1,5 +1,5 @@
 import { after as afterResponse } from "next/server";
-import { drainTicketEmails, skipTicketEmails } from "@/lib/ticket-email";
+import { drainTicketEmails } from "@/lib/ticket-email";
 import { PaymentAttributionRequired } from "@/lib/payment-coverage";
 import { NextResponse, type NextRequest } from "next/server";
 import { apiError } from "@/lib/api-error";
@@ -35,22 +35,19 @@ export const runtime = "nodejs";
  * screen sitting open on the pass.
  */
 export async function POST(req: NextRequest): Promise<NextResponse> {
-  // A refused collection leaves no ticket email suppressed (Codex review of #622).
-  const skip: { undo?: () => Promise<void> } = {};
+  // A refused collection leaves no ticket email suppressed: SQL rolls back
+  // its choice with the payment (Codex review of #622, review N7).
   try {
-    const res = await collect(req, skip);
-    if (!res.ok) await skip.undo?.().catch(() => {});
-    return res;
+    return await collect(req);
   }
   catch (error) {
-    // A collection that threw is refused too: its mark comes back off.
-    await skip.undo?.().catch(() => {});
+    // A collection that threw is refused too: its transaction kept no mark.
     if (error instanceof PaymentAttributionRequired) return await apiError("apiErr.attributionRequired", 409);
     throw error;
   }
 }
 
-async function collect(req: NextRequest, skip: { undo?: () => Promise<void> }): Promise<NextResponse> {
+async function collect(req: NextRequest): Promise<NextResponse> {
   const actor = await actingFrontOfHouse();
   if (!actor) return await apiError("apiErr.forbidden", 403);
 
@@ -92,9 +89,7 @@ async function collect(req: NextRequest, skip: { undo?: () => Promise<void> }): 
   // Tickets this request's payment queued for the card's email go out once it
   // has answered; registered only once the caller and the request are valid.
   afterResponse(() => drainTicketEmails());
-  if (body.skipTicketEmail === true) {
-    skip.undo = await skipTicketEmails(actor.restaurantId, { tableId: body.tableId, currency: body.currency });
-  }
+
 
   const before = await tableOutstanding(actor.restaurantId, body.tableId, body.currency);
 
@@ -115,7 +110,7 @@ async function collect(req: NextRequest, skip: { undo?: () => Promise<void> }): 
   if (taken.amount <= 0) return await apiError("apiErr.invalidRequest", 400);
 
   // Legacy sitting attachment also belongs to the reviewed transaction.
-  const result = await recordReviewed(actor, { tableId: body.tableId, expected: Number(body.expected), currency: body.currency }, taken.amount, taken.tip, method!, ref);
+  const result = await recordReviewed(actor, { tableId: body.tableId, expected: Number(body.expected), currency: body.currency, skipTicketEmail: body.skipTicketEmail === true }, taken.amount, taken.tip, method!, ref);
   const { wrote, refused, covered, landed } = result;
   if (result.split) return await apiError("apiErr.splitCollectSlots", 409, undefined, { code: "split" });
   if (result.paying) return await apiError("apiErr.accountBillPaying", 409);

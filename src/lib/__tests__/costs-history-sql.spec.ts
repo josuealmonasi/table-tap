@@ -2,7 +2,9 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 const schema = readFileSync("supabase/schema.sql", "utf8");
-const sql = schema.slice(schema.indexOf("-- S18:"));
+// Later collection overloads are outside this ingredient migration.
+const start = schema.indexOf("-- S18:");
+const sql = schema.slice(start, schema.indexOf("-- S20:", start));
 const drop = readFileSync("supabase/drop.sql", "utf8");
 const fn = (name: string) => {
   const start = sql.indexOf(`create or replace function public.${name}(`);

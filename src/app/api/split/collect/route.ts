@@ -1,5 +1,5 @@
 import { after } from "next/server";
-import { drainTicketEmails, skipTicketEmails } from "@/lib/ticket-email";
+import { drainTicketEmails } from "@/lib/ticket-email";
 import { tableOutstanding } from "@/lib/table-outstanding";
 import { logSlotReceipt } from "@/lib/split-slots-activity";
 import { type NextRequest, NextResponse } from "next/server";
@@ -38,22 +38,20 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   // drain here it waited for another route's drain or the daily cron.
   // Registered only once the caller and the request are valid.
   after(() => drainTicketEmails());
-  let undoSkip: (() => Promise<void>) | null = null;
   try {
     const split = await readSlotSplit(body, body.splitId);
     if (!split) return await splitResponse({ outcome: "gone" }, []);
     // The orders that become paid here are this split's frozen ones, and only
-    // when its last part is collected (close_divided_bill_v3). Marked before
-    // the writer runs, because the trigger reads the flag the moment `paid`
-    // turns true; marking the whole table would also silence a later bill
-    // ordered after the split froze.
-    // The latest collection's choice wins: a part collected with "send" clears
-    // a mark an earlier part left on the same orders (Codex review of #622).
-    undoSkip = await skipTicketEmails(actor.restaurantId, { orderIds: split.order_ids }, body.skipTicketEmail === true);
+    // when its last part is collected (close_divided_bill_v3). SQL marks them
+    // inside the payment transaction before the trigger sees `paid`: marking
+    // the whole table would also silence a later bill ordered after the freeze.
+    // The latest successful collection's choice wins, including "send" after
+    // an earlier "skip" (Codex review of #622). A refused colleague must never
+    // change that choice (review N7).
     const result = await splitRpc("collect_split_slots_v1", {
       p_restaurant: actor.restaurantId, p_split: split.id, p_revision: body.revision, p_slots: body.slots,
       p_expected_cents: body.expectedCents, p_currency: body.currency, p_tip_cents: body.tipCents ?? 0,
-      p_method: body.method, p_actor: actor.email, p_ref: body.ref.trim(),
+      p_method: body.method, p_actor: actor.email, p_ref: body.ref.trim(), p_skip_ticket_email: body.skipTicketEmail === true,
     });
     if (["collected", "duplicate"].includes(result.outcome)) {
       // The drawer reads this same activity as other table collections. Log
@@ -66,12 +64,10 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       const settled = left.owed <= 0 && !(otherCurrencies?.balances?.some(b => b.owed > 0) ?? (otherCurrencies?.owed ?? 0) > 0);
       return NextResponse.json({ ok: true, ...result, payment, settled, owed: left.owed, currency: body.currency });
     }
-    // A refused collection leaves no ticket email suppressed (Codex review of #622).
-    await undoSkip?.().catch(() => {});
+    // A refused collection leaves no ticket email suppressed: SQL rolls it back (Codex review of #622).
     return await splitResponse(result, []);
   } catch {
-    // A collection that threw is refused too: the marks go back as they were.
-    await undoSkip?.().catch(() => {});
+    // A collection that threw is refused too: SQL kept no change to the marks.
     return await apiError("apiErr.collectionFailed", 503);
   }
 }

@@ -1,4 +1,4 @@
-import { beforeEach, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { fixture, old } from "./fixtures";
 
 const { apply } = vi.hoisted(() => ({ apply: vi.fn() }));
@@ -95,4 +95,24 @@ it("backfill: reads at most one page per run", async () => {
   f.client.subscriptions.retrieve.mockImplementation(async (id: string) => ({ id, status: "active", metadata: { restaurant_id: "nobody" } }));
   await recoverSubscriptions(f.context);
   expect(f.client.subscriptions.retrieve.mock.calls.length).toBeLessThanOrEqual(BATCH_SIZE);
+});
+
+afterEach(() => vi.useRealTimers());
+it("N8: reserves time for cancellation and backfill despite sustained unpaid reads", async () => {
+  vi.useFakeTimers({ toFake: ["Date"] });
+  for (let run = 0; run < 2; run++) {
+    f = fixture();
+    f.tables.restaurants = [
+      ...Array.from({ length: 8 }, (_, n) => paid({ id: `unpaid${n}`, stripe_subscription_id: `sub${n}`, plan_status: "locked" })),
+      paid({ id: "expired", stripe_subscription_id: "expired", plan_period_ends_at: ago(4) }),
+      paid({ id: "backfill", stripe_subscription_id: "backfill" }),
+    ];
+    f.client.subscriptions.retrieve.mockImplementation(async (id: string) => {
+      vi.advanceTimersByTime(1500);
+      return { id, metadata: { restaurant_id: id === "expired" || id === "backfill" ? id : `unpaid${id.slice(3)}` } };
+    });
+    await recoverSubscriptions(f.context);
+    expect(f.client.subscriptions.retrieve.mock.calls.map(([id]) => id)).toContain("expired");
+    expect(f.client.subscriptions.retrieve.mock.calls.map(([id]) => id)).toContain("backfill");
+  }
 });

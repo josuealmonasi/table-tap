@@ -16,7 +16,7 @@ vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({
       q[op] = (...args: unknown[]) => { s.queries.push([table, op, ...args]); return q; };
     }
     q.range = (from: number) => { start = from; return q; };
-    const answer = () => ({ data: s.foreign ? null : { id: "11111111-1111-4111-8111-111111111111", order_ids: ["22222222-2222-4222-8222-222222222222"], account_id: null }, error: s.error ? { message: "failed" } : null });
+    const answer = () => ({ data: s.foreign ? null : { id: "11111111-1111-4111-8111-111111111111", order_ids: ["22222222-2222-4222-8222-222222222222"], account_id: null }, error: s.error || table === "tables" ? { message: "unknown relation or failed read" } : null });
     q.maybeSingle = async () => answer();
     q.then = (done: (v: unknown) => unknown) => {
       const a = answer(); return Promise.resolve({ ...a, data: a.data && start === 0 ? [a.data] : [] }).then(done);
@@ -86,4 +86,11 @@ it("read failures and open pages remain unverified", async () => {
   s.error = true; expect(await (await post({ kind: "orders", orderIds: [id] })).json()).toEqual({ outcome: "unverified" });
   expect(resolve).not.toHaveBeenCalled(); s.error = false; resolve.mockResolvedValue("unresolved");
   expect(await (await post({ kind: "orders", orderIds: [id] })).json()).toEqual({ outcome: "unverified" });
+});
+
+it("N3: resolves a table against the schema relation before checking Stripe", async () => {
+  expect(await (await post({ kind: "table", tableId: id, currency: "MXN" })).json()).toEqual({ outcome: "closed" });
+  expect(resolve).toHaveBeenCalledWith("own", { orderIds: [id] }, true);
+  expect(s.queries).toContainEqual(["restaurant_tables", "eq", "restaurant_id", "own"]);
+  expect(s.queries).toContainEqual(["restaurant_tables", "eq", "id", id]);
 });

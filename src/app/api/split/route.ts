@@ -82,6 +82,13 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
   const db = createAdminClient();
 
+  // Older phones still propose here. Hiding the menu's offer alone left
+  // this route creating new divisions after the owner turned them off.
+  const { data: restaurant, error: settingError } = await db.from("restaurants")
+    .select("split_enabled").eq("id", restaurantId).maybeSingle();
+  if (settingError || !restaurant) return await apiError("apiErr.verifyOrders", 503);
+  if (restaurant.split_enabled === false) return await apiError("apiErr.forbidden", 403);
+
   // The sitting has to be this table's, and open. Otherwise a stale id from a
   // phone that sat here last night could start a split on tonight's diners.
   const { data: sitting } = await db

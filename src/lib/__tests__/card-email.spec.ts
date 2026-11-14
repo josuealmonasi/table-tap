@@ -2,7 +2,7 @@ import { beforeEach, expect, it, vi } from "vitest";
 
 type Row = Record<string, unknown> & { id: string };
 const state = vi.hoisted(() => ({
-  claimed: [] as Row[], updates: [] as unknown[], sent: [] as unknown[], steps: [] as string[], claims: 0,
+  claimed: [] as Row[], updates: [] as unknown[], sent: [] as unknown[], steps: [] as string[], claims: 0, cardError: false,
   mail: "sent" as "sent" | "failed", result: null as unknown, renders: 0, sendMs: 0, crashAfterSend: false, batches: [] as Row[][],
   card: { email: "ana@example.invalid", email_unsubscribe: "11111111-1111-4111-8111-111111111111" } as unknown,
 }));
@@ -18,7 +18,7 @@ vi.mock("@/lib/supabase/admin", () => ({
     from: (table: string) => {
       const q: Record<string, unknown> = {};
       for (const m of ["select", "eq", "is"]) q[m] = () => q;
-      q.maybeSingle = async () => ({ data: table === "loyalty_cards" ? state.card : null, error: null });
+      q.maybeSingle = async () => ({ data: table === "loyalty_cards" ? state.card : null, error: state.cardError ? { message: "temporary database failure" } : null });
       q.single = async () => ({ data: { name: "Demo Bistro", timezone: "America/Mexico_City" }, error: null });
       q.update = (patch: Record<string, unknown>) => {
         const w: Record<string, unknown> = {};
@@ -75,7 +75,7 @@ const drain = async () => { vi.advanceTimersByTime(5000); await drainTicketEmail
 
 beforeEach(() => {
   vi.useFakeTimers({ toFake: ["Date"] });
-  Object.assign(state, { claimed: [], updates: [], sent: [], steps: [], claims: 0, mail: "sent", result: null, renders: 0, sendMs: 0, crashAfterSend: false, batches: [] });
+  Object.assign(state, { claimed: [], updates: [], sent: [], steps: [], claims: 0, cardError: false, mail: "sent", result: null, renders: 0, sendMs: 0, crashAfterSend: false, batches: [] });
 });
 const keys = () => (state.sent as { idempotencyKey: string }[]).map(m => m.idempotencyKey);
 const finished = () => (state.updates as { patch: Record<string, unknown>; ids: string[] }[]).filter(u => "finished_at" in u.patch);
@@ -264,4 +264,16 @@ it("finding 5: the cron drain stops at its own deadline and releases what it cla
   expect(state.claims).toBe(1);
   expect(state.sent).toHaveLength(1);
   expect(state.updates.at(-1)).toEqual({ patch: { claimed_at: null, claim: null }, ids: ["2"] });
+});
+
+it("N6: retries a failed card lookup, then sends after the database recovers", async () => {
+  state.claimed = [row("1", "o1", "s")];
+  state.cardError = true;
+  await drainTicketEmailQueue(1);
+  expect(finished()).toEqual([]);
+  expect(state.updates.at(-1)).toEqual({ patch: expect.objectContaining({ next_attempt_at: expect.any(String),
+    failure_reason: expect.stringContaining("temporary database failure") }), ids: ["1"] });
+  state.cardError = false;
+  await drainTicketEmailQueue(1);
+  expect(finished()).toEqual([{ patch: expect.objectContaining({ outcome: "sent" }), ids: ["1"] }]);
 });
