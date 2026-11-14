@@ -5,7 +5,8 @@ import { createHash } from "node:crypto";
 // address in `ticket_email_outbox`; this sends them: one email per card per
 // payment (a table's orders paid together are one ticket), with the 80 mm PDF
 // attached and the "stop" link. Called with `after()` by every route that
-// takes a payment, and by the five-minute recovery cron for anything left over.
+// takes a payment, and by the frequent recovery schedule and daily fallback
+// cron for anything left over.
 // The receipt is the accounting record; a ticket that cannot be emailed never
 // fails the payment that queued it.
 // ============================================================================

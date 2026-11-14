@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { drainTicketEmailQueue } from "@/lib/ticket-email";
 import { cronAuthorized } from "@/lib/cron-auth";
+import { githubCronAuthorized } from "@/lib/github-cron-auth";
 import { recoveryContext } from "@/lib/recovery/context";
 import { isolateJob, type RecoveryJob, type RecoveryResult } from "@/lib/recovery/job";
 import { recoverStock } from "@/lib/recovery/stock";
@@ -17,7 +18,7 @@ export const maxDuration = 60;
 const TICKET_DRAIN_MS = 40_000;
 
 export async function GET(request: Request) {
-  if (!cronAuthorized(request)) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!cronAuthorized(request) && !await githubCronAuthorized(request)) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   // Ticket emails left waiting since the last payment request drained them:
   // claimed until the queue is empty or the budget runs out (Codex review of
   // #622). Never throws; it stops between groups and releases what it claimed.

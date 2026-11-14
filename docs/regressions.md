@@ -44,6 +44,7 @@ and that a new party cannot see the previous party's waiting phones.
 `src/lib/__tests__/invariants.spec.ts` enforces the rules that span files:
 
 | Rule | The bug it came from |
+| The retry schedule must run on the hosting plan and identify its caller | Vercel rejected the five-minute cron on Hobby; `recovery-schedule-platform.spec.ts`, `github-cron-auth.spec.ts` and `recovery-scheduler-client.spec.ts` pin the daily fallback and the exact signed main-branch job |
 |---|---|
 | A duplicate refund tracks customer completion and fee completion separately (S11 I5) | A failed fee return disappeared behind an already-refunded customer payment |
 | A duplicate refund keeps its original charge currency everywhere (S11 I9) | Changing the menu currency relabelled money owed back and the approval amount |
@@ -7557,7 +7558,30 @@ The global oldest-age metric and per-case reminders had to agree on their scope.
 
 ## Review N10 — Ticket retries run before tickets expire
 
-The retry clock and worker schedule had to agree. Recovery now runs every five minutes, independently of payment traffic, within the existing 24-hour email lifetime. More frequent bounded runs also raise queue throughput.
+The retry clock and worker schedule had to agree. An independent scheduled
+GitHub job now requests recovery about every five minutes within the existing
+24-hour email lifetime. Vercel keeps the daily fallback. More frequent bounded
+runs also raise queue throughput; neither path waits for another payment.
+
+## The retry schedule and the production plan
+
+The five-minute retry change passed unit tests but Vercel rejected the deploy:
+Hobby only accepts a daily cron. The schedule and the plan have to agree before
+an email can ever be retried. The frequent job now runs in GitHub Actions,
+without copying the production cron secret, and Vercel's daily job remains.
+
+The server verifies GitHub's signature and the exact main-branch recovery job,
+including repository and owner IDs. A similarly named fork, a pull request,
+another workflow or a token for another endpoint must not open this global
+writer. The client refuses an unknown identity provider, follows no redirect,
+and prints no identity or response body to the public job log.
+
+`github-cron-auth.spec.ts` signs real fixture tokens and rejects forged,
+expired and wrongly scoped callers. `recovery-scheduler-client.spec.ts` checks
+the two requests and failed observations. `ticket-email-schedule.spec.ts`
+models recovery without new traffic, including a delayed runner, before the
+unchanged 24-hour expiration. `recovery-schedule-platform.spec.ts` keeps the
+fallback deployable and the scheduled job on its approved branch.
 
 ## Review N1 — Collecting the counter quote
 
