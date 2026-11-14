@@ -27,6 +27,14 @@ it.each([["collect_table_reviewed_v1", "written"], ["collect_split_slots_v1", "c
     expect(fn).toContain(`if v_result->>'outcome' is distinct from '${success}' then raise exception using errcode = 'PT001'`);
     expect(fn).toContain("exception when sqlstate 'PT001' then return v_result");
     expect(fn).toContain("and not paid and not written_off and account_id is null");
+    expect(fn).toContain("where restaurant_id = p_restaurant");
+    if (name === "collect_split_slots_v1") {
+      expect(fn).toContain("where id = p_split and restaurant_id = p_restaurant and model_version = 2");
+      expect(fn).toContain("id = any((select order_ids from bill_splits");
+    } else {
+      expect(fn).toContain("table_id = p_table and currency = p_currency");
+      expect(fn).toContain("status not in ('cancelled','pending_payment')");
+    }
   },
 );
 it("N1/N7: required overloads preserve old signatures and service-only grants", () => {

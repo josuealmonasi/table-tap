@@ -31,17 +31,21 @@ and that a new party cannot see the previous party's waiting phones.
 `src/lib/__tests__/invariants.spec.ts` enforces the rules that span files:
 
 | Rule | The bug it came from |
+|---|---|
 | A duplicate refund tracks customer completion and fee completion separately (S11 I5) | A failed fee return disappeared behind an already-refunded customer payment |
 | A duplicate refund keeps its original charge currency everywhere (S11 I9) | Changing the menu currency relabelled money owed back and the approval amount |
-|---|---|
-| Each subscription source has time to run (review N8) | `subscriptions.spec.ts` checks the recovery path |
-| Overdue refunds remind each restaurant (review N9) | `refunds.spec.ts` checks the recovery path |
-| Ticket retries run before tickets expire (review N10) | `ticket-email-schedule.spec.ts` checks the recovery path |
-
+| A counter quote is checked under the payment lock (review N1) | A discount after the route read could record less than the cash received; `counter-collection-race.spec.ts` and `review2-money-schema.spec.ts` hold the quote and writer together |
+| Staff discounts preserve existing gratuities (review N2) | Both pricing and SQL discounted tips below the order total; `staff-discount-tip.spec.ts` and `staff-discount-tip-route.spec.ts` check direct and approved principal-only discounts |
+| Each subscription source has time to run (review N8) | Persistently unpaid reads starved cancellation recovery; `subscriptions.spec.ts` advances the clock across all three sources |
+| Overdue refunds remind each restaurant (review N9) | Only the globally oldest case got a reminder; `refunds.spec.ts` keeps two tenants pending and checks both bells |
+| Ticket retries run before tickets expire (review N10) | Daily recovery missed the backoff window; `ticket-email-schedule.spec.ts` models recovery without payment traffic |
 | A table payment check names the actual table relation (review N3) | `payment-check-route.spec.ts` rejects unknown relations and checks the tenant and table before Stripe |
 | Held approval keeps the kitchen's saved instructions (review N4) | `offline-sale.spec.ts` keeps notes and component extras without duplicating flattened extras |
+| New split offers follow the owner's switch (review N5) | Both menu readers omitted it and both creation paths ignored it; `public-menu-cache.spec.ts`, `ordering-split-setting.spec.ts` and `legacy-split-setting.spec.ts` cover the readers and writers |
 | An unread ticket address remains retryable (review N6) | `card-email.spec.ts` fails the card read, then sends after recovery |
-
+| The successful collector alone chooses ticket email (review N7) | A refused colleague could overwrite the choice before payment; `ticket-email-skip-race.spec.ts` interleaves opposite choices and `review2-money-schema.spec.ts` pins transactional rollback |
+| Cached menus page before schedule filtering (review N11) | A capped page of breakfast rows hid the serving dinner menu; `public-menu-cache.spec.ts` keeps the dinner dish behind that page |
+| Held history reads only the requested decision page (review N13) | Clamping a huge page still loaded the full history prefix; `held-sales-history-route.spec.ts` bounds retrieval and `held-resolution-history.spec.ts` checks both clocks under a small row cap |
 | Held receipts reuse the existing payment tenant key | The train created a second unique index on the same payment columns; `held-payment-index.spec.ts` keeps the original unique key and rejects the duplicate build |
 | Restaurant deletion archives the account journal with its source books | The restaurant cascade deleted original charge snapshots that the archive list omitted; `account-journal-archive.spec.ts` pins the journal copy, tenant lock and preserved held-receipt/dispute checks |
 | Printed IVA keeps each order's saved rate | A second current restaurant rate could relabel an older sale; `ticket-vat.spec.ts` and `receipt-vat-source.spec.ts` check saved rates, missing evidence and mixed-rate splits |
@@ -7176,8 +7180,9 @@ address as well as per card. Staff still learn which card holds it. The diner
 screen notes what `submitted` means. `diner-answer.spec.ts`, `card-email.spec.tsx`.
 
 **access3, a far history page read the whole history.** The held-sales
-history page is clamped to the last page there is, counted per clock, before
-either clock is read. `held-sales-history-route.spec.ts`.
+history page is clamped to the last page there is before reading. That first
+fix still read each clock's full prefix; review N13 below replaces those reads
+with one indexed decision clock. `held-sales-history-route.spec.ts`.
 
 **screens4 and screens5, errors said more than once.** Order history reads a
 page's chargebacks once (`useDisputeHistory`), only for orders a card could
@@ -7220,3 +7225,50 @@ The global oldest-age metric and per-case reminders had to agree on their scope.
 ## Review N10 — Ticket retries run before tickets expire
 
 The retry clock and worker schedule had to agree. Recovery now runs every five minutes, independently of payment traffic, within the existing 24-hour email lifetime. More frequent bounded runs also raise queue throughput.
+
+## Review N1 — Collecting the counter quote
+
+The cashier's quote and locked receipt had to agree. Counter collection now
+sends the expected amount and currency to a required-argument SQL overload.
+It checks both after taking the money and order locks, before changing the
+ticket choice or marking anything paid. A concurrent discount or currency
+change refuses the stale quote without recording a smaller receipt.
+
+## Review N2 — Discounts leave gratuities owed
+
+The route's coupon base and both discount writers had to agree on principal.
+They now subtract existing tips before pricing and distributing the discount.
+A full coupon on MX$100 food plus MX$20 tip leaves MX$20 owed. Direct manager
+discounts and waiter requests use the same base, and approval refuses an old
+request that included gratuities. SQL also refuses inconsistent components.
+
+## Review N5 — The split switch reaches the menu and writers
+
+The owner's setting and diner payment controls had to agree. Cached and live
+restaurant projections now carry `split_enabled`; both the current locked
+writer and the legacy proposal route refuse new splits when it is off.
+Existing parts remain payable, and ordinary bill payment stays available.
+
+## Review N7 — The payment keeps its own email choice
+
+The successful receipt and ticket trigger had to agree on the cashier's choice.
+Counter, table and split collection pass that choice into the locked payment
+transaction. Refused, failed and duplicate collections roll back any tentative
+flag change. The latest successful split collection still decides for only its
+frozen orders; a new round at the table is outside that choice.
+
+## Review N11 — Cached menu pages precede schedule filtering
+
+The Data API page and currently serving menus had to agree on completeness.
+Cached raw menus, categories, items and dietary tags now use uniquely ordered
+pages before the time-sensitive filter runs. A thousand scheduled-closed
+breakfast items cannot hide a dinner dish on the next page. Anonymous menu
+reads retain their existing RLS filters.
+
+## Review N13 — History pages one decision clock
+
+The page boundary and merged decision order had to agree in the database.
+A stored `decision_at` column and tenant-scoped index merge approval and
+resolution clocks before paging. A request past the end counts once, clamps
+to the last page and retrieves at most that page plus one lookahead row,
+including its resolution evidence, even under a smaller Data API row cap.

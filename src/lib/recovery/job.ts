@@ -81,6 +81,8 @@ export async function runBatch<T extends PendingItem>(
         console.error("Recovery item failed", name, item.restaurant_id, error);
       }
     }
+    // Only duplicate-payment refunds have an existing matching bell kind.
+    // Reusing a stock warning for a stuck fee would send owners to stock.
     if (onOverdue && !done && (Date.now() - Date.parse(item.created_at)) / 1000 > OVERDUE_SECONDS) {
       try { await onOverdue(item); }
       catch (error) { result.failed++; console.error("Recovery reminder failed", name, error); }
@@ -94,12 +96,9 @@ export async function runBatch<T extends PendingItem>(
     if (oldest) {
       result.oldest_pending_at = oldest.created_at;
       result.oldest_pending_age_seconds = Math.max(0, Math.floor((Date.now() - Date.parse(oldest.created_at)) / 1000));
-      // Only duplicate-payment refunds have an existing matching bell kind.
-      // Reusing a stock warning for a stuck fee would send owners to stock.
       if (result.oldest_pending_age_seconds > OVERDUE_SECONDS) {
         console.warn("Recovery overdue", { job: name, restaurant_id: oldest.restaurant_id,
           oldest_pending_at: oldest.created_at, age_basis: ageBasis });
-
       }
     }
   } catch (error) {
