@@ -46,6 +46,7 @@ and that a new party cannot see the previous party's waiting phones.
 | Rule | The bug it came from |
 | The retry schedule must run on the hosting plan and identify its caller | Vercel rejected the five-minute cron on Hobby; `recovery-schedule-platform.spec.ts`, `github-cron-auth.spec.ts` and `recovery-scheduler-client.spec.ts` pin the daily fallback and the exact signed main-branch job |
 |---|---|
+| The account promise opens its own unsplit bill | The first Collect could open another table's divided bill, which correctly offers parts instead of an account charge; `promise-account-bill.spec.ts` checks the target and cleanup |
 | A duplicate refund tracks customer completion and fee completion separately (S11 I5) | A failed fee return disappeared behind an already-refunded customer payment |
 | A duplicate refund keeps its original charge currency everywhere (S11 I9) | Changing the menu currency relabelled money owed back and the approval amount |
 |---|---|
@@ -7244,6 +7245,17 @@ only if changed, clears demo metadata and bans, removes accidental admin
 grants and restores names. Unchanged passwords never go through GoTrue's
 password update. Explicit `dropMock` still removes all five users. Mocked
 database and admin-client specs check both lifetimes without sending mail.
+## The account promise and the bill it opens
+
+The account control and the bill selected by the promise case must agree.
+The case opened the first Collect on the page, which can belong to a divided
+bill. That bill correctly offers its remaining parts rather than moving the
+whole debt to an account, so the case reported a missing working control.
+
+The case now owns an unsplit fixture and opens its exact order's bill. Its
+existing text and control assertions stay unchanged. `promise-account-bill.spec.ts`
+puts an unrelated divided bill first and checks that the case still visits its
+own bill, then checks cleanup when the browser fails.
 
 ## The cash contract spec and its case union
 
