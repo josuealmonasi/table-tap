@@ -4,7 +4,7 @@ exports[`plain-text emails in en > separates POS and diner receipt paragraphs an
 "Demo Bistro
 Receipt ORD-1960
 Table 6
-November 10, 2026 at 12:13 PM
+November 10, 2026, 12:13 PM
 
 1× Apple Pie  MX$200.00
 1× Tea  MX$50.00
@@ -20,7 +20,7 @@ exports[`plain-text emails in en > separates card ticket paragraphs and puts the
 "Demo Bistro
 Receipt ORD-1960
 Table 6
-November 10, 2026 at 12:13 PM
+November 10, 2026, 12:13 PM
 
 1× Apple Pie  MX$200.00
 1× Tea  MX$50.00
