@@ -7,7 +7,7 @@ import { useSitting, ELSEWHERE_RECHECK_MS, type OpenElsewhere } from "@/hooks/us
 
 let seen: OpenElsewhere | null = null;
 function Probe() { seen = useSitting("r1", "table-2"); return null; }
-beforeEach(() => { vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true); vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] }); localStorage.clear(); });
+beforeEach(() => { vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true); vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] }); localStorage.clear(); });
 afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); });
 
 it("clears the other-table notice once that bill is paid, without a rescan (A5)", async () => {
@@ -19,7 +19,7 @@ it("clears the other-table notice once that bill is paid, without a rescan (A5)"
   await act(async () => {});
   expect(seen).toMatchObject({ tableLabel: "1", owed: 100, tableId: "table-1" });
   open = false;
-  await act(async () => { vi.advanceTimersByTime(ELSEWHERE_RECHECK_MS); });
+  await act(async () => { await vi.advanceTimersByTimeAsync(ELSEWHERE_RECHECK_MS); });
   await act(async () => {});
   expect(seen).toBeNull();
   expect(recallSitting("r1")).toBeNull();

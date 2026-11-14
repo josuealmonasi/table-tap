@@ -1,5 +1,6 @@
 "use client";
 
+import { pollAfterSettle } from "@/lib/poll-after-settle";
 import BillTicketEmail from "@/components/loyalty/BillTicketEmail.react-component";
 import { usePaymentCheck } from "@/hooks/usePaymentCheck";
 
@@ -127,9 +128,8 @@ export default function TableCalculator({
     setPlan([]);
     setDone(0);
     setTyped("");
-    void load();
-    const timer = setInterval(() => void load(), SPLIT_POLL_MS);
-    return () => clearInterval(timer);
+    const poll = pollAfterSettle(load, SPLIT_POLL_MS);
+    return () => poll.stop();
   }, [open, load, initialSkipTicketEmail]);
 
   async function refreshBill(): Promise<void> {

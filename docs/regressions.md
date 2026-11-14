@@ -52,6 +52,8 @@ and that a new party cannot see the previous party's waiting phones.
 | Cash case tests narrow optional matchers | A runtime assertion did not tell TypeScript which API cases have an error matcher, so the new contract spec broke type checking |
 | Return polling batches SQL progress (SQL read cost 1) | The list needed every outstanding balance, but sent one RPC per refund every 15 seconds |
 | Orders and pass feeds build their allowed restaurant list once per read | History called `has_role` for every order; the same pattern affected service requests and kitchen feeds. `orders-rls-equivalence.spec.ts` pins the old audience, and `probe-orders-rls-equivalence.mjs` compares counts and row identities under real RLS |
+| Every fetch poll waits for its last read and then its full interval | Slow reads stacked requests, or busy guards retried too soon; `poller-cadence.spec.tsx`, `poll-after-settle.spec.ts` and `invariants/polls.spec.ts` cover all nine former exceptions |
+| Connect onboarding uses the owner and currency from one membership lookup | The guard and route each asked for membership because React cache was assumed to memoise route handlers; `auth-round-trips.spec.ts` counts auth and table reads and refuses every non-owner |
 | The cash API case checks the cashier's own refusal in both languages | Role-specific instructions were correct, but the case still matched the manager's older wording and reported a false failure; `cash-held-api-contract.spec.ts` checks both translations |
 | The cash API contract spec typechecks from a clean checkout | The spec and the inferred case union must agree: some cases have no refusal matcher. A property guard keeps that distinction; a clean `tsc --noEmit` catches an unsafe read |
 | The POS retry fixture leaves journal sources for its restaurant cascade | The retry case used the demo restaurant and deleted its charged order individually; the journal correctly refused cleanup. `api-retry-account-fixture.spec.ts` checks the disposable tenant and retained sources |
@@ -7437,3 +7439,32 @@ again with `--compare /tmp/orders-before.json` afterward, without reseeding
 between captures. `--explain` includes the actual authenticated plans.
 The probe refuses a comparison if the underlying rows or memberships changed;
 equal counts alone cannot hide a different restaurant's rows.
+## A slow poll and its next wait must agree
+
+Nine older pollers still used fixed intervals: table membership, the diner bill,
+the other-table notice, finished orders, the connection probe, held sales, split
+receipts, the staff calculator and the order tracker. A slow read could overlap
+the next one; the ones with busy guards still started again before a full wait
+had passed. They now share `pollAfterSettle`, which waits for the whole read
+before scheduling its next timeout, even on failure. Each keeps its interval,
+first-read timing, visibility rules and stop conditions. Held-sale retries join
+the active send rather than mistaking a busy guard for a completed upload.
+
+`poller-cadence.spec.tsx` fails against all nine original pollers and checks slow
+reads, the full wait after completion, teardown and hidden tabs.
+Focus and visibility events also join an unfinished read. Stop-condition checks
+keep the connection probe and closed-table recheck stopped, while the tracker
+keeps following delivered food until payment arrives.
+`poll-after-settle.spec.ts` checks retries, focus/visibility events, delayed starts,
+one-shot bills and cleanup. `invariants/polls.spec.ts` has no exceptions left.
+
+## Onboarding's owner and currency must come from the same lookup
+
+The Connect onboarding guard resolved an owner, then the route asked for the
+membership again to get the restaurant currency. React cache memoises a server
+render, not a route handler, so that second call repeated auth and both table
+reads. The route now reuses `actingManagerWithRestaurant` and still explicitly
+requires the owner role before calling Stripe. `auth-round-trips.spec.ts` counts
+one auth call and one read each of restaurants and staff, checks the owner's
+currency and email, and refuses managers, waiters, cashiers, kitchen logins,
+non-members and signed-out callers before Stripe is reached.
