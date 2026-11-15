@@ -1,5 +1,6 @@
 "use client";
 
+import { pollAfterSettle } from "@/lib/poll-after-settle";
 import { useCallback, useEffect, useState } from "react";
 import { myOrderIds } from "@/lib/my-orders";
 import { recallSitting } from "@/lib/table-binding";
@@ -38,7 +39,7 @@ export function useTableBill(
   const [dividing, setDividing] = useState(false);
   const [loading, setLoading] = useState(false);
 
-  const reload = useCallback(() => {
+  const reload = useCallback(async () => {
     if (!tableId) return;
     setLoading(true);
     // Our own sitting, so a bill we opened stays ours to settle.
@@ -48,41 +49,31 @@ export function useTableBill(
     // become `{ orders: [] }`, and an empty bill is a settled one: one refused
     // poll hid the bill under a diner who owed it and asked them if they
     // wanted a receipt for paying it.
-    fetch(`/api/bill?restaurantId=${restaurantId}&tableId=${tableId}${mine}&own=${encodeURIComponent(myOrderIds(restaurantId).join(","))}`)
-      .then(async r => {
-        if (r.status === 403) { setOrders(null); return; }
-        if (!r.ok) return;
-        const d = await r.json();
-        setOrders(d.orders ?? []);
-        setStaffBill(Boolean(d.staffBill));
-        setParty(Number(d.party) || 0);
-        setDividing(Boolean(d.dividing));
-      })
-      .catch(() => {
-        // Offline for a moment: the same, keep what we last knew.
-      })
-      .finally(() => setLoading(false));
+    try {
+      const r = await fetch(`/api/bill?restaurantId=${restaurantId}&tableId=${tableId}${mine}&own=${encodeURIComponent(myOrderIds(restaurantId).join(","))}`);
+      if (r.status === 403) { setOrders(null); return; }
+      if (!r.ok) return;
+      const d = await r.json();
+      setOrders(d.orders ?? []);
+      setStaffBill(Boolean(d.staffBill));
+      setParty(Number(d.party) || 0);
+      setDividing(Boolean(d.dividing));
+    } catch {
+      // Offline for a moment: the same, keep what we last knew.
+    } finally {
+      setLoading(false);
+    }
   }, [restaurantId, tableId]);
 
   useEffect(() => {
-    reload();
-    const onVisible = () => {
-      if (document.visibilityState === "visible") reload();
-    };
-    document.addEventListener("visibilitychange", onVisible);
-    window.addEventListener("focus", onVisible);
-
     // While the bill is open on screen, poll: a manager can apply a promotion
     // to it from their side, and the diner should watch the amount drop rather
     // than be told about it. The route's limit is sized from this interval,
     // for every phone behind the room's address (see poll.ts).
-    const tick = watching ? setInterval(reload, BILL_POLL_MS) : null;
-
-    return () => {
-      document.removeEventListener("visibilitychange", onVisible);
-      window.removeEventListener("focus", onVisible);
-      if (tick) clearInterval(tick);
-    };
+    const poll = pollAfterSettle(reload, watching ? BILL_POLL_MS : null, {
+      refreshOnVisible: true, refreshOnFocus: true,
+    });
+    return () => poll.stop();
   }, [reload, watching]);
 
   return {

@@ -38,3 +38,12 @@ it("does not offer legacy share checkout on a bill the waiter is collecting", ()
     tableId="table" sessionId="session" tableLabel="1" staffBill photoOf={() => null} />);
   expect(html).not.toContain("split.payShare"); expect(html).toContain("bill.payAtTable");
 });
+
+it("N5: disabling splitting hides new offers while keeping ordinary payment", () => {
+  state.ready = true;
+  expect(render(true)).toContain("split.ask");
+  const html = render(false);
+  expect(html).not.toContain("split.ask");
+  expect(html).not.toContain('data-split-model="2"');
+  expect(html).toContain("bill.payAtTable");
+});

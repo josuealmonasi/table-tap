@@ -1,5 +1,6 @@
 "use client";
 
+import { pollAfterSettle } from "@/lib/poll-after-settle";
 import { useEffect, useState } from "react";
 
 /** How often to see whether the connection has come back. */
@@ -48,17 +49,17 @@ export function useOnline(): { online: boolean; markOffline: () => void } {
   useEffect(() => {
     if (online) return; // nothing to find out
     let stop = false;
-    const timer = setInterval(async () => {
+    const poll = pollAfterSettle(async () => {
       try {
         const res = await fetch(PROBE_URL, { cache: "no-store" });
         if (!stop && res.ok) setOnline(true);
       } catch {
         // Still out. The next tick asks again.
       }
-    }, PROBE_MS);
+    }, PROBE_MS, { immediate: false });
     return () => {
       stop = true;
-      clearInterval(timer);
+      poll.stop();
     };
   }, [online]);
 

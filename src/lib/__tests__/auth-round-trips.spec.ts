@@ -13,8 +13,11 @@ const state = vi.hoisted(() => ({
   getUser: vi.fn(),
   tables: [] as string[],
   limited: false,
+  role: "owner" as string | null,
   pending: vi.fn(),
   collected: vi.fn(),
+  connect: vi.fn(),
+  link: vi.fn(),
 }));
 vi.mock("@/lib/supabase/server", () => ({ createClient: async () => ({ auth: { getUser: state.getUser } }) }));
 vi.mock("@/lib/supabase/admin", () => ({
@@ -25,7 +28,7 @@ vi.mock("@/lib/supabase/admin", () => ({
       const chain = {
         select: () => chain,
         eq: () => chain,
-        maybeSingle: async () => ({ data: table === "restaurants" ? owned : null, error: null }),
+        maybeSingle: async () => ({ data: table === "restaurants" ? (state.role === "owner" ? owned : null) : (state.role ? { role: state.role, restaurant: owned } : null), error: null }),
       };
       return chain;
     },
@@ -38,6 +41,8 @@ vi.mock("@/lib/rate-limit", async importOriginal => ({
 vi.mock("@/lib/table-member-requests", () => ({ pendingPhones: state.pending }));
 vi.mock("@/lib/collected-today", () => ({ collectedToday: state.collected }));
 vi.mock("@/lib/i18n/server", () => ({ getLocale: async () => "en" }));
+vi.mock("@/lib/stripe-connect", () => ({ ensureConnectAccount: state.connect, createOnboardingLink: state.link }));
+const { POST: onboardPOST } = await import("@/app/api/connect/onboard/route");
 const { GET: membershipGET } = await import("@/app/api/table-membership/route");
 const { GET: takingsGET } = await import("@/app/api/orders/takings/route");
 
@@ -46,7 +51,10 @@ const poll = () => membershipGET(new NextRequest(`https://test/api/table-members
 beforeEach(() => {
   state.getUser.mockReset().mockResolvedValue({ data: { user: { id: "owner", email: "owner@test" } }, error: null });
   state.tables = [];
+  state.connect.mockReset().mockResolvedValue("acct_owner");
+  state.link.mockReset().mockResolvedValue("https://stripe.test/onboard");
   state.limited = false;
+  state.role = "owner";
   state.pending.mockReset().mockResolvedValue([]);
   state.collected.mockReset().mockResolvedValue(10);
 });
@@ -84,4 +92,30 @@ it("answers a failed membership lookup with 503, and a limited one with 429 firs
   state.limited = true;
   expect((await poll()).status).toBe(429);
   expect(state.pending).not.toHaveBeenCalled();
+});
+
+it("asks the auth server once and reads membership once per owner onboarding request", async () => {
+  const response = await onboardPOST(new NextRequest("https://test/api/connect/onboard", { method: "POST" }));
+  expect(response.status).toBe(200);
+  expect(state.getUser).toHaveBeenCalledTimes(1);
+  expect(state.tables.sort()).toEqual(["restaurants", "staff"]);
+  expect(state.connect).toHaveBeenCalledExactlyOnceWith(RESTAURANT, { email: "owner@test", currency: "MXN" });
+});
+
+it.each(["manager", "waiter", "cashier", "kitchen", null])("refuses onboarding for %s before calling Stripe", async role => {
+  state.role = role;
+  const response = await onboardPOST(new NextRequest("https://test/api/connect/onboard", { method: "POST" }));
+  expect(response.status).toBe(403);
+  expect(state.getUser).toHaveBeenCalledTimes(1);
+  expect(state.tables.sort()).toEqual(["restaurants", "staff"]);
+  expect(state.connect).not.toHaveBeenCalled();
+  expect(state.link).not.toHaveBeenCalled();
+});
+
+it("refuses signed-out onboarding before any membership or Stripe read", async () => {
+  state.getUser.mockResolvedValue({ data: { user: null }, error: null });
+  expect((await onboardPOST(new NextRequest("https://test/api/connect/onboard", { method: "POST" }))).status).toBe(403);
+  expect(state.getUser).toHaveBeenCalledTimes(1);
+  expect(state.tables).toEqual([]);
+  expect(state.connect).not.toHaveBeenCalled();
 });

@@ -1,17 +1,19 @@
 import assert from "node:assert/strict";
-import { splitSlotFixture } from "./split-slots-fixture.mjs";
+import { splitSlotFixtures } from "./split-slot-fixtures.mjs";
 
 /** Judge receipts and owners, not just HTTP refusals: money must move exactly once. */
 export async function attackSplitSlots({ admin, post, who, home, neighbour, ok, bad }) {
-  async function run(label, operation, options) {
+  const fixtures = splitSlotFixtures(admin, home.id);
+  async function run(label, operation, options, readOnly = false) {
     let fixture;
     try {
-      fixture = await splitSlotFixture(admin, home.id, options);
+      fixture = await fixtures.acquire(options, readOnly);
       await operation(fixture);
       ok(`split slots: ${label}`);
     } catch (error) { bad(`split slots: ${label}: ${error.message}`); }
     finally { if (fixture) await fixture.cleanup(); }
   }
+  try {
   await run("overlapping groups reserve all their parts or none", async f => {
     const [a, b] = await Promise.all([f.hold([0, 1]), f.hold([1, 2])]);
     assert.deepEqual([a.result.outcome, b.result.outcome].sort(), ["reserved", "taken"]);
@@ -50,7 +52,7 @@ export async function attackSplitSlots({ admin, post, who, home, neighbour, ok, 
       assert.equal(foreign.status, 403);
     }
     assert.deepEqual(await f.slots(), before); assert.equal((await f.receipts()).length, 0);
-  });
+  }, undefined, true);
   await run("the kitchen cannot start, change, cancel or collect the split", async f => {
     const before = await f.slots();
     for (const path of ["/api/split/start", "/api/split/resize", "/api/split/cancel", "/api/split/collect"]) {
@@ -58,7 +60,7 @@ export async function attackSplitSlots({ admin, post, who, home, neighbour, ok, 
       assert.equal(result.status, 403);
     }
     assert.deepEqual(await f.slots(), before); assert.equal((await f.receipts()).length, 0);
-  });
+  }, undefined, true);
   for (const currency of ["MXN", "USD"]) await run(`${currency} mixed cash and own-terminal receipts survive retries`, async f => {
     const first = { ...f.body([0]), tipCents: 500 };
     const a = await post("/api/split/collect", first, who.waiter);
@@ -77,4 +79,5 @@ export async function attackSplitSlots({ admin, post, who, home, neighbour, ok, 
     if (error) throw new Error(error.message);
     assert.equal(order.paid, true); assert.equal(order.pay_method, null);
   }, { currency });
+  } finally { await fixtures.cleanup(); }
 }

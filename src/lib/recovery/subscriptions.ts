@@ -21,8 +21,13 @@ async function refresh(context: RecoveryContext, row: SubscriptionRow): Promise<
 
 export async function recoverSubscriptions(context: RecoveryContext) {
   const { db } = context;
+  // Unpaid rows can stay unpaid forever. Reserve a turn for each discovery
+  // source so they cannot spend the cancellation and backfill budget too.
+  const started = Date.now();
+  const work = Math.max(0, context.deadline - started - 2000);
+  const turn = (n: number) => ({ ...context, deadline: Math.min(context.deadline, started + work * n / 3 + 2000) });
   const columns = "id, restaurant_id:id, created_at, stripe_subscription_id";
-  const unpaid = await isolateJob("unpaid subscriptions", () => runBatch("unpaid subscriptions", context, (limit, offset = 0) => db.from("restaurants")
+  const unpaid = await isolateJob("unpaid subscriptions", () => runBatch("unpaid subscriptions", turn(1), (limit, offset = 0) => db.from("restaurants")
     .select(columns, { count: "exact" }).in("plan_status", UNPAID).not("stripe_subscription_id", "is", null)
     .order("created_at").order("id").range(offset, offset + limit - 1).returns<SubscriptionRow[]>(), async row => {
     await refresh(context, row);
@@ -37,7 +42,7 @@ export async function recoverSubscriptions(context: RecoveryContext) {
   // tier would otherwise stay on forever with nothing charged (finding 3).
   const cutoff = new Date(Date.now() - PERIOD_GRACE_MS).toISOString();
   const lapsed = `plan_ends_at.lt.${cutoff},plan_period_ends_at.lt.${cutoff}`;
-  const expired = await isolateJob("expired subscriptions", () => runBatch("expired subscriptions", context, (limit, offset = 0) => db.from("restaurants")
+  const expired = await isolateJob("expired subscriptions", () => runBatch("expired subscriptions", turn(2), (limit, offset = 0) => db.from("restaurants")
     .select(columns, { count: "exact" }).in("plan_status", PAID).neq("plan", "carta").not("stripe_subscription_id", "is", null)
     .or(lapsed).order("created_at").order("id").range(offset, offset + limit - 1).returns<SubscriptionRow[]>(), async row => {
     await refresh(context, row);

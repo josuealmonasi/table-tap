@@ -57,7 +57,7 @@ it("refuses a missing demo password before deleting or changing demo data", asyn
 it("creates the demo owner with the target password before building its menu", async () => {
   vi.stubEnv("DEMO_PASSWORD", "demo-owner-from-env");
   createUser.mockResolvedValue({ data: null, error: { message: "fixture stops before menu creation" } });
-  const query = vi.fn(async () => ({ rows: [] }));
+  const query = vi.fn(async (sql: string) => ({ rows: sql.includes("from pg_extension") ? [{ nspname: "extensions" }] : [] }));
   await expect(seedMock({ query })).rejects.toThrow("fixture stops before menu creation");
   expect(createUser).toHaveBeenCalledExactlyOnceWith({
     email: "demo@tabletap.dev", password: "demo-owner-from-env", email_confirm: true,

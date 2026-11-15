@@ -1,5 +1,19 @@
 import assert from "node:assert/strict";
 import { MARK } from "./api-fixtures.mjs";
+import { sharedRunFixtures } from "./run-fixtures.mjs";
+
+async function inactiveOrder(f) {
+  const { data, error } = await f.admin.from("orders").insert({
+    restaurant_id: f.restaurant.id, status: "received", written_off: true,
+    total: 20, subtotal: 20, note: MARK, currency: "MXN", paid: false,
+    items: [{ name: "Inactive fixture", price: 20, qty: 1 }],
+  }).select("*").single();
+  if (error) throw new Error(error.message);
+  return { data, cleanup: async () => {
+    const { error: cleanupError } = await f.admin.from("orders").delete().eq("id", data.id);
+    if (cleanupError) throw new Error(cleanupError.message);
+  } };
+}
 
 // Historical write-offs can retain a live source status. Never reopen them;
 // keep the pass and stale actions consistent with the original books.
@@ -11,17 +25,9 @@ export function inactiveOrderCases() {
       as, method, path: method === "POST" ? "/api/orders/station" : "/api/orders", expect: [409],
       expectError: /no longer active|ya no está activo/i,
       arrange: async f => {
-        const { data, error } = await f.admin.from("orders").insert({
-          restaurant_id: f.restaurant.id, status: "received", written_off: true,
-          total: 20, subtotal: 20, note: MARK, currency: "MXN", paid: false,
-          items: [{ name: "Inactive fixture", price: 20, qty: 1 }],
-        }).select("*").single();
-        if (error) throw new Error(error.message);
+        const { data, cleanup } = await sharedRunFixtures(f).acquire("inactive-order", () => inactiveOrder(f));
         id = data.id; ticket = data.kitchen_ticket_id; original = data;
-        return async () => {
-          const { error: cleanupError } = await f.admin.from("orders").delete().eq("id", id);
-          if (cleanupError) throw new Error(cleanupError.message);
-        };
+        return cleanup;
       },
       body: () => method === "POST" ? { id: as === "kitchen" ? ticket : id, station: "kitchen" }
         : { id: as === "kitchen" ? ticket : id, status: "preparing", from: "received" },

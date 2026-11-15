@@ -67,14 +67,25 @@ export async function runBatch<T extends PendingItem>(
   const offset = pages > 1 ? Math.floor(Math.random() * pages) * BATCH_SIZE : 0;
   if (offset) batch = await load(BATCH_SIZE, offset);
   if (batch.error) throw new Error(`${name} discovery failed: ${batch.error.message}`);
+  // The oldest global row is only a metric. Every still-pending overdue
+  // case on the bounded rotating page needs its own reminder, across tenants.
   for (const item of batch.data ?? []) {
-    if (!hasTime(context)) break;
-    try {
-      const done = await recover(item);
-      result.done += Number(done);
-    } catch (error) {
-      result.failed++;
-      console.error("Recovery item failed", name, item.restaurant_id, error);
+    let done = false;
+    if (hasTime(context)) {
+      try {
+        const recovered = await recover(item);
+        result.done += Number(recovered);
+        done = Boolean(recovered);
+      } catch (error) {
+        result.failed++;
+        console.error("Recovery item failed", name, item.restaurant_id, error);
+      }
+    }
+    // Only duplicate-payment refunds have an existing matching bell kind.
+    // Reusing a stock warning for a stuck fee would send owners to stock.
+    if (onOverdue && !done && (Date.now() - Date.parse(item.created_at)) / 1000 > OVERDUE_SECONDS) {
+      try { await onOverdue(item); }
+      catch (error) { result.failed++; console.error("Recovery reminder failed", name, error); }
     }
   }
   try {
@@ -85,12 +96,9 @@ export async function runBatch<T extends PendingItem>(
     if (oldest) {
       result.oldest_pending_at = oldest.created_at;
       result.oldest_pending_age_seconds = Math.max(0, Math.floor((Date.now() - Date.parse(oldest.created_at)) / 1000));
-      // Only duplicate-payment refunds have an existing matching bell kind.
-      // Reusing a stock warning for a stuck fee would send owners to stock.
       if (result.oldest_pending_age_seconds > OVERDUE_SECONDS) {
         console.warn("Recovery overdue", { job: name, restaurant_id: oldest.restaurant_id,
           oldest_pending_at: oldest.created_at, age_basis: ageBasis });
-        if (onOverdue) await onOverdue(oldest);
       }
     }
   } catch (error) {

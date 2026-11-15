@@ -9,7 +9,7 @@ import { logEvent } from "@/lib/activity-log";
 import { logDetail } from "@/lib/log-detail";
 
 /** Full collection stays available on every plan, with the same reviewed balance. */
-export async function settleReviewedTable(actor: Actor, tableId: string, body: { expected?: number; currency?: string; ref?: string }, method: "cash" | "card") {
+export async function settleReviewedTable(actor: Actor, tableId: string, body: { expected?: number; currency?: string; ref?: string; skipTicketEmail?: boolean }, method: "cash" | "card") {
   if (!isDinerCurrency(body.currency) || !Number.isFinite(body.expected) || Number(body.expected) < 0 || !body.ref) {
     return await apiError("apiErr.invalidRequest", 400);
   }
@@ -19,7 +19,7 @@ export async function settleReviewedTable(actor: Actor, tableId: string, body: {
     const settled = await closeBill(actor, tableId, method, body.currency);
     return settled ? NextResponse.json({ ok: true, settled, amount: 0, tip: 0, currency: body.currency }) : await apiError("apiErr.billChanged", 409);
   }
-  const result = await recordReviewed(actor, { tableId, expected: Number(body.expected), currency: body.currency }, Number(body.expected), 0, method, body.ref);
+  const result = await recordReviewed(actor, { tableId, expected: Number(body.expected), currency: body.currency, skipTicketEmail: body.skipTicketEmail === true }, Number(body.expected), 0, method, body.ref);
   if (result.split) return await apiError("apiErr.splitCollectSlots", 409, undefined, { code: "split" });
   if (result.changed) return await apiError("apiErr.collectionBalanceChanged", 409, { owed: formatMoney(result.owed, body.currency) }, { owed: result.owed, currency: body.currency });
   if (!result.wrote && !result.refused) return await apiError("apiErr.accountBillPaying", 409);

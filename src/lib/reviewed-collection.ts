@@ -2,7 +2,7 @@ import { checkoutPageRpc } from "@/lib/checkout-page-rpc";
 import type { Actor } from "@/lib/api-guard";
 import { round2 } from "@/lib/money";
 
-export interface ReviewedCollection { tableId: string; expected: number; currency: string }
+export interface ReviewedCollection { tableId: string; expected: number; currency: string; skipTicketEmail?: boolean }
 
 /**
  * The reviewed balance and the receipt are checked in the same money transaction.
@@ -12,7 +12,7 @@ export interface ReviewedCollection { tableId: string; expected: number; currenc
 export async function recordReviewed(actor: Actor, review: ReviewedCollection, amount: number, tip: number, method: string, ref: string) {
   const { data, error } = await checkoutPageRpc("collect_table_reviewed_v1", {
     p_restaurant: actor.restaurantId, p_table: review.tableId, p_expected: review.expected,
-    p_currency: review.currency, p_amount: round2(amount - tip), p_tip: tip, p_method: method, p_actor: actor.email, p_ref: ref,
+    p_currency: review.currency, p_amount: round2(amount - tip), p_tip: tip, p_method: method, p_actor: actor.email, p_ref: ref, p_skip_ticket_email: review.skipTicketEmail === true,
   });
   if (error) throw new Error(`Could not record the reviewed collection: ${error.message}`);
   const r = data as { outcome: string; amount: number; tip: number; owed: number; currency: string };

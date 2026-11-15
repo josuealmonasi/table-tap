@@ -3,9 +3,14 @@ import { expect, it } from "vitest";
 
 const schema = readFileSync("supabase/schema.sql", "utf8");
 const drop = readFileSync("supabase/drop.sql", "utf8");
+// Keep the last definition of each arity: a new delegating overload must not
+// hide the retained implementation's payment inserts from this date check.
 const definitions = new Map([...schema.matchAll(/create or replace function public\.(\w+)\(/g)]
-  .map(m => [m[1], schema.slice(m.index).split("$$;")[0]]));
-const body = (name: string) => definitions.get(name)!;
+  .map(m => {
+    const sql = schema.slice(m.index).split("$$;")[0];
+    return [`${m[1]}:${sql.slice(0, sql.indexOf(")")).split(",").length}`, sql];
+  }));
+const body = (name: string) => [...definitions].filter(([key]) => key.startsWith(`${name}:`)).at(-1)![1];
 
 it("F1: every online payment is dated after its money lock, not at transaction start", () => {
   const missing: string[] = [];

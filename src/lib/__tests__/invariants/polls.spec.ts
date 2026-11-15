@@ -52,24 +52,10 @@ describe("a poll waits for its last read", () => {
     // schedules its next read after the last one settles (a chained
     // setTimeout), or uses SWR's refreshInterval, which already does.
     //
-    // These predate the rule. The list only shrinks: convert one, delete it.
-    const GRANDFATHERED = [
-      "src/hooks/useOfflineSales.ts",
-      "src/hooks/useOnline.ts",
-      "src/hooks/useOrderFinished.ts",
-      "src/hooks/useSitting.ts",
-      "src/hooks/useSlotReceiptOffer.ts",
-      "src/hooks/useTableBill.ts",
-      "src/hooks/useTableMembership.ts",
-      "src/components/dashboard/TableCalculator.tsx",
-      "src/components/customer/TrackerOverlay.tsx",
-    ];
+    // The older exceptions now follow the same rule; none may keep a fixed tick.
     const files = [...walk("src/hooks"), ...walk("src/components")];
     const offenders = files.flatMap(f => intervalFetches(f).map(line => `${f}:${line}`));
-    const fresh = offenders.filter(o => !GRANDFATHERED.some(g => o.startsWith(`${g}:`)));
-    expect(fresh, `chain the poll with setTimeout after it settles, or use SWR:\n${fresh.join("\n")}`).toEqual([]);
-    const converted = GRANDFATHERED.filter(g => !offenders.some(o => o.startsWith(`${g}:`)));
-    expect(converted, "no longer polls on an interval: remove it from GRANDFATHERED").toEqual([]);
+    expect(offenders, `chain the poll with setTimeout after it settles, or use SWR:\n${offenders.join("\n")}`).toEqual([]);
   });
 
   it("detects the shape it bans", () => {

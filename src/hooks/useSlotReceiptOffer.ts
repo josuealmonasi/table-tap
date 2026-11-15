@@ -1,5 +1,6 @@
 "use client";
 
+import { pollAfterSettle } from "@/lib/poll-after-settle";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { BILL_POLL_MS } from "@/lib/poll";
 import type { SplitScope } from "@/lib/split-slots";
@@ -69,15 +70,12 @@ export function useSlotReceiptOffer(scope?: SplitScope, settled: boolean | null 
       } finally {
         busy = false;
         // A reply begun before the bill closed cannot decide its receipt.
-        if (!stopped && latestDecision.current !== forDecision) void reload();
+        if (!stopped && latestDecision.current !== forDecision) await reload();
       }
     }
-    refresh.current = reload;
-    void reload();
-    const visible = () => { void reload(); };
-    const tick = setInterval(visible, BILL_POLL_MS);
-    window.addEventListener("focus", visible); document.addEventListener("visibilitychange", visible);
-    return () => { stopped = true; refresh.current = null; clearInterval(tick); window.removeEventListener("focus", visible); document.removeEventListener("visibilitychange", visible); };
+    const poll = pollAfterSettle(reload, BILL_POLL_MS, { pauseWhenHidden: true, refreshOnVisible: true, refreshOnFocus: true });
+    refresh.current = poll.refresh;
+    return () => { stopped = true; refresh.current = null; poll.stop(); };
   }, [restaurantId, tableId, sessionId]);
   const dismiss = useCallback(() => {
     current.current.ids = current.current.ids.slice(1);

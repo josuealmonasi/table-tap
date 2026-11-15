@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { apiError } from "@/lib/api-error";
-import { actingOwner } from "@/lib/api-guard";
-import { getMembership } from "@/lib/membership";
+import { actingManagerWithRestaurant } from "@/lib/api-guard";
 import { createOnboardingLink, ensureConnectAccount } from "@/lib/stripe-connect";
 import { siteOrigin } from "@/lib/site-origin";
 
@@ -11,21 +10,19 @@ export const runtime = "nodejs";
 // Returns a one-time Stripe-hosted onboarding URL for the client to redirect to.
 // Owner-only: connecting a bank account is the owner's decision, not a manager's.
 export async function POST(req: NextRequest) {
-  const actor = await actingOwner();
-  if (!actor) return await apiError("apiErr.forbidden", 403);
+  const found = await actingManagerWithRestaurant();
+  if (!found || found.actor.role !== "owner") return await apiError("apiErr.forbidden", 403);
+  const { actor, restaurant } = found;
 
   // Stripe wants the account's currency, which is a restaurant field rather
-  // than part of the caller's identity. getMembership is memoised for this
-  // request, so asking again costs nothing.
-  const membership = await getMembership();
-  if (!membership) return await apiError("apiErr.forbidden", 403);
-
+  // than part of the caller's identity. Reuse the guard's lookup: route handlers
+  // get no React cache memo, so asking again pays for auth and membership twice.
   const origin = siteOrigin(req);
 
   try {
     const accountId = await ensureConnectAccount(actor.restaurantId, {
       email: actor.email,
-      currency: membership.restaurant.currency,
+      currency: restaurant.currency,
     });
     const url = await createOnboardingLink(accountId, origin);
     return NextResponse.json({ url });

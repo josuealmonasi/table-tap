@@ -1,5 +1,6 @@
 "use client";
 
+import { pollAfterSettle } from "@/lib/poll-after-settle";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useT } from "@/lib/i18n/context";
 import { useRouter } from "next/navigation";
@@ -25,42 +26,46 @@ export function useOfflineSales(restaurantId: string, uploadOnly = false) {
   const t = useT();
   const [online, setOnline] = useState(true);
   const [held, setHeld] = useState<HeldSale[]>([]);
-  const sending = useRef(false);
+  const sending = useRef<Promise<void> | null>(null);
 
   const refresh = useCallback(() => setHeld(readHeld().filter(s => s.restaurantId === restaurantId)), [restaurantId]);
 
-  const flush = useCallback(async () => {
-    if (sending.current || !navigator.onLine) return;
-    sending.current = true;
-    let sent = 0;
-    try {
-      for (const sale of readHeld().filter(s => s.restaurantId === restaurantId).sort((a, b) => a.at.localeCompare(b.at))) {
-        if (posSendInFlight(restaurantId, sale.posRef)) continue;
-        let res: Response;
-        try {
-          res = await fetch(uploadOnly ? "/api/pos/upload" : "/api/pos/order", {
-            method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(replayBody(sale)),
-          });
-        } catch {
-          break; // still no connection: try again later, in the same order
+  const flush = useCallback((): Promise<void> => {
+    // A retry joins the same send, so its next wait starts when that send ends.
+    if (sending.current) return sending.current;
+    if (!navigator.onLine) return Promise.resolve();
+    sending.current = Promise.resolve().then(async () => {
+      let sent = 0;
+      try {
+        for (const sale of readHeld().filter(s => s.restaurantId === restaurantId).sort((a, b) => a.at.localeCompare(b.at))) {
+          if (posSendInFlight(restaurantId, sale.posRef)) continue;
+          let res: Response;
+          try {
+            res = await fetch(uploadOnly ? "/api/pos/upload" : "/api/pos/order", {
+              method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(replayBody(sale)),
+            });
+          } catch {
+            break; // still no connection: try again later, in the same order
+          }
+          const data = await res.json().catch(() => null);
+          const acknowledgement = saleAcknowledgement(sale, data);
+          if (res.ok && (acknowledgement === "settled" || queueAcknowledgement(replayBody(sale), data))) {
+            if (dropHeld(sale.posRef, restaurantId)) sent++;
+          } else {
+            if (res.ok && acknowledgement === "mismatch") keepAcknowledgement(sale, data);
+            const reason = res.ok
+              ? t(acknowledgement === "mismatch" ? "pos.saleMismatch" : "pos.saleUnsettled", { collected: sale.charge.total, settled: data?.total ?? "—" })
+              : typeof data?.error === "string" ? data.error : `HTTP ${res.status}`;
+            markHeldError(sale.posRef, restaurantId, reason);
+          }
         }
-        const data = await res.json().catch(() => null);
-        const acknowledgement = saleAcknowledgement(sale, data);
-        if (res.ok && (acknowledgement === "settled" || queueAcknowledgement(replayBody(sale), data))) {
-          if (dropHeld(sale.posRef, restaurantId)) sent++;
-        } else {
-          if (res.ok && acknowledgement === "mismatch") keepAcknowledgement(sale, data);
-          const reason = res.ok
-            ? t(acknowledgement === "mismatch" ? "pos.saleMismatch" : "pos.saleUnsettled", { collected: sale.charge.total, settled: data?.total ?? "—" })
-            : typeof data?.error === "string" ? data.error : `HTTP ${res.status}`;
-          markHeldError(sale.posRef, restaurantId, reason);
-        }
+      } finally {
+        sending.current = null;
+        refresh();
+        if (sent > 0) router.refresh();
       }
-    } finally {
-      sending.current = false;
-      refresh();
-      if (sent > 0) router.refresh();
-    }
+    });
+    return sending.current;
   }, [restaurantId, refresh, router, t, uploadOnly]);
 
   useEffect(() => {
@@ -82,8 +87,8 @@ export function useOfflineSales(restaurantId: string, uploadOnly = false) {
 
   useEffect(() => {
     if (held.length === 0) return;
-    const timer = setInterval(() => void flush(), RETRY_MS);
-    return () => clearInterval(timer);
+    const poll = pollAfterSettle(flush, RETRY_MS, { immediate: sending.current !== null });
+    return () => poll.stop();
   }, [held.length, flush]);
 
   /** Keeps a sale on the device; false when the browser would not store it. */

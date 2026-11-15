@@ -50,13 +50,16 @@ it("K11: manager, frozen and stock-plan guards apply before the private transact
 });
 it("K11: the private SQL scopes, locks and replaces without swallowing an insert failure", () => {
   const schema = readFileSync("supabase/schema.sql", "utf8");
-  const sql = schema.slice(schema.indexOf("create or replace function public.save_product_addons_v1("));
+  const start = schema.indexOf("create or replace function public.save_product_addons_v1(");
+  const sql = schema.slice(start, schema.indexOf("$$;", start) + 3);
   expect(sql).toContain("security definer set search_path = public");
   expect(sql).toContain("restaurant_id = p_restaurant and not is_addon for update");
   expect(sql).toContain("menu_id is not distinct from v_product.menu_id and is_addon");
   expect(sql.indexOf("delete from item_addons")).toBeLessThan(sql.indexOf("insert into item_addons"));
   expect(sql).not.toMatch(/exception\s+when/i);
-  expect(sql).toContain("from public, anon, authenticated"); expect(sql).toContain("to service_role");
+  const signature = "public.save_product_addons_v1(uuid, uuid, uuid[], jsonb, uuid, uuid)";
+  expect(schema).toContain(`revoke all on function ${signature} from public, anon, authenticated;`);
+  expect(schema).toContain(`grant execute on function ${signature} to service_role;`);
   expect(readFileSync("supabase/drop.sql", "utf8")).toContain("save_product_addons_v1(uuid, uuid, uuid[], jsonb, uuid, uuid)");
 });
 it("K11: the transaction's late plan refusals keep their useful explanation", async () => {

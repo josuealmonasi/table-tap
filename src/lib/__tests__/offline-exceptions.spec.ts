@@ -158,3 +158,16 @@ it("C5: a till without a kitchen board still finishes an interrupted counter sal
     approval: { confirmed: true, reason: "Original receipt checked" } }))).status).toBe(200);
   expect(state.calls[0]).toMatchObject({ name: "record_offline_sale", args: { p_order: { preparation_pending: false } } });
 });
+
+it("N4: approved interrupted combos keep their preparation notes and component extras", async () => {
+  state.role = "manager";
+  const extra = { id: "cheese", name: "Cheese", emoji: "", price: 10 };
+  const original = { ...body(), items: [{ itemId: "combo", comboId: "combo", name: "Meal", price: 80, qty: 1,
+    notes: "No peanuts", extras: [extra], components: [{ itemId: "burger", name: "Burger", qty: 1, extras: [extra] }] }],
+    offline: { ...body().offline, preparationPending: true } };
+  state.queued = { body: original, collector: "cashier@example.com", currency: "MXN" };
+  expect((await recovery.POST(request({ posRef: original.posRef, restaurantId: "r",
+    approval: { confirmed: true, reason: "Original kitchen instructions checked" } }))).status).toBe(200);
+  expect(state.calls[0]).toMatchObject({ name: "record_offline_sale", args: { p_order: { preparation_pending: true,
+    items: [expect.objectContaining({ notes: "No peanuts", extras: [extra], components: [expect.objectContaining({ extras: [extra] })] })] } } });
+});

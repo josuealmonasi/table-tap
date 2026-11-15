@@ -1,6 +1,6 @@
 import { beforeEach, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
-const state = vi.hoisted(() => ({ role: "manager", failed: false, reads: [] as { tenant: string; status: string; from: number; to: number }[] }));
+const state = vi.hoisted(() => ({ role: "manager", failed: false, total: 43, reads: [] as { tenant: string; status: string; from: number; to: number }[] }));
 vi.mock("@/lib/api-guard", () => ({ actingManager: async () => ["owner", "manager"].includes(state.role) ? { restaurantId: "r" } : null }));
 vi.mock("@/lib/api-error", () => ({ apiError: async (error: string, status: number) => Response.json({ error }, { status }) }));
 vi.mock("@/lib/pos-offline", () => ({ ringOffline: vi.fn() }));
@@ -13,12 +13,12 @@ vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({ from: () =>
     range: (from: number, to: number) => ({ returns: async () => result(from, to), then: (done: (value: ReturnType<typeof result>) => void) => Promise.resolve(result(from, to)).then(done) }),
     // A head count: 43 approved, none resolved.
     then: (done: (value: { count: number; error: { message: string } | null }) => void) =>
-      Promise.resolve({ count: status === "history" ? 43 : 0, error: state.failed ? { message: "offline" } : null }).then(done),
+      Promise.resolve({ count: status === "history" ? state.total : 0, error: state.failed ? { message: "offline" } : null }).then(done),
   };
   function result(from: number, to: number) {
       state.reads.push({ tenant, status, from, to });
       const rows = [...Array.from({ length: 2 }, (_, n) => ({ pos_ref: `pending-${n}`, approved_at: null })),
-        ...Array.from({ length: 43 }, (_, n) => ({ pos_ref: `approved-${n}`, approved_at: new Date(Date.UTC(2026, 9, 27, 0, 0, -n)).toISOString() }))];
+        ...Array.from({ length: state.total }, (_, n) => ({ pos_ref: `approved-${n}`, approved_at: new Date(Date.UTC(2026, 9, 27, 0, 0, -n)).toISOString() }))];
       return { data: rows.filter(r => status === "all" || (status === "pending" ? !r.approved_at : status === "resolved" ? false : r.approved_at)).slice(from, to + 1), error: state.failed ? { message: "offline" } : null };
     }
   return q;
@@ -48,3 +48,13 @@ it("access3: a page past the end is clamped to the last page before any history 
 it.each(["cashier", "waiter", "kitchen"])("refuses %s before reading saved money", async role => { state.role = role; expect((await get()).status).toBe(403); expect(state.reads).toEqual([]); });
 it.each(["-1", "1.5", "wat", "99999999999999"])("refuses invalid history page %s", async page => { expect((await get(`?view=history&page=${page}`)).status).toBe(400); expect(state.reads).toEqual([]); });
 it("reports failed reads instead of an empty successful queue", async () => { state.failed = true; expect((await get("?view=history")).status).toBe(503); expect((await get()).status).toBe(503); });
+
+it("N13: a huge page retrieves only the final twenty decisions from a large history", async () => {
+  state.total = 2000;
+  try {
+    const res = await (await get("?view=history&page=999999")).json();
+    expect(res.sales).toHaveLength(20);
+    expect(state.reads.reduce((n, r) => n + Math.max(0, Math.min(state.total - r.from, r.to - r.from + 1)), 0)).toBeLessThanOrEqual(21);
+    expect(state.reads[0].from).toBe(1980);
+  } finally { state.total = 43; }
+});

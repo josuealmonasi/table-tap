@@ -42,11 +42,12 @@ describe("order_coverage reads without writing when nothing needs a backfill", (
     expect(backfill).toContain("rp.allocation_origin = 'legacy' and o.status = 'cancelled'");
     expect(backfill).toContain("perform public.import_historical_return(v_restaurant, v_order)");
     // The importer writes a missing cancel record, a return for an unreturned
-    // allocation, or evidence for a return still in historical review.
+    // allocation, or new evidence for a return still in historical review.
     expect(importer).toContain("on conflict (order_id) where kind = 'cancel' do nothing");
     expect(importer).toContain("p.allocation_origin = 'legacy' and (r.id is null or (f.historical_review and f.status = 'review'))");
     expect(need).toContain("o.status = 'cancelled' and p.allocation_origin = 'legacy'");
-    expect(need).toContain("(r.id is null or (f.historical_review and f.status = 'review') or not exists (select 1 from order_adjustments d where d.order_id = o.id and d.kind = 'cancel'))");
+    expect(need).toContain("(r.id is null or (f.historical_review and f.status = 'review' and exists (select 1 from user_logs l");
+    expect(need).toContain("or not exists (select 1 from order_adjustments d where d.order_id = o.id and d.kind = 'cancel'))");
   });
 
   it("keeps the old signature and coverage body", () => {

@@ -24,7 +24,7 @@ it("resends an unanswered collection unchanged, and only then starts a new one (
   let posts = 0;
   // The first collection was recorded; only its reply was lost. The bill polls
   // and now shows what is left, and the old screen offered a new collection.
-  vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
   vi.stubGlobal("fetch", vi.fn().mockImplementation(async (_url: string, init?: RequestInit) => {
     const owed = posts === 0 ? 100 : 30;
     if (init?.method !== "POST") return Response.json({ orders: [order], splits: [], outstanding: { owed, ordered: 100, collected: 100 - owed, tips: 0, currency: "MXN" } });
@@ -35,7 +35,7 @@ it("resends an unanswered collection unchanged, and only then starts a new one (
   await act(async () => root.render(<TableCalculator open onClose={vi.fn()} currency="MXN" tableId="table" tableLabel="1" onCollected={vi.fn()} />));
   await act(async () => cash().click());
   expect(host.textContent).toContain(t("settle.unansweredCollection"));
-  await act(async () => { vi.advanceTimersByTime(60_000); });
+  await act(async () => { await vi.advanceTimersByTimeAsync(60_000); });
   await act(async () => cash().click());
   await act(async () => cash().click());
   const bodies = vi.mocked(fetch).mock.calls.filter(([, init]) => init?.method === "POST").map(([, init]) => JSON.parse(String(init!.body)));

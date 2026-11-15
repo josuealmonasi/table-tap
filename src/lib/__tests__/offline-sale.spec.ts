@@ -135,3 +135,13 @@ describe("held receipts that stored their amounts as text", () => {
     expect(offlineCharge(text(), NOW, true)).toBeNull();
   });
 });
+
+it("N4: keeps preparation notes and component extras without adding flattened extras again", () => {
+  const extra = { id: "cheese", name: "Cheese", emoji: "", price: 10 };
+  const [line] = offlineLines([{ itemId: "combo", comboId: "combo", qty: 1, notes: "No peanuts",
+    extras: [extra], components: [{ itemId: "burger", qty: 1, extras: [extra] }] }]);
+  expect(line.notes).toBe("No peanuts");
+  expect(line.components?.[0].extras).toEqual([extra]);
+  expect(line.extras).toEqual([extra]);
+  expect(offlineLines([{ itemId: "x", qty: 1, notes: "x".repeat(1000) }])[0].notes?.length).toBeLessThanOrEqual(500);
+});

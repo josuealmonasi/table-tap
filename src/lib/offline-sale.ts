@@ -107,6 +107,12 @@ function offlineMods(raw: unknown): OrderLineItem["mods"] {
   return mods;
 }
 
+function offlineExtras(raw: unknown): OrderExtra[] {
+  return Array.isArray(raw) ? (raw as Record<string, unknown>[]).slice(0, 20).map(e => ({
+    id: text(e?.id, 64), name: text(e?.name, 80), emoji: text(e?.emoji, 8), price: price(e?.price),
+  })) : [];
+}
+
 /**
  * The till's own lines, kept as the record of a sale whose dishes the menu no
  * longer has. Names and prices as the till had them, bounded; nothing in them
@@ -120,11 +126,7 @@ export function offlineLines(items: unknown): OrderLineItem[] {
     const qty = Math.trunc(Number(l.qty));
     if (!Number.isFinite(qty) || qty < 1 || qty > 99) return [];
     const mods = offlineMods(l.mods);
-    const extras: OrderExtra[] = Array.isArray(l.extras)
-      ? (l.extras as Record<string, unknown>[]).slice(0, 20).map(e => ({
-          id: text(e?.id, 64), name: text(e?.name, 80), emoji: text(e?.emoji, 8), price: price(e?.price),
-        }))
-      : [];
+    const extras = offlineExtras(l.extras);
     // A combo keeps its parts: they are what the kitchen made and what stock
     // gives up, and the promotion that priced it may be gone by the time the
     // sale is sent.
@@ -133,7 +135,7 @@ export function offlineLines(items: unknown): OrderLineItem[] {
           const n = Math.trunc(Number(c?.qty));
           const itemId = text(c?.itemId, 64);
           return itemId && Number.isFinite(n) && n >= 1 && n <= 99
-            ? [{ itemId, name: text(c?.name, 80) || "—", emoji: text(c?.emoji, 8), qty: n, mods: offlineMods(c?.mods), ...preparationOf(c) }]
+            ? [{ itemId, name: text(c?.name, 80) || "—", emoji: text(c?.emoji, 8), qty: n, mods: offlineMods(c?.mods), extras: offlineExtras(c?.extras), ...preparationOf(c) }]
             : [];
         })
       : [];
@@ -145,6 +147,7 @@ export function offlineLines(items: unknown): OrderLineItem[] {
       ...(typeof l.promotionRevenue === "number" && Number.isFinite(l.promotionRevenue)
         && l.promotionRevenue >= 0 && l.promotionRevenue <= 1_000_000 * qty
         ? { promotionRevenue: round2(l.promotionRevenue) } : {}),
+      ...(typeof l.notes === "string" ? { notes: text(l.notes, 500) } : {}),
       ...(typeof l.note === "string" ? { note: text(l.note, 150) } : {}),
       ...(comboId && components.length > 0 ? { comboId, components } : {}),
       ...(Number.isFinite(discountPct) && discountPct > 0 && discountPct <= 100 ? { discountPct } : {}),
