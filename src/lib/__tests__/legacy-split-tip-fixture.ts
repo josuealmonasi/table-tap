@@ -1,9 +1,13 @@
 import { vi } from "vitest";
+import type Stripe from "stripe";
 
 const state = vi.hoisted(() => ({
   principal: null as number | null,
   prior: null as { url: string; metadata: { settle_tip: string }; amount_total: number } | null,
-  open: vi.fn(async () => ({ url: "https://checkout.invalid/share" })),
+  open: vi.fn(async (_stripe: unknown, params: Stripe.Checkout.SessionCreateParams) => ({
+    url: "https://checkout.invalid/share", metadata: params.metadata,
+    amount_total: params.line_items?.[0].price_data?.unit_amount,
+  })),
   reserve: vi.fn(async () => ({ id: "fee", cents: 10 })),
 }));
 export { state };

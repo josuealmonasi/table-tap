@@ -3334,3 +3334,12 @@ its background as a separate button needing a gap. Ordinary buttons, partial
 rows and options outside listboxes retain the existing control checks. Positive
 and broken fixtures cover both borderless and divided rows on every text edge;
 the spacing thresholds are unchanged.
+
+### Concurrent legacy checkout retries
+
+For a legacy split with no trusted tip principal, both a resumed checkout and
+the session returned by the attempt opener must match the selected exact tip
+and gross before its URL is returned. This includes a concurrent request's
+winning attempt discovered after the initial resume read. A mismatch refuses
+the redirect while preserving the winner's pending attempt; missing, blank,
+negative or nonfinite saved tip evidence refuses verification.

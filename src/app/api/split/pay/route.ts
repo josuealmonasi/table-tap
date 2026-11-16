@@ -23,7 +23,7 @@ import {
 } from "@/lib/platform-fee";
 import { orderFeeCents } from "@/lib/plan";
 import { round2 } from "@/lib/money";
-import { formatMoney } from "@/lib/format";
+import { legacySplitCheckoutError } from "@/lib/legacy-split-checkout";
 import { siteOrigin } from "@/lib/site-origin";
 
 export const runtime = "nodejs";
@@ -145,18 +145,13 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
   const payable = round2(Number(claim.amount) + ownTotal);
   if (payable <= 0) return await apiError("apiErr.billSettled", 409);
+  const exactTip = Math.min(Math.max(0, round2(Number(tipAmount ?? 0))), payable);
 
   // A lost reply keeps its original page. Choosing another exact amount must
   // not silently reopen that page with its previous tip instead.
   if (prior) {
-    const savedTip = Number(prior.metadata?.settle_tip);
-    if (!Number.isFinite(savedTip)) return await apiError("apiErr.verifyOrders", 503);
-    const asked = Math.min(Math.max(0, round2(Number(tipAmount ?? 0))), payable);
-    if (savedTip !== asked) return await apiError("apiErr.splitOpenTip", 409,
-      { tip: formatMoney(savedTip, prior.currency?.toUpperCase() ?? "MXN") });
-    if (prior.amount_total !== Math.round(round2(payable + asked) * 100)) {
-      return await apiError("apiErr.billChanged", 409);
-    }
+    const error = await legacySplitCheckoutError(prior, payable, exactTip);
+    if (error) return error;
     return NextResponse.json({ url: prior.url });
   }
 
@@ -262,6 +257,12 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       },
     );
 
+    // Another request can win after our resume read. The opener returns that
+    // winner's durable session; its quote must match before we expose the URL.
+    if (split.food_principal == null) {
+      const error = await legacySplitCheckoutError(session, payable, exactTip);
+      if (error) return error;
+    }
     // A session with no page is still a session: its fee waits for expiry.
     if (!session.url) return await apiError("apiErr.checkoutFailed", 502);
     return NextResponse.json({ url: session.url });

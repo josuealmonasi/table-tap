@@ -7667,3 +7667,14 @@ edges. This also checks text inside divided rows that the old full-row shortcut
 skipped. The real coupon dialog was reproduced at phone and desktop widths;
 the audit self-test includes valid adjacent options, cramped text on all four
 sides of both rows, and ordinary/partial/outside controls that must still fail.
+
+### A concurrent legacy checkout keeps the tip the diner selected
+
+Two requests could both read no open attempt before the shared opener returned
+the winner's existing session to the loser. Checking only the initial resume
+path silently redirected the loser to a different tip or total. Red route
+regressions reproduced both mismatches as HTTP 200. Both return paths now use
+one quote check before exposing the URL, preserving the existing attempt and
+fee lifecycle. Matching exact and zero-tip winners remain usable; invalid saved
+tip evidence refuses verification on either path. The race regression models
+the shared opener's documented return contract without making provider calls.

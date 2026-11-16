@@ -82,3 +82,40 @@ it("does not guess an open page's tip when its saved evidence is invalid", async
   expect(state.reserve).not.toHaveBeenCalled();
   expect(state.open).not.toHaveBeenCalled();
 });
+
+it.each([
+  { savedTip: "6", gross: 6600, error: "apiErr.splitOpenTip" },
+  { savedTip: "5", gross: 7500, error: "apiErr.billChanged" },
+])("refuses a concurrent winner's checkout when its quote differs: $error", async ({ savedTip, gross, error }) => {
+  // Both requests saw no prior attempt. The shared attempt opener returns the
+  // winner's persisted checkout to the loser instead of creating another one.
+  state.open.mockImplementationOnce(async () => ({ url: "https://checkout.invalid/winner",
+    metadata: { settle_tip: savedTip }, amount_total: gross }));
+  const response = await pay({ tipAmount: 5 });
+  expect(response.status).toBe(409);
+  expect(await response.json()).toEqual({ error });
+  expect(state.open).toHaveBeenCalledTimes(1);
+});
+
+it.each([0, 5.25])("returns the concurrent winner when exact tip %s and gross both match", async tip => {
+  state.open.mockImplementationOnce(async () => ({ url: "https://checkout.invalid/winner",
+    metadata: { settle_tip: String(tip) }, amount_total: 6000 + tip * 100 }));
+  const response = await pay({ tipAmount: tip });
+  expect(response.status).toBe(200);
+  expect(await response.json()).toEqual({ url: "https://checkout.invalid/winner" });
+  expect(state.open).toHaveBeenCalledTimes(1);
+});
+
+it.each(["", " ", "-1", "unknown"])("refuses invalid persisted tip evidence %j on either return path", async savedTip => {
+  const session = { url: "https://checkout.invalid/unverified", metadata: { settle_tip: savedTip }, amount_total: 6000 };
+  state.prior = session;
+  expect((await pay({ tipAmount: 0 })).status).toBe(503);
+  expect(state.reserve).not.toHaveBeenCalled();
+  expect(state.open).not.toHaveBeenCalled();
+  state.prior = null;
+  state.open.mockImplementationOnce(async () => session);
+  const response = await pay({ tipAmount: 0 });
+  expect(response.status).toBe(503);
+  expect(await response.json()).toEqual({ error: "apiErr.verifyOrders" });
+  expect(state.open).toHaveBeenCalledTimes(1);
+});
