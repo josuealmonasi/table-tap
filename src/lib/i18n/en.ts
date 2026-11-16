@@ -1425,6 +1425,7 @@ foundingLeftBody: "Subscribe now and keep this subscription price for as long as
     soon: "Soon",
   },
   split: {
+    exactTip: "For this split, enter an amount if you would like to leave a tip.",
     ask: "Split the bill?",
     title: "Split the bill",
     hint: "Evenly. It only works if everyone at the table agrees.",
@@ -1571,6 +1572,8 @@ foundingLeftBody: "Subscribe now and keep this subscription price for as long as
     requestsFailed: "Could not check for other phones waiting to join. We’ll check again in a few seconds.",
   },
   apiErr: {
+    splitOpenTip: "An earlier payment page has a {tip} tip. Enter that amount to return to it.",
+    splitExactTip: "Enter a tip amount or choose no tip to pay this share.",
     heldResolveManager: "Only an owner or manager can resolve this receipt.",
     heldResolveInvalid: "Check the resolution: reason (8–500 characters), collector, date, amount with at most two decimals, currency and links.",
     heldResolveCashRequired: "Choose a held cash receipt. Card receipts cannot use this resolution.",

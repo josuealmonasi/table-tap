@@ -23,6 +23,7 @@ import {
 } from "@/lib/platform-fee";
 import { orderFeeCents } from "@/lib/plan";
 import { round2 } from "@/lib/money";
+import { formatMoney } from "@/lib/format";
 import { siteOrigin } from "@/lib/site-origin";
 
 export const runtime = "nodejs";
@@ -116,11 +117,18 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   if (!claim) return await apiError("apiErr.splitNotYours", 403);
   if (claim.paid_at) return await apiError("apiErr.splitAlreadyPaid", 409);
 
+  // Old gross splits may already contain tips. Ask for an amount instead of
+  // charging a percentage of that uncertainty; zero-tip payment still works.
+  if (split.food_principal == null && tipAmount == null && Number(tipPct) > 0) {
+    return await apiError("apiErr.splitExactTip", 409);
+  }
+
   const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
   const scopeKey = `split:${splitId}:${claim.share_no}`;
+  let prior: Stripe.Checkout.Session | null;
   try {
-    const prior = await resumeDinerAttempt(stripe, restaurantId, scopeKey);
-    if (prior) return NextResponse.json({ url: prior.url });
+    prior = await resumeDinerAttempt(stripe, restaurantId, scopeKey);
+    if (prior && split.food_principal != null) return NextResponse.json({ url: prior.url });
   } catch { return await apiError("apiErr.checkoutFailed", 502); }
 
   // Their own orders since the freeze — verified, never taken on trust: unpaid,
@@ -137,6 +145,20 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
   const payable = round2(Number(claim.amount) + ownTotal);
   if (payable <= 0) return await apiError("apiErr.billSettled", 409);
+
+  // A lost reply keeps its original page. Choosing another exact amount must
+  // not silently reopen that page with its previous tip instead.
+  if (prior) {
+    const savedTip = Number(prior.metadata?.settle_tip);
+    if (!Number.isFinite(savedTip)) return await apiError("apiErr.verifyOrders", 503);
+    const asked = Math.min(Math.max(0, round2(Number(tipAmount ?? 0))), payable);
+    if (savedTip !== asked) return await apiError("apiErr.splitOpenTip", 409,
+      { tip: formatMoney(savedTip, prior.currency?.toUpperCase() ?? "MXN") });
+    if (prior.amount_total !== Math.round(round2(payable + asked) * 100)) {
+      return await apiError("apiErr.billChanged", 409);
+    }
+    return NextResponse.json({ url: prior.url });
+  }
 
   // The share is the amount frozen when the table agreed, and it has no idea
   // what has happened since. If the bill has been settled another way — a
@@ -192,7 +214,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     return await apiError("apiErr.mixedCurrencies", 409);
   }
 
-  const tipBase = splitTipBase(splitTipPrincipal(split, frozenOrders), shares, [claim.share_no], ordersTipBase(own));
+  const tipBase = splitTipBase(splitTipPrincipal(split, frozenOrders) ?? 0, shares, [claim.share_no], ordersTipBase(own));
   const asked = tipAmount != null ? Number(tipAmount) : tipFromPercent(tipBase, Number(tipPct));
   const tip = Math.min(Math.max(0, round2(asked)), payable);
   const cents = Math.round(round2(payable + tip) * 100);

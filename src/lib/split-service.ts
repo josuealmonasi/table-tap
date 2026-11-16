@@ -34,7 +34,8 @@ export interface SplitState {
   outstanding: number;
   /** Their own orders placed after it froze, which are theirs alone. */
   ownSince: number;
-  tipPrincipal?: number;
+  /** Null means an old split has no trusted frozen principal for percentages. */
+  tipPrincipal?: number | null;
   ownTipBase?: number;
 }
 

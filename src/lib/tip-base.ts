@@ -44,15 +44,17 @@ export function frozenTipPrincipal(principal: number | null, orders: TipOrder[])
 
 /**
  * The tip principal of a split, whichever version froze it. A v1 split locked
- * before `food_principal` existed still froze `amount`, what the table owed
- * when everyone agreed. Reading what the orders owe now instead shrank with
- * every share paid, and was divided by every share again: the second of two
- * diners was offered a tip on half of half (review M4). Only a split with
- * neither (never locked) falls back to the orders.
+ * before `food_principal` existed froze a gross `amount`, which can include
+ * earlier tips. Today's orders cannot say which tips were already in that
+ * amount and which another share added later. Reading today's remaining debt
+ * also shrank the base with each payment (review M4). Keep that uncertainty
+ * explicit: those old shares accept exact tips, never an inferred percentage.
+ * Only a split never locked falls back to the orders.
  */
-export function splitTipPrincipal(split: { food_principal: number | null; amount?: number | null }, orders: TipOrder[]): number {
+export function splitTipPrincipal(split: { food_principal: number | null; amount?: number | null }, orders: TipOrder[]): number | null {
   const amount = Number(split.amount ?? 0);
-  return frozenTipPrincipal(split.food_principal ?? (amount > 0 ? amount : null), orders);
+  if (split.food_principal == null && amount > 0) return null;
+  return frozenTipPrincipal(split.food_principal, orders);
 }
 
 /** Each frozen food cent belongs to one share; the first carries the remainder. */

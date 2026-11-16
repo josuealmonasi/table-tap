@@ -1422,6 +1422,7 @@ foundingLeftBody: "Quien contrata ahora conserva este precio de suscripción mie
     soon: "Pronto",
   },
   split: {
+    exactTip: "Para esta cuenta dividida, escribe el importe si deseas dejar propina.",
     ask: "¿Dividir la cuenta?",
     title: "Dividir la cuenta",
     hint: "En partes iguales. Sólo funciona si todos en la mesa aceptan.",
@@ -1568,6 +1569,8 @@ foundingLeftBody: "Quien contrata ahora conserva este precio de suscripción mie
     requestsFailed: "No pudimos revisar si hay otros teléfonos esperando entrar. Lo intentaremos de nuevo en unos segundos.",
   },
   apiErr: {
+    splitOpenTip: "La página de pago anterior tiene {tip} de propina. Escribe ese importe para volver a ella.",
+    splitExactTip: "Escribe el importe de la propina o elige sin propina para pagar tu parte.",
     heldResolveManager: "Solo el dueño o un gerente puede resolver este comprobante.",
     heldResolveInvalid: "Revisa la resolución: motivo (8–500 caracteres), quién cobró, fecha, importe con máximo dos decimales, moneda y vínculos.",
     heldResolveCashRequired: "Elige un comprobante de efectivo retenido. Esta resolución no acepta comprobantes de tarjeta.",

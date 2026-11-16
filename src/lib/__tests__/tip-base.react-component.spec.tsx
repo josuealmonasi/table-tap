@@ -1,5 +1,5 @@
 import { expect, it } from "vitest";
-import { frozenTipPrincipal, ordersTipBase, splitTipBase, splitTipPrincipal, tipFromPercent, type TipOrder } from "@/lib/tip-base";
+import { frozenTipPrincipal, ordersTipBase, splitTipBase, splitTipPrincipal, tipFromPercent } from "@/lib/tip-base";
 
 it("excludes service, earlier tips, discounts already in total, and only collected principal", () => {
   const orders = [{ total: 120, service_fee: 10, tip: 10, collected: 35, collected_tip: 5 }];
@@ -34,15 +34,16 @@ it("tips only the food share of a split frozen after part of the bill was collec
   expect(frozenTipPrincipal(55, frozen)).toBe(50);
   expect([0, 1].map(n => tipFromPercent(splitTipBase(50, 2, [n]), 10))).toEqual([2.5, 2.5]);
 });
-it("M4: a v1 split frozen without a principal offers every share the same tip", () => {
+it("M4/N14: an old gross split never infers a percentage base from later collections", () => {
   // Two-way split of MX$100 food, locked before food_principal existed: amount froze MX$100.
   const split = { food_principal: null, amount: 100 };
   const before = [{ total: 100 }];
   // Share 0 paid MX$50 + a MX$5 tip, which landed on the order.
   const after = [{ total: 105, tip: 5, collected: 55, collected_tip: 5 }];
-  const offer = (orders: TipOrder[], share: number) => tipFromPercent(splitTipBase(splitTipPrincipal(split, orders), 2, [share]), 10);
-  expect(offer(before, 0)).toBe(5);
-  expect(offer(after, 1)).toBe(5);
+  // The original tip breakdown was not frozen. The owner chose exact amounts
+  // for these old splits, rather than either shrinking or inflated presets.
+  expect(splitTipPrincipal(split, before)).toBeNull();
+  expect(splitTipPrincipal(split, after)).toBeNull();
   // What the orders still owe was the old base, divided by the shares again.
   expect(tipFromPercent(splitTipBase(frozenTipPrincipal(null, after), 2, [1]), 10)).toBe(2.5);
   // A frozen principal still wins, and a split never locked reads the orders.

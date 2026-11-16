@@ -3313,3 +3313,14 @@ keep the original line notes and component extras for interrupted kitchen work.
 Subscription recovery reserves time for unpaid, expired and unknown-period
 sources; duplicate-refund reminders inspect each pending case on the bounded
 rotating page, with the existing per-case deduplication key.
+
+### Old splits without a saved tip principal
+
+A legacy phone-claim split whose frozen gross amount exists but whose
+`food_principal` is missing exposes `tipPrincipal: null`. Its gross may include
+earlier gratuities. Diners choose no tip or an exact amount for those shares;
+the preview and `/api/split/pay` use the same capped amount. The server refuses
+percentage requests before reserving a fee and retains support for zero-tip
+payment. A retry reuses its original checkout only when its saved tip and total
+match the current exact choice. Saved-principal legacy splits and model-2 slots
+retain percentage tipping. This fallback changes no historical rows or schema.
