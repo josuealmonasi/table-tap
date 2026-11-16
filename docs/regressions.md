@@ -7656,3 +7656,14 @@ A resumed old checkout must have the selected tip and total: an unchanged retry
 reuses its page without a second fee; a different tip gets an explanation.
 Unit and browser-component specs cover both languages, custom input, caps,
 no-tip payment, and preview/request agreement. No historical data is rewritten.
+
+### A highlighted promotion row is part of its listbox
+
+The live layout gate reported a coupon row's painted background as touching
+the list border, despite its text having 12px of padding. Multiple valid options
+also looked like independent buttons touching each other. Full-width listbox
+options now use their own inner text bounds and share the widget's background
+edges. This also checks text inside divided rows that the old full-row shortcut
+skipped. The real coupon dialog was reproduced at phone and desktop widths;
+the audit self-test includes valid adjacent options, cramped text on all four
+sides of both rows, and ordinary/partial/outside controls that must still fail.

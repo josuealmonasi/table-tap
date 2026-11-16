@@ -3324,3 +3324,13 @@ percentage requests before reserving a fee and retains support for zero-tip
 payment. A retry reuses its original checkout only when its saved tip and total
 match the current exact choice. Saved-principal legacy splits and model-2 slots
 retain percentage tipping. This fallback changes no historical rows or schema.
+
+### Listbox rows in browser audits
+
+A full-width direct `role="option"` child of a listbox is part of that widget.
+Its background may meet the list border and adjacent option rows. The layout
+audit measures its text against the row's own inner edges instead of treating
+its background as a separate button needing a gap. Ordinary buttons, partial
+rows and options outside listboxes retain the existing control checks. Positive
+and broken fixtures cover both borderless and divided rows on every text edge;
+the spacing thresholds are unchanged.
