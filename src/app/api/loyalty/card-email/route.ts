@@ -55,7 +55,12 @@ export async function POST(req: NextRequest) {
     // addresses with it: each "taken" answers whether an address is in use here.
     // Counted per card and per address: one caller holding many cards had five
     // probes an hour for each of them (review access2).
-    if (!actor && (await isRateLimited(`card-email:${code}`, 5, 3600)
+    //
+    // Only linking is counted. Removing an address probes nothing, and taking
+    // consent back must never wait: one diner spending the restaurant Wi-Fi's
+    // shared allowance once left every other diner there unable to remove
+    // their own address for an hour (security review 2026-11-17, finding 4).
+    if (!actor && !removing && (await isRateLimited(`card-email:${code}`, 5, 3600)
       || await isRateLimited(`card-email-diner:${clientKey(req)}`, DINER_LINKS_PER_ADDRESS, 3600))) {
       return await apiError("apiErr.tooManyRequests", 429);
     }
