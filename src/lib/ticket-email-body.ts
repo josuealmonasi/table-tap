@@ -55,7 +55,7 @@ export async function renderTicketMail(
     fromName: where.name, subject: receipt.subject,
     ...mail,
     attachments: [{ filename: `ticket-${model.code}.pdf`, content: Buffer.from(pdf).toString("base64") }],
-    headers: { "List-Unsubscribe": `<${stop}>` },
+    headers: { "List-Unsubscribe": `<${stop}>`, "List-Unsubscribe-Post": "List-Unsubscribe=One-Click" },
   };
 }
 

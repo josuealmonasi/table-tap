@@ -3284,8 +3284,9 @@ Divided-slot collections use their separate `/api/split/collect` contract;
 the skip control here is limited to the two table-payment routes.
 
 The public `/tickets/stop?t=<uuid>` page asks before posting the token to
-`/api/tickets/stop`. Page loads do nothing, so mail scanners cannot unsubscribe
-a diner by opening a link. Missing links and failed requests have distinct
+`/api/tickets/stop`. Mail providers can also POST the RFC 8058 one-click form
+to that public link; it removes the same saved address and consent. Page loads do
+nothing, so mail scanners cannot unsubscribe a diner by opening a link. Missing links and failed requests have distinct
 messages. All new copy is available in Spanish and English.
 
 These client screens consume the card-email server contract implemented in

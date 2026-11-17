@@ -1,3 +1,4 @@
+import { escapeHtml } from "@/lib/html";
 import { mailText } from "@/lib/mail-text";
 import type { Receipt } from "@/lib/receipt";
 
@@ -9,6 +10,8 @@ export function ticketMail(
   const kept = (text: string) => text.split(copy.receiptFooter).join("");
   return {
     text: mailText([kept(receipt.text), "", copy.footer, "", `${copy.stopLabel}:`, copy.stop]),
-    html: `${kept(receipt.html)}<p style="margin-top:24px;color:#6E7A74;font-size:12px">${copy.footer} <a href="${copy.stop}">${copy.stopLabel}</a></p>`,
+    html: receipt.html
+      .replace(`<p style="margin-top:24px;color:#70707a;font-size:12px">${copy.receiptFooter.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")}</p>`, "")
+      .replace(/<\/div>$/, `<p style="margin-top:24px;color:#70707a;font-size:12px">${escapeHtml(copy.footer)} <a style="color:#0e6e6e" href="${escapeHtml(copy.stop)}">${escapeHtml(copy.stopLabel)}</a></p>\n</div>`),
   };
 }

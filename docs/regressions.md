@@ -82,6 +82,9 @@ and that a new party cannot see the previous party's waiting phones.
 | Statement text separates days and the payment link | HTML headings separated days while plain text ran them together; `mail-plaintext.spec.ts` snapshots both languages |
 | Receipt text keeps paragraph breaks | Empty separators were discarded before sending POS and diner receipts; `mail-plaintext.spec.ts` snapshots items, totals and paragraphs in both languages |
 | Card ticket text gives the stop link its own line | The HTML link stood apart while plain text buried its URL beside the label; `mail-plaintext.spec.ts` and `card-email.spec.ts` check the copy and actual sender |
+| Card ticket footer stays inside the receipt | Removing only its text left an empty paragraph and put the card footer outside the receipt; `ticket-email-polish.spec.ts` snapshots both languages |
+| Receipt emails use the Counter palette | The receipt kept retired colors while the app moved to Counter; `ticket-email-polish.spec.ts` checks ink, muted, line and link colors |
+| A mail provider can stop ticket emails in one click | The header and stop route disagreed about POST forms; `ticket-stop-one-click.spec.ts` checks the public rewrite and card update, and `card-email.spec.ts` checks the header |
 | Restaurant logos use PNG bytes, content type and path, and the bucket accepts PNG | The photo encoder stored WebP logos that the ticket PDF could not print; changing only the encoder would leave a WebP path and a bucket that refused PNG. `image-resize.spec.ts` checks logos and unchanged photo encodings; `images.spec.ts` checks the bucket allowlist |
 | A new card save cannot duplicate today's ticket after a lost reply (card email UI) | The save could commit unseen and both the card outbox and the per-sale sender mailed the same ticket; `card-email-pos.spec.tsx` holds the lost reply and checks skip in the charge and held replay |
 | A new card reader does not reuse another reader's address (card email UI) | A cashier could briefly see an owner's full address from the shared SWR cache; `card-email.spec.tsx` reproduces the flash with a delayed masked reply |
@@ -7692,3 +7695,19 @@ share `splitTakesExactTipOnly`, tested against one fixture table
 (`exact-tip-cases.ts`) on both sides; `apiErr.splitExactTip` tells a stale
 bundle to reload. Known follow-up (F4): modern v1 splits with a principal still
 reopen an earlier page or return a winner whose tip differs from the screen.
+
+
+### Ticket email footer and colors
+
+The card footer belongs inside the same receipt container as the ticket; removing
+the old promise must also remove its paragraph. The receipt colors follow the
+Counter tokens so the email and the app do not drift apart. Both languages have
+HTML snapshots in `ticket-email-polish.spec.ts`.
+
+### Ticket email one-click unsubscribe
+
+A mail provider posts the one-click form to the link in the email header. The
+public link must route that POST to the same card update as the confirmation
+button, while a GET only opens the confirmation page: scanners open links.
+`ticket-stop-one-click.spec.ts` checks the route and rewrite, and
+`card-email.spec.ts` checks the outgoing header.

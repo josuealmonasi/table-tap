@@ -11,12 +11,21 @@ const uuid = /^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i;
 /**
  * POST { token } — the "stop sending me tickets" link in every ticket email.
  * Removes the address from the card (and the consent with it). A POST from a
- * button, never on opening the link: mail scanners open links.
+ * button, never on opening the link: mail scanners open links. Mail providers
+ * can also POST the one-click form, with the token in the link.
  */
 export async function POST(req: NextRequest) {
   if (await isRoomLimited(req, "tickets-stop", 20)) return await apiError("apiErr.tooManyRequests", 429);
-  const body = await jsonBody<{ token?: unknown }>(req);
-  const token = typeof body?.token === "string" && uuid.test(body.token) ? body.token : null;
+  const contentType = req.headers.get("content-type") ?? "";
+  let candidate: unknown;
+  if (/^(application\/x-www-form-urlencoded|multipart\/form-data)(?:;|$)/i.test(contentType)) {
+    const form = await req.formData().catch(() => null);
+    if (form?.get("List-Unsubscribe") === "One-Click") candidate = req.nextUrl.searchParams.get("t");
+  } else {
+    const body = await jsonBody<{ token?: unknown }>(req);
+    candidate = body?.token;
+  }
+  const token = typeof candidate === "string" && uuid.test(candidate) ? candidate : null;
   if (!token) return await apiError("apiErr.invalidRequest", 400);
   const db = createAdminClient();
   const { data, error } = await db.from("loyalty_cards")
