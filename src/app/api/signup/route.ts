@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { apiError } from "@/lib/api-error";
 import { jsonBody } from "@/lib/json-body";
 import { TERMS_VERSION } from "@/lib/legal";
-import { TERMS_TEXT_HASH, termsEvidence } from "@/lib/terms-evidence";
+import { TERMS_TEXT_HASH } from "@/lib/terms-evidence";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { clientKey, isRateLimited } from "@/lib/rate-limit";
 import { sendSignupConfirmation } from "@/lib/signup-confirmation";
@@ -78,15 +78,12 @@ export async function POST(req: NextRequest) {
   // Confirmation starts these 30 days afresh: mail delays must not spend the trial.
   // What they agreed to and when. Versioned, because "they accepted" is
   // only worth something if we can say which document they accepted.
-  const evidence = termsEvidence(req);
   const { error: restaurantErr } = await admin.rpc("signup_restaurant_with_terms_v1", {
     p_name: restaurantName.trim(),
     p_user: created.user.id,
     p_email: email,
     p_version: TERMS_VERSION,
     p_text_hash: TERMS_TEXT_HASH,
-    p_ip: evidence.ip,
-    p_user_agent: evidence.userAgent,
     p_plan: TRIAL_PLAN,
     p_trial_ends_at: new Date(Date.now() + TRIAL_DAYS * 86_400_000).toISOString(),
   });

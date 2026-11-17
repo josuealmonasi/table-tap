@@ -1,7 +1,9 @@
 drop table if exists terms_acceptances cascade;
 drop function if exists public.capture_legacy_terms_v1() cascade;
 drop function if exists public.keep_terms_acceptance_v1();
+drop function if exists public.accept_terms_v1(uuid, uuid, text, text, text);
 drop function if exists public.accept_terms_v1(uuid, uuid, text, text, text, text, text);
+drop function if exists public.signup_restaurant_with_terms_v1(text, uuid, text, text, text, text, timestamptz);
 drop function if exists public.signup_restaurant_with_terms_v1(text, uuid, text, text, text, text, text, text, timestamptz);
 drop table if exists account_movements cascade;
 -- Required-parameter review overloads; drop before their legacy callees.

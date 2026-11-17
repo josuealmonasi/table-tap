@@ -22,9 +22,11 @@ it("records each acceptance and its evidence atomically with the current terms",
   await POST(req);
   expect(mock.rpc).toHaveBeenCalledTimes(2);
   expect(mock.rpc).toHaveBeenCalledWith("accept_terms_v1", expect.objectContaining({
-    p_restaurant: "r1", p_user: "u1", p_ip: "192.0.2.1", p_user_agent: "test-browser",
+    p_restaurant: "r1", p_user: "u1",
     p_text_hash: expect.stringMatching(/^[a-f0-9]{64}$/),
   }));
+  expect(mock.rpc.mock.calls[0][1]).not.toHaveProperty("p_ip");
+  expect(mock.rpc.mock.calls[0][1]).not.toHaveProperty("p_user_agent");
 });
 
 it("refuses a non-owner without writing evidence", async () => {

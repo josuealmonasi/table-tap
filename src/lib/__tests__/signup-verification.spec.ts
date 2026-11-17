@@ -37,6 +37,8 @@ it("records the signup acceptance together with the restaurant", async () => {
   expect(mock.rpc).toHaveBeenCalledWith("signup_restaurant_with_terms_v1", expect.objectContaining({
     p_user: "owner", p_version: expect.any(String), p_text_hash: expect.stringMatching(/^[a-f0-9]{64}$/),
   }));
+  expect(mock.rpc.mock.calls[0][1]).not.toHaveProperty("p_ip");
+  expect(mock.rpc.mock.calls[0][1]).not.toHaveProperty("p_user_agent");
 });
 it("removes the unconfirmed user if the restaurant and evidence cannot be saved", async () => {
   mock.rpc.mockResolvedValue({ error: { message: "unavailable" } });
