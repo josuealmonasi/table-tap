@@ -7705,3 +7705,15 @@ unknown identity, network details and text hash left empty rather than guessed.
 `signup-verification.spec.ts` covers the first acceptance and rollback;
 `acceptance-schema.spec.ts` pins the archive and owner-read policy. Database
 execution and cascade behavior still need Claude's isolated gate.
+
+## Deleted restaurant books expire after ten years
+
+| Places that must agree | What went wrong | What checks it |
+| --- | --- | --- |
+| Restaurant deletion and scheduled retention | Archived books had no expiry job and stayed indefinitely | `accounting-purge.spec.ts`, `recovery/__tests__/route.spec.ts` |
+
+The archive records the deletion time after deleting the live restaurant. The
+scheduled worker removes only records older than ten years, in bounded batches.
+Older archives have no proven deletion time, so their ten years start when the
+schema is applied; this avoids deleting them too early. The SQL contract test
+pins the strict boundary and the mocked worker checks the reported counts.
