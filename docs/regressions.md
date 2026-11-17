@@ -56,6 +56,7 @@ and that a new party cannot see the previous party's waiting phones.
 | Read-only gate cases share their run's fixtures | Identical refusals repeatedly inserted and deleted orders, tables and splits; `gate-fixture-reuse.spec.ts`, `api-readonly-fixtures.spec.ts` and `run-fixtures.spec.ts` check reuse, writer isolation and cleanup |
 | Reseeding restores demo logins without replacing their identities | Deleting the restaurant also deleted five healthy logins and sessions; `seed-logins.spec.ts` and `mock-logins.spec.ts` check identity reuse, changed passwords, metadata reset and explicit drop |
 | A counter quote is checked under the payment lock (review N1) | A discount after the route read could record less than the cash received; `counter-collection-race.spec.ts` and `review2-money-schema.spec.ts` hold the quote and writer together |
+| A coverage probe must check a restaurant before passing | An empty database or only restaurants awaiting backfill printed `ok`; `coverage-probe-empty.spec.ts` checks both and a refused connection |
 | Staff discounts preserve existing gratuities (review N2) | Both pricing and SQL discounted tips below the order total; `staff-discount-tip.spec.ts` and `staff-discount-tip-route.spec.ts` check direct and approved principal-only discounts |
 | Each subscription source has time to run (review N8) | Persistently unpaid reads starved cancellation recovery; `subscriptions.spec.ts` advances the clock across all three sources |
 | Overdue refunds remind each restaurant (review N9) | Only the globally oldest case got a reminder; `refunds.spec.ts` keeps two tenants pending and checks both bells |
@@ -7692,3 +7693,11 @@ share `splitTakesExactTipOnly`, tested against one fixture table
 (`exact-tip-cases.ts`) on both sides; `apiErr.splitExactTip` tells a stale
 bundle to reload. Known follow-up (F4): modern v1 splits with a principal still
 reopen an earlier page or return a winner whose tip differs from the screen.
+
+
+## A coverage probe must check something
+
+The coverage probe compared eligible restaurants, but its final success line
+did not know whether any were eligible. An empty database or only restaurants
+awaiting backfill therefore looked like proof. It now fails when none was
+checked; the unit test also refuses a broken database connection.

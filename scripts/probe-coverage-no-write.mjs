@@ -48,7 +48,7 @@ const MONEY_DIGEST = `select md5(concat_ws('|',
 const byId = rows => JSON.stringify([...rows].sort((a, b) => a.id.localeCompare(b.id))
   .map(r => ({ id: r.id, unresolved: r.unresolved, amount: Number(r.amount), tip: Number(r.tip) })));
 const value = async (sql, args) => (await db.query(sql, args)).rows[0].value;
-let failed = 0;
+let failed = 0, checked = 0;
 const fail = (name, message) => { failed++; console.error(`FAIL ${name}: ${message}`); };
 
 try {
@@ -70,7 +70,10 @@ try {
       const actual = byId(await value("select public.order_coverage($1, $2::uuid[]) value", [r.id, orders]));
       if (await value("select txid_current_if_assigned() is not null value")) fail(name, "the read was given a transaction id, so it wrote");
       else if (actual !== expected) fail(name, `coverage differs from the old body\n  old ${expected}\n  new ${actual}`);
-      else console.log(`PASS ${name}: ${orders.length} orders read inside begin read only, coverage identical`);
+      else {
+        checked++;
+        console.log(`PASS ${name}: ${orders.length} orders read inside begin read only, coverage identical`);
+      }
     } catch (error) {
       fail(name, error.message.replaceAll("\n", " "));
     } finally {
@@ -94,5 +97,7 @@ try {
 } finally {
   await db.end();
 }
+// A clean run with no eligible restaurant proved nothing.
+if (!checked) fail("coverage", "no restaurant was checked");
 if (failed) process.exitCode = 1;
 console.log(failed ? `${failed} failed` : "ok");
