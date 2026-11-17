@@ -127,9 +127,10 @@ async function drainOnce(limit: number, deadline = Infinity, tally = emptyDrain(
     for (const rows of groups.values()) {
       const ids = rows.map(r => r.id);
       const writeRows = (patch: Record<string, unknown>) => db.from("ticket_email_outbox").update(patch)
-        .eq("restaurant_id", rows[0].restaurant_id).eq("claim", rows[0].claim).in("id", ids);
+        .eq("restaurant_id", rows[0].restaurant_id).eq("claim", rows[0].claim).in("id", ids).select("id");
       if (Date.now() >= deadline) {
-        await writeRows({ claimed_at: null, claim: null });
+        const { data: released, error: releaseError } = await writeRows({ claimed_at: null, claim: null });
+        if (releaseError || released?.length !== ids.length) { tally.errors++; continue; }
         tally.released += ids.length;
         continue;
       }
@@ -137,9 +138,10 @@ async function drainOnce(limit: number, deadline = Infinity, tally = emptyDrain(
         console.error("ticket email failed", err);
         return { outcome: "failed", retryable: true, reason: `error: ${err instanceof Error ? err.message : String(err)}` };
       });
-      if (result === "lost") continue;
+      if (result === "lost") { tally.errors++; continue; }
       const patch = outboxPatch(result, Math.max(...rows.map(r => r.attempts)));
-      await writeRows(patch);
+      const { data: updated, error: updateError } = await writeRows(patch);
+      if (updateError || updated?.length !== ids.length) { tally.errors++; continue; }
       if (result.outcome === "sent") tally.sent += ids.length;
       else if (result.outcome === "failed") {
         if (patch.finished_at) tally.failed += ids.length;
