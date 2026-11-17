@@ -104,6 +104,23 @@ export function adminOwnerCases(fx) {
         const { data } = await f.admin.from("restaurants").select("plan, plan_status").eq("id", r).single();
         return data?.plan === d.to && data?.plan_status === "active" || `the restaurant is on ${data?.plan}/${data?.plan_status}, not ${d.to}`;
       } },
+    // A tier assigned with billing: refused where there is nothing to bill.
+    // The happy paths email a real owner and change a Stripe subscription, so
+    // they are proved in src/lib/__tests__/admin-tier.spec.ts, not here.
+    { name: "PATCH /api/admin/restaurants (Carta by payment link refused)", as: "platformAdmin", method: "PATCH",
+      path: "/api/admin/restaurants", body: { id: r, plan: "carta", billing: "payment_link" },
+      expect: [400], expectError: /Carta/ },
+    { name: "PATCH /api/admin/restaurants (pay-by date in the past refused)", as: "platformAdmin", method: "PATCH",
+      path: "/api/admin/restaurants", body: { id: r, plan: "casa", billing: "payment_link", payBy: "2020-01-01" },
+      expect: [400], expectError: /fecha|date/i },
+    { name: "PATCH /api/admin/restaurants (unknown billing refused)", as: "platformAdmin", method: "PATCH",
+      path: "/api/admin/restaurants", body: { id: r, plan: "casa", billing: "forever-free" }, expect: [400] },
+    // The emailed pay link opens Checkout only for a tier that was assigned and
+    // is unpaid. Asked for another tier, it lands on the Plan screen instead.
+    { name: "GET  /api/billing/assigned (a tier nobody assigned)", as: "owner", method: "GET",
+      path: "/api/billing/assigned?plan=grupo", expect: [200] },
+    { name: "GET  /api/billing/assigned (not the owner)", as: "waiter", method: "GET",
+      path: "/api/billing/assigned?plan=casa", expect: [200] },
     // An owner cannot give themselves a plan — only the platform admin moves one.
     { name: "PATCH /api/admin/restaurants (an owner refused)", as: "owner", method: "PATCH",
       path: "/api/admin/restaurants",
