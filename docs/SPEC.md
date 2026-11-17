@@ -3358,3 +3358,13 @@ percentage by it and `splitTipPrincipal` sends the screen `null` by it, so a
 split frozen at zero or with no amount keeps percentages on both sides. The
 modern v1 paths (with a principal) still reopen an earlier page whatever its
 tip; that is a known follow-up.
+
+
+### Database behavior probes
+
+The probes gate runs development database behavior checks for money and held
+sales in rolled-back transactions, and checks that complete coverage reads do
+not write. It fails if a probe fails or cannot run. Schema and money-path
+changes select it in the gate planner. The journal race and RLS before/after
+equivalence probes remain separate until their fixture and baseline needs can
+be met safely.

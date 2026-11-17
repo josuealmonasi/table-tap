@@ -36,10 +36,11 @@ const flag = name => args.includes(name);
 const value = name => (flag(name) ? args[args.indexOf(name) + 1] : null);
 const ROOT = execFileSync("git", ["rev-parse", "--show-toplevel"], { encoding: "utf8" }).trim();
 const STALL_MS = Number(process.env.GATE_STALL_MIN ?? 6) * 60_000;
-const SERVERLESS = new Set(["tsc", "lint", "test"]);
+const SERVERLESS = new Set(["tsc", "lint", "test", "probes"]);
 const WRITERS = new Set(["api", "rls", "attack", "promises"]);
 
 const COMMANDS = {
+  probes: ["node", ["scripts/probes.mjs"]],
   mock: ["node", ["scripts/db.mjs", "mock"]],
   // Whole, because a changed type breaks callers nobody touched; on a cache,
   // so a rerun takes seconds (10s cold, 2s warm on 2026-11-10).

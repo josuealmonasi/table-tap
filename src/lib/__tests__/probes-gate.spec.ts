@@ -1,0 +1,12 @@
+import { expect, it } from "vitest";
+import { runProbes } from "../../../scripts/probes.mjs";
+
+it("fails the gate when a probe cannot connect", async () => {
+  const result = await runProbes(["connection"], async () => ({ code: 1, error: "connection refused" }));
+  expect(result).toBe(false);
+});
+
+it("fails the gate when a probe cannot start", async () => {
+  const result = await runProbes(["missing"], async () => { throw new Error("spawn failed"); });
+  expect(result).toBe(false);
+});

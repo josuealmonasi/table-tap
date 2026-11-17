@@ -7701,3 +7701,17 @@ The coverage probe compared eligible restaurants, but its final success line
 did not know whether any were eligible. An empty database or only restaurants
 awaiting backfill therefore looked like proof. It now fails when none was
 checked; the unit test also refuses a broken database connection.
+
+
+| Gap | Automated check | Dev verification |
+|---|---|---|
+| Money SQL was covered by mocks and text, while a failed probe could be missed | probes-gate.spec.ts | Run the probes gate on dev; its money cases roll back every fixture. |
+
+## Database behavior needs a gate
+
+The SQL writers and the checks that describe them must agree. Source matches and
+mocked RPCs cannot show what PostgreSQL actually did. The probes gate runs the
+rolled-back money and held-sale cases and the coverage read check. A failed or
+unstartable probe fails the gate. The journal race probe commits fixtures and
+still needs separate fixture isolation; the RLS equivalence probe needs a
+baseline from before a schema change, so neither belongs in this runner yet.
