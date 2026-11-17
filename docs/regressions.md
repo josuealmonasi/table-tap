@@ -7700,8 +7700,21 @@ reopen an earlier page or return a winner whose tip differs from the screen.
 | --- | --- | --- |
 | Restaurant deletion and scheduled retention | Archived books had no expiry job and stayed indefinitely | `accounting-purge.spec.ts`, `recovery/__tests__/route.spec.ts` |
 
-The archive records the deletion time after deleting the live restaurant. The
-scheduled worker removes only records older than ten years, in bounded batches.
-Older archives have no proven deletion time, so their ten years start when the
-schema is applied; this avoids deleting them too early. The SQL contract test
-pins the strict boundary and the mocked worker checks the reported counts.
+The archive records when the accounting copy is made in the deletion transaction.
+The scheduled worker removes only records older than ten years for restaurants
+that no longer exist, in bounded batches. The SQL contract pins the strict
+boundary; a database probe must check the actual boundary and restored IDs.
+
+
+## Accounting purge and recovery reporting agree
+
+| Places that must agree | What went wrong | What checks it |
+| --- | --- | --- |
+| Recovery jobs and the production scheduler | A failed accounting job could still report success | `recovery-scheduler-client.spec.ts` |
+| Retained books and the expiry worker | A second deletion timestamp rewrote old archives, and a restored restaurant was not excluded | `accounting-purge.spec.ts`; database probe |
+| Retention deadline and recovery age | Pending age included the ten years books must be kept | `accounting-purge.spec.ts` |
+
+The scheduler checks the accounting result. The purge uses the existing
+`retained_at`, excludes live restaurants from both deletion and pending counts,
+and reports the age since the retention deadline. The SQL contract test reads
+the function itself; the database probe must exercise the actual predicate.
