@@ -43,12 +43,34 @@ const PREVIEW_TOOLBAR = "https://vercel.live";
 const PREVIEW_SOCKET = "wss://ws-us3.pusher.com";
 
 /**
+ * The Supabase origin when it runs on this machine, else "".
+ *
+ * Only the GitHub gates do that: a production build served over http against
+ * a throwaway local Supabase (`.github/workflows/gates.yml`). The policy has
+ * to name that origin or the browser refuses every call to the database and
+ * no login works. A deployed build points at `*.supabase.co`, gets "", and
+ * its policy does not change by a character.
+ */
+export function loopbackDatabase(supabaseUrl: string | undefined): string {
+  if (!supabaseUrl) return "";
+  try {
+    const url = new URL(supabaseUrl);
+    const local = ["127.0.0.1", "localhost", "[::1]"].includes(url.hostname);
+    return local && url.protocol === "http:" ? url.origin : "";
+  } catch {
+    return "";
+  }
+}
+
+/**
  * @param nonce   a fresh value per request; Next stamps it on its own scripts
  * @param dev     the development server, which needs `eval` and a websocket
  *                for hot reload and serves over plain http
  * @param preview a deployment for a pull request, where the toolbar lives
+ * @param localDatabase `loopbackDatabase(...)`: a Supabase on this machine
  */
-export function contentSecurityPolicy(nonce: string, dev: boolean, preview = false): string {
+export function contentSecurityPolicy(nonce: string, dev: boolean, preview = false, localDatabase = ""): string {
+  const local = localDatabase ? ` ${localDatabase} ${localDatabase.replace(/^http/, "ws")}` : "";
   const directives: string[] = [
     "default-src 'self'",
 
@@ -70,7 +92,7 @@ export function contentSecurityPolicy(nonce: string, dev: boolean, preview = fal
     "style-src 'self' 'unsafe-inline'",
 
     // `data:` for inline icons, `blob:` for a file the browser made itself.
-    `img-src 'self' data: blob: ${SUPABASE}`,
+    `img-src 'self' data: blob: ${SUPABASE}${localDatabase ? " " + localDatabase : ""}`,
     "font-src 'self' data:",
 
     // The one that matters. Nowhere but us and our database — so a script that
@@ -78,7 +100,7 @@ export function contentSecurityPolicy(nonce: string, dev: boolean, preview = fal
     // In development the loopback address is spelled both ways — hot reload
     // uses one and an editor's console bridge the other — and a host in a
     // policy is matched literally, so `localhost` does not cover `127.0.0.1`.
-    `connect-src 'self' ${SUPABASE} ${SUPABASE_SOCKET}${dev ? " " + LOOPBACK : ""}${
+    `connect-src 'self' ${SUPABASE} ${SUPABASE_SOCKET}${local}${dev ? " " + LOOPBACK : ""}${
       preview ? ` ${PREVIEW_TOOLBAR} ${PREVIEW_SOCKET}` : ""
     }`,
 
@@ -101,8 +123,9 @@ export function contentSecurityPolicy(nonce: string, dev: boolean, preview = fal
   ];
 
   // Not in development, where the server is plain http and this would send
-  // every request to a port nothing is listening on.
-  if (!dev) directives.push("upgrade-insecure-requests");
+  // every request to a port nothing is listening on — nor against a local
+  // database, which is plain http on this machine for the same reason.
+  if (!dev && !localDatabase) directives.push("upgrade-insecure-requests");
 
   return directives.join("; ");
 }

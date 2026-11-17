@@ -14,8 +14,8 @@ let staffIds: string[] = [];
 const admin = { userId: "11111111-1111-4111-8111-111111111111", email: "admin@test.dev" };
 vi.mock("@/lib/admin", () => ({ getPlatformAdmin: async () => allowed ? admin : null }));
 vi.mock("@/lib/api-error", () => ({ apiError: async (error: string, status: number) => NextResponse.json({ error }, { status }) }));
-vi.mock("@/lib/admin-plan", () => ({ moveRestaurantPlan: async () => planRefused
-  ? { ok: false, error: "apiErr.billingBusy", status: 409 } : { ok: true, from: "carta", to: "caja" } }));
+vi.mock("@/lib/admin-tier", () => ({ TIER_BILLING: ["next_bill", "payment_link", "free"], assignTier: async () => planRefused
+  ? { ok: false, error: "apiErr.billingBusy", status: 409 } : { ok: true, from: "carta", to: "caja", billing: "free" } }));
 vi.mock("@/lib/user-log", () => ({ logUserChange: vi.fn() }));
 vi.mock("@/lib/billing-delete", () => ({ endRestaurantBilling: async () => { effects.push("billing"); } }));
 vi.mock("@/lib/billing-operation", () => ({

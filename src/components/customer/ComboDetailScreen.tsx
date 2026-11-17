@@ -117,7 +117,7 @@ export default function ComboDetailScreen({
       </div>
 
       <div style={{ padding: 20 }}>
-        <div className="tt-row">
+        <div className="tt-detail-head">
           <h2 className="tt-serif" style={{ margin: 0, fontSize: 24 }}>
             {combo.name}
           </h2>

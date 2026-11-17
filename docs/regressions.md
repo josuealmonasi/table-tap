@@ -7728,3 +7728,14 @@ of both actual paths with one restaurant row did not reproduce the reported
 regime mismatch. `ticket-place-regime.spec.ts` pins their saved regime, and
 `ticket-email-polish.spec.ts` checks the old receipt footer is absent in both
 languages.
+## Android layout — separators stay with the word before them
+
+The GitHub layout gate renders text like Linux/Android Chrome, which wraps
+where macOS did not. A " · " joint could start a line (check payment, divided
+bill, part receipt), the dish or combo name ran up against its price (3px), and
+the account statement's order lines painted 1px into each other. Every inline
+" · " now joins with no-break spaces on both sides of the dot (a line can neither start nor end with one); the dish/combo head is
+`.tt-detail-head` (elastic name with `min-width: 0` and `overflow-wrap`, fixed
+price); `.tt-statement-lines` spaces its lines with a parent `gap`.
+
+The i18n strings (`es.ts`, `en.ts`) join with the same no-break spaces around the dot.
