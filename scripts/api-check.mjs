@@ -31,6 +31,7 @@ const BASE = DEV_URL;
 await requireServer(BASE);
 
 let failed = 0;
+let skippedForStripe = 0;
 const ok = m => console.log(`    ok       ${m}`);
 const bad = m => { failed++; console.log(`    BAD      ${m}`); };
 
@@ -57,6 +58,15 @@ const chainInScope = all.some(c => chained(c) && inScope.get(c));
 try {
   for (const c of all) {
     if (!(chained(c) ? chainInScope : inScope.get(c))) continue;
+
+    // A case that only means something against Stripe's test mode, on a run
+    // that has no Stripe key (GitHub without STRIPE_TEST_SECRET). Skipped by
+    // name and counted, never passed: a check that cannot run is not a pass.
+    if (c.needsStripe && process.env.GATE_NO_STRIPE === "1") {
+      skippedForStripe++;
+      console.log(`    skip     ${c.name} — skipped: no STRIPE_TEST_SECRET`);
+      continue;
+    }
 
     // Some refusals only exist on the far side of a switch. `/api/split/pay`
     // turns everybody away when the restaurant has no card reader, and no
@@ -195,5 +205,6 @@ try {
 }
 
 reportScope("api");
+if (skippedForStripe) console.log(`\n  ${skippedForStripe} case(s) skipped: no STRIPE_TEST_SECRET — they did not run, so they did not pass.`);
 console.log(failed === 0 ? "\nEvery request answers.\n" : `\n${failed} PROBLEM(S).\n`);
 process.exit(failed === 0 ? 0 : 1);

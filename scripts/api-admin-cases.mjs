@@ -10,6 +10,9 @@ export function adminCases() {
       check: data => Array.isArray(data.entries) && data.entries.length <= 100 || "no bounded audit page" },
     { name: "DELETE /api/admin/restaurants (pending refund blocks; settled receipts survive deletion)",
       as: "platformAdmin", method: "DELETE", path: "/api/admin/restaurants", expect: [409],
+      // The deletion asks Stripe to end the restaurant's billing first
+      // (endRestaurantBilling), so it needs a real Stripe test key.
+      needsStripe: true,
       arrange: async f => {
         const id = randomUUID();
         const cleanup = async () => {

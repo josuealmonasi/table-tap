@@ -7692,3 +7692,15 @@ share `splitTakesExactTipOnly`, tested against one fixture table
 (`exact-tip-cases.ts`) on both sides; `apiErr.splitExactTip` tells a stale
 bundle to reload. Known follow-up (F4): modern v1 splits with a principal still
 reopen an earlier page or return a winner whose tip differs from the screen.
+
+## Android layout — separators stay with the word before them
+
+The GitHub layout gate renders text like Linux/Android Chrome, which wraps
+where macOS did not. A " · " joint could start a line (check payment, divided
+bill, part receipt), the dish or combo name ran up against its price (3px), and
+the account statement's order lines painted 1px into each other. Every inline
+" · " now joins with no-break spaces on both sides of the dot (a line can neither start nor end with one); the dish/combo head is
+`.tt-detail-head` (elastic name with `min-width: 0` and `overflow-wrap`, fixed
+price); `.tt-statement-lines` spaces its lines with a parent `gap`.
+
+The i18n strings (`es.ts`, `en.ts`) join with the same no-break spaces around the dot.
