@@ -3003,6 +3003,17 @@ votes: "Votes",
     button: "Pay for {plan}",
     after: "The link opens Stripe's secure payment page, with the price, before you confirm. If it asks you to sign in, sign in with your owner account and open the link again. If it is not paid by {date}, your restaurant goes back to the Carta plan and keeps everything you built.",
   },
+  adminBilling: {
+    locked: "Locked for non-payment",
+    pastDue: "Payment overdue in Stripe",
+    cancelling: "Stripe · cancelled, active until {date}",
+    stripeTrial: "Stripe · trial until {date}",
+    paying: "Stripe · {price}/month · renews {date}",
+    payingNoDate: "Pays through Stripe",
+    unpaidUntil: "No subscription · until {date}, then Carta",
+    free: "Free",
+    comped: "Assigned at no charge",
+  },
 };
 
 export type Messages = typeof en;
