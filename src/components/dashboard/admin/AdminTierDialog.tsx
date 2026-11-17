@@ -48,9 +48,6 @@ export default function AdminTierDialog({ name, plan, billedByStripe, busy, onCl
 
   return (
     <Modal open onClose={onClose} maxWidth={460} title={t("admin.planConfirmTitle", { name, plan: label })}>
-      <h3 className="tt-serif" style={{ marginTop: 0, marginBottom: 4 }}>
-        {t("admin.planConfirmTitle", { name, plan: label })}
-      </h3>
       <form className="tt-prodform" onSubmit={submit}>
         {billedByStripe && !free ? (
           <p className="tt-muted" style={{ margin: 0, fontSize: 13 }}>{t("admin.tierNextBillMsg", { plan: label })}</p>
