@@ -129,6 +129,23 @@ export default function AccountStatement({ code, paid }: { code: string; paid: b
     }
   }
 
+  async function removeEmail(): Promise<void> {
+    if (!window.confirm(t("account.removeEmailConfirm"))) return;
+    setBusy(true);
+    setNotice(null);
+    try {
+      const res = await fetch("/api/account/remove-email", {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ c: code }),
+      });
+      const result = await res.json().catch(() => ({}));
+      setNotice(res.ok ? t("account.removeEmailDone") : result.error ?? t("apiErr.generic"));
+    } catch {
+      setNotice(t("done.networkError"));
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function mail(e: React.FormEvent): Promise<void> {
     e.preventDefault();
     setBusy(true);
@@ -242,6 +259,9 @@ export default function AccountStatement({ code, paid }: { code: string; paid: b
         <div className="tt-statement-keep tt-no-print">
           <button type="button" className="tt-btn tt-btn-ghost tt-btn-sm" onClick={() => window.print()}>
             {t("account.print")}
+          </button>
+          <button type="button" className="tt-btn tt-btn-ghost tt-btn-sm" disabled={busy} onClick={() => void removeEmail()}>
+            {t("account.removeEmail")}
           </button>
           {data.canEmail && mode !== "mail" && (
             <button type="button" className="tt-btn tt-btn-ghost tt-btn-sm" onClick={() => setMode("mail")}>

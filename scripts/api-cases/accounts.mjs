@@ -118,6 +118,8 @@ export function accountsCases(root) {
       body: { c: fx.accountCode, expected: 1 }, expect: [409], expectError: /tarjeta|card/i },
     // Dev carries a placeholder mail key, so a real send fails there: either
     // answer is one the route gives, and neither keeps the address.
+    { name: "POST /api/account/remove-email (waiter refused)", as: "waiter", method: "POST", path: "/api/account/remove-email",
+      body: { id: fx.accountId }, expect: [403] },
     { name: "POST /api/account/email (the statement)", as: "diner", method: "POST", path: "/api/account/email",
       body: { c: fx.accountCode, email: "cliente@example.com", ref: randomUUID() }, expect: [200, 409, 502] },
   ].map(c => ({ ...c, fixture: fx }));
