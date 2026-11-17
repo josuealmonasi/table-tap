@@ -1573,7 +1573,8 @@ foundingLeftBody: "Subscribe now and keep this subscription price for as long as
   },
   apiErr: {
     splitOpenTip: "An earlier payment page has a {tip} tip. Enter that amount to return to it.",
-    splitExactTip: "Enter a tip amount or choose no tip to pay this share.",
+    splitExactTip: "Enter a tip amount or choose no tip to pay this share. If you don’t see a tip amount field, reload the page.",
+    splitPageChanged: "Your share changed while an earlier payment page was still open. Reload the page and try again in a few minutes.",
     heldResolveManager: "Only an owner or manager can resolve this receipt.",
     heldResolveInvalid: "Check the resolution: reason (8–500 characters), collector, date, amount with at most two decimals, currency and links.",
     heldResolveCashRequired: "Choose a held cash receipt. Card receipts cannot use this resolution.",

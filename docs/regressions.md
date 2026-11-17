@@ -7678,3 +7678,17 @@ one quote check before exposing the URL, preserving the existing attempt and
 fee lifecycle. Matching exact and zero-tip winners remain usable; invalid saved
 tip evidence refuses verification on either path. The race regression models
 the shared opener's documented return contract without making provider calls.
+
+### A diner whose share grew can still pay it (review F1–F3)
+
+A stale exact-tip page was reopened only when its tip and total matched. A diner
+who cancelled the Stripe page and then ordered dessert got 409 on every Pay
+until Stripe expired the page 30 minutes later, worded as the waiter's
+"collect again". The route now expires a resumed page whose total is stale,
+closes its attempt (and fee) through `resumeDinerAttempt`, and opens one at the
+new total; a concurrent winner keeps the strict check. When the old page cannot
+be closed the diner sees `apiErr.splitPageChanged`. The route and the screen now
+share `splitTakesExactTipOnly`, tested against one fixture table
+(`exact-tip-cases.ts`) on both sides; `apiErr.splitExactTip` tells a stale
+bundle to reload. Known follow-up (F4): modern v1 splits with a principal still
+reopen an earlier page or return a winner whose tip differs from the screen.

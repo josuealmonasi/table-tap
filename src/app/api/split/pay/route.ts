@@ -1,6 +1,6 @@
 import { after } from "next/server";
 import { drainTicketEmails } from "@/lib/ticket-email";
-import { ordersTipBase, splitTipBase, splitTipPrincipal, tipFromPercent } from "@/lib/tip-base";
+import { ordersTipBase, splitTakesExactTipOnly, splitTipBase, splitTipPrincipal, tipFromPercent } from "@/lib/tip-base";
 import { paySplitSlots } from "@/lib/split-slots-pay";
 import { tableMember } from "@/lib/table-membership";
 import { dinerCheckoutOrders } from "@/lib/diner-checkout-orders";
@@ -23,7 +23,7 @@ import {
 } from "@/lib/platform-fee";
 import { orderFeeCents } from "@/lib/plan";
 import { round2 } from "@/lib/money";
-import { legacySplitCheckoutError } from "@/lib/legacy-split-checkout";
+import { legacySplitQuote, legacySplitRefusal, retireStaleLegacyPage } from "@/lib/legacy-split-checkout";
 import { siteOrigin } from "@/lib/site-origin";
 
 export const runtime = "nodejs";
@@ -119,7 +119,9 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
   // Old gross splits may already contain tips. Ask for an amount instead of
   // charging a percentage of that uncertainty; zero-tip payment still works.
-  if (split.food_principal == null && tipAmount == null && Number(tipPct) > 0) {
+  // The same rule decides whether the screen shows the exact-amount field.
+  const exactOnly = splitTakesExactTipOnly(split);
+  if (exactOnly && tipAmount == null && Number(tipPct) > 0) {
     return await apiError("apiErr.splitExactTip", 409);
   }
 
@@ -128,7 +130,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   let prior: Stripe.Checkout.Session | null;
   try {
     prior = await resumeDinerAttempt(stripe, restaurantId, scopeKey);
-    if (prior && split.food_principal != null) return NextResponse.json({ url: prior.url });
+    if (prior && !exactOnly) return NextResponse.json({ url: prior.url });
   } catch { return await apiError("apiErr.checkoutFailed", 502); }
 
   // Their own orders since the freeze — verified, never taken on trust: unpaid,
@@ -148,11 +150,15 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   const exactTip = Math.min(Math.max(0, round2(Number(tipAmount ?? 0))), payable);
 
   // A lost reply keeps its original page. Choosing another exact amount must
-  // not silently reopen that page with its previous tip instead.
+  // not silently reopen that page with its previous tip instead. A page for a
+  // total this share no longer owes (the diner ordered more since, or a waiter
+  // collected part of a later order) is closed and a fresh one opened below:
+  // refusing it left the share unpayable until Stripe expired it.
   if (prior) {
-    const error = await legacySplitCheckoutError(prior, payable, exactTip);
-    if (error) return error;
-    return NextResponse.json({ url: prior.url });
+    const quote = legacySplitQuote(prior, payable, exactTip);
+    if (quote !== "total") return await legacySplitRefusal(quote, prior) ?? NextResponse.json({ url: prior.url });
+    const retired = await retireStaleLegacyPage(stripe, prior, restaurant.stripe_account_id, restaurantId, scopeKey);
+    if (!retired) return await apiError("apiErr.splitPageChanged", 409);
   }
 
   // The share is the amount frozen when the table agreed, and it has no idea
@@ -259,8 +265,9 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
     // Another request can win after our resume read. The opener returns that
     // winner's durable session; its quote must match before we expose the URL.
-    if (split.food_principal == null) {
-      const error = await legacySplitCheckoutError(session, payable, exactTip);
+    // It was opened moments ago, so it is never closed here: that is a race.
+    if (exactOnly) {
+      const error = await legacySplitRefusal(legacySplitQuote(session, payable, exactTip), session);
       if (error) return error;
     }
     // A session with no page is still a session: its fee waits for expiry.

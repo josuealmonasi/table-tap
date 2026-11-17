@@ -5,6 +5,8 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import type { SplitState } from "@/hooks/useSplit";
 import { messagesFor, translate } from "@/lib/i18n";
+import { EXACT_TIP_CASES, EXACT_TIP_ORDERS } from "@/lib/__tests__/exact-tip-cases";
+import { screenTakesExactTipOnly, splitTipPrincipal } from "@/lib/tip-base";
 import SplitBillCard from "../SplitBillCard";
 
 const locale = vi.hoisted(() => ({ value: "en" as "en" | "es" }));
@@ -24,9 +26,9 @@ beforeEach(() => {
 });
 afterEach(async () => { await act(async () => root.unmount()); vi.unstubAllGlobals(); });
 
-async function render(language: "en" | "es") {
+async function render(language: "en" | "es", shown: SplitState = split) {
   locale.value = language;
-  await act(async () => root.render(<SplitBillCard split={split} diner="diner" busy={false} currency="MXN"
+  await act(async () => root.render(<SplitBillCard split={shown} diner="diner" busy={false} currency="MXN"
     tipPct={15} outstanding={120} party={2} cardsEnabled propose={vi.fn()} join={vi.fn()} cancel={vi.fn()} onPay={pay} />));
 }
 function button(text: string): HTMLButtonElement {
@@ -73,4 +75,15 @@ it("lets the diner clear an exact tip and still pay the share", async () => {
   await act(async () => button("No tip").click());
   await act(async () => button("MX$60.00").click());
   expect(pay).toHaveBeenCalledExactlyOnceWith(undefined, undefined, undefined, 0);
+});
+
+it.each(EXACT_TIP_CASES)("shows the exact field exactly when the route refuses a percentage: $name", async c => {
+  // The principal the server sends for this split, as split-service builds it.
+  const shown = { ...split, tipPrincipal: splitTipPrincipal(c, EXACT_TIP_ORDERS) };
+  expect(screenTakesExactTipOnly(shown)).toBe(c.exactOnly);
+  await render("en", shown);
+  expect(host.textContent?.includes(translate(messagesFor("en"), "split.exactTip"))).toBe(c.exactOnly);
+  await act(async () => button("Pay").click());
+  // Exact-only sends an amount and never the hidden percentage; otherwise the percentage rides.
+  expect(pay).toHaveBeenCalledExactlyOnceWith(undefined, undefined, undefined, c.exactOnly ? 0 : undefined);
 });

@@ -4,7 +4,7 @@ import { useState, type JSX } from "react";
 import type { SplitState } from "@/hooks/useSplit";
 import { useT } from "@/lib/i18n/context";
 import { formatMoney } from "@/lib/format";
-import { splitTipBase, tipFromPercent } from "@/lib/tip-base";
+import { screenTakesExactTipOnly, splitTipBase, tipFromPercent } from "@/lib/tip-base";
 import { applyPayment } from "@/lib/table-balance";
 import { SEP } from "@/lib/separator";
 import TipPicker from "./TipPicker";
@@ -23,7 +23,7 @@ export default function LegacySplitPayment({ split, busy, currency, tipPct, onPa
   const [customTip, setCustomTip] = useState<number | null>(null);
   const mine = split.mine;
   if (!mine) return null;
-  const exactOnly = split.tipPrincipal === null;
+  const exactOnly = screenTakesExactTipOnly(split);
   const total = mine.amount + split.ownSince;
   const base = splitTipBase(split.tipPrincipal ?? 0, split.shares, [mine.shareNo], split.ownTipBase ?? 0);
   const taken = applyPayment(total, total, exactOnly ? customTip ?? 0 : tipFromPercent(base, tipPct));

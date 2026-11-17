@@ -51,10 +51,27 @@ export function frozenTipPrincipal(principal: number | null, orders: TipOrder[])
  * explicit: those old shares accept exact tips, never an inferred percentage.
  * Only a split never locked falls back to the orders.
  */
-export function splitTipPrincipal(split: { food_principal: number | null; amount?: number | null }, orders: TipOrder[]): number | null {
-  const amount = Number(split.amount ?? 0);
-  if (split.food_principal == null && amount > 0) return null;
+export function splitTipPrincipal(split: TipSplit, orders: TipOrder[]): number | null {
+  if (splitTakesExactTipOnly(split)) return null;
   return frozenTipPrincipal(split.food_principal, orders);
+}
+
+export interface TipSplit { food_principal: number | null; amount?: number | null }
+
+/**
+ * The one rule for "this share takes an exact tip, never a percentage": a v1
+ * split that froze a positive gross with no food principal. The pay route
+ * refuses a percentage by it, and `splitTipPrincipal` sends the screen `null`
+ * by it, so the screen offers the exact field exactly when the route needs
+ * one. A zero or missing amount has nothing gross to be unsure about.
+ */
+export function splitTakesExactTipOnly(split: TipSplit): boolean {
+  return split.food_principal == null && Number(split.amount ?? 0) > 0;
+}
+
+/** The screen's side of `splitTakesExactTipOnly`: the server sent no principal. */
+export function screenTakesExactTipOnly(split: { tipPrincipal?: number | null }): boolean {
+  return split.tipPrincipal === null;
 }
 
 /** Each frozen food cent belongs to one share; the first carries the remainder. */
