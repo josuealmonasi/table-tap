@@ -14,5 +14,5 @@ export async function purgeAccounting(context: RecoveryContext): Promise<Recover
   const oldest = result.oldest as string | null;
   return { done: Number(result.deleted), pending: Number(result.pending), failed: 0,
     oldest_pending_at: oldest, oldest_pending_age_seconds: oldest ? Math.max(0, Math.floor((Date.now() - Date.parse(oldest)) / 1000)) : null,
-    age_basis: "deleted_at" };
+    age_basis: "retention_expired_at" };
 }

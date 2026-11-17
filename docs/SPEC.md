@@ -2987,10 +2987,9 @@ No additional production secret or paid scheduler is required.
 Six isolated jobs use the admin client and the existing locked writers:
 
 - Accounting deletes at most 1,000 archived records per run when the restaurant
-  was deleted more than ten years ago. Deletion time is saved after the live
-  restaurant is deleted. Existing archives without a proven deletion time start
-  their ten years when the schema is applied, so none are deleted early. This
-  job runs alongside the other jobs within its own time budget.
+  was deleted more than ten years ago and no longer exists. The archive records
+  when the accounting copy was made in the deletion transaction. This job runs
+  alongside the other jobs within its own time budget.
 - Stock calls `recover_stock_reservations` across restaurants. SQL keeps its
   one-hour grace period, checks that no order owns the reservation, and releases
   at most one orphan per call, at most ten calls per invocation.
