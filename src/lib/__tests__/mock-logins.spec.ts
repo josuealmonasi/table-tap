@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { ensureDemoUser, revokeDemoAccess } from "../../../scripts/mock-logins.mjs";
+import { ensureDemoUser, revokeDemoAccess, resetDemoUser } from "../../../scripts/mock-logins.mjs";
 
 function database(user: { id: string; password_matches: boolean } | null, namespace = "extensions") {
   return { query: vi.fn(async (sql: string, values?: unknown[]) => {
@@ -13,8 +13,19 @@ function client() {
   return { auth: { admin: {
     createUser: vi.fn(async () => ({ data: { user: { id: "new" } }, error: null })),
     updateUserById: vi.fn(async () => ({ error: null as { message: string } | null })),
+    deleteUser: vi.fn(async () => ({ error: null })),
   } } };
 }
+
+it("production reset replaces the identity while development keeps it", async () => {
+  const pg = database({ id: "same", password_matches: true }), admin = client();
+  await expect(resetDemoUser(pg, admin, "demo@tabletap.dev", "Diego", "password", true)).resolves.toBe("new");
+  expect(admin.auth.admin.deleteUser).toHaveBeenCalledWith("same");
+  expect(admin.auth.admin.createUser).toHaveBeenCalledOnce();
+  const dev = client();
+  await expect(resetDemoUser(pg, dev, "demo@tabletap.dev", "Diego", "password", false)).resolves.toBe("same");
+  expect(dev.auth.admin.deleteUser).not.toHaveBeenCalled();
+});
 
 describe("restoring demo logins in place", () => {
   it.each(["public", "extensions"])("keeps a healthy identity and password with pgcrypto in %s", async namespace => {

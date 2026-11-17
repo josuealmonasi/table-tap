@@ -37,19 +37,16 @@ describe("demo login lifetime", () => {
     expect(pg.query.mock.calls.find(([sql]) => sql.startsWith("insert into restaurants")))
       .toBeDefined();
   });
-  it("audit #648: a production reseed revokes the kept owner's MFA, sessions and pending email change", async () => {
+  it("a production reseed replaces the owner before rebuilding the restaurant", async () => {
     const pg = database();
     await expect(seedMock(pg, { production: true })).rejects.toThrow("stop before restaurant seed");
-    expect(auth.mfa.listFactors).toHaveBeenCalledWith({ userId: "kept-owner" });
-    expect(auth.mfa.deleteFactor).toHaveBeenCalledWith({ id: "totp", userId: "kept-owner" });
+    expect(auth.deleteUser).toHaveBeenCalledWith("kept-owner");
+    expect(auth.createUser).toHaveBeenCalledOnce();
+    expect(auth.deleteUser.mock.invocationCallOrder[0]).toBeLessThan(auth.createUser.mock.invocationCallOrder[0]);
     const sql = pg.query.mock.calls.map(([text]) => text as string);
-    const revoked = ["delete from auth.refresh_tokens where user_id = $1::text", "delete from auth.sessions where user_id = $1"]
-      .map(text => sql.indexOf(text));
-    const emailChange = sql.findIndex(text => text.startsWith("update auth.users set email_change = ''"));
-    expect(revoked.every(i => i > -1)).toBe(true); expect(emailChange).toBeGreaterThan(-1);
-    // Revoked before the restaurant it signs into is rebuilt.
+    // The new owner is put on the profile before the restaurant is rebuilt.
     const restaurant = sql.findIndex(text => text.startsWith("insert into restaurants"));
-    expect(Math.max(...revoked, emailChange)).toBeLessThan(restaurant);
+    expect(sql.findIndex(text => text.startsWith("insert into profiles"))).toBeLessThan(restaurant);
   });
   it("audit #648: a development reseed keeps the demo sessions the gates sign in with", async () => {
     const pg = database();

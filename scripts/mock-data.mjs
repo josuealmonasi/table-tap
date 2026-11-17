@@ -33,7 +33,7 @@ import { legacyTerminalTimes } from "./mock-terminal-times.mjs";
 import { finalizeMockCashShift } from "./mock-cash-shift.mjs";
 import { bulkInsert, randInt, sample } from "./menu-catalog.mjs";
 import { loginSecret } from "./login-secrets.mjs";
-import { ensureDemoUser, revokeDemoAccess } from "./mock-logins.mjs";
+import { resetDemoUser } from "./mock-logins.mjs";
 
 export const DEMO_RESTAURANT = "Demo Bistro";
 // Read when the seeder runs, after its caller loaded the env file: production's
@@ -56,13 +56,10 @@ function adminClient() {
   );
 }
 
-/** Reuse an existing auth user (surviving a drop) or create one. On
- * production a kept login also loses its sessions, MFA factors and pending
- * email change (audit of #648); development keeps sessions for the gates. */
+/** Development keeps sessions for the gates; production replaces the user
+ * so an old access token cannot regain the rebuilt demo (review of #651). */
 async function ensureUser(pg, admin, email, name, production) {
-  const userId = await ensureDemoUser(pg, admin, email, name, demoPassword());
-  if (production) await revokeDemoAccess(pg, admin, userId);
-  return userId;
+  return resetDemoUser(pg, admin, email, name, demoPassword(), production);
 }
 
 /**
@@ -175,9 +172,8 @@ function pickTip(subtotal) {
 }
 
 /**
- * Rebuilds Demo Bistro. `production` revokes what a kept demo login could
- * have gained (sessions, MFA, a pending email change); pass it on every
- * production target.
+ * Rebuilds Demo Bistro. `production` replaces demo logins so old tokens
+ * cannot regain access; pass it on every production target.
  */
 export async function seedMock(pg, { production = false } = {}) {
   demoPassword(); // Refuse missing credentials before deleting the demo.
@@ -196,7 +192,7 @@ export async function seedMock(pg, { production = false } = {}) {
 }
 
 async function seedDemo(pg, production) {
-  await dropMock(pg, { keepLogins: true }); // clean slate → repeatable; logins keep their sessions
+  await dropMock(pg, { keepLogins: true }); // Development keeps sessions; production replaces logins below.
 
   const admin = adminClient();
   const ownerId = await ensureUser(pg, admin, DEMO_OWNER.email, DEMO_OWNER.name, production);

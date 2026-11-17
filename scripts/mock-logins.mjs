@@ -1,7 +1,7 @@
 /**
- * On production, a kept demo login keeps nothing a stranger gave it (audit of
- * #648). Before logins were kept, a reset deleted the users, which revoked all
- * of this; now it is revoked here instead. MFA factors go through GoTrue's
+ * The former production reset revoked what a kept demo login gained (audit of
+ * #648). Production now replaces the user because a kept user's access token
+ * survived this cleanup. MFA factors go through GoTrue's
  * admin API, so their challenges go with them. GoTrue has no admin "sign out
  * by user", so sessions and refresh tokens are deleted by user id, and a
  * pending email change is cleared, scoped to this one demo user.
@@ -18,6 +18,22 @@ export async function revokeDemoAccess(pg, admin, userId) {
   await pg.query(`update auth.users set email_change = '', email_change_token_new = '',
     email_change_token_current = '', email_change_confirm_status = 0, email_change_sent_at = null
     where id = $1`, [userId]);
+}
+
+/** A production reset must give old access tokens no new demo identity. */
+export async function resetDemoUser(pg, admin, email, name, password, production) {
+  if (!production) return ensureDemoUser(pg, admin, email, name, password);
+  const { rows } = await pg.query("select id from auth.users where email = $1", [email]);
+  if (rows[0]) {
+    const { error } = await admin.auth.admin.deleteUser(rows[0].id);
+    if (error) throw new Error(`${email}: ${error.message}`);
+  }
+  const { data, error } = await admin.auth.admin.createUser({ email, password, email_confirm: true });
+  if (error) throw new Error(`${email}: ${error.message}`);
+  const userId = data.user.id;
+  if (name) await pg.query(`insert into profiles (user_id, full_name, updated_at)
+    values ($1, $2, now()) on conflict (user_id) do update set full_name = $2`, [userId, name]);
+  return userId;
 }
 
 /** Restore a demo login without replacing its identity or healthy sessions. */
