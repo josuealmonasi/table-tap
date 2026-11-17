@@ -32,12 +32,27 @@ Staff roles live in `staff`; `MANAGES(role)` in `src/lib/membership.ts` is the
 line between running the business and working a shift. A platform admin is a
 row in `platform_admins`, which no browser can read.
 The platform admin can move any restaurant to another plan from its row in
-`/dashboard/admin` (`PATCH /api/admin/restaurants`, `moveRestaurantPlan`), and
-its whole team moves with it — a plan belongs to the restaurant. It is an
-assignment, not a sale: the restaurant comes out `active` with any trial
-cleared, nothing is charged, the move is written in the restaurant's activity
-log, and one still billed by a live Stripe subscription is refused, since the
-next billing event would write Stripe's plan back over it.
+`/dashboard/admin` (`PATCH /api/admin/restaurants`, `assignTier` in
+`src/lib/admin-tier.ts`), and its whole team moves with it — a plan belongs to
+the restaurant. A dialog asks how the tier is paid (`billing`):
+- `next_bill` — the restaurant pays through a live Stripe subscription. Its
+  single item moves to the new tier's Price with `proration_behavior: "none"`:
+  nothing is charged or credited today, the period already paid stays as paid,
+  and the next invoice is at the new price. The tier changes at once
+  (`applySubscription`). Refused for an overdue subscription (settle first)
+  and under the same billing lock as the owner's own checkout.
+- `payment_link` — no subscription. The tier starts now as the app's own trial
+  ending on a pay-by date (default 7 days, at most 60), so whatever ends trials
+  drops an unpaid one to Carta. The owner gets an email linking to
+  `GET /api/billing/assigned?plan=<tier>`, which opens Stripe Checkout only for
+  the tier the restaurant was given and has not paid (Grupo included, though it
+  is not self-serve); anything else lands on the Plan screen. Paying replaces
+  the trial with the subscription.
+- `free` — the original assignment (`moveRestaurantPlan`): `active`, trial
+  cleared, nothing charged; refused while a live subscription would write
+  Stripe's plan back over it.
+Carta costs nothing, so it is only ever assigned free. Every assignment is
+written in the restaurant's activity log with its billing mode.
 
 Permanent deletion is refused only while a refund, duplicate-payment return or
 provider operation is unfinished, or until 30 days after the latest successful Stripe refund evidence (operations, duplicate-payment returns and attempts); refusals return the unlock time. `admin_delete_restaurant` takes
