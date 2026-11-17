@@ -89,10 +89,12 @@ export function useSplit(
         body: JSON.stringify({ sessionId, diner, restaurantId, tableId, ...body }),
       });
       const result = await res.json().catch(() => ({}));
-      if (!res.ok) setError(result.error ?? t("apiErr.generic"));
-      // The menu said splitting was on when this sheet opened; the owner has
-      // since turned it off. Stop offering it (audit of #648).
-      if (result.code === "split_disabled") setDisabled(true);
+      if (!res.ok) {
+        setError(result.error ?? t("apiErr.generic"));
+        // The menu said splitting was on when this sheet opened; the owner has
+        // since turned it off. Stop offering it (audit of #648).
+        if (result.code === "split_disabled") setDisabled(true);
+      }
       // Cancellation is final even when Wi-Fi loses the following read.
       else if (path === "/api/split/cancel" || method === "DELETE") start.current = null;
       // Offline for a moment: keep showing what we last knew.
