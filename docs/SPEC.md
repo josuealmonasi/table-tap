@@ -32,12 +32,27 @@ Staff roles live in `staff`; `MANAGES(role)` in `src/lib/membership.ts` is the
 line between running the business and working a shift. A platform admin is a
 row in `platform_admins`, which no browser can read.
 The platform admin can move any restaurant to another plan from its row in
-`/dashboard/admin` (`PATCH /api/admin/restaurants`, `moveRestaurantPlan`), and
-its whole team moves with it — a plan belongs to the restaurant. It is an
-assignment, not a sale: the restaurant comes out `active` with any trial
-cleared, nothing is charged, the move is written in the restaurant's activity
-log, and one still billed by a live Stripe subscription is refused, since the
-next billing event would write Stripe's plan back over it.
+`/dashboard/admin` (`PATCH /api/admin/restaurants`, `assignTier` in
+`src/lib/admin-tier.ts`), and its whole team moves with it — a plan belongs to
+the restaurant. A dialog asks how the tier is paid (`billing`):
+- `next_bill` — the restaurant pays through a live Stripe subscription. Its
+  single item moves to the new tier's Price with `proration_behavior: "none"`:
+  nothing is charged or credited today, the period already paid stays as paid,
+  and the next invoice is at the new price. The tier changes at once
+  (`applySubscription`). Refused for an overdue subscription (settle first)
+  and under the same billing lock as the owner's own checkout.
+- `payment_link` — no subscription. The tier starts now as the app's own trial
+  ending on a pay-by date (default 7 days, at most 60), so whatever ends trials
+  drops an unpaid one to Carta. The owner gets an email linking to
+  `GET /api/billing/assigned?plan=<tier>`, which opens Stripe Checkout only for
+  the tier the restaurant was given and has not paid (Grupo included, though it
+  is not self-serve); anything else lands on the Plan screen. Paying replaces
+  the trial with the subscription.
+- `free` — the original assignment (`moveRestaurantPlan`): `active`, trial
+  cleared, nothing charged; refused while a live subscription would write
+  Stripe's plan back over it.
+Carta costs nothing, so it is only ever assigned free. Every assignment is
+written in the restaurant's activity log with its billing mode.
 
 Permanent deletion is refused only while a refund, duplicate-payment return or
 provider operation is unfinished, or until 30 days after the latest successful Stripe refund evidence (operations, duplicate-payment returns and attempts); refusals return the unlock time. `admin_delete_restaurant` takes
@@ -2236,6 +2251,28 @@ no browser gate waits for a live update, and `pnpm rls` asks the socket its
 questions directly. `next.config.ts` refuses that setting on Vercel, so a
 deployed build always subscribes. And `pnpm db:mock` writes the demo's ~300
 closed sittings in two statements rather than two per sitting.
+
+The third is to not spend it at all. On every pull request
+`.github/workflows/gates.yml` runs `api`, `money`, `attack`, `rls`, `roles`
+and `smoke` on GitHub's runners, one job each, and `layout`, `promises` and
+`dialogs` on the pages `scripts/gate-plan.mjs` says the change reaches (the
+core screens — orders, bills, POS, accounts, settings, the diner menu — when
+it reaches everything; `scripts/gate-scope-ci.mjs`). Each job starts its own
+throwaway Supabase with the CLI (`ci/supabase/config.toml`), builds it with
+`pnpm db:create`, `db:seed` and `db:mock` from `supabase/schema.sql`, and
+serves the run's one production build against it (built once by a `build` job
+and shared as an artifact; each job checks the build inlined its own stack's
+URL and key). `scripts/ci-env.mjs` writes the only env
+file the gates read, refuses to run off GitHub Actions or over an existing
+file, and refuses any API or database address that is not the runner's
+loopback, so CI cannot reach the dev or production projects. Login passwords
+are made per job. The CSP names that loopback origin only when the build
+points at one (`loopbackDatabase` in `src/lib/csp.ts`); a deployed build's
+policy is unchanged. Stripe is the one outside service: with the
+`STRIPE_TEST_SECRET` repository secret (a test key) it is used; without it,
+`GATE_NO_STRIPE=1` and the cases that need Stripe print
+`skipped: no STRIPE_TEST_SECRET` by name and are counted in the job summary —
+never passed.
 
 Every check plants what it needs rather than depending on what the demo data
 happens to hold, and removes it afterwards. A check that finds nothing to
