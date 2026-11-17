@@ -10,7 +10,7 @@ let locale: Locale = "en";
 vi.mock("@/lib/i18n/server", () => ({ getLocale: async () => locale }));
 vi.mock("@/lib/admin", () => ({ getPlatformAdmin: async () => ({ email: "admin@test.dev" }) }));
 vi.mock("@/lib/admin-audit", () => ({ auditedAdminAction: (_action: string, handler: unknown) => handler }));
-vi.mock("@/lib/admin-plan", () => ({ moveRestaurantPlan: vi.fn() }));
+vi.mock("@/lib/admin-tier", () => ({ TIER_BILLING: [], assignTier: vi.fn() }));
 vi.mock("@/lib/billing-delete", () => ({ endRestaurantBilling: (...args: unknown[]) => billing(...args) }));
 vi.mock("@/lib/billing-operation", () => ({
   withRestaurantBilling: async (_db: unknown, _id: string, action: (op: unknown) => unknown) =>

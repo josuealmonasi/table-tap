@@ -7,6 +7,7 @@ import { planLabel } from "@/lib/plan";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { DeleteIcon } from "@/components/ui/icons";
 import type { AdminRestaurantRow } from "./AdminPanel";
+import AdminTierDialog, { type TierAssignment } from "./AdminTierDialog";
 
 interface AdminRestaurantsProps {
   restaurants: AdminRestaurantRow[];
@@ -14,7 +15,7 @@ interface AdminRestaurantsProps {
   plans: string[];
   busy: boolean;
   /** Resolves true when the move was made. */
-  onMovePlan: (id: string, plan: string, doneMsg: string) => Promise<boolean>;
+  onMovePlan: (id: string, plan: string, doneMsg: string, choice: TierAssignment) => Promise<boolean>;
   onDelete: (id: string) => void;
 }
 
@@ -33,17 +34,21 @@ export default function AdminRestaurants({ restaurants, plans, busy, onMovePlan,
   // put back if the move was refused.
   const [shown, setShown] = useState<Record<string, string>>({});
 
-  async function move(r: AdminRestaurantRow, plan: string): Promise<void> {
+  // The tier picked in a row, waiting for the admin to say how it is paid.
+  const [picking, setPicking] = useState<{ row: AdminRestaurantRow; plan: string } | null>(null);
+
+  function pick(r: AdminRestaurantRow, plan: string): void {
     if (plan === (shown[r.id] ?? r.plan)) return;
-    const name = r.name;
-    const ok = await confirm({
-      title: t("admin.planConfirmTitle", { name, plan: planLabel(plan) }),
-      message: t("admin.planConfirmMsg", { plan: planLabel(plan) }),
-      confirmLabel: t("common.confirm"),
-    });
-    if (!ok) return;
+    setPicking({ row: r, plan });
+  }
+
+  async function assign(choice: TierAssignment): Promise<void> {
+    if (!picking) return;
+    const { row: r, plan } = picking;
+    setPicking(null);
     setShown(s => ({ ...s, [r.id]: plan }));
-    const moved = await onMovePlan(r.id, plan, t("admin.planMoved", { name, plan: planLabel(plan) }));
+    const done = choice.billing === "payment_link" ? "admin.tierLinkSent" : choice.billing === "next_bill" ? "admin.tierNextBillDone" : "admin.planMoved";
+    const moved = await onMovePlan(r.id, plan, t(done, { name: r.name, plan: planLabel(plan) }), choice);
     if (!moved) setShown(s => ({ ...s, [r.id]: r.plan }));
   }
 
@@ -79,7 +84,7 @@ export default function AdminRestaurants({ restaurants, plans, busy, onMovePlan,
               aria-label={t("admin.plan")}
               value={shown[r.id] ?? r.plan}
               disabled={busy}
-              onChange={e => void move(r, e.target.value)}
+              onChange={e => pick(r, e.target.value)}
             >
               {plans.map(p => (
                 <option key={p} value={p}>
@@ -116,6 +121,16 @@ export default function AdminRestaurants({ restaurants, plans, busy, onMovePlan,
           </div>
         ))}
       </div>
+      {picking ? (
+        <AdminTierDialog
+          name={picking.row.name}
+          plan={picking.plan}
+          billedByStripe={picking.row.billed_by_stripe}
+          busy={busy}
+          onClose={() => setPicking(null)}
+          onAssign={choice => void assign(choice)}
+        />
+      ) : null}
     </div>
   );
 }
