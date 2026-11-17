@@ -5,6 +5,20 @@ import { MARK } from "../api-fixtures.mjs";
 export function accountsCases(root) {
   const fx = root.accountFixture ?? root;
   const { dish } = fx;
+  const arrangeEmail = async f => {
+    const { data, error } = await f.admin.from("customer_accounts").select("email").eq("id", fx.accountId).single();
+    if (error) throw error;
+    const { error: updateError } = await f.admin.from("customer_accounts").update({ email: "gate@example.com" }).eq("id", fx.accountId);
+    if (updateError) throw updateError;
+    return async () => {
+      const { error: restoreError } = await f.admin.from("customer_accounts").update({ email: data.email }).eq("id", fx.accountId);
+      if (restoreError) throw restoreError;
+    };
+  };
+  const emailGone = async f => {
+    const { data, error } = await f.admin.from("customer_accounts").select("email").eq("id", fx.accountId).single();
+    return error ? error.message : data.email === null || "the saved email remains";
+  };
   return [
     tipBaseCase("account"),
     // ── Customer accounts ("cuenta abierta") ─────────────────────────────
@@ -120,6 +134,19 @@ export function accountsCases(root) {
     // answer is one the route gives, and neither keeps the address.
     { name: "POST /api/account/remove-email (waiter refused)", as: "waiter", method: "POST", path: "/api/account/remove-email",
       body: { id: fx.accountId }, expect: [403] },
+    { name: "POST /api/account/remove-email (manager)", as: "manager", method: "POST", path: "/api/account/remove-email",
+      arrange: arrangeEmail, body: { id: fx.accountId }, expect: [200], effect: emailGone },
+    { name: "POST /api/account/remove-email (diner and retry)", as: "diner", method: "POST", path: "/api/account/remove-email",
+      arrange: arrangeEmail, body: { c: fx.accountCode }, expect: [200],
+      effect: async f => {
+        const gone = await emailGone(f);
+        if (gone !== true) return gone;
+        const res = await fetch(`${f.base}/api/account/remove-email`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ c: fx.accountCode }) });
+        if (res.status !== 200) return `retry answered ${res.status}`;
+        return emailGone(f);
+      } },
+    { name: "POST /api/account/remove-email (unknown code)", as: "diner", method: "POST", path: "/api/account/remove-email",
+      body: { c: "000000000000" }, expect: [404] },
     { name: "POST /api/account/email (the statement)", as: "diner", method: "POST", path: "/api/account/email",
       body: { c: fx.accountCode, email: "cliente@example.com", ref: randomUUID() }, expect: [200, 409, 502] },
   ].map(c => ({ ...c, fixture: fx }));

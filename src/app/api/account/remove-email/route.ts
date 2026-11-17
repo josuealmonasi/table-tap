@@ -12,9 +12,6 @@ import { logDetail } from "@/lib/log-detail";
 export const runtime = "nodejs";
 
 export async function POST(req: NextRequest): Promise<NextResponse> {
-  if (await isRateLimited(`account-remove-email:${clientKey(req)}`, 3, 600)) {
-    return await apiError("apiErr.tooManyWait", 429);
-  }
   const body = await jsonBody<{ id?: unknown; c?: unknown }>(req);
   const code = typeof body?.c === "string" ? normalizeCode(body.c) : null;
   const staffRequest = typeof body?.id === "string" && body.c === undefined;
@@ -22,6 +19,9 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
   const actor = staffRequest ? await actingManager() : null;
   if (staffRequest && !actor) return await apiError("apiErr.forbidden", 403);
+  // A busy restaurant must not share the code holder's small IP budget.
+  const limitKey = actor ? `account-remove-email:${actor.restaurantId}` : `account-remove-email:${clientKey(req)}`;
+  if (await isRateLimited(limitKey, actor ? 100 : 3, 600)) return await apiError("apiErr.tooManyWait", 429);
   const account = await (actor ? accountById(actor.restaurantId, body!.id as string) : accountByCode(code!)).catch(() => undefined);
   if (account === undefined) return await apiError("apiErr.generic", 500);
   if (!account) return await apiError("apiErr.notFound", 404);

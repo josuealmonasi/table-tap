@@ -46,6 +46,7 @@ and that a new party cannot see the previous party's waiting phones.
 | Rule | The bug it came from |
 | The retry schedule must run on the hosting plan and identify its caller | Vercel rejected the five-minute cron on Hobby; `recovery-schedule-platform.spec.ts`, `github-cron-auth.spec.ts` and `recovery-scheduler-client.spec.ts` pin the daily fallback and the exact signed main-branch job |
 |---|---|
+| Account email removal matches each caller and the saved address | Staff shared a customer IP limit, and a statement offered removal without an address; `account-email-remove.spec.ts`, `account-credit-public.spec.ts` and `remove-email.spec.tsx` cover the limits, projection and dialog |
 | Account email removal follows the privacy notice | Neither staff nor the code holder could remove a saved address; `account-email-remove.spec.ts`, `remove-email.spec.tsx` and `staff-remove-email.spec.tsx` cover the route and both screens |
 | An old split without a frozen principal accepts exact tips only (review N14) | Gross amount included earlier gratuities, and an open checkout could silently keep a different tip; legacy-split-tip, legacy-split-tip-route and legacy-split-tip-input regression specs cover calculation, request, preview and retry |
 | The account promise opens its own unsplit bill | The first Collect could open another table's divided bill, which correctly offers parts instead of an account charge; `promise-account-bill.spec.ts` checks the target and cleanup |
@@ -7702,3 +7703,13 @@ can clear it in the account dialog; the statement code holder can confirm its
 removal on the statement. Both use the same restaurant-scoped route, and the
 activity records the removal without keeping the address. A one-time statement
 email still uses the address the customer types for that message.
+
+### Account email removal matches the caller and statement
+
+The staff limit and the customer code limit shared an IP budget before staff
+authorization, so a busy restaurant could exhaust both. Staff now have a
+restaurant budget after authorization; code holders keep the small IP budget.
+The statement API and its button also have to agree on whether an address
+exists. The button disappears after removal, and the shared confirmation dialog
+works where native confirms are blocked. The account removal specs pin these
+boundaries; the API gate checks manager, customer, retry and unknown code.

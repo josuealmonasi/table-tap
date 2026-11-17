@@ -8,6 +8,7 @@ import Link from "next/link";
 import { useLocale, useT } from "@/lib/i18n/context";
 import { formatMoney, dateLocale } from "@/lib/format";
 import { qrSvg } from "@/lib/qr";
+import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { BackIcon } from "@/components/ui/icons";
 import TipPicker from "@/components/customer/TipPicker";
 import StatementDays from "./StatementDays";
@@ -30,6 +31,7 @@ interface Statement {
   cardsEnabled: boolean;
   payingOnline: boolean;
   canEmail: boolean;
+  hasEmail: boolean;
   timeZone: string | null;
 }
 
@@ -41,6 +43,7 @@ interface Statement {
  */
 export default function AccountStatement({ code, paid }: { code: string; paid: boolean }) {
   const t = useT();
+  const confirm = useConfirm();
   const sendStatement = useStatementMail(code);
   const { locale } = useLocale();
   const [data, setData] = useState<Statement | null>(null);
@@ -130,7 +133,7 @@ export default function AccountStatement({ code, paid }: { code: string; paid: b
   }
 
   async function removeEmail(): Promise<void> {
-    if (!window.confirm(t("account.removeEmailConfirm"))) return;
+    if (!await confirm({ title: t("account.removeEmailConfirm"), confirmLabel: t("account.removeEmail"), danger: true })) return;
     setBusy(true);
     setNotice(null);
     try {
@@ -139,6 +142,7 @@ export default function AccountStatement({ code, paid }: { code: string; paid: b
       });
       const result = await res.json().catch(() => ({}));
       setNotice(res.ok ? t("account.removeEmailDone") : result.error ?? t("apiErr.generic"));
+      if (res.ok) setData(current => current ? { ...current, hasEmail: false } : current);
     } catch {
       setNotice(t("done.networkError"));
     } finally {
@@ -260,9 +264,9 @@ export default function AccountStatement({ code, paid }: { code: string; paid: b
           <button type="button" className="tt-btn tt-btn-ghost tt-btn-sm" onClick={() => window.print()}>
             {t("account.print")}
           </button>
-          <button type="button" className="tt-btn tt-btn-ghost tt-btn-sm" disabled={busy} onClick={() => void removeEmail()}>
+          {data.hasEmail && <button type="button" className="tt-btn tt-btn-ghost tt-btn-sm" disabled={busy} onClick={() => void removeEmail()}>
             {t("account.removeEmail")}
-          </button>
+          </button>}
           {data.canEmail && mode !== "mail" && (
             <button type="button" className="tt-btn tt-btn-ghost tt-btn-sm" onClick={() => setMode("mail")}>
               {t("account.email")}
