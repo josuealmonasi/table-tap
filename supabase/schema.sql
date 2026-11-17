@@ -10232,6 +10232,39 @@ revoke all on restaurant_accounting_records from public, authenticated, service_
 -- under the privacy notice and removal of disposable API fixtures.
 grant select, delete on restaurant_accounting_records to service_role;
 
+-- Older archives have no proven deletion time. Start their ten years here,
+-- rather than risk erasing books before the retention period ends.
+alter table restaurant_accounting_records add column if not exists deleted_at timestamptz;
+update restaurant_accounting_records set deleted_at = clock_timestamp() where deleted_at is null;
+alter table restaurant_accounting_records alter column deleted_at set default clock_timestamp();
+alter table restaurant_accounting_records alter column deleted_at set not null;
+create index if not exists restaurant_accounting_records_deleted_at_idx on restaurant_accounting_records (deleted_at);
+
+create or replace function public.purge_expired_accounting_records()
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  v_deleted integer;
+  v_pending bigint;
+  v_oldest timestamptz;
+begin
+  -- Lock and remove only a small page, even when two cron calls overlap.
+  with expired as (
+    select restaurant_id, source_table, source_id from restaurant_accounting_records
+    where deleted_at < now() - interval '10 years'
+    order by deleted_at, restaurant_id, source_table, source_id
+    limit 1000 for update skip locked
+  )
+  delete from restaurant_accounting_records r using expired e
+    where (r.restaurant_id, r.source_table, r.source_id) = (e.restaurant_id, e.source_table, e.source_id);
+  get diagnostics v_deleted = row_count;
+  select count(*), min(deleted_at) into v_pending, v_oldest from restaurant_accounting_records
+    where deleted_at < now() - interval '10 years';
+  return jsonb_build_object('deleted', v_deleted, 'pending', v_pending, 'oldest', v_oldest);
+end;
+$$;
+revoke all on function public.purge_expired_accounting_records() from public, anon, authenticated;
+grant execute on function public.purge_expired_accounting_records() to service_role;
+
 -- A missing fee row is not evidence of no fee. A saved checkout that asked
 -- for no application fee, or a fee returned in full, is. This also releases
 -- pre-field completed refunds without trusting today's menu or local rounding.
@@ -10442,6 +10475,8 @@ begin
     from (select c.* from bill_split_claims c join bill_splits s on s.id = c.split_id
       where s.restaurant_id = p_restaurant for update of c) t;
   delete from restaurants where id = p_restaurant;
+  update restaurant_accounting_records set deleted_at = clock_timestamp()
+    where restaurant_id = p_restaurant;
   return jsonb_build_object('outcome', 'deleted');
 end;
 $$;

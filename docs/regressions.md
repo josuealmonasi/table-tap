@@ -7692,3 +7692,16 @@ share `splitTakesExactTipOnly`, tested against one fixture table
 (`exact-tip-cases.ts`) on both sides; `apiErr.splitExactTip` tells a stale
 bundle to reload. Known follow-up (F4): modern v1 splits with a principal still
 reopen an earlier page or return a winner whose tip differs from the screen.
+
+
+## Deleted restaurant books expire after ten years
+
+| Places that must agree | What went wrong | What checks it |
+| --- | --- | --- |
+| Restaurant deletion and scheduled retention | Archived books had no expiry job and stayed indefinitely | `accounting-purge.spec.ts`, `recovery/__tests__/route.spec.ts` |
+
+The archive records the deletion time after deleting the live restaurant. The
+scheduled worker removes only records older than ten years, in bounded batches.
+Older archives have no proven deletion time, so their ten years start when the
+schema is applied; this avoids deleting them too early. The SQL contract test
+pins the strict boundary and the mocked worker checks the reported counts.
