@@ -2950,6 +2950,14 @@ votes: "Votes",
     unpriced: "not compared: a product is no longer on the menu",
     drift: "against the menu: {amount}",
   },
+  placeIdentity: {
+    privacy: "Privacy notice",
+  },
+  privacyHint: {
+    email: "We use your email only to send you the receipt.",
+    name: "We use your name only to call you when your order is ready.",
+    link: "Privacy notice",
+  },
   footer: {
     privacy: "Privacy",
     rights: "All rights reserved.",

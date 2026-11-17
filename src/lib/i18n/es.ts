@@ -2933,6 +2933,14 @@ votes: "Votos",
     unpriced: "sin comparar: un producto ya no está en el menú",
     drift: "contra el menú: {amount}",
   },
+  placeIdentity: {
+    privacy: "Aviso de privacidad",
+  },
+  privacyHint: {
+    email: "Usamos tu correo solo para enviarte el ticket.",
+    name: "Usamos tu nombre solo para llamarte cuando tu pedido esté listo.",
+    link: "Aviso de privacidad",
+  },
   footer: {
     privacy: "Privacidad",
     rights: "Todos los derechos reservados.",

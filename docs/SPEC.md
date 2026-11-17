@@ -1448,6 +1448,12 @@ measure. Its amounts come from
   2.7.1.24): razón social, address (street and number, colonia and CP,
   municipio and estado), phone, RFC and régimen fiscal. These columns are
   optional, owner-only and never granted to anon (`ticket-place.ts`).
+- Diners see who they are paying: the menu, the cart and the table bill end
+  with a muted line holding the razón social (else the trade name), the
+  address as the ticket prints it, and a link to the privacy notice. It is read
+  server-side by `place-identity.ts` (secret key, only those two strings reach
+  the browser); the public restaurant columns are unchanged. The pickup-name
+  and receipt-email fields carry a one-line notice with the same link.
 - Body: date, folio (the order code), table, four columns (quantity, item,
   unit price, amount), the number of items, the receipt's rows, the total,
   the IVA it includes, and how it was paid.

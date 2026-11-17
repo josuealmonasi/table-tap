@@ -106,6 +106,7 @@ and that a new party cannot see the previous party's waiting phones.
 | Failed loyalty reads cannot open an empty editor (E2E D7) | A read failure looked like a program that had never existed |
 | Replay waits for the online send and preserves preparation (E2E C5) | Background replay raced a live request and completed food nobody had made |
 | Processing fees keep the payment currency (E2E D4) | A dollar charge used the fixed peso processing fee |
+| Diner menu, cart and bill show the restaurant's legal identity, read through the ticket's server-side path and never the public columns; the pickup-name and receipt-email fields carry the short privacy notice (`invariants/place-identity.spec.ts`, `place-identity.spec.tsx`) | The legal review found diners paying with no restaurant identity, address or notice in sight (LFPC 76 Bis, LFPDPPP 16) |
 | An elapsed time goes through `src/lib/elapsed.ts`; no dictionary key outside `elapsed` takes a raw count of minutes, hours or days, and no screen divides by 60 000 itself (`invariants/elapsed.spec.ts`) | The Pedidos board read "hace 1741 min" for a ticket a day and five hours old |
 | Terminal bank movements keep their sign (E2E C7) | A refund-heavy day's bank debit could not be recorded |
 | New owners prove email ownership before their trial starts (E2E E4) | Signup confirmed an address nobody had verified |

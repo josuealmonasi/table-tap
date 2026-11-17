@@ -8454,3 +8454,22 @@ a.tt-user-plan:hover {
   background: color-mix(in srgb, var(--tt-danger) 10%, transparent);
   color: var(--tt-danger);
 }
+
+/* Who the diner is paying, and the short notice under a field that takes personal data. */
+.tt-place-identity,
+.tt-privacy-hint {
+  margin: 8px 0 0;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--tt-muted);
+  overflow-wrap: anywhere;
+}
+.tt-place-identity {
+  padding: 16px 0 96px;
+  text-align: center;
+}
+.tt-place-identity a,
+.tt-privacy-hint a {
+  color: inherit;
+  text-decoration: underline;
+}
