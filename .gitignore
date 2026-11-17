@@ -38,3 +38,8 @@ TEST-ACCOUNTS.txt
 # this one's files. Untracked, they made the gate report "the code changed
 # while it ran" whenever an agent started mid-run (2026-11-13).
 .claude/worktrees/
+
+# The Supabase CLI's local state (ci/supabase is the GitHub gates' throwaway stack).
+supabase/.temp/
+ci/supabase/.temp/
+ci/supabase/.branches/
