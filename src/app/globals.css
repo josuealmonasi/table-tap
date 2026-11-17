@@ -2493,6 +2493,21 @@ a.tt-btn {
   font-size: 22px;
   cursor: pointer;
 }
+/* The dish or combo name beside its price. The name is the elastic child: it
+   wraps inside the room the price leaves instead of running up against it. */
+.tt-detail-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+.tt-detail-head > h2 {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.tt-detail-head > .tt-price-lg {
+  flex: none;
+}
 .tt-price-lg {
   font-weight: 700;
   color: var(--tt-ink);
@@ -7948,6 +7963,11 @@ a.tt-user-plan:hover {
   margin: 4px 0 0;
   padding: 0;
   font-size: 14px;
+  /* The gap lives here, on the parent: each line used to touch the next, and
+     an emoji line painted 1px into its neighbour. */
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
 }
 .tt-statement-lines li > span:first-child {
   min-width: 0;

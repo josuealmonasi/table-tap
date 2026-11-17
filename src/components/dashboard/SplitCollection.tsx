@@ -87,10 +87,10 @@ export default function SplitCollection({ split, skipTicketEmail, onSkipTicketEm
     <CashChange amount={amount + (tooMuch ? 0 : tip)} currency={currency} />
     <div className="tt-bill-actions">
       <button type="button" className="tt-btn tt-btn-primary" disabled={busy || cents <= 0 || tooMuch} onClick={() => send(false, "cash")}>
-        {t("settle.cash")} · {formatMoney(amount + (tooMuch ? 0 : tip), currency)}
+        {t("settle.cash")}&nbsp;· {formatMoney(amount + (tooMuch ? 0 : tip), currency)}
       </button>
       <button type="button" className="tt-btn tt-btn-ghost" disabled={busy || cents <= 0 || tooMuch} onClick={() => send(false, "card")}>
-        {t("settle.card")} · {formatMoney(amount + (tooMuch ? 0 : tip), currency)}
+        {t("settle.card")}&nbsp;· {formatMoney(amount + (tooMuch ? 0 : tip), currency)}
       </button>
     </div>
     {canWriteOff && <button type="button" className="tt-btn tt-btn-ghost tt-bill-close" disabled={busy}

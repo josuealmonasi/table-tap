@@ -7643,6 +7643,7 @@ resolution clocks before paging. A request past the end counts once, clamps
 to the last page and retrieves at most that page plus one lookahead row,
 including its resolution evidence, even under a smaller Data API row cap.
 
+<<<<<<< HEAD
 ### Legacy split tips use an amount when the frozen principal is unknown (N14)
 
 A split locked before `food_principal` existed froze gross debt, including any
@@ -7692,3 +7693,14 @@ share `splitTakesExactTipOnly`, tested against one fixture table
 (`exact-tip-cases.ts`) on both sides; `apiErr.splitExactTip` tells a stale
 bundle to reload. Known follow-up (F4): modern v1 splits with a principal still
 reopen an earlier page or return a winner whose tip differs from the screen.
+=======
+## Android layout — separators stay with the word before them
+
+The GitHub layout gate renders text like Linux/Android Chrome, which wraps
+where macOS did not. A " · " joint could start a line (check payment, divided
+bill, part receipt), the dish or combo name ran up against its price (3px), and
+the account statement's order lines painted 1px into each other. Every inline
+" · " now joins with a non-breaking space before the dot; the dish/combo head is
+`.tt-detail-head` (elastic name with `min-width: 0` and `overflow-wrap`, fixed
+price); `.tt-statement-lines` spaces its lines with a parent `gap`.
+>>>>>>> 03bff45d (Fix Android layout findings: separators stay with the preceding word, dish head wraps, statement lines spaced by gap)

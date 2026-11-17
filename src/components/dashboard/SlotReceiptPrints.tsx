@@ -39,7 +39,7 @@ export default function SlotReceiptPrints({ receipts }: Props): JSX.Element | nu
   return <div className="tt-bill-actions">
     {receipts.map(receipt => <button key={receipt.paymentId} type="button" className="tt-btn tt-btn-ghost"
       data-slot-receipt-print disabled={busy} onClick={() => void print(receipt.paymentId)}>
-      {t("slots.printPart")} · {formatMoney(receipt.amountCents / 100, receipt.currency)}
+      {t("slots.printPart")}&nbsp;· {formatMoney(receipt.amountCents / 100, receipt.currency)}
     </button>)}
   </div>;
 }

@@ -24,7 +24,7 @@ export default function TableSplitCollection({ splits, ...props }: Props): JSX.E
     {splits.length > 1 && <div role="group" aria-label={t("slots.chooseBill")}>
       {splits.map((s, n) => <button key={s.id} type="button" className="tt-btn tt-btn-ghost"
         aria-pressed={s.id === split.id} onClick={() => setChosen(s.id)}>
-        {t("slots.division", { n: n + 1 })} · {t("slots.progress", { paid: (s.slots ?? []).filter(p => p.paid).length, of: s.shares })}
+        {t("slots.division", { n: n + 1 })}&nbsp;· {t("slots.progress", { paid: (s.slots ?? []).filter(p => p.paid).length, of: s.shares })}
       </button>)}
     </div>}
     <SplitCollection key={`${split.id}:${split.revision}`} split={split} skipTicketEmail={skipTicketEmail}
