@@ -2966,10 +2966,11 @@ three schedulers:
 - **The database, every five minutes.** `supabase/schema.sql` installs
   `pg_cron` and `pg_net` and schedules the job `tabletap-recover`
   (`*/5 * * * *`), which `net.http_post`s to
-  `https://tabletap.shop/api/cron/recover` with `Authorization: Bearer` and the
-  value of the Vault secret named `cron_secret`, read when the job runs. The
-  secret is never in the repository. A project without that Vault secret
-  (development) makes no call at all. This is the five-minute guarantee.
+  `https://tabletap.shop/api/cron/recover` with a timestamp, random nonce and
+  HMAC-SHA256 signature made using Vault's `recovery_signing_secret`. The
+  reusable secret never enters the request queue. A project without that Vault
+  secret (development) makes no call at all. The route accepts a signature for
+  five minutes either side of its timestamp and consumes its nonce once.
 - **Vercel Cron, once a day** (09:00 UTC, 03:00 in Mexico City): the schedule
   the Hobby plan accepts, since a schedule the plan refuses fails the deploy.
 - **GitHub Actions, best effort** (`.github/workflows/recovery.yml`). It asks
@@ -2979,12 +2980,13 @@ three schedulers:
 
 The ticket-email model (`ticket-email-schedule.spec.ts`, N10) counts only the
 daily Vercel cron and the pg_cron job. The jobs are bounded per run whichever
-scheduler calls. Vercel and the database both send `CRON_SECRET` as a Bearer
-authorization header: production's Vercel `CRON_SECRET` and its Vault
-`cron_secret` hold the same random value, generated at ship time and never
-printed. Missing, empty and incorrect credentials return 401 before any
-recovery client is created. The route compares fixed-size hashes in constant
-time and never needs a signed-in user. `drop.sql` unschedules the job.
+scheduler calls. Vercel uses `CRON_SECRET` as a Bearer authorization header;
+the database uses the separate `RECOVERY_SIGNING_SECRET` configured in the
+route and Vault. Missing, empty and incorrect credentials return 401. Signature
+comparisons are constant-time, and a unique nonce insert rejects replay.
+Successful database runs are recorded separately from fallback runs; the route
+and `prod-check` report failure when the latest is 15 minutes old or missing.
+Development shows `skipped: no scheduler on dev`. `drop.sql` unschedules the job.
 
 The GitHub job uses a signed, short-lived OpenID Connect identity instead of
 copying that production secret. Only production accepts it. The server checks

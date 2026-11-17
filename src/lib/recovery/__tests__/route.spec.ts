@@ -44,7 +44,8 @@ it("runs every job without a user session and returns uncached per-job counts", 
   const result = await GET(request("Bearer cron-test-secret"));
   expect(result.status).toBe(200);
   expect(result.headers.get("cache-control")).toBe("no-store");
-  expect(await result.json()).toEqual({ jobs: { stock: clean, refunds: clean, fees: clean, subscriptions: clean, disputes: clean }, tickets: { ...drained, expired: 0 } });
+  expect(await result.json()).toEqual({ jobs: { stock: clean, refunds: clean, fees: clean, subscriptions: clean, disputes: clean }, tickets: { ...drained, expired: 0 },
+    scheduler: { ok: true, status: "skipped: no scheduler on dev" } });
   expect(context).toHaveBeenCalledTimes(5);
   expect(githubAuth).not.toHaveBeenCalled();
 });

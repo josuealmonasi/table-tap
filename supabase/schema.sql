@@ -15050,10 +15050,19 @@ grant execute on function public.collect_split_slots_v1(uuid, uuid, int, int[], 
 -- Audit of #648: recovery every five minutes, scheduled by the database.
 -- GitHub's schedule ran 8 times in two days, hours apart, and Vercel Hobby
 -- allows one cron a day. pg_cron is part of Supabase and runs on time; pg_net
--- makes the call. The bearer is read from Vault when the job runs, never from
--- this file: a project without a Vault secret named 'cron_secret' (dev) makes
--- no call at all. Production's secret equals Vercel's CRON_SECRET. The
+-- makes the call. A one-time signature is made from a Vault secret at run
+-- time: a project without 'recovery_signing_secret' (dev) makes no call.
+-- The reusable secret never enters pg_net's readable request queue. The
 -- GitHub workflow stays as a backup; the route accepts all three callers.
+create table if not exists recovery_nonces (nonce uuid primary key, at timestamptz not null default now());
+create table if not exists recovery_runs (source text not null, ok boolean not null, at timestamptz not null default now());
+create index if not exists recovery_runs_source_at on public.recovery_runs (source, at desc) where ok;
+alter table public.recovery_nonces enable row level security;
+alter table public.recovery_runs enable row level security;
+revoke all on recovery_nonces from anon, authenticated, public;
+revoke all on recovery_runs from anon, authenticated, public;
+grant select, insert, delete on public.recovery_nonces, public.recovery_runs to service_role;
+revoke truncate, references, trigger on all tables in schema public from authenticated;
 create extension if not exists pg_cron;
 create extension if not exists pg_net;
 do $$ begin
@@ -15062,12 +15071,20 @@ do $$ begin
   end if;
 end $$;
 select cron.schedule('tabletap-recover', '*/5 * * * *', $job$
+  set local search_path = public, extensions, pg_catalog;
+  with signed as materialized (
+    select s.decrypted_secret, floor(extract(epoch from clock_timestamp()))::bigint::text as ts,
+      gen_random_uuid()::text as nonce
+    from vault.decrypted_secrets s
+    where s.name = 'recovery_signing_secret' and coalesce(s.decrypted_secret, '') <> ''
+    limit 1
+  )
   select net.http_post(
     url := 'https://tabletap.shop/api/cron/recover',
-    headers := jsonb_build_object('Authorization', 'Bearer ' || s.decrypted_secret, 'Content-Type', 'application/json'),
+    headers := jsonb_build_object('X-Recover-Ts', ts, 'X-Recover-Nonce', nonce,
+      'X-Recover-Signature', encode(hmac(ts || '.' || nonce, decrypted_secret, 'sha256'), 'hex'),
+      'Content-Type', 'application/json'),
     body := '{}'::jsonb,
     timeout_milliseconds := 60000)
-  from vault.decrypted_secrets s
-  where s.name = 'cron_secret' and coalesce(s.decrypted_secret, '') <> ''
-  limit 1
+  from signed
 $job$);

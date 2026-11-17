@@ -38,17 +38,19 @@ describe("audit #648: the database's five-minute recovery job", () => {
     expect(drop).toContain("perform cron.unschedule('tabletap-recover');");
   });
 
-  it("posts to the production route with the bearer read from Vault when it runs", () => {
+  it("posts a one-time signature without putting the Vault secret in the queue", () => {
     expect(job).toContain("net.http_post(");
     expect(job).toContain("url := 'https://tabletap.shop/api/cron/recover'");
-    expect(job).toContain("'Bearer ' || s.decrypted_secret");
+    expect(job).not.toContain("'Bearer ' || s.decrypted_secret");
+    expect(job).toContain("'X-Recover-Signature'");
+    expect(job).toContain("hmac(");
     expect(job).toContain("from vault.decrypted_secrets s");
-    expect(job).toContain("where s.name = 'cron_secret' and coalesce(s.decrypted_secret, '') <> ''");
+    expect(job).toContain("where s.name = 'recovery_signing_secret' and coalesce(s.decrypted_secret, '') <> ''");
   });
 
   it("does nothing on a project without the secret: the call is a select over the Vault row", () => {
     // No row, no call. Dev never sets the secret, so dev never calls production.
-    expect(job.trim().startsWith("$job$\n  select net.http_post(")).toBe(true);
+    expect(job).toContain("select net.http_post(");
     expect(job).not.toMatch(/Bearer [A-Za-z0-9_-]{16,}/);
     expect(job).toContain("limit 1");
   });

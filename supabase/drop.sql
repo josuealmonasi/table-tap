@@ -123,6 +123,8 @@ drop table if exists account_checkouts   cascade;
 drop table if exists customer_accounts   cascade;
 drop table if exists loyalty_redemptions cascade;
 drop table if exists loyalty_visits      cascade;
+drop table if exists recovery_nonces cascade;
+drop table if exists recovery_runs cascade;
 drop table if exists ticket_email_outbox cascade;
 drop table if exists loyalty_cards       cascade;
 drop table if exists loyalty_programs    cascade;

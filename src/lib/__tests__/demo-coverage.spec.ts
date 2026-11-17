@@ -31,6 +31,8 @@ const NOT_DEMO_DATA = new Set([
   "restaurant_accounting_records", // only real deletions retain books; the demo stays live
   "profiles", // created with the logins
   "rate_limits", // throttling counters
+  "recovery_nonces", // replay protection for real scheduled calls
+  "recovery_runs", // health of the real scheduler, never seeded
   "menus",
   "categories",
   "menu_items",

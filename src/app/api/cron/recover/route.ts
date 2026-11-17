@@ -10,6 +10,8 @@ import { recoverFees } from "@/lib/recovery/fees";
 import { recoverRefunds } from "@/lib/recovery/refunds";
 import { recoverSubscriptions } from "@/lib/recovery/subscriptions";
 import { recoverDisputes } from "@/lib/recovery/disputes";
+import { signedRecoveryAuthorized } from "@/lib/recovery/signed-auth";
+import { schedulerHealth } from "@/lib/recovery/health.mjs";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -31,12 +33,14 @@ async function drainTickets(): Promise<TicketDrain & { expired: number }> {
 
 /**
  * Callers, all checked here: Vercel's daily cron and the database's
- * five-minute pg_cron job (both `Bearer CRON_SECRET`, compared in constant
- * time), and GitHub's best-effort backup schedule (a signed OIDC identity).
+ * five-minute pg_cron job (a one-time signature), and GitHub's best-effort
+ * backup schedule (a signed OIDC identity). Vercel uses `Bearer CRON_SECRET`.
  * Everything else is refused.
  */
 async function recover(request: Request) {
-  if (!cronAuthorized(request) && !await githubCronAuthorized(request)) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const scheduled = request.headers.has("x-recover-signature") && await signedRecoveryAuthorized(request, createAdminClient());
+  if (!scheduled && !cronAuthorized(request) && !await githubCronAuthorized(request)) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const db = createAdminClient();
   // Ticket emails left waiting since the last payment request drained them:
   // claimed until the queue is empty or the budget runs out (Codex review of
   // #622). Never throws; it stops between groups and releases what it claimed.
@@ -50,7 +54,20 @@ async function recover(request: Request) {
   }
   const drained = await tickets;
   console.info("Scheduled recovery", { job: "tickets", ...drained });
-  return NextResponse.json({ jobs: results, tickets: drained }, { headers: { "Cache-Control": "no-store" } });
+  const ok = Object.values(results).every(r => r.failed === 0 && !r.observation_failed && r.pending !== null) &&
+    drained !== null && drained.failed === 0 && drained.expired === 0 && drained.errors === 0;
+  if (scheduled && ok) {
+    const { error } = await db.from("recovery_runs").insert({ source: "database", ok: true });
+    if (error) console.error("Could not record scheduled recovery", error.message);
+    await db.from("recovery_runs").delete().lt("at", new Date(Date.now() - 7 * 86_400_000).toISOString());
+  }
+  let health = schedulerHealth(false, null, false);
+  if (process.env.VERCEL_ENV === "production") {
+    const { data, error } = await db.from("recovery_runs").select("at").eq("source", "database").eq("ok", true)
+      .order("at", { ascending: false }).limit(1).maybeSingle();
+    health = schedulerHealth(true, data?.at ?? null, Boolean(error));
+  }
+  return NextResponse.json({ jobs: results, tickets: drained, scheduler: health }, { headers: { "Cache-Control": "no-store" } });
 }
 
 export const GET = recover;
