@@ -5918,6 +5918,7 @@ create table if not exists refund_operations (
   foreign key (restaurant_id, adjustment_id) references order_adjustments(restaurant_id, id) on delete cascade
 );
 alter table refund_operations add column if not exists historical_review boolean not null default false;
+alter table refund_operations add column if not exists historical_import_reason text;
 create unique index if not exists user_logs_tenant_identity on user_logs(restaurant_id, id);
 alter table refund_operations add column if not exists historical_log_id uuid;
 alter table refund_operations drop constraint if exists refund_operations_historical_log_id_fkey;
@@ -6276,6 +6277,11 @@ begin
     if g.stripe_payment_intent is not null or g.currency is distinct from o.currency then v_log := null; end if;
     select * into l from user_logs where id = v_log;
     if g.existing_operation is not null then
+      if g.stripe_payment_intent is not null then
+        update refund_operations set historical_import_reason = 'Historical card return needs provider evidence'
+          where id = g.existing_operation and historical_review and status = 'review'
+            and historical_import_reason is null;
+      end if;
       if v_log is not null then
         update refund_operations set status = 'succeeded', historical_log_id = v_log,
           completed_at = l.created_at, payout_actor = g.actor_email, confirmed_by = l.actor_email
@@ -6284,12 +6290,13 @@ begin
       continue;
     end if;
     insert into refund_operations(restaurant_id, adjustment_id, source, amount, tip, currency,
-      stripe_payment_intent, stripe_account_id, original_collector, status, historical_log_id, completed_at, payout_actor, confirmed_by, historical_review)
+      stripe_payment_intent, stripe_account_id, original_collector, status, historical_log_id, completed_at, payout_actor, confirmed_by, historical_review, historical_import_reason)
       values(p_restaurant, d, case when g.stripe_payment_intent is not null or g.currency is distinct from o.currency then 'review'
         when g.method = 'cash' then 'cash' else 'terminal' end,
         g.amount, g.tip, coalesce(g.currency, o.currency), g.stripe_payment_intent, g.stripe_account_id, g.actor_email,
         case when v_log is null then 'review' else 'succeeded' end, v_log, l.created_at,
-        case when v_log is not null then g.actor_email end, l.actor_email, true) returning id into v_operation;
+        case when v_log is not null then g.actor_email end, l.actor_email, true,
+        case when g.stripe_payment_intent is not null then 'Historical card return needs provider evidence' end) returning id into v_operation;
     insert into refund_allocations(restaurant_id, operation_id, allocation_id, amount, tip)
       select p_restaurant, v_operation, (x->>'id')::uuid, (x->>'amount')::numeric, (x->>'tip')::numeric
         from jsonb_array_elements(g.entries) x;
@@ -6394,7 +6401,7 @@ returns boolean language sql stable security definer set search_path = public as
         -- Match only the order code here: the importer still proves the amount,
         -- collector, currency and unique log before accepting any return.
         and (r.id is null or (f.historical_review and f.status = 'review'
-          and exists (select 1 from user_logs l where l.restaurant_id = o.restaurant_id
+          and f.historical_import_reason is null and exists (select 1 from user_logs l where l.restaurant_id = o.restaurant_id
             and l.entity = 'order' and l.action = 'refunded'
             and substring(l.detail from '(?:^| )order=([^ ]+)') = left(o.id::text, 8)
             and not exists (select 1 from refund_operations used where used.historical_log_id = l.id)))
@@ -7140,10 +7147,17 @@ begin
       current_setting('tabletap.importing_return', true) is distinct from 'v1') then
     raise exception 'historical evidence is immutable';
   end if;
+  -- Only the importer can mark a card return that needs provider evidence.
+  if new.historical_import_reason is distinct from old.historical_import_reason and
+    (old.historical_import_reason is not null or not old.historical_review or old.status <> 'review' or
+      old.stripe_payment_intent is null or new.historical_import_reason is distinct from 'Historical card return needs provider evidence' or
+      current_setting('tabletap.importing_return', true) is distinct from 'v1') then
+    raise exception 'historical import reason is immutable';
+  end if;
   -- Fee verification changes after customer completion; the return's money
   -- and original charge identity remain immutable throughout recovery.
-  if (to_jsonb(new) - array['status','stripe_refund_id','provider_status','completed_at','payout_actor','confirmed_by','fee_reconciled_at','fee_verification_pending','fee_target_cents','historical_log_id'])
-    is distinct from (to_jsonb(old) - array['status','stripe_refund_id','provider_status','completed_at','payout_actor','confirmed_by','fee_reconciled_at','fee_verification_pending','fee_target_cents','historical_log_id']) then
+  if (to_jsonb(new) - array['status','stripe_refund_id','provider_status','completed_at','payout_actor','confirmed_by','fee_reconciled_at','fee_verification_pending','fee_target_cents','historical_log_id','historical_import_reason'])
+    is distinct from (to_jsonb(old) - array['status','stripe_refund_id','provider_status','completed_at','payout_actor','confirmed_by','fee_reconciled_at','fee_verification_pending','fee_target_cents','historical_log_id','historical_import_reason']) then
     raise exception 'return money is immutable';
   end if;
   return new;

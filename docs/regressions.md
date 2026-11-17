@@ -8,6 +8,14 @@ table owed MX$105 and the diner's screen said it owed nothing.
 So this is not a style guide. It is the list of things that have actually bitten
 us, and what now catches each one.
 
+## Historical card return imports stop retrying
+
+The import and the bill read disagreed about what a card return log could prove.
+A matching log kept the import pending even though only provider evidence can
+resolve the card return. The import records that reason on the review row; the
+need check skips it and the money check still lists it. `historical-card-import.spec.ts`
+checks the shared rule, and the rolled-back development probe checks both reads.
+
 ## What runs on its own
 
 ### Login passwords stay outside the repository
@@ -44,8 +52,9 @@ and that a new party cannot see the previous party's waiting phones.
 `src/lib/__tests__/invariants.spec.ts` enforces the rules that span files:
 
 | Rule | The bug it came from |
-| The retry schedule must run on the hosting plan and identify its caller | Vercel rejected the five-minute cron on Hobby; `recovery-schedule-platform.spec.ts`, `github-cron-auth.spec.ts` and `recovery-scheduler-client.spec.ts` pin the daily fallback and the exact signed main-branch job |
 |---|---|
+| Historical card reviews do not retry on each bill read | The importer cannot use a log as provider evidence, but the need check kept finding it; `historical-card-import.spec.ts` checks the review marker |
+| The retry schedule must run on the hosting plan and identify its caller | Vercel rejected the five-minute cron on Hobby; `recovery-schedule-platform.spec.ts`, `github-cron-auth.spec.ts` and `recovery-scheduler-client.spec.ts` pin the daily fallback and the exact signed main-branch job |
 | An old split without a frozen principal accepts exact tips only (review N14) | Gross amount included earlier gratuities, and an open checkout could silently keep a different tip; legacy-split-tip, legacy-split-tip-route and legacy-split-tip-input regression specs cover calculation, request, preview and retry |
 | The account promise opens its own unsplit bill | The first Collect could open another table's divided bill, which correctly offers parts instead of an account charge; `promise-account-bill.spec.ts` checks the target and cleanup |
 | A duplicate refund tracks customer completion and fee completion separately (S11 I5) | A failed fee return disappeared behind an already-refunded customer payment |
