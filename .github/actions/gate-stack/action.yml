@@ -71,7 +71,18 @@ runs:
       shell: bash
       env:
         NODE_OPTIONS: --max-old-space-size=6144
-      run: pnpm build
+      # next/font fetches Google Fonts at build time, and nine jobs asking at
+      # once sometimes get an answer it cannot parse ("Cannot read properties
+      # of null (reading '1')" in next/font's loader). A rerun gets a good one.
+      run: |
+        for attempt in 1 2 3; do
+          pnpm build > build.log 2>&1 && { tail -40 build.log; exit 0; }
+          if ! grep -q "An error occurred in \`next/font\`" build.log; then cat build.log; exit 1; fi
+          echo "::warning::next/font could not read Google Fonts' answer (attempt $attempt); building again"
+          sleep $((attempt * 20))
+        done
+        cat build.log
+        exit 1
 
     - name: Start the server
       shell: bash

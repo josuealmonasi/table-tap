@@ -23,7 +23,9 @@ export function adminOwnerCases(fx) {
     // while Stripe refused every account it was asked to make: no restaurant
     // could connect at all. Dev is on Stripe's test mode, so this makes a real
     // test account, demands the onboarding link, and closes the account again.
-    { name: "POST /api/connect/onboard", as: "owner", method: "POST", path: "/api/connect/onboard",
+    // It needs a real Stripe test key: on GitHub without STRIPE_TEST_SECRET it
+    // is skipped by name (`needsStripe`), never passed.
+    { name: "POST /api/connect/onboard", as: "owner", method: "POST", path: "/api/connect/onboard", needsStripe: true,
       arrange: async f => {
         const { data: was } = await f.admin.from("restaurants")
           .select("stripe_account_id, stripe_charges_enabled").eq("id", r).single();

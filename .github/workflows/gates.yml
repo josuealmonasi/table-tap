@@ -54,7 +54,7 @@ jobs:
           pnpm "$GATE" 2>&1 | tee "gate-output/$GATE.txt"
           code=${PIPESTATUS[0]}
           set -e
-          skipped=$(grep -c "skipped: no STRIPE_TEST_SECRET" "gate-output/$GATE.txt" || true)
+          skipped=$(grep -c "— skipped: no STRIPE_TEST_SECRET" "gate-output/$GATE.txt" || true)
           {
             echo "### $GATE: $([ "$code" = 0 ] && echo passed || echo "FAILED (exit $code)")"
             [ "$skipped" -gt 0 ] && echo "$skipped case(s) skipped: no STRIPE_TEST_SECRET"
