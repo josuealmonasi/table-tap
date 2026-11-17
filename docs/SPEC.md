@@ -2239,7 +2239,9 @@ core screens — orders, bills, POS, accounts, settings, the diner menu — when
 it reaches everything; `scripts/gate-scope-ci.mjs`). Each job starts its own
 throwaway Supabase with the CLI (`ci/supabase/config.toml`), builds it with
 `pnpm db:create`, `db:seed` and `db:mock` from `supabase/schema.sql`, and
-serves a production build against it. `scripts/ci-env.mjs` writes the only env
+serves the run's one production build against it (built once by a `build` job
+and shared as an artifact; each job checks the build inlined its own stack's
+URL and key). `scripts/ci-env.mjs` writes the only env
 file the gates read, refuses to run off GitHub Actions or over an existing
 file, and refuses any API or database address that is not the runner's
 loopback, so CI cannot reach the dev or production projects. Login passwords

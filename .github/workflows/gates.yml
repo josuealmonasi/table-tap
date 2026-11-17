@@ -28,9 +28,55 @@ permissions:
   contents: read
 
 jobs:
+  # One production build for every gate job. Nine jobs each building at once
+  # also asked Google Fonts nine times at once (next/font fetches at build
+  # time), which broke builds here and in ci.yml's verify job.
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ./.github/actions/gate-stack
+        with:
+          build-only: "true"
+
+      - name: Cache the Next build
+        uses: actions/cache@v4
+        with:
+          path: .next/cache
+          key: next-gates-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-${{ github.sha }}
+          restore-keys: next-gates-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-
+
+      - name: Build
+        env:
+          NODE_OPTIONS: --max-old-space-size=6144
+        # next/font sometimes cannot parse Google Fonts' answer ("Cannot read
+        # properties of null (reading '1')"); a rerun gets a good one.
+        run: |
+          for attempt in 1 2 3; do
+            pnpm build > build.log 2>&1 && { tail -60 build.log; break; }
+            if [ "$attempt" = 3 ] || ! grep -q "An error occurred in \`next/font\`" build.log; then cat build.log; exit 1; fi
+            echo "::warning::next/font could not read Google Fonts' answer (attempt $attempt); building again"
+            sleep $((attempt * 20))
+          done
+          # What the build inlined, so each gate job can prove its own stack matches.
+          printf '%s\n%s' "$NEXT_PUBLIC_SUPABASE_URL" "$NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY" | sha256sum | cut -c1-64 > .next/gate-build-env
+
+      - name: Share the build
+        uses: actions/upload-artifact@v4
+        with:
+          name: next-build
+          path: |
+            .next
+            !.next/cache
+          include-hidden-files: true
+          retention-days: 1
+
   # Stage 1: the gates that talk to the server and the database, unscoped.
   gate:
     name: ${{ matrix.gate }}
+    needs: build
     runs-on: ubuntu-latest
     timeout-minutes: 60
     strategy:
@@ -78,6 +124,7 @@ jobs:
   # the core screens instead — the gate budget the owner set on 2026-11-14.
   browser:
     name: ${{ matrix.gate }}
+    needs: build
     runs-on: ubuntu-latest
     timeout-minutes: 75
     strategy:

@@ -1,9 +1,10 @@
 name: Gate stack
 description: >
   Everything a gate needs on one runner — a throwaway local Supabase with the
-  schema and the demo seed, and a production build of this checkout served on
-  localhost:3000 against it. Nothing here can reach the dev or production
-  projects: scripts/ci-env.mjs refuses any address that is not this machine.
+  schema and the demo seed, and the run's production build (the `next-build`
+  artifact) served on localhost:3000 against it. Nothing here can reach the
+  dev or production projects: scripts/ci-env.mjs refuses any address that is
+  not this machine.
 
 inputs:
   stripe-test-secret:
@@ -12,6 +13,12 @@ inputs:
     default: ""
   playwright:
     description: Install Chromium for the browser gates.
+    required: false
+    default: "false"
+  build-only:
+    description: >
+      For the job that builds: start only the database (its keys are what the
+      build inlines), no seed, no server.
     required: false
     default: "false"
 
@@ -40,10 +47,16 @@ runs:
 
     # Only the services the app talks to: the database, auth, the REST API,
     # realtime (pnpm rls asks the socket directly) and storage (the schema
-    # makes the menu bucket). The rest only cost pull time.
+    # makes the menu bucket). The rest only cost pull time. The build job
+    # needs the keys and nothing else, so it starts the database alone.
     - name: Start a throwaway Supabase
       shell: bash
-      run: supabase start --workdir ci -x studio,imgproxy,edge-runtime,logflare,vector,supavisor,postgres-meta,mailpit
+      env:
+        BUILD_ONLY: ${{ inputs.build-only }}
+      run: |
+        skip=studio,imgproxy,edge-runtime,logflare,vector,supavisor,postgres-meta,mailpit
+        [ "$BUILD_ONLY" = true ] && skip=$skip,gotrue,realtime,storage-api,kong,postgrest
+        supabase start --workdir ci -x "$skip"
 
     - name: Point the gates at it
       shell: bash
@@ -54,37 +67,33 @@ runs:
     # The same scripts that build the dev project: the schema file, the test
     # logins and platform admin (db:seed), and the demo restaurant (db:mock).
     - name: Create the schema and seed it
+      if: inputs.build-only != 'true'
       shell: bash
       run: |
         pnpm db:create
         pnpm db:seed
         pnpm db:mock
 
-    - name: Cache the Next build
-      uses: actions/cache@v4
+    - name: Fetch the run's build
+      if: inputs.build-only != 'true'
+      uses: actions/download-artifact@v4
       with:
-        path: .next/cache
-        key: next-gates-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-${{ github.sha }}
-        restore-keys: next-gates-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-
+        name: next-build
+        path: .next
 
-    - name: Build
+    # The build inlined the Supabase URL and publishable key. Every local
+    # stack derives them from the same defaults; if that ever stops being
+    # true, say so here rather than as a few hundred failed logins.
+    - name: Check the build matches this stack
+      if: inputs.build-only != 'true'
       shell: bash
-      env:
-        NODE_OPTIONS: --max-old-space-size=6144
-      # next/font fetches Google Fonts at build time, and nine jobs asking at
-      # once sometimes get an answer it cannot parse ("Cannot read properties
-      # of null (reading '1')" in next/font's loader). A rerun gets a good one.
       run: |
-        for attempt in 1 2 3; do
-          pnpm build > build.log 2>&1 && { tail -40 build.log; exit 0; }
-          if ! grep -q "An error occurred in \`next/font\`" build.log; then cat build.log; exit 1; fi
-          echo "::warning::next/font could not read Google Fonts' answer (attempt $attempt); building again"
-          sleep $((attempt * 20))
-        done
-        cat build.log
-        exit 1
+        now=$(printf '%s\n%s' "$NEXT_PUBLIC_SUPABASE_URL" "$NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY" | sha256sum | cut -c1-64)
+        built=$(cat .next/gate-build-env)
+        if [ "$now" != "$built" ]; then echo "The build was made for another Supabase URL or key than this stack's"; exit 1; fi
 
     - name: Start the server
+      if: inputs.build-only != 'true'
       shell: bash
       run: |
         nohup pnpm start -p 3000 > server.log 2>&1 &
