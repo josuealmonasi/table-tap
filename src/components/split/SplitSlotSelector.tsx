@@ -20,7 +20,7 @@ export default function SplitSlotSelector({ slots, selected, currency, busy = fa
       <input type="checkbox" disabled={busy || slot.paid || slot.paying}
         checked={!slot.paid && !slot.paying && selected.includes(slot.shareNo)}
         onChange={e => onChange(e.target.checked ? [...selected, slot.shareNo].sort((a, b) => a - b) : selected.filter(n => n !== slot.shareNo))} />
-      <span>{t("slots.part", { n: slot.shareNo + 1 })}&nbsp;· {formatMoney(slot.amountCents / 100, currency)}
+      <span>{t("slots.part", { n: slot.shareNo + 1 })}&nbsp;·&nbsp;{formatMoney(slot.amountCents / 100, currency)}
         {SEP}<strong>{t(slot.paid ? "slots.paid" : slot.paying ? "slots.held" : "slots.free")}</strong></span>
     </label>)}
   </fieldset>;

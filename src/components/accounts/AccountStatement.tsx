@@ -172,8 +172,8 @@ export default function AccountStatement({ code, paid }: { code: string; paid: b
                 <li key={i}>
                   {/* The restaurant's day, as the charges above use: a 00:30 Mexico City
                     payment read on a Los Angeles phone was dated the day before (sweep 8, finding 5). */}
-                  {new Intl.DateTimeFormat(dateLocale(locale), { dateStyle: "medium", timeZone: data.timeZone ?? undefined }).format(new Date(p.at))}&nbsp;·{" "}
-                  {p.currency ? formatMoney(p.amount, p.currency) : `${Number(p.amount).toFixed(2)}${SEP}${t("attribution.currencyUnknown")}`}&nbsp;· {t(p.method === "cash" ? "account.byCash" : "account.byCard")}
+                  {new Intl.DateTimeFormat(dateLocale(locale), { dateStyle: "medium", timeZone: data.timeZone ?? undefined }).format(new Date(p.at))}&nbsp;·&nbsp;
+                  {p.currency ? formatMoney(p.amount, p.currency) : `${Number(p.amount).toFixed(2)}${SEP}${t("attribution.currencyUnknown")}`}&nbsp;·&nbsp;{t(p.method === "cash" ? "account.byCash" : "account.byCard")}
                 </li>
               ))}
             </ul>
@@ -182,7 +182,7 @@ export default function AccountStatement({ code, paid }: { code: string; paid: b
 
         {Boolean(data.returns?.length) && <section className="tt-section">
           <h3>{t("returns.title")}</h3>
-          {data.returns?.map(r => <p key={r.id}>{formatMoney(Number(r.amount), r.currency)}&nbsp;· {t(`returns.${r.status}`)}</p>)}
+          {data.returns?.map(r => <p key={r.id}>{formatMoney(Number(r.amount), r.currency)}&nbsp;·&nbsp;{t(`returns.${r.status}`)}</p>)}
         </section>}
 
         {notice && <p className="tt-field-error" role="status">{notice}</p>}

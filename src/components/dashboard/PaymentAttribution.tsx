@@ -50,7 +50,7 @@ export default function PaymentAttribution({ receipts, timeZone }: Props) {
     <h3>{t("attribution.title")}</h3><p className="tt-muted">{t("attribution.help")}</p>
     {receipts.map(p => <div key={p.id} className="tt-bill-row">
       <div className="tt-bill-main"><strong>{p.currency ? formatMoney(Number(p.amount), p.currency) : `${Number(p.amount).toFixed(2)}${SEP}${t("attribution.currencyUnknown")}`}</strong>
-        <span className="tt-muted tt-bill-sub">{new Date(p.created_at).toLocaleString(dateLocale(locale), { timeZone, dateStyle: "medium", timeStyle: "short" })}&nbsp;· {p.id.slice(0, 8)}</span></div>
+        <span className="tt-muted tt-bill-sub">{new Date(p.created_at).toLocaleString(dateLocale(locale), { timeZone, dateStyle: "medium", timeStyle: "short" })}&nbsp;·&nbsp;{p.id.slice(0, 8)}</span></div>
       <button className="tt-btn tt-btn-ghost tt-btn-sm" disabled={busy} onClick={() => void open(p)}>{t("attribution.assign")}</button>
     </div>)}
     <Modal open={receipt !== null} onClose={() => { if (!busy) setReceipt(null); }} title={t("attribution.title")} maxWidth={560}>
@@ -67,7 +67,7 @@ export default function PaymentAttribution({ receipts, timeZone }: Props) {
       </label>
       <label><input type="checkbox" checked={breakdownUnknown} onChange={e => setBreakdownUnknown(e.target.checked)} /> {t("attribution.unknownTip")}</label>
       {orders.filter(o => !currency || o.currency === currency).map(o => <div key={o.id} className="tt-section">
-        <strong style={{ display: "block" }}>{o.table_label ?? o.id.slice(0, 8)}&nbsp;· {formatMoney(Number(o.total), o.currency)}</strong>
+        <strong style={{ display: "block" }}>{o.table_label ?? o.id.slice(0, 8)}&nbsp;·&nbsp;{formatMoney(Number(o.total), o.currency)}</strong>
         {o.status === "cancelled" && <p className="tt-muted">{t("attribution.cancelled")}</p>}
         <label className="tt-field" style={{ marginTop: 12 }}>{t("attribution.inclusive")}
           <input className="tt-input" type="number" min="0" step="0.01" value={amounts[o.id]?.amount ?? ""}

@@ -61,7 +61,7 @@ export default function OrderRefunds({ refunds }: Props) {
         {row.outstanding_cents !== undefined && row.outstanding_cents < Math.round(Number(row.amount) * 100)
           && <span className="tt-muted tt-bill-sub">{t("returns.alreadyReturned", { amount: formatMoney(Number(row.amount) - row.outstanding_cents / 100, row.currency) })}</span>}
         {identity(row) && <span className="tt-bill-sub">{identity(row)}</span>}
-        <span className="tt-muted tt-bill-sub">{t(`returns.${row.source}`)}&nbsp;· {t(`returns.${row.status}`)}</span>
+        <span className="tt-muted tt-bill-sub">{t(`returns.${row.source}`)}&nbsp;·&nbsp;{t(`returns.${row.status}`)}</span>
       </div>
       <div className="tt-bill-actions-row" style={{ flexWrap: "wrap" }}>
         {row.source !== "stripe" && row.source !== "review" && <label className="tt-field" style={{ width: "100%" }}>
