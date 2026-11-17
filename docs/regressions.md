@@ -46,6 +46,7 @@ and that a new party cannot see the previous party's waiting phones.
 | Rule | The bug it came from |
 | The retry schedule must run on the hosting plan and identify its caller | Vercel rejected the five-minute cron on Hobby; `recovery-schedule-platform.spec.ts`, `github-cron-auth.spec.ts` and `recovery-scheduler-client.spec.ts` pin the daily fallback and the exact signed main-branch job |
 |---|---|
+| An old split without a frozen principal accepts exact tips only (review N14) | Gross amount included earlier gratuities, and an open checkout could silently keep a different tip; legacy-split-tip, legacy-split-tip-route and legacy-split-tip-input regression specs cover calculation, request, preview and retry |
 | The account promise opens its own unsplit bill | The first Collect could open another table's divided bill, which correctly offers parts instead of an account charge; `promise-account-bill.spec.ts` checks the target and cleanup |
 | A duplicate refund tracks customer completion and fee completion separately (S11 I5) | A failed fee return disappeared behind an already-refunded customer payment |
 | A duplicate refund keeps its original charge currency everywhere (S11 I9) | Changing the menu currency relabelled money owed back and the approval amount |
@@ -7641,3 +7642,53 @@ A stored `decision_at` column and tenant-scoped index merge approval and
 resolution clocks before paging. A request past the end counts once, clamps
 to the last page and retrieves at most that page plus one lookahead row,
 including its resolution evidence, even under a smaller Data API row cap.
+
+### Legacy split tips use an amount when the frozen principal is unknown (N14)
+
+A split locked before `food_principal` existed froze gross debt, including any
+earlier tips. Using it as food offered a tip on a tip; subtracting today's tips
+cannot distinguish tips present at the lock from tips added by later shares.
+The owner chose exact amounts for these old splits. The read exposes a null
+principal, the screen offers no percentage presets, and the route refuses a
+percentage before any fee reservation. Zero-tip and capped exact-tip payments
+remain available. Trusted saved principals, including zero, keep their flow.
+A resumed old checkout must have the selected tip and total: an unchanged retry
+reuses its page without a second fee; a different tip gets an explanation.
+Unit and browser-component specs cover both languages, custom input, caps,
+no-tip payment, and preview/request agreement. No historical data is rewritten.
+
+### A highlighted promotion row is part of its listbox
+
+The live layout gate reported a coupon row's painted background as touching
+the list border, despite its text having 12px of padding. Multiple valid options
+also looked like independent buttons touching each other. Full-width listbox
+options now use their own inner text bounds and share the widget's background
+edges. This also checks text inside divided rows that the old full-row shortcut
+skipped. The real coupon dialog was reproduced at phone and desktop widths;
+the audit self-test includes valid adjacent options, cramped text on all four
+sides of both rows, and ordinary/partial/outside controls that must still fail.
+
+### A concurrent legacy checkout keeps the tip the diner selected
+
+Two requests could both read no open attempt before the shared opener returned
+the winner's existing session to the loser. Checking only the initial resume
+path silently redirected the loser to a different tip or total. Red route
+regressions reproduced both mismatches as HTTP 200. Both return paths now use
+one quote check before exposing the URL, preserving the existing attempt and
+fee lifecycle. Matching exact and zero-tip winners remain usable; invalid saved
+tip evidence refuses verification on either path. The race regression models
+the shared opener's documented return contract without making provider calls.
+
+### A diner whose share grew can still pay it (review F1–F3)
+
+A stale exact-tip page was reopened only when its tip and total matched. A diner
+who cancelled the Stripe page and then ordered dessert got 409 on every Pay
+until Stripe expired the page 30 minutes later, worded as the waiter's
+"collect again". The route now expires a resumed page whose total is stale,
+closes its attempt (and fee) through `resumeDinerAttempt`, and opens one at the
+new total; a concurrent winner keeps the strict check. When the old page cannot
+be closed the diner sees `apiErr.splitPageChanged`. The route and the screen now
+share `splitTakesExactTipOnly`, tested against one fixture table
+(`exact-tip-cases.ts`) on both sides; `apiErr.splitExactTip` tells a stale
+bundle to reload. Known follow-up (F4): modern v1 splits with a principal still
+reopen an earlier page or return a winner whose tip differs from the screen.

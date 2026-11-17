@@ -46,6 +46,7 @@ export function useBillPayment(
     diner: string;
     ownOrderIds: string[];
     tipPct: number;
+    tipAmount?: number;
   }): Promise<void> {
     if (!sessionId || busy) return;
     setBusy(true);
@@ -62,7 +63,8 @@ export function useBillPayment(
           // Which orders this phone believes are its own. Checked on the server
           // against what was actually placed after the freeze.
           ownOrderIds: share.ownOrderIds,
-          tipPct: share.tipPct,
+          tipPct: share.tipAmount == null ? share.tipPct : undefined,
+          tipAmount: share.tipAmount,
         }),
       });
       await redirectOrSay(res);

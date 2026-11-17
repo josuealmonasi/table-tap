@@ -1,6 +1,6 @@
 import { beforeEach, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
-import { splitTipPrincipal, splitTipBase, tipFromPercent } from "@/lib/tip-base";
+import { splitTipPrincipal } from "@/lib/tip-base";
 const f = vi.hoisted(() => ({ taken: false, email: null as string | null }));
 vi.mock("@/lib/api-guard", () => ({ actingFrontOfHouse: async () => null }));
 vi.mock("@/lib/api-error", () => ({ apiError: async (error: string, status: number) => Response.json({ error }, { status }) }));
@@ -39,11 +39,11 @@ it.fails("N12: subsequent rewards reads must not reveal whether the submitted ad
   }
   expect(answers[1]).toEqual(answers[0]);
 });
-// Known P3: amount includes original tips; subtracting today's tips instead
-// would also subtract later share tips. Historical evidence needs its own fix.
-it.fails("N14: existing gratuities must not become suggested legacy split tips", () => {
+// N14: gross amount includes earlier tips; today's tips can include later ones.
+// The owner's fallback is exact tips when the frozen principal is unavailable.
+it("N14: old gross splits expose no inferred percentage principal", () => {
   const split = { food_principal: null, amount: 120 };
   for (const orders of [[{ total: 120, tip: 20 }], [{ total: 125, tip: 25, collected: 65, collected_tip: 15 }]]) {
-    expect(tipFromPercent(splitTipBase(splitTipPrincipal(split, orders), 2, [1]), 10)).toBe(5);
+    expect(splitTipPrincipal(split, orders)).toBeNull();
   }
 });

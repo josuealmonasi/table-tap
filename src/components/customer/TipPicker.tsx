@@ -21,6 +21,8 @@ interface TipPickerProps {
   maxTip: number;
   /** Percentage base may exclude service while exact tips keep their existing cap. */
   tipBase?: number;
+  /** Old split snapshots cannot safely supply a percentage base. */
+  exactOnly?: boolean;
   onPresetTip: (pct: number) => void;
   onCustomTip: (amount: number | null) => void;
 }
@@ -32,6 +34,7 @@ export default function TipPicker({
   tipCustom,
   maxTip,
   tipBase = maxTip,
+  exactOnly = false,
   onPresetTip,
   onCustomTip,
 }: TipPickerProps) {
@@ -58,7 +61,7 @@ export default function TipPicker({
     <div style={{ marginBottom: 20 }}>
       <div className="tt-mod-label">{t("tip.prompt")}</div>
       <div className="tt-tip-row">
-        {[0, 10, 15, 20].map(pct => (
+        {(exactOnly ? [0] : [0, 10, 15, 20]).map(pct => (
           <button
             key={pct}
             type="button"
