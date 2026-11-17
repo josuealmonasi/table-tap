@@ -3342,3 +3342,48 @@ keep the original line notes and component extras for interrupted kitchen work.
 Subscription recovery reserves time for unpaid, expired and unknown-period
 sources; duplicate-refund reminders inspect each pending case on the bounded
 rotating page, with the existing per-case deduplication key.
+
+### Old splits without a saved tip principal
+
+A legacy phone-claim split whose frozen gross amount exists but whose
+`food_principal` is missing exposes `tipPrincipal: null`. Its gross may include
+earlier gratuities. Diners choose no tip or an exact amount for those shares;
+the preview and `/api/split/pay` use the same capped amount. The server refuses
+percentage requests before reserving a fee and retains support for zero-tip
+payment. A retry reuses its original checkout only when its saved tip and total
+match the current exact choice. Saved-principal legacy splits and model-2 slots
+retain percentage tipping. This fallback changes no historical rows or schema.
+
+### Listbox rows in browser audits
+
+A full-width direct `role="option"` child of a listbox is part of that widget.
+Its background may meet the list border and adjacent option rows. The layout
+audit measures its text against the row's own inner edges instead of treating
+its background as a separate button needing a gap. Ordinary buttons, partial
+rows and options outside listboxes retain the existing control checks. Positive
+and broken fixtures cover both borderless and divided rows on every text edge;
+the spacing thresholds are unchanged.
+
+### Concurrent legacy checkout retries
+
+For a legacy split with no trusted tip principal, both a resumed checkout and
+the session returned by the attempt opener must match the selected exact tip
+and gross before its URL is returned. This includes a concurrent request's
+winning attempt discovered after the initial resume read. A mismatch refuses
+the redirect while preserving the winner's pending attempt; missing, blank,
+negative or nonfinite saved tip evidence refuses verification.
+
+A resumed page (not a concurrent winner) whose tip matches but whose total
+this share no longer owes — the diner ordered more after cancelling it, or a
+waiter collected part of a later order — is expired at Stripe, read back
+through `resumeDinerAttempt` so `finish_diner_checkout` closes the attempt and
+gives back its fee, and a fresh page is opened at today's total with one new
+fee reservation. If the old page cannot be proven closed (Stripe refuses, it
+was paid, or another request opened a page meanwhile) the diner gets
+`apiErr.splitPageChanged`, diner copy that says to reload; the waiter's
+`apiErr.billChanged` is never sent from this route. `splitTakesExactTipOnly`
+(`tip-base.ts`) is the one rule for "exact tip only": the route refuses a
+percentage by it and `splitTipPrincipal` sends the screen `null` by it, so a
+split frozen at zero or with no amount keeps percentages on both sides. The
+modern v1 paths (with a principal) still reopen an earlier page whatever its
+tip; that is a known follow-up.

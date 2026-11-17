@@ -33,3 +33,14 @@ it("sends slot percentage choices without converting them to a trusted exact tip
   expect(body).not.toHaveProperty("tipCents");
   vi.unstubAllGlobals();
 });
+
+it.each([0, 5.25])("sends the legacy share's exact %s tip without its earlier preset", async tipAmount => {
+  vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false, json: async () => ({ error: "refused" }) }));
+  await useBillPayment("restaurant", "table", "session").payShare({
+    splitId: "old", diner: "member", ownOrderIds: [], tipPct: 15, tipAmount,
+  });
+  const body = JSON.parse(vi.mocked(fetch).mock.calls[0][1]!.body as string);
+  expect(body).toMatchObject({ splitId: "old", tipAmount });
+  expect(body).not.toHaveProperty("tipPct");
+  vi.unstubAllGlobals();
+});

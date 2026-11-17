@@ -18,7 +18,8 @@ export interface SplitState {
   mine: { shareNo: number; amount: number; paid: boolean } | null;
   outstanding: number;
   ownSince: number;
-  tipPrincipal?: number;
+  /** Null means an old split has no trusted frozen principal for percentages. */
+  tipPrincipal?: number | null;
   ownTipBase?: number;
 }
 
