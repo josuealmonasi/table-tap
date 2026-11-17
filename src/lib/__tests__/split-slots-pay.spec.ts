@@ -3,9 +3,9 @@ vi.mock("@/lib/split-page-recovery", () => ({ resolveSelectedSplitPages: recover
 import { beforeEach, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
 const s = vi.hoisted(() => ({ revision: 1, paid: false, held: false, amount: 5500, currency: "MXN", prior: false, winner: false, gross: 12000, expireFails: false,
-  params: null as Record<string, unknown> | null, quote: null as Record<string, unknown> | null, fee: vi.fn(), waiter: vi.fn() }));
-vi.mock("@/lib/diner-checkout-orders", () => ({ dinerCheckoutOrders: async () => [{ id: "o", total: 120, service_fee: 10, tip: 10 }] }));
-vi.mock("stripe", () => ({ default: class { checkout = { sessions: { expire: async () => { if (s.expireFails) throw new Error("paid"); s.prior = false; s.held = false; return { status: "expired", payment_status: "unpaid" }; } } }; } }));
+  ordersFail: false, expires: 0, params: null as Record<string, unknown> | null, quote: null as Record<string, unknown> | null, fee: vi.fn(), waiter: vi.fn() }));
+vi.mock("@/lib/diner-checkout-orders", () => ({ dinerCheckoutOrders: async () => { if (s.ordersFail) throw new Error("food unavailable"); return [{ id: "o", total: 120, service_fee: 10, tip: 10 }]; } }));
+vi.mock("stripe", () => ({ default: class { checkout = { sessions: { expire: async () => { s.expires++; if (s.expireFails) throw new Error("paid"); s.prior = false; s.held = false; return { status: "expired", payment_status: "unpaid" }; } } }; } }));
 vi.mock("@/lib/rate-limit", () => ({ isRoomLimited: async () => false, isTableLimited: async () => false }));
 vi.mock("@/lib/table-membership", () => ({ tableMember: async () => ({ id: "m", sessionId: "session" }) }));
 vi.mock("@/lib/table-session", () => ({ staffOpenedBill: s.waiter }));
@@ -36,7 +36,7 @@ const body = { restaurantId: "r", tableId: "t", sessionId: "session", splitId: "
   slots: [1, 0], expectedCents: 11000, tipCents: 1000 };
 const req = (data: unknown = body) => new NextRequest("http://localhost/api/split/pay", { method: "POST", body: JSON.stringify(data) });
 beforeEach(() => { recover.mockReset().mockResolvedValue("unverified"); s.revision = 1; s.paid = false; s.held = false; s.amount = 5500; s.currency = "MXN"; s.prior = false; s.winner = false; s.gross = 12000; s.expireFails = false;
-  s.params = null; s.quote = null; s.fee.mockReset().mockResolvedValue({ id: "fee", cents: 125 }); s.waiter.mockReset().mockResolvedValue(true); });
+  s.ordersFail = false; s.expires = 0; s.params = null; s.quote = null; s.fee.mockReset().mockResolvedValue({ id: "fee", cents: 125 }); s.waiter.mockReset().mockResolvedValue(true); });
 it("staff-opened model 2 bill charges the selected parts plus new tip and reserves only their fee slices", async () => {
   expect((await POST(req())).status).toBe(200);
   expect(s.waiter).not.toHaveBeenCalled();
@@ -96,13 +96,29 @@ it("F6 percentage slots charge the shared food-only preview and reject an ambigu
 });
 
 
-it("parts refuse an earlier page with a different tip", async () => {
+it("parts replace an earlier page with a different tip", async () => {
   s.prior = true; s.held = true;
   const response = await POST(req({ ...body, tipCents: 2000 }));
-  expect(response.status).toBe(409);
-  expect(await response.json()).toEqual({ error: "apiErr.splitOpenTip" });
-  expect(s.fee).not.toHaveBeenCalled();
+  expect(await response.json()).toEqual({ url: "new-page" });
+  expect(s.expires).toBe(1);
+  expect(s.quote).toMatchObject({ amountCents: 13000 });
 });
+
+it("a wrong expected amount cannot expire a valid page", async () => {
+  s.prior = true; s.held = true;
+  const response = await POST(req({ ...body, expectedCents: 10000 }));
+  expect(await response.json()).toMatchObject({ code: "stale", amount_cents: 11000 });
+  expect(s.expires).toBe(0);
+});
+
+it.each([["revision", "stale"], ["paid", "paid"], ["held", "taken"]] as const)(
+  "%s is reported before frozen food fails", async (field, code) => {
+    if (field === "revision") s.revision = 2; else s[field] = true;
+    s.ordersFail = true;
+    const response = await POST(req({ ...body, tipCents: undefined, tipPct: 10 }));
+    expect(await response.json()).toMatchObject({ code });
+  },
+);
 
 it("parts refuse a concurrent winner with a different tip", async () => {
   s.winner = true;
@@ -123,6 +139,13 @@ it("parts do not reopen when the stale page cannot be closed", async () => {
   s.prior = true; s.gross = 13000; s.expireFails = true;
   const response = await POST(req());
   expect(response.status).toBe(409);
+  expect(await response.json()).toEqual({ error: "apiErr.splitPageChanged" });
+  expect(s.fee).not.toHaveBeenCalled();
+});
+
+it("a changed tip cannot replace a page that Stripe could not close", async () => {
+  s.prior = true; s.held = true; s.expireFails = true;
+  const response = await POST(req({ ...body, tipCents: 2000 }));
   expect(await response.json()).toEqual({ error: "apiErr.splitPageChanged" });
   expect(s.fee).not.toHaveBeenCalled();
 });

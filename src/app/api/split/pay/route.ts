@@ -158,14 +158,14 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   const priorAsked = tipAmount != null ? Number(tipAmount) : tipFromPercent(priorBase, Number(tipPct));
   const priorTip = Math.min(Math.max(0, round2(priorAsked)), payable);
 
-  // A lost reply keeps its original page. Choosing another exact amount must
-  // not silently reopen that page with its previous tip instead. A page for a
-  // total this share no longer owes (the diner ordered more since, or a waiter
-  // collected part of a later order) is closed and a fresh one opened below:
+  // A lost reply keeps its original page only when its tip and total match.
+  // A changed tip must not silently reopen the page with its previous tip.
+  // A changed tip or a total this share no longer owes (the diner ordered more
+  // since, or a waiter collected part of a later order) needs a fresh page:
   // refusing it left the share unpayable until Stripe expired it.
   if (prior) {
     const quote = legacySplitQuote(prior, payable, priorTip);
-    if (quote !== "total") return await legacySplitRefusal(quote, prior) ?? NextResponse.json({ url: prior.url });
+    if (quote !== "total" && quote !== "tip") return await legacySplitRefusal(quote) ?? NextResponse.json({ url: prior.url });
     const retired = await retireStaleLegacyPage(stripe, prior, restaurant.stripe_account_id, restaurantId, scopeKey);
     if (!retired) return await apiError("apiErr.splitPageChanged", 409);
   }
@@ -275,7 +275,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     // Another request can win after our resume read. The opener returns that
     // winner's durable session; its quote must match before we expose the URL.
     // It was opened moments ago, so it is never closed here: that is a race.
-    const error = await legacySplitRefusal(legacySplitQuote(session, payable, tip), session);
+    const error = await legacySplitRefusal(legacySplitQuote(session, payable, tip));
     if (error) return error;
     // A session with no page is still a session: its fee waits for expiry.
     if (!session.url) return await apiError("apiErr.checkoutFailed", 502);

@@ -57,11 +57,11 @@ it("rejects nonfinite exact amounts before opening checkout", async () => {
   expect(state.open).not.toHaveBeenCalled();
 });
 
-it("does not resume a different tip behind the exact amount the diner just chose", async () => {
-  state.prior = { url: "https://checkout.invalid/existing", metadata: { settle_tip: "6" }, amount_total: 6600 };
-  expect((await pay({ tipAmount: 5 })).status).toBe(409);
-  expect(state.reserve).not.toHaveBeenCalled();
-  expect(state.open).not.toHaveBeenCalled();
+it("replaces a different exact tip with the amount the diner chose", async () => {
+  state.prior = { id: "cs_old", url: "https://checkout.invalid/existing", metadata: { settle_tip: "6" }, amount_total: 6600 };
+  expect((await pay({ tipAmount: 5 })).status).toBe(200);
+  expect(state.expire).toHaveBeenCalledTimes(1);
+  expect(state.open).toHaveBeenCalledTimes(1);
 });
 
 it("resumes the identical exact-tip page without a second fee or checkout", async () => {
@@ -187,13 +187,27 @@ it.each(EXACT_TIP_CASES)("refuses a percentage exactly when the shared rule says
 });
 
 
-it("a saved-principal split refuses an earlier page with a different percentage tip", async () => {
+it("a cancelled modern split replaces its earlier tip with zero", async () => {
   state.principal = 100;
-  state.prior = { url: "old-page", metadata: { settle_tip: "6" }, amount_total: 6600 };
-  const response = await pay({ tipPct: 10 });
-  expect(response.status).toBe(409);
-  expect(await response.json()).toEqual({ error: "apiErr.splitOpenTip" });
-  expect(state.open).not.toHaveBeenCalled();
+  state.prior = { id: "cs_old", url: "old-page", metadata: { settle_tip: "6" }, amount_total: 6600 };
+  expect((await pay({ tipPct: 0 })).status).toBe(200);
+  expect(state.expire).toHaveBeenCalledTimes(1);
+  expect(state.open).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
+    metadata: expect.objectContaining({ settle_tip: "0" }),
+    line_items: [expect.objectContaining({ price_data: expect.objectContaining({ unit_amount: 6000 }) })],
+  }), expect.anything());
+});
+
+it("a modern split with dessert replaces the percentage tip and total", async () => {
+  state.principal = 100;
+  state.prior = { id: "cs_old", url: "old-page", metadata: { settle_tip: "5" }, amount_total: 6500 };
+  state.own = [dessert];
+  expect((await pay({ tipPct: 10, ownOrderIds: ["dessert"] })).status).toBe(200);
+  expect(state.expire).toHaveBeenCalledTimes(1);
+  expect(state.open).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
+    metadata: expect.objectContaining({ settle_tip: "9" }),
+    line_items: [expect.objectContaining({ price_data: expect.objectContaining({ unit_amount: 10900 }) })],
+  }), expect.anything());
 });
 
 it("a saved-principal split refuses a concurrent winner with a different tip", async () => {

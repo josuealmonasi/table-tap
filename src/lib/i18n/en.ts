@@ -1572,7 +1572,7 @@ foundingLeftBody: "Subscribe now and keep this subscription price for as long as
     requestsFailed: "Could not check for other phones waiting to join. We’ll check again in a few seconds.",
   },
   apiErr: {
-    splitOpenTip: "An earlier payment page has a {tip} tip. Enter that amount to return to it.",
+    splitOpenTip: "Another payment page for your share just opened. Try again in a moment.",
     splitExactTip: "Enter a tip amount or choose no tip to pay this share. If you don’t see a tip amount field, reload the page.",
     splitPageChanged: "Your share changed while an earlier payment page was still open. Reload the page and try again in a few minutes.",
     heldResolveManager: "Only an owner or manager can resolve this receipt.",

@@ -7701,3 +7701,35 @@ The phone showed its new tip while an older Stripe page could still charge the
 previous one. Both share models compare the saved tip and total before returning
 a page. A stale total is closed before a replacement is opened; an unverified
 closure or a concurrent winner is never replaced. Route tests cover both models.
+
+
+| Regression | Two places that must agree | Check |
+| --- | --- | --- |
+| A changed tip leaves a cancelled split payable | The diner's current quote and the resumed Stripe page | `legacy-split-tip-route.react-component.spec.tsx`, `split-slots-pay.spec.ts` |
+| A racing page explains the next step | The refusal and the diner's available controls in both languages | `split-race-copy.spec.ts` |
+| A slot retry preserves a valid page | The server's slot amount and the phone's expected amount | `split-slots-pay.spec.ts` |
+| Slot state takes precedence over a food read | Revision, payment and reservation checks and the percentage-tip read | `split-slots-pay.spec.ts` |
+
+### A changed tip leaves a cancelled split payable
+
+A resumed page and the current tip had to agree. A different tip now closes
+the earlier page through the same verified expiry and fee release as a changed
+total. If closure is uncertain the diner is asked to retry; a concurrent
+winner stays open and a different quote is refused. Route tests cover a
+cancelled modern split, a later dish and percentage tip, slots and races.
+
+### A racing page explains the next step
+
+The refusal and the screen's controls had to agree. A diner with no tip field
+can now understand the English or Spanish message and try again.
+
+### A slot retry preserves a valid page
+
+The phone's expected amount and the server's selected slots had to agree
+before expiring a page. A stale phone amount now leaves the valid page open.
+
+### Slot state takes precedence over a food read
+
+The selected slots and the percentage-tip food read had to agree on which
+answer comes first. Stale, paid and taken parts are reported before an
+unavailable food read can hide them.

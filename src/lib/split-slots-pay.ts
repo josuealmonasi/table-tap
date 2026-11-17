@@ -41,6 +41,21 @@ export async function paySplitSlots(req: NextRequest, body: SlotPayBody, member:
     const scopeKey = `split2:${split.id}:${body.revision}:${member.id}:${slots.join(",")}`;
     const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
     const prior = await resumeDinerAttempt(stripe, body.restaurantId, scopeKey);
+    if (split.revision !== body.revision) return await splitResponse({ outcome: "stale", revision: split.revision }, []);
+    const readSelected = () => db.from("bill_split_slots")
+      .select("share_no, amount_cents, fee_slice_cents, payment_id, reserved_checkout_id")
+      .eq("restaurant_id", body.restaurantId).eq("split_id", split.id).in("share_no", slots);
+    let { data: selected, error: slotsError } = await readSelected();
+    if (!prior && !slotsError && selected?.some(s => s.reserved_checkout_id)
+      && await resolveSelectedSplitPages(body.restaurantId, split.id, slots) === "closed") {
+      ({ data: selected, error: slotsError } = await readSelected());
+    }
+    if (slotsError || selected?.length !== slots.length) throw new Error("Could not read split slots");
+    if (selected.some(s => s.payment_id)) return await splitResponse({ outcome: "paid" }, []);
+    if (!prior && selected.some(s => s.reserved_checkout_id)) return await splitResponse({ outcome: "taken" }, []);
+    const amount = selected.reduce((sum, s) => sum + s.amount_cents, 0);
+    if (amount !== body.expectedCents) return await splitResponse({ outcome: "stale", amount_cents: amount }, []);
+    if (amount < (split.currency === "USD" ? 50 : 1000)) return await splitResponse({ outcome: "below_minimum", amount_cents: amount }, []);
     let tip = body.tipCents ?? 0;
     if (body.tipPct !== undefined) {
       const orders = await dinerCheckoutOrders(split.order_ids);
@@ -48,31 +63,22 @@ export async function paySplitSlots(req: NextRequest, body: SlotPayBody, member:
       const base = splitTipBase(frozenTipPrincipal(split.food_principal, orders), split.shares, slots);
       tip = Math.round(tipFromPercent(base, body.tipPct) * 100);
     }
-    if (prior) {
-      if (tip > body.expectedCents || !splitCents(body.expectedCents + tip)) return await apiError("apiErr.invalidRequest", 400);
-      const quote = legacySplitQuote(prior, body.expectedCents / 100, tip / 100);
-      if (quote !== "total") return await legacySplitRefusal(quote, prior) ?? NextResponse.json({ url: prior.url });
-      const retired = await retireStaleLegacyPage(stripe, prior, restaurant.stripe_account_id, body.restaurantId, scopeKey);
-      if (!retired) return await apiError("apiErr.splitPageChanged", 409);
-    }
-    if (split.revision !== body.revision) return await splitResponse({ outcome: "stale", revision: split.revision }, []);
-    const readSelected = () => db.from("bill_split_slots")
-      .select("share_no, amount_cents, fee_slice_cents, payment_id, reserved_checkout_id")
-      .eq("restaurant_id", body.restaurantId).eq("split_id", split.id).in("share_no", slots);
-    let { data: selected, error: slotsError } = await readSelected();
-    if (!slotsError && selected?.some(s => s.reserved_checkout_id)
-      && await resolveSelectedSplitPages(body.restaurantId, split.id, slots) === "closed") {
-      ({ data: selected, error: slotsError } = await readSelected());
-    }
-    if (slotsError || selected?.length !== slots.length) throw new Error("Could not read split slots");
-    if (selected.some(s => s.payment_id)) return await splitResponse({ outcome: "paid" }, []);
-    if (selected.some(s => s.reserved_checkout_id)) return await splitResponse({ outcome: "taken" }, []);
-    const amount = selected.reduce((sum, s) => sum + s.amount_cents, 0);
-    if (amount !== body.expectedCents) return await splitResponse({ outcome: "stale", amount_cents: amount }, []);
-    if (amount < (split.currency === "USD" ? 50 : 1000)) return await splitResponse({ outcome: "below_minimum", amount_cents: amount }, []);
     // Never silently reduce a tip the diner chose. Tips are outside both the
     // frozen debt and its fee budget, and may be at most the parts being paid.
     if (tip > amount || !splitCents(amount + tip)) return await apiError("apiErr.invalidRequest", 400);
+    if (prior) {
+      const quote = legacySplitQuote(prior, amount / 100, tip / 100);
+      if (quote !== "total" && quote !== "tip") return await legacySplitRefusal(quote) ?? NextResponse.json({ url: prior.url });
+      const retired = await retireStaleLegacyPage(stripe, prior, restaurant.stripe_account_id, body.restaurantId, scopeKey);
+      if (!retired) return await apiError("apiErr.splitPageChanged", 409);
+      // Another payment can claim the parts while the old page is closing.
+      ({ data: selected, error: slotsError } = await readSelected());
+      if (slotsError || selected?.length !== slots.length) throw new Error("Could not read split slots");
+      if (selected.some(s => s.payment_id)) return await splitResponse({ outcome: "paid" }, []);
+      if (selected.some(s => s.reserved_checkout_id)) return await splitResponse({ outcome: "taken" }, []);
+      const currentAmount = selected.reduce((sum, s) => sum + s.amount_cents, 0);
+      if (currentAmount !== amount) return await splitResponse({ outcome: "stale", amount_cents: currentAmount }, []);
+    }
     const plan = await getPlan(body.restaurantId);
     const slice = selected.reduce((sum, s) => sum + s.fee_slice_cents, 0);
     const fee = plan ? await reserveFeeCents(body.restaurantId, plan.limits, slice, "split") : NO_FEE;
@@ -94,7 +100,7 @@ export async function paySplitSlots(req: NextRequest, body: SlotPayBody, member:
       amountCents: amount + tip, orderIds: split.order_ids, payableIds: [], scopeKey, foodPrincipal: Number(split.food_principal) });
     // A concurrent winner owns its page and fee; refuse a different quote
     // without closing a page that another diner may already be paying.
-    const refusal = await legacySplitRefusal(legacySplitQuote(session, amount / 100, tip / 100), session);
+    const refusal = await legacySplitRefusal(legacySplitQuote(session, amount / 100, tip / 100));
     if (refusal) return refusal;
     return NextResponse.json({ url: session.url });
   } catch (error) {
