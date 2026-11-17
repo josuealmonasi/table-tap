@@ -39,7 +39,7 @@ it("scans the QR bearer code and selects the returned standing", async () => {
 });
 it("shows masked progress and removes a draft before charging", async () => {
   await render({ selection: { suffix: "K7P2", code: "K7QM3XW9K7P2", progress: 5, goal: 8 } });
-  expect(el.textContent).toContain("Tarjeta ···· K7P2 · 5 de 8"); expect(el.textContent).not.toContain("K7QM");
+  expect(el.textContent).toContain("Tarjeta ···· K7P2 · 5 de 8"); expect(el.textContent).not.toContain("K7QM");
   await act(async () => button("Quitar tarjeta").click()); expect(picked).toHaveBeenCalledWith(null); expect(f.fetch).not.toHaveBeenCalled();
 });
 it("does not allow scan attachment while charging", async () => {
