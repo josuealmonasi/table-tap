@@ -2,10 +2,10 @@ const recover = vi.hoisted(() => vi.fn());
 vi.mock("@/lib/split-page-recovery", () => ({ resolveSelectedSplitPages: recover }));
 import { beforeEach, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
-const s = vi.hoisted(() => ({ revision: 1, paid: false, held: false, amount: 5500, currency: "MXN", prior: false,
+const s = vi.hoisted(() => ({ revision: 1, paid: false, held: false, amount: 5500, currency: "MXN", prior: false, winner: false, gross: 12000, expireFails: false,
   params: null as Record<string, unknown> | null, quote: null as Record<string, unknown> | null, fee: vi.fn(), waiter: vi.fn() }));
 vi.mock("@/lib/diner-checkout-orders", () => ({ dinerCheckoutOrders: async () => [{ id: "o", total: 120, service_fee: 10, tip: 10 }] }));
-vi.mock("stripe", () => ({ default: class {} }));
+vi.mock("stripe", () => ({ default: class { checkout = { sessions: { expire: async () => { if (s.expireFails) throw new Error("paid"); s.prior = false; s.held = false; return { status: "expired", payment_status: "unpaid" }; } } }; } }));
 vi.mock("@/lib/rate-limit", () => ({ isRoomLimited: async () => false, isTableLimited: async () => false }));
 vi.mock("@/lib/table-membership", () => ({ tableMember: async () => ({ id: "m", sessionId: "session" }) }));
 vi.mock("@/lib/table-session", () => ({ staffOpenedBill: s.waiter }));
@@ -15,9 +15,9 @@ vi.mock("@/lib/api-error", () => ({ apiError: async (error: string, status: numb
 vi.mock("@/lib/platform-fee", () => ({ NO_FEE: { cents: 0, id: null }, reserveFeeCents: s.fee,
   feeMetadata: (f: { id: string; cents: number }) => ({ fee_id: f.id, fee_cents: String(f.cents) }) }));
 vi.mock("@/lib/diner-attempt", () => ({
-  resumeDinerAttempt: async () => s.prior ? { url: "original-page" } : null,
+  resumeDinerAttempt: async () => s.prior ? { id: "old", url: "original-page", metadata: { settle_tip: "10" }, amount_total: s.gross } : null,
   openDinerAttempt: async (_stripe: unknown, params: Record<string, unknown>, quote: Record<string, unknown>) => {
-    s.params = params; s.quote = quote; return { url: "new-page" };
+    s.params = params; s.quote = quote; return s.winner ? { url: "winner", metadata: { settle_tip: "20" }, amount_total: 13000 } : { url: "new-page", metadata: params.metadata, amount_total: (quote as { amountCents: number }).amountCents };
   },
 }));
 vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({ from: (table: string) => {
@@ -35,7 +35,7 @@ const { POST } = await import("@/app/api/split/pay/route");
 const body = { restaurantId: "r", tableId: "t", sessionId: "session", splitId: "split", revision: 1,
   slots: [1, 0], expectedCents: 11000, tipCents: 1000 };
 const req = (data: unknown = body) => new NextRequest("http://localhost/api/split/pay", { method: "POST", body: JSON.stringify(data) });
-beforeEach(() => { recover.mockReset().mockResolvedValue("unverified"); s.revision = 1; s.paid = false; s.held = false; s.amount = 5500; s.currency = "MXN"; s.prior = false;
+beforeEach(() => { recover.mockReset().mockResolvedValue("unverified"); s.revision = 1; s.paid = false; s.held = false; s.amount = 5500; s.currency = "MXN"; s.prior = false; s.winner = false; s.gross = 12000; s.expireFails = false;
   s.params = null; s.quote = null; s.fee.mockReset().mockResolvedValue({ id: "fee", cents: 125 }); s.waiter.mockReset().mockResolvedValue(true); });
 it("staff-opened model 2 bill charges the selected parts plus new tip and reserves only their fee slices", async () => {
   expect((await POST(req())).status).toBe(200);
@@ -47,7 +47,7 @@ it("staff-opened model 2 bill charges the selected parts plus new tip and reserv
 });
 it("a retry returns its own persisted page before checking held slots", async () => {
   s.prior = true; s.held = true;
-  const response = await POST(req({ ...body, tipCents: 2000 }));
+  const response = await POST(req());
   expect(await response.json()).toEqual({ url: "original-page" });
   expect(s.fee).not.toHaveBeenCalled();
 });
@@ -93,4 +93,36 @@ it("F6 percentage slots charge the shared food-only preview and reject an ambigu
   expect(s.params).toMatchObject({ metadata: { settle_tip: String(preview) },
     line_items: [{ price_data: { unit_amount: 11000 + Math.round(preview * 100) } }] });
   expect((await POST(req({ ...body, tipPct: 15 }))).status).toBe(400);
+});
+
+
+it("parts refuse an earlier page with a different tip", async () => {
+  s.prior = true; s.held = true;
+  const response = await POST(req({ ...body, tipCents: 2000 }));
+  expect(response.status).toBe(409);
+  expect(await response.json()).toEqual({ error: "apiErr.splitOpenTip" });
+  expect(s.fee).not.toHaveBeenCalled();
+});
+
+it("parts refuse a concurrent winner with a different tip", async () => {
+  s.winner = true;
+  const response = await POST(req());
+  expect(response.status).toBe(409);
+  expect(await response.json()).toEqual({ error: "apiErr.splitOpenTip" });
+});
+
+
+it("parts close a stale total and open the requested total", async () => {
+  s.prior = true; s.held = true; s.gross = 13000;
+  const response = await POST(req());
+  expect(await response.json()).toEqual({ url: "new-page" });
+  expect(s.quote).toMatchObject({ amountCents: 12000 });
+});
+
+it("parts do not reopen when the stale page cannot be closed", async () => {
+  s.prior = true; s.gross = 13000; s.expireFails = true;
+  const response = await POST(req());
+  expect(response.status).toBe(409);
+  expect(await response.json()).toEqual({ error: "apiErr.splitPageChanged" });
+  expect(s.fee).not.toHaveBeenCalled();
 });

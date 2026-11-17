@@ -185,3 +185,21 @@ it.each(EXACT_TIP_CASES)("refuses a percentage exactly when the shared rule says
   expect(response.status).toBe(c.exactOnly ? 409 : 200);
   if (c.exactOnly) expect(await response.json()).toEqual({ error: "apiErr.splitExactTip" });
 });
+
+
+it("a saved-principal split refuses an earlier page with a different percentage tip", async () => {
+  state.principal = 100;
+  state.prior = { url: "old-page", metadata: { settle_tip: "6" }, amount_total: 6600 };
+  const response = await pay({ tipPct: 10 });
+  expect(response.status).toBe(409);
+  expect(await response.json()).toEqual({ error: "apiErr.splitOpenTip" });
+  expect(state.open).not.toHaveBeenCalled();
+});
+
+it("a saved-principal split refuses a concurrent winner with a different tip", async () => {
+  state.principal = 100;
+  state.open.mockImplementationOnce(async () => ({ url: "winner", metadata: { settle_tip: "6" }, amount_total: 6600 }));
+  const response = await pay({ tipPct: 10 });
+  expect(response.status).toBe(409);
+  expect(state.expire).not.toHaveBeenCalled();
+});

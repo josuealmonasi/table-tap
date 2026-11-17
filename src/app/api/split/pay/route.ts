@@ -130,7 +130,6 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   let prior: Stripe.Checkout.Session | null;
   try {
     prior = await resumeDinerAttempt(stripe, restaurantId, scopeKey);
-    if (prior && !exactOnly) return NextResponse.json({ url: prior.url });
   } catch { return await apiError("apiErr.checkoutFailed", 502); }
 
   // Their own orders since the freeze — verified, never taken on trust: unpaid,
@@ -147,7 +146,17 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
   const payable = round2(Number(claim.amount) + ownTotal);
   if (payable <= 0) return await apiError("apiErr.billSettled", 409);
-  const exactTip = Math.min(Math.max(0, round2(Number(tipAmount ?? 0))), payable);
+  // Percentage tips need the same frozen food the screen uses, even when
+  // this is a retry: returning early used to reopen a different tip.
+  const earlyFrozenOrders = !exactOnly && prior && tipAmount == null
+    ? await dinerCheckoutOrders(split.order_ids).catch(() => null) : null;
+  if (!exactOnly && prior && tipAmount == null && (!earlyFrozenOrders?.length || earlyFrozenOrders.length !== split.order_ids.length)) {
+    return await apiError("apiErr.verifyOrders", 503);
+  }
+  const priorBase = splitTipBase(splitTipPrincipal(split, earlyFrozenOrders ?? []) ?? 0,
+    Math.max(1, Number(split.shares) || 1), [claim.share_no], ordersTipBase(own));
+  const priorAsked = tipAmount != null ? Number(tipAmount) : tipFromPercent(priorBase, Number(tipPct));
+  const priorTip = Math.min(Math.max(0, round2(priorAsked)), payable);
 
   // A lost reply keeps its original page. Choosing another exact amount must
   // not silently reopen that page with its previous tip instead. A page for a
@@ -155,7 +164,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   // collected part of a later order) is closed and a fresh one opened below:
   // refusing it left the share unpayable until Stripe expired it.
   if (prior) {
-    const quote = legacySplitQuote(prior, payable, exactTip);
+    const quote = legacySplitQuote(prior, payable, priorTip);
     if (quote !== "total") return await legacySplitRefusal(quote, prior) ?? NextResponse.json({ url: prior.url });
     const retired = await retireStaleLegacyPage(stripe, prior, restaurant.stripe_account_id, restaurantId, scopeKey);
     if (!retired) return await apiError("apiErr.splitPageChanged", 409);
@@ -204,7 +213,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   // opened was answered "could not verify the orders" instead.
   // No attempt is open yet, so the share's fee slice is all there is to give back.
   const giveBackFee = () => releaseFee(fee.id).catch(err => console.error("split pay: the fee reservation stays counted", err));
-  const frozenOrders = await dinerCheckoutOrders(split.order_ids).catch(() => null);
+  const frozenOrders = earlyFrozenOrders ?? await dinerCheckoutOrders(split.order_ids).catch(() => null);
   if (!frozenOrders?.length || frozenOrders.length !== split.order_ids.length) {
     await giveBackFee();
     return await apiError("apiErr.verifyOrders", 503);
@@ -266,10 +275,8 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     // Another request can win after our resume read. The opener returns that
     // winner's durable session; its quote must match before we expose the URL.
     // It was opened moments ago, so it is never closed here: that is a race.
-    if (exactOnly) {
-      const error = await legacySplitRefusal(legacySplitQuote(session, payable, exactTip), session);
-      if (error) return error;
-    }
+    const error = await legacySplitRefusal(legacySplitQuote(session, payable, tip), session);
+    if (error) return error;
     // A session with no page is still a session: its fee waits for expiry.
     if (!session.url) return await apiError("apiErr.checkoutFailed", 502);
     return NextResponse.json({ url: session.url });

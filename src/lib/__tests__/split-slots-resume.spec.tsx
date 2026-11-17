@@ -23,8 +23,8 @@ vi.mock("@/lib/diner-checkout", () => ({ stripeLiveMode: () => false, requireVer
   recordDinerCheckout: async () => { s.attempt!.stripe_session_id = "cs"; } }));
 vi.mock("stripe", () => ({ default: class {
   checkout = { sessions: {
-    create: async (...args: unknown[]) => { s.creates.push(args); return { id: "cs", status: "open", url: "original-page" }; },
-    retrieve: async () => { s.retrieves++; return { id: "cs", status: "open", url: "original-page" }; }, expire: vi.fn(),
+    create: async (...args: unknown[]) => { s.creates.push(args); return { id: "cs", status: "open", url: "original-page", metadata: { settle_tip: "7.25" }, amount_total: 10725 }; },
+    retrieve: async () => { s.retrieves++; return { id: "cs", status: "open", url: "original-page", metadata: { settle_tip: "7.25" }, amount_total: 10725 }; }, expire: vi.fn(),
   } };
 } }));
 vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({
