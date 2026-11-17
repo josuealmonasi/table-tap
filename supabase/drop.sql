@@ -1,8 +1,18 @@
+-- The database's five-minute recovery call (audit of #648). The extensions
+-- stay: other projects' jobs may use them.
+do $$ begin
+  if exists (select 1 from pg_namespace where nspname = 'cron') then
+    if exists (select 1 from cron.job where jobname = 'tabletap-recover') then
+      perform cron.unschedule('tabletap-recover');
+    end if;
+  end if;
+end $$;
 drop table if exists account_movements cascade;
 -- Required-parameter review overloads; drop before their legacy callees.
 drop function if exists public.collect_split_slots_v1(uuid, uuid, int, int[], int, text, int, text, text, text, boolean);
 drop function if exists public.collect_table_reviewed_v1(uuid, uuid, numeric, text, numeric, numeric, text, text, text, boolean);
 drop function if exists public.settle_orders_v2(uuid, uuid[], text, text, jsonb, numeric, text, boolean);
+drop function if exists public.settle_orders_v2(uuid, uuid[], text, text, jsonb, boolean);
 drop function if exists public.account_journal_backfill_v1(uuid, timestamptz);
 drop function if exists public.guard_account_movement();
 drop function if exists public.check_account_movement_source();

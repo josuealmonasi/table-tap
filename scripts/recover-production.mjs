@@ -26,6 +26,13 @@ export async function recoverProduction(env = process.env, send = fetch) {
       throw new Error("Production recovery reported unfinished checks; inspect the protected recovery logs.");
     }
   }
+  // The ticket-email drain runs in the same request: a ticket that failed for
+  // good, expired unsent, or could not be attempted fails the job too.
+  const tickets = answer?.tickets;
+  const counts = ["claimed", "sent", "failed", "expired", "errors"].map(name => tickets?.[name]);
+  if (!counts.every(n => Number.isInteger(n) && n >= 0) || tickets.failed > 0 || tickets.expired > 0 || tickets.errors > 0) {
+    throw new Error("Production recovery reported ticket emails that failed or expired; inspect the protected recovery logs.");
+  }
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {

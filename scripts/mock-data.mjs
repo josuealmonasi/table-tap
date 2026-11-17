@@ -33,7 +33,7 @@ import { legacyTerminalTimes } from "./mock-terminal-times.mjs";
 import { finalizeMockCashShift } from "./mock-cash-shift.mjs";
 import { bulkInsert, randInt, sample } from "./menu-catalog.mjs";
 import { loginSecret } from "./login-secrets.mjs";
-import { ensureDemoUser } from "./mock-logins.mjs";
+import { ensureDemoUser, revokeDemoAccess } from "./mock-logins.mjs";
 
 export const DEMO_RESTAURANT = "Demo Bistro";
 // Read when the seeder runs, after its caller loaded the env file: production's
@@ -56,9 +56,13 @@ function adminClient() {
   );
 }
 
-/** Reuse an existing auth user (surviving a drop) or create one. */
-async function ensureUser(pg, admin, email, name) {
-  return ensureDemoUser(pg, admin, email, name, demoPassword());
+/** Reuse an existing auth user (surviving a drop) or create one. On
+ * production a kept login also loses its sessions, MFA factors and pending
+ * email change (audit of #648); development keeps sessions for the gates. */
+async function ensureUser(pg, admin, email, name, production) {
+  const userId = await ensureDemoUser(pg, admin, email, name, demoPassword());
+  if (production) await revokeDemoAccess(pg, admin, userId);
+  return userId;
 }
 
 /**
@@ -170,16 +174,32 @@ function pickTip(subtotal) {
   return sample([10, 20, 25, 30, 50], 1)[0]; // a round custom amount
 }
 
-export async function seedMock(pg) {
+/**
+ * Rebuilds Demo Bistro. `production` revokes what a kept demo login could
+ * have gained (sessions, MFA, a pending email change); pass it on every
+ * production target.
+ */
+export async function seedMock(pg, { production = false } = {}) {
   demoPassword(); // Refuse missing credentials before deleting the demo.
-  await pg.query("select set_config('tabletap.allocation_origin', 'fixture_history', false)");
   if (!process.env.SUPABASE_SECRET_KEY) {
     throw new Error("SUPABASE_SECRET_KEY missing — needed to create demo logins.");
   }
+  // Historical receipts are written as the backfill writes them. The setting
+  // lives on this connection, so it is cleared however the seed ends: a
+  // caller reusing the client must never write real sales as history.
+  await pg.query("select set_config('tabletap.allocation_origin', 'fixture_history', false)");
+  try {
+    return await seedDemo(pg, production);
+  } finally {
+    await pg.query("select set_config('tabletap.allocation_origin', '', false)");
+  }
+}
+
+async function seedDemo(pg, production) {
   await dropMock(pg, { keepLogins: true }); // clean slate → repeatable; logins keep their sessions
 
   const admin = adminClient();
-  const ownerId = await ensureUser(pg, admin, DEMO_OWNER.email, DEMO_OWNER.name);
+  const ownerId = await ensureUser(pg, admin, DEMO_OWNER.email, DEMO_OWNER.name, production);
 
   // ── Restaurant + tables ──
   const {
@@ -296,7 +316,7 @@ export async function seedMock(pg) {
   // ── Team (manager + kitchen) with names, plus an activity log ──
   const logs = [];
   for (const member of DEMO_TEAM) {
-    const uid = await ensureUser(pg, admin, member.email, member.name);
+    const uid = await ensureUser(pg, admin, member.email, member.name, production);
     await pg.query(
       `insert into staff (restaurant_id, user_id, email, role) values ($1, $2, $3, $4)
        on conflict (user_id) do update set restaurant_id = $1, role = $4`,

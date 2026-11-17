@@ -1,17 +1,19 @@
 import assert from "node:assert/strict";
 import { splitSlotFixtures } from "./split-slot-fixtures.mjs";
+import { beginSharedCase, inheritedChange, settleSharedCase } from "./run-fixtures.mjs";
 
 /** Judge receipts and owners, not just HTTP refusals: money must move exactly once. */
 export async function attackSplitSlots({ admin, post, who, home, neighbour, ok, bad }) {
   const fixtures = splitSlotFixtures(admin, home.id);
   async function run(label, operation, options, readOnly = false) {
     let fixture;
+    beginSharedCase();
     try {
       fixture = await fixtures.acquire(options, readOnly);
       await operation(fixture);
       ok(`split slots: ${label}`);
-    } catch (error) { bad(`split slots: ${label}: ${error.message}`); }
-    finally { if (fixture) await fixture.cleanup(); }
+    } catch (error) { bad(`split slots: ${label}: ${error.message}${inheritedChange()}`); }
+    finally { if (fixture) await fixture.cleanup(); await settleSharedCase(label); }
   }
   try {
   await run("overlapping groups reserve all their parts or none", async f => {

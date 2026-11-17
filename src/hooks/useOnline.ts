@@ -49,9 +49,9 @@ export function useOnline(): { online: boolean; markOffline: () => void } {
   useEffect(() => {
     if (online) return; // nothing to find out
     let stop = false;
-    const poll = pollAfterSettle(async () => {
+    const poll = pollAfterSettle(async signal => {
       try {
-        const res = await fetch(PROBE_URL, { cache: "no-store" });
+        const res = await fetch(PROBE_URL, { cache: "no-store", signal });
         if (!stop && res.ok) setOnline(true);
       } catch {
         // Still out. The next tick asks again.

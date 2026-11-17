@@ -4,6 +4,10 @@ const auth = vi.hoisted(() => ({
   createUser: vi.fn(async () => ({ data: { user: { id: "new-owner" } }, error: null })),
   deleteUser: vi.fn(async () => ({ error: null })),
   updateUserById: vi.fn(async () => ({ error: null })),
+  mfa: {
+    listFactors: vi.fn(async () => ({ data: { factors: [{ id: "totp" }] }, error: null })),
+    deleteFactor: vi.fn(async () => ({ error: null })),
+  },
 }));
 vi.mock("@supabase/supabase-js", () => ({ createClient: () => ({ auth: { admin: auth } }) }));
 const { seedMock, dropMock } = await import("../../../scripts/mock-data.mjs");
@@ -32,6 +36,39 @@ describe("demo login lifetime", () => {
     expect(auth.createUser).not.toHaveBeenCalled();
     expect(pg.query.mock.calls.find(([sql]) => sql.startsWith("insert into restaurants")))
       .toBeDefined();
+  });
+  it("audit #648: a production reseed revokes the kept owner's MFA, sessions and pending email change", async () => {
+    const pg = database();
+    await expect(seedMock(pg, { production: true })).rejects.toThrow("stop before restaurant seed");
+    expect(auth.mfa.listFactors).toHaveBeenCalledWith({ userId: "kept-owner" });
+    expect(auth.mfa.deleteFactor).toHaveBeenCalledWith({ id: "totp", userId: "kept-owner" });
+    const sql = pg.query.mock.calls.map(([text]) => text as string);
+    const revoked = ["delete from auth.refresh_tokens where user_id = $1::text", "delete from auth.sessions where user_id = $1"]
+      .map(text => sql.indexOf(text));
+    const emailChange = sql.findIndex(text => text.startsWith("update auth.users set email_change = ''"));
+    expect(revoked.every(i => i > -1)).toBe(true); expect(emailChange).toBeGreaterThan(-1);
+    // Revoked before the restaurant it signs into is rebuilt.
+    const restaurant = sql.findIndex(text => text.startsWith("insert into restaurants"));
+    expect(Math.max(...revoked, emailChange)).toBeLessThan(restaurant);
+  });
+  it("audit #648: a development reseed keeps the demo sessions the gates sign in with", async () => {
+    const pg = database();
+    await expect(seedMock(pg)).rejects.toThrow("stop before restaurant seed");
+    expect(auth.mfa.listFactors).not.toHaveBeenCalled();
+    expect(pg.query.mock.calls.some(([text]) => (text as string).includes("auth.sessions"))).toBe(false);
+  });
+  it("audit #648: the historical-receipt setting is cleared even when the seed fails partway", async () => {
+    const pg = database();
+    await expect(seedMock(pg)).rejects.toThrow("stop before restaurant seed");
+    const sql = pg.query.mock.calls.map(([text]) => text as string);
+    expect(sql.indexOf("select set_config('tabletap.allocation_origin', 'fixture_history', false)")).toBeGreaterThan(-1);
+    expect(sql.at(-1)).toBe("select set_config('tabletap.allocation_origin', '', false)");
+  });
+  it("audit #648: a missing secret key refuses before the setting is ever set", async () => {
+    vi.stubEnv("SUPABASE_SECRET_KEY", "");
+    const pg = database();
+    await expect(seedMock(pg)).rejects.toThrow("SUPABASE_SECRET_KEY missing");
+    expect(pg.query).not.toHaveBeenCalled();
   });
   it("still deletes the five logins when explicitly dropping the demo", async () => {
     await expect(dropMock(database())).resolves.toBe(1);

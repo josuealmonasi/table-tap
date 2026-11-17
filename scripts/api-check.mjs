@@ -20,6 +20,7 @@ import { join } from "node:path";
 import { checkPaymentAllocations } from "./allocations-check.mjs";
 import { setup, teardown } from "./api-fixtures.mjs";
 import { cases } from "./api-cases.mjs";
+import { beginSharedCase, inheritedChange, settleSharedCase } from "./run-fixtures.mjs";
 import { refuseProduction, requireServer, retryFetch } from "./preflight.mjs";
 import { DEV_URL } from "./dev-url.mjs";
 import { apiInScope, reportScope } from "./gate-scope.mjs";
@@ -32,7 +33,8 @@ await requireServer(BASE);
 
 let failed = 0;
 const ok = m => console.log(`    ok       ${m}`);
-const bad = m => { failed++; console.log(`    BAD      ${m}`); };
+// A failure on a shared fixture also names the first case that changed it.
+const bad = m => { failed++; console.log(`    BAD      ${m}${inheritedChange()}`); };
 
 console.log("\nRequests — development\n");
 
@@ -72,6 +74,7 @@ try {
     // the whole run: it used to crash the gate on case nine, and every case
     // after it went unchecked while the output read like one broken route.
     const caseFx = c.fixture ?? fx;
+    beginSharedCase();
     let restore = null;
     if (c.arrange) {
       try {
@@ -188,6 +191,8 @@ try {
     ok(`${c.name}${c.expect.length > 1 ? ` (${res.status})` : ""}`);
     } finally {
       if (restore) await restore();
+      // After the undo: a shared row this case left different is its doing.
+      await settleSharedCase(c.name);
     }
   }
 } finally {

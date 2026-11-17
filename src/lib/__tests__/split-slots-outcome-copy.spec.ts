@@ -20,3 +20,11 @@ it.each(["taken", "reserved", "below_minimum", "stale", "frozen"])("keeps biling
     expect(body.error).not.toMatch(/^apiErr\./); expect(body.error.length).toBeGreaterThan(20);
   }
 });
+
+it.each(["en", "es"] as const)("audit #648: splitting turned off reads as the restaurant's choice in %s, never no permission", async locale => {
+  state.locale = locale;
+  const response = await splitResponse({ outcome: "split_disabled" }, []), body = await response.json();
+  expect(response.status).toBe(403); expect(body.code).toBe("split_disabled");
+  expect(body.error).toBe(locale === "en" ? "This restaurant turned off bill splitting. You can still pay the bill."
+    : "El restaurante desactivó dividir la cuenta. Aún puedes pagar la cuenta.");
+});

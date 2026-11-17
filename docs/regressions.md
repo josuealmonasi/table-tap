@@ -7641,3 +7641,44 @@ A stored `decision_at` column and tenant-scoped index merge approval and
 resolution clocks before paging. A request past the end counts once, clamps
 to the last page and retrieves at most that page plus one lookahead row,
 including its resolution evidence, even under a smaller Data API row cap.
+
+## Audit of #648 — The five-minute schedule that ran every few hours
+
+The spec's "every five minutes" and the scheduler had to agree. GitHub ran
+the workflow 8 times in two days, 3.5 to 10 hours apart, and N10's test
+modelled a delay, not a dropped run. The database now schedules the call
+itself: pg_cron job `tabletap-recover` posts to the route every five minutes
+with the Vault secret `cron_secret` as its bearer, and does nothing on a
+project without that secret. `ticket-email-schedule.spec.ts` counts only the
+daily Vercel cron and the pg_cron job; `recovery-schedule-platform.spec.ts`
+pins the job, its Vault read and the unschedule in `drop.sql`. The route's
+answer now carries the ticket drain, and the GitHub backup fails on a failed,
+expired or unattempted ticket (`recovery-scheduler-client.spec.ts`).
+
+## Audit of #648 — Polls the invariant could not see
+
+The poll rule and two fixed ticks had to agree. `SettleTableDialog` bumped a
+counter on a 5 s interval that re-ran its fetching effect, and
+`useMenuFreshness` called `router.refresh()` every 45 s. Both use
+`pollAfterSettle` now, and `invariants/polls.spec.ts` flags a setter chain and
+`router.refresh` as well as `fetch`; its sabotage cases are the two old shapes.
+A read that never answers is aborted after `max(2 × interval, 15 s)` and the
+poll goes on (`poll-after-settle.spec.ts`, `poller-cadence.spec.tsx`).
+
+## Audit of #648 — Smaller agreements
+
+- A MX$0 table close and the cashier's ticket choice: the close now uses a
+  six-argument `settle_orders_v2` that marks the skip under the money lock
+  (`zero-close-ticket-email.spec.ts`).
+- The ticket-choice wrappers and the kitchen board: they lock their rows in id
+  order and rewrite the flag only where it changes
+  (`review2-money-schema.spec.ts`).
+- The owner's split switch and the diner's copy: `split_disabled` with its own
+  ES and EN message, and the bill sheet stops offering to divide on it.
+- A kept production demo login and what a stranger gave it: a production
+  reseed deletes its MFA factors, sessions and pending email change
+  (`mock-logins.spec.ts`, `seed-logins.spec.ts`), and the seed's historical
+  receipt setting is cleared however the seed ends.
+- Shared read-only fixtures and failure order: the api and attack runners
+  fingerprint shared rows after each case and name the first case that
+  changed one (`run-fixtures.spec.ts`).
