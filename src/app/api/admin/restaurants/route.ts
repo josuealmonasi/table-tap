@@ -5,7 +5,8 @@ import { apiError } from "@/lib/api-error";
 import { jsonBody } from "@/lib/json-body";
 import { getPlatformAdmin } from "@/lib/admin";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { moveRestaurantPlan } from "@/lib/admin-plan";
+import { assignTier, TIER_BILLING, type TierBilling } from "@/lib/admin-tier";
+import { siteOrigin } from "@/lib/site-origin";
 import { billingFailure, withRestaurantBilling } from "@/lib/billing-operation";
 import { endRestaurantBilling } from "@/lib/billing-delete";
 import { getLocale } from "@/lib/i18n/server";
@@ -93,22 +94,27 @@ async function deleteRestaurant(req: NextRequest) {
   }
 }
 
-// PATCH /api/admin/restaurants — a platform admin moves a restaurant to
-// another plan. Body: { id, plan }. Its whole team moves with it: the plan
-// belongs to the restaurant. Refused for one still billed by a live Stripe
-// subscription (`moveRestaurantPlan`).
+// PATCH /api/admin/restaurants — a platform admin assigns a restaurant a
+// tier. Body: { id, plan, billing?, payBy? }. Its whole team moves with it:
+// the plan belongs to the restaurant. `billing` says how it is paid
+// (`assignTier`): from the next Stripe invoice, by a payment link the owner
+// gets by email, or free. Without it, free — the move this route always made.
 async function movePlan(req: NextRequest) {
   const admin = await getPlatformAdmin();
   if (!admin) return await apiError("apiErr.forbidden", 403);
 
-  const body = await jsonBody<{ id?: unknown; plan?: unknown }>(req);
+  const body = await jsonBody<{ id?: unknown; plan?: unknown; billing?: unknown; payBy?: unknown }>(req);
   if (!body || typeof body.id !== "string" || typeof body.plan !== "string") {
     return await apiError("apiErr.invalidRequest", 400);
   }
+  const billing = (body.billing ?? "free") as TierBilling;
+  if (!TIER_BILLING.includes(billing)) return await apiError("apiErr.invalidRequest", 400);
 
-  const answer = await moveRestaurantPlan(createAdminClient(), body.id, body.plan, admin.email);
+  const answer = await assignTier(createAdminClient(), {
+    restaurantId: body.id, plan: body.plan, billing, payBy: body.payBy, origin: siteOrigin(req),
+  }, admin.email);
   if (!answer.ok) return await apiError(answer.error, answer.status);
-  return NextResponse.json({ ok: true, from: answer.from, to: answer.to });
+  return NextResponse.json(answer);
 }
 
 export const DELETE = auditedAdminAction("restaurant.delete", deleteRestaurant);
