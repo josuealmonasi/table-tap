@@ -44,6 +44,7 @@ and that a new party cannot see the previous party's waiting phones.
 `src/lib/__tests__/invariants.spec.ts` enforces the rules that span files:
 
 | Rule | The bug it came from |
+| Terms acceptances survive newer acceptances and restaurant deletion | The restaurant kept only its latest acceptance and was deleted with it; `acceptance-history.spec.ts`, `acceptance-schema.spec.ts` and `signup-verification.spec.ts` cover the writers and archive contract |
 | The retry schedule must run on the hosting plan and identify its caller | Vercel rejected the five-minute cron on Hobby; `recovery-schedule-platform.spec.ts`, `github-cron-auth.spec.ts` and `recovery-scheduler-client.spec.ts` pin the daily fallback and the exact signed main-branch job |
 |---|---|
 | An old split without a frozen principal accepts exact tips only (review N14) | Gross amount included earlier gratuities, and an open checkout could silently keep a different tip; legacy-split-tip, legacy-split-tip-route and legacy-split-tip-input regression specs cover calculation, request, preview and retry |
@@ -7692,3 +7693,15 @@ share `splitTakesExactTipOnly`, tested against one fixture table
 (`exact-tip-cases.ts`) on both sides; `apiErr.splitExactTip` tells a stale
 bundle to reload. Known follow-up (F4): modern v1 splits with a principal still
 reopen an earlier page or return a winner whose tip differs from the screen.
+
+## Terms acceptance history
+
+Signup and later consent both wrote the restaurant's one current acceptance,
+while deletion kept the books but not that acceptance. Both writers now save
+the current value and an individual history row together; deletion copies each
+row with the books before the cascade. The old value is backfilled once, with
+unknown identity, network details and text hash left empty rather than guessed.
+`acceptance-history.spec.ts` exercises repeat acceptance, permission and failure;
+`signup-verification.spec.ts` covers the first acceptance and rollback;
+`acceptance-schema.spec.ts` pins the archive and owner-read policy. Database
+execution and cascade behavior still need Claude's isolated gate.

@@ -1,8 +1,10 @@
 import { invalidatePublicMenu } from "@/lib/public-menu-cache";
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { apiError } from "@/lib/api-error";
 import { actingOwner } from "@/lib/api-guard";
 import { TERMS_VERSION } from "@/lib/legal";
+import { currentUser } from "@/lib/current-user";
+import { TERMS_TEXT_HASH, termsEvidence } from "@/lib/terms-evidence";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 export const runtime = "nodejs";
@@ -15,18 +17,22 @@ export const runtime = "nodejs";
  * along with who clicked — an acceptance nobody can identify later is not much
  * of an acceptance.
  */
-export async function POST(): Promise<NextResponse> {
+export async function POST(req: NextRequest): Promise<NextResponse> {
   const actor = await actingOwner();
   if (!actor) return await apiError("apiErr.forbidden", 403);
+  const user = await currentUser();
+  if (!user) return await apiError("apiErr.forbidden", 403);
 
-  const { error } = await createAdminClient()
-    .from("restaurants")
-    .update({
-      terms_version: TERMS_VERSION,
-      terms_accepted_at: new Date().toISOString(),
-      terms_accepted_email: actor.email,
-    })
-    .eq("id", actor.restaurantId);
+  const evidence = termsEvidence(req);
+  const { error } = await createAdminClient().rpc("accept_terms_v1", {
+    p_restaurant: actor.restaurantId,
+    p_user: user.id,
+    p_email: actor.email,
+    p_version: TERMS_VERSION,
+    p_text_hash: TERMS_TEXT_HASH,
+    p_ip: evidence.ip,
+    p_user_agent: evidence.userAgent,
+  });
   invalidatePublicMenu(actor.restaurantId);
 
   if (error) return await apiError("apiErr.generic", 500);

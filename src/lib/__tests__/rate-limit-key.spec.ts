@@ -28,13 +28,13 @@ describe("the rate limit's key", () => {
     for (const part of ["189", "203", "14.7"]) expect(key).not.toContain(part);
   });
 
-  it("is the only place a request's address is read", () => {
+  it("reads request addresses only for rate limits and owner terms evidence", () => {
     const walk = (d: string): string[] =>
       readdirSync(d).flatMap(n => (statSync(join(d, n)).isDirectory() ? walk(join(d, n)) : [join(d, n)]));
     const readers = walk("src")
       .filter(f => /\.(ts|tsx)$/.test(f) && !f.includes("__tests__"))
       .filter(f => /x-forwarded-for|x-real-ip/.test(readFileSync(f, "utf8")));
-    expect(readers).toEqual(["src/lib/rate-limit.ts"]);
+    expect(readers.sort()).toEqual(["src/lib/rate-limit.ts", "src/lib/terms-evidence.ts"]);
   });
 
   it("is swept from the table after a day, as the privacy notice says", () => {

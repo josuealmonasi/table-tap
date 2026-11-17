@@ -10215,6 +10215,114 @@ drop trigger if exists platform_admin_audit_immutable on platform_admin_audit;
 create trigger platform_admin_audit_immutable before update or delete or truncate
   on platform_admin_audit for each statement execute function public.keep_platform_admin_audit();
 
+-- Each click is evidence of its own, not another value on the restaurant.
+create table if not exists terms_acceptances (
+  id uuid primary key default gen_random_uuid(),
+  restaurant_id uuid not null references restaurants(id) on delete cascade,
+  user_id uuid,
+  accepted_email text,
+  version text,
+  accepted_at timestamptz,
+  ip text,
+  user_agent text,
+  text_hash text,
+  legacy boolean not null default false,
+  check (legacy or (version is not null and accepted_at is not null))
+);
+create unique index if not exists terms_acceptances_legacy_restaurant
+  on terms_acceptances (restaurant_id) where legacy;
+alter table terms_acceptances enable row level security;
+revoke all on terms_acceptances from anon;
+revoke all on terms_acceptances from public, authenticated, service_role;
+grant select on terms_acceptances to authenticated, service_role;
+drop policy if exists "owners read terms acceptances" on terms_acceptances;
+create policy "owners read terms acceptances" on terms_acceptances for select
+  to authenticated using (owns_restaurant(restaurant_id));
+
+-- The old row proves only these fields; do not invent the person or document.
+insert into terms_acceptances (restaurant_id, accepted_email, version, accepted_at, legacy)
+  select id, terms_accepted_email, terms_version, terms_accepted_at, true
+  from restaurants r where (terms_version is not null or terms_accepted_at is not null)
+    and not exists (select 1 from terms_acceptances a where a.restaurant_id = r.id)
+  on conflict (restaurant_id) where legacy do nothing;
+
+create or replace function public.keep_terms_acceptance_v1()
+returns trigger language plpgsql security definer set search_path = public as $$
+begin
+  -- Direct fixture cleanup can delete a restaurant too. Keep the evidence
+  -- before its cascade, just as the admin deletion does.
+  if tg_op = 'DELETE' and pg_trigger_depth() > 1 then
+    insert into restaurant_accounting_records (restaurant_id, source_table, source_id, row_data)
+      values (old.restaurant_id, 'terms_acceptances', old.id, to_jsonb(old))
+      on conflict (restaurant_id, source_table, source_id) do nothing;
+    if exists (select 1 from restaurant_accounting_records a where a.restaurant_id = old.restaurant_id
+      and a.source_table = 'terms_acceptances' and a.source_id = old.id and a.row_data = to_jsonb(old))
+      then return old; end if;
+  end if;
+  raise exception 'terms acceptance is immutable';
+end; $$;
+revoke all on function public.keep_terms_acceptance_v1() from public, anon, authenticated;
+grant execute on function public.keep_terms_acceptance_v1() to service_role;
+drop trigger if exists terms_acceptances_immutable on terms_acceptances;
+create trigger terms_acceptances_immutable before update or delete on terms_acceptances
+  for each row execute function public.keep_terms_acceptance_v1();
+drop trigger if exists terms_acceptances_no_truncate on terms_acceptances;
+create trigger terms_acceptances_no_truncate before truncate on terms_acceptances
+  for each statement execute function public.keep_terms_acceptance_v1();
+
+-- Old application instances may still write the current fields while the new
+-- code rolls out. Preserve those clicks too, without inventing their evidence.
+create or replace function public.capture_legacy_terms_v1()
+returns trigger language plpgsql security definer set search_path = public as $$
+begin
+  if current_setting('tabletap.terms_writer', true) is distinct from 'on'
+    and new.terms_version is not null and new.terms_accepted_at is not null then
+    insert into terms_acceptances (restaurant_id, accepted_email, version, accepted_at)
+      values (new.id, new.terms_accepted_email, new.terms_version, new.terms_accepted_at);
+  end if;
+  return new;
+end; $$;
+revoke all on function public.capture_legacy_terms_v1() from public, anon, authenticated;
+grant execute on function public.capture_legacy_terms_v1() to service_role;
+drop trigger if exists capture_legacy_terms_insert on restaurants;
+create trigger capture_legacy_terms_insert after insert on restaurants
+  for each row execute function public.capture_legacy_terms_v1();
+drop trigger if exists capture_legacy_terms_update on restaurants;
+create trigger capture_legacy_terms_update after update of terms_version, terms_accepted_at, terms_accepted_email on restaurants
+  for each row execute function public.capture_legacy_terms_v1();
+
+create or replace function public.accept_terms_v1(
+  p_restaurant uuid, p_user uuid, p_email text, p_version text, p_text_hash text, p_ip text, p_user_agent text
+) returns void language plpgsql security definer set search_path = public as $$
+begin
+  perform set_config('tabletap.terms_writer', 'on', true);
+  update restaurants set terms_version = p_version, terms_accepted_at = now(), terms_accepted_email = p_email
+    where id = p_restaurant;
+  if not found then raise exception 'restaurant not found'; end if;
+  insert into terms_acceptances (restaurant_id, user_id, accepted_email, version, accepted_at, ip, user_agent, text_hash)
+    values (p_restaurant, p_user, p_email, p_version, now(), p_ip, p_user_agent, p_text_hash);
+end; $$;
+revoke all on function public.accept_terms_v1(uuid, uuid, text, text, text, text, text) from public, anon, authenticated;
+grant execute on function public.accept_terms_v1(uuid, uuid, text, text, text, text, text) to service_role;
+
+create or replace function public.signup_restaurant_with_terms_v1(
+  p_name text, p_user uuid, p_email text, p_version text, p_text_hash text, p_ip text, p_user_agent text,
+  p_plan text, p_trial_ends_at timestamptz
+) returns uuid language plpgsql security definer set search_path = public as $$
+declare v_restaurant uuid;
+begin
+  perform set_config('tabletap.terms_writer', 'on', true);
+  insert into restaurants (name, owner_id, owner_signup_pending, plan, plan_status,
+    terms_version, terms_accepted_at, terms_accepted_email, trial_ends_at)
+  values (p_name, p_user, true, p_plan, 'trialing', p_version, now(), p_email, p_trial_ends_at)
+  returning id into v_restaurant;
+  insert into terms_acceptances (restaurant_id, user_id, accepted_email, version, accepted_at, ip, user_agent, text_hash)
+    values (v_restaurant, p_user, p_email, p_version, now(), p_ip, p_user_agent, p_text_hash);
+  return v_restaurant;
+end; $$;
+revoke all on function public.signup_restaurant_with_terms_v1(text, uuid, text, text, text, text, text, text, timestamptz) from public, anon, authenticated;
+grant execute on function public.signup_restaurant_with_terms_v1(text, uuid, text, text, text, text, text, text, timestamptz) to service_role;
+
 -- Accounting survives the live restaurant. Keep original IDs and row contents,
 -- not a restaurant/profile copy; no FK may cascade this retained record away.
 create table if not exists restaurant_accounting_records (
@@ -10390,7 +10498,7 @@ begin
     -- returned, discounts and losses someone approved, coupons and rewards
     -- given as money off, and how a bill was divided (review bg8).
     'fee_returns', 'coupon_redemptions', 'write_off_requests', 'discount_requests',
-    'loyalty_redemptions', 'bill_splits'
+    'loyalty_redemptions', 'bill_splits', 'terms_acceptances'
   ] loop
     -- Lock existing rows as they are copied too: an update must not change a
     -- receipt after its copy. A failed copy or cascade rolls back both writes.
