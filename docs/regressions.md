@@ -44,6 +44,7 @@ and that a new party cannot see the previous party's waiting phones.
 `src/lib/__tests__/invariants.spec.ts` enforces the rules that span files:
 
 | Rule | The bug it came from |
+| One-click ticket unsubscribe retries return the same success | A cleared or unknown token returned 404 to mail providers; `ticket-stop-one-click.spec.ts` checks retries, invalid forms and the separate confirmation response |
 | The retry schedule must run on the hosting plan and identify its caller | Vercel rejected the five-minute cron on Hobby; `recovery-schedule-platform.spec.ts`, `github-cron-auth.spec.ts` and `recovery-scheduler-client.spec.ts` pin the daily fallback and the exact signed main-branch job |
 |---|---|
 | An old split without a frozen principal accepts exact tips only (review N14) | Gross amount included earlier gratuities, and an open checkout could silently keep a different tip; legacy-split-tip, legacy-split-tip-route and legacy-split-tip-input regression specs cover calculation, request, preview and retry |
@@ -7711,3 +7712,19 @@ public link must route that POST to the same card update as the confirmation
 button, while a GET only opens the confirmation page: scanners open links.
 `ticket-stop-one-click.spec.ts` checks the route and rewrite, and
 `card-email.spec.ts` checks the outgoing header.
+
+### One-click ticket retries and confirmation
+
+The provider's retry and the card update had to agree after the token was
+cleared. A well-formed one-click form now returns the same success for a match,
+a retry or an unknown token; the confirmation page still gets its 404. Invalid
+forms and rate limits still stop before the update. `ticket-stop-one-click.spec.ts`
+checks both paths. Emails already queued before one-click support keep their
+original headers until they are sent.
+
+The emailed PDF and Settings preview both read the restaurant's fiscal fields
+through `ticketPlace`; the preview's sale lines alone are samples. A comparison
+of both actual paths with one restaurant row did not reproduce the reported
+regime mismatch. `ticket-place-regime.spec.ts` pins their saved regime, and
+`ticket-email-polish.spec.ts` checks the old receipt footer is absent in both
+languages.

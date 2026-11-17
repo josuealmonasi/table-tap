@@ -17,8 +17,9 @@ const uuid = /^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i;
 export async function POST(req: NextRequest) {
   if (await isRoomLimited(req, "tickets-stop", 20)) return await apiError("apiErr.tooManyRequests", 429);
   const contentType = req.headers.get("content-type") ?? "";
+  const oneClick = /^(application\/x-www-form-urlencoded|multipart\/form-data)(?:;|$)/i.test(contentType);
   let candidate: unknown;
-  if (/^(application\/x-www-form-urlencoded|multipart\/form-data)(?:;|$)/i.test(contentType)) {
+  if (oneClick) {
     const form = await req.formData().catch(() => null);
     if (form?.get("List-Unsubscribe") === "One-Click") candidate = req.nextUrl.searchParams.get("t");
   } else {
@@ -32,6 +33,8 @@ export async function POST(req: NextRequest) {
     .update({ email: null, email_consent_at: null, email_notice_version: null, email_set_by: null, email_unsubscribe: null })
     .eq("email_unsubscribe", token).select("restaurant_id").maybeSingle();
   if (error) return await apiError("apiErr.generic", 503);
+  // Providers retry the same link; a valid form must not reveal whether it matched.
+  if (oneClick) return NextResponse.json({ ok: true });
   if (!data) return await apiError("cardEmail.stopGone", 404);
   const { data: r } = await db.from("restaurants").select("name").eq("id", data.restaurant_id).maybeSingle();
   return NextResponse.json({ restaurant: r?.name ?? "" });

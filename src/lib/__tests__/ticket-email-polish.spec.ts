@@ -10,6 +10,7 @@ describe.each<Locale>(["en", "es"])("ticket email HTML in %s", locale => {
     const t = (key: string, vars?: Record<string, string | number>) => translate(messagesFor(locale), key, vars);
     const receipt = buildReceipt([order], { name: "Demo", timeZone: "UTC", locale }, t);
     const html = ticketMail(receipt, { receiptFooter: t("receipt.footer"), footer: t("cardEmail.footer", { restaurant: "Demo" }), stopLabel: t("cardEmail.stopLink"), stop: "https://example.com/tickets/stop?t=token" }).html;
+    expect(html).not.toContain(t("receipt.footer"));
     expect(html).not.toMatch(/<p[^>]*>\s*<\/p>/);
     expect(html).toMatch(/<a[^>]*>[^<]+<\/a><\/p>\s*<\/div>$/);
     expect(html).not.toMatch(/#16211c|#6e7a74|#e3e2dc/i);
