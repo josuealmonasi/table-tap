@@ -17,8 +17,8 @@ inputs:
     default: "false"
   build-only:
     description: >
-      For the job that builds: start only the database (its keys are what the
-      build inlines), no seed, no server.
+      For the job that builds: the stack only for the URL and keys the build
+      inlines; no seed, no server.
     required: false
     default: "false"
 
@@ -48,15 +48,11 @@ runs:
     # Only the services the app talks to: the database, auth, the REST API,
     # realtime (pnpm rls asks the socket directly) and storage (the schema
     # makes the menu bucket). The rest only cost pull time. The build job
-    # needs the keys and nothing else, so it starts the database alone.
+    # starts the same set: `supabase status` reports the API URL and keys the
+    # build inlines only while the API gateway is up.
     - name: Start a throwaway Supabase
       shell: bash
-      env:
-        BUILD_ONLY: ${{ inputs.build-only }}
-      run: |
-        skip=studio,imgproxy,edge-runtime,logflare,vector,supavisor,postgres-meta,mailpit
-        [ "$BUILD_ONLY" = true ] && skip=$skip,gotrue,realtime,storage-api,kong,postgrest
-        supabase start --workdir ci -x "$skip"
+      run: supabase start --workdir ci -x studio,imgproxy,edge-runtime,logflare,vector,supavisor,postgres-meta,mailpit
 
     - name: Point the gates at it
       shell: bash
