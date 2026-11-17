@@ -14569,10 +14569,12 @@ drop trigger if exists forget_account_journal_check on orders;
 create trigger forget_account_journal_check before insert or delete on orders
   for each row execute function public.forget_account_journal_check_v1();
 drop trigger if exists forget_account_journal_check_update on orders;
--- No WHEN: another BEFORE trigger may still change a money column after this
--- one is evaluated. Outside commit the cache is empty and it returns at once.
+-- Keep every account update: another BEFORE trigger may still change a money
+-- column after this one runs. No order trigger assigns account_id later.
+-- Outside commit the cache is empty and it returns at once.
 create trigger forget_account_journal_check_update before update on orders
-  for each row execute function public.forget_account_journal_check_v1();
+  for each row when (old.account_id is not null or new.account_id is not null)
+  execute function public.forget_account_journal_check_v1();
 
 -- A zero-priced order in a positive bill still has one charge event.
 alter table account_movements drop constraint if exists account_movements_debt;

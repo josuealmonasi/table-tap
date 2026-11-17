@@ -108,10 +108,15 @@ function forgetsOnWrite(sql: string): void {
   expect(block).toMatch(/array\['payments', 'order_adjustments', 'account_movements', 'customer_accounts'\]/);
   const triggers = block.match(/create trigger forget_account_journal_check[^;]*;/g) ?? [];
   expect(triggers.length).toBe(3);
-  for (const t of triggers) {
+  for (const t of triggers.slice(0, 2)) {
     expect(t).toMatch(/ before (insert|update)/);
     expect(t).not.toMatch(/deferr| when /);
   }
+  expect(triggers[2].replace(/\s+/g, " ")).toContain(
+    "before update on orders for each row when (old.account_id is not null or new.account_id is not null)",
+  );
+  // A later BEFORE trigger must not attach an account after invalidation was skipped.
+  expect(sql).not.toMatch(/new\.account_id\s*:=/i);
 }
 
 it("forgets a reconciled account before any later write in the same transaction", () => {
@@ -122,8 +127,9 @@ it("planted: a missing, AFTER, filtered or row-cancelling forget trigger breaks 
   for (const [before, after] of [
     ["array_remove(array_remove(v_checked::uuid[], v_old), v_new)", "v_checked::uuid[]"],
     ["create trigger forget_account_journal_check_update before update on orders", "create trigger forget_account_journal_check_update after update on orders"],
-    ["create trigger forget_account_journal_check_update before update on orders\n  for each row",
-      "create trigger forget_account_journal_check_update before update on orders\n  for each row when (old.total is distinct from new.total)"],
+    ["when (old.account_id is not null or new.account_id is not null)\n  execute function public.forget_account_journal_check_v1()",
+      "when (old.total is distinct from new.total)\n  execute function public.forget_account_journal_check_v1()"],
+    ["create or replace function public.forget_account_journal_check_v1()", "new.account_id := null;\ncreate or replace function public.forget_account_journal_check_v1()"],
     ["'account_movements', 'customer_accounts'] loop\n    execute format('drop trigger if exists forget",
       "'account_movements'] loop\n    execute format('drop trigger if exists forget"],
     ["  return case when tg_op = 'DELETE' then old else new end;\nend $$;", "  return null;\nend $$;"],
@@ -139,4 +145,11 @@ it("refuses an id change on a started account's charged order, and checks one", 
   const planted = schema.replace("(new.id, new.account_id, new.restaurant_id, new.currency, new.charged_at)", "(new.account_id, new.restaurant_id, new.currency, new.charged_at)");
   expect(planted).not.toBe(schema);
   expect(check(planted)).not.toContain("(new.id, new.account_id");
+});
+
+it("skips cache invalidation for an order that has no old or new account", () => {
+  const trigger = schema.split("create trigger forget_account_journal_check_update before update on orders")[1]?.split(";")[0] ?? "";
+  expect(trigger.replace(/\s+/g, " ")).toContain(
+    "for each row when (old.account_id is not null or new.account_id is not null)",
+  );
 });
