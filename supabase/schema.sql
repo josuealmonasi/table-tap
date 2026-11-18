@@ -4735,6 +4735,10 @@ grant execute on function public.abandon_checkout(uuid, boolean, jsonb) to servi
 
 -- Compare-and-set version for subscription synchronization.
 alter table restaurants add column if not exists subscription_sync_revision int not null default 0;
+-- The admin tier assignment an emailed pay link belongs to. A new assignment
+-- gets a new id and a free move clears it, so an older link (even for the same
+-- tier and day) opens nothing (review 2026-11-17, finding 7).
+alter table restaurants add column if not exists tier_assignment_id uuid;
 
 -- An interrupted request may have taken stock without inserting its order.
 -- A grace period keeps ordinary requests out; the reservation lock and the
