@@ -104,6 +104,7 @@ and that a new party cannot see the previous party's waiting phones.
 `src/lib/__tests__/invariants.spec.ts` enforces the rules that span files:
 
 | Rule | The bug it came from |
+| A held sale offers paper when its one-sale email may be lost | The first request carried the address but replay did not; `card-email-pos.spec.tsx` checks the warning and printable ticket |
 | Scheduled plan prices keep their eligible notice queue | A scheduled price without its recipients could leave an owner without notice; the route and schema specs pin validation and the atomic queue |
 | One-click ticket unsubscribe retries return the same success | A cleared or unknown token returned 404 to mail providers; `ticket-stop-one-click.spec.ts` checks retries, invalid forms and the separate confirmation response |
 |---|---|
@@ -8047,3 +8048,11 @@ other; `review2-deferred-probes.spec.ts` keeps the original regression.
   keeps it, and only that exact link shape (`safeLoginNext`).
 
 Checks: `admin-tier.spec.ts`, `billing-assigned.spec.ts`.
+
+## A held POS sale offers a ticket when email is uncertain
+
+The one-sale email and the held sale's replay disagreed: replay kept the card
+email skip but had no one-sale address. The first request may already have
+sent the email, so the held ticket tells the cashier it may not arrive and
+offers the printable receipt. `card-email-pos.spec.tsx` checks a lost reply,
+a sale taken offline and a sale without a one-sale address.

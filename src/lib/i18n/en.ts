@@ -1494,6 +1494,7 @@ foundingLeftBody: "Subscribe now and keep this subscription price for as long as
     saleMismatch: "You charged {collected}; the system recorded {settled}. The sale stays on this device: ask a manager to match the two.",
     saleUnsettled: "Not confirmed yet: the sale stays on this device and is sent again by itself.",
     offlineNoStorage: "This browser would not save the sale, so it was not sent. Charge it again; if it keeps happening, check the browser's storage settings.",
+    heldEmailPrint: "The email may not arrive. Print the ticket for the customer.",
     offlineHeld: "No connection: the sale is kept on this device and will be sent by itself when the connection returns.",
     heldAnswered: "The sale is kept on this device and will be sent again by itself.",
     offlineBanner: "No connection. You can keep charging cash or on your terminal: sales are kept on this device and sent by themselves when the connection returns.",
