@@ -7693,6 +7693,24 @@ share `splitTakesExactTipOnly`, tested against one fixture table
 bundle to reload. Known follow-up (F4): modern v1 splits with a principal still
 reopen an earlier page or return a winner whose tip differs from the screen.
 
+## Rate limits that capped the answer, not the cost (security review 2026-11-17)
+
+Three limits each guarded one side of something that had to agree:
+- The floor's membership poll started the session check and two membership
+  reads before awaiting its limiter, to save a round trip. A caller over the
+  limit got 429 but still cost auth plus two reads per request. The limiter is
+  now awaited first.
+- Diner card-email changes were counted per network address, removals included.
+  One diner on the restaurant's Wi-Fi could spend the shared allowance and
+  leave everyone there unable to remove their own address for an hour. Removal
+  probes nothing and withdraws consent, so it is no longer counted; linking is.
+- Dispute history paged through the restaurant's whole dispute book and
+  checked each case's ownership for any request, including one with no order.
+  An empty request now answers `{}` without reading, and reads are capped at 30
+  a minute per manager.
+
+Check: `src/lib/__tests__/secreview-1117-limits.spec.ts` (fails on the old code
+for the first two; the third asserts no dispute read happens).
 ## Android layout — separators stay with the word before them
 
 The GitHub layout gate renders text like Linux/Android Chrome, which wraps
