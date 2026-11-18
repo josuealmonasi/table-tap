@@ -10248,6 +10248,20 @@ create index if not exists platform_admin_audit_attempt on platform_admin_audit(
 alter table platform_admin_audit enable row level security;
 revoke all on platform_admin_audit from anon, authenticated, public, service_role;
 grant select, insert on platform_admin_audit to service_role;
+-- The platform team's own notes about a restaurant (support history). Never
+-- shown to the restaurant; service role only, like every admin table.
+create table if not exists restaurant_admin_notes (
+  id uuid primary key default gen_random_uuid(),
+  restaurant_id uuid not null references restaurants(id) on delete cascade,
+  author text not null,
+  body text not null check (char_length(body) between 1 and 2000),
+  created_at timestamptz not null default now()
+);
+create index if not exists restaurant_admin_notes_restaurant on restaurant_admin_notes (restaurant_id, created_at desc);
+alter table restaurant_admin_notes enable row level security;
+revoke all on restaurant_admin_notes from anon, authenticated, public, service_role;
+grant select, insert, delete on restaurant_admin_notes to service_role;
+
 
 -- A platform admin hands a restaurant to someone already on its team. One
 -- transaction under the restaurant's row lock: the new owner's staff row goes
@@ -15360,7 +15374,8 @@ alter table platform_admin_audit add constraint platform_admin_audit_target_type
 alter table platform_admin_audit drop constraint if exists platform_admin_audit_action_check;
 alter table platform_admin_audit add constraint platform_admin_audit_action_check
   check (action in ('login.create', 'login.update', 'login.delete', 'restaurant.delete', 'restaurant.plan', 'plan.price',
-    'restaurant.suspend', 'restaurant.unsuspend', 'restaurant.trial', 'restaurant.owner_transfer'));
+    'restaurant.suspend', 'restaurant.unsuspend', 'restaurant.trial', 'restaurant.owner_reset',
+    'restaurant.owner_transfer'));
 
 revoke truncate, references, trigger on all tables in schema public from authenticated;
 -- Audit of #648: recovery every five minutes, scheduled by the database.

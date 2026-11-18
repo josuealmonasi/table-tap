@@ -5,6 +5,7 @@ import { Modal } from "@/components/ui/Modal";
 import { dateLocale, formatMoney } from "@/lib/format";
 import { useLocale, useT } from "@/lib/i18n/context";
 import type { readAdminUsage } from "@/lib/admin-usage-read";
+import AdminSupport from "./AdminSupport";
 
 type Usage = NonNullable<Awaited<ReturnType<typeof readAdminUsage>>>;
 interface Props { id: string; name: string; onClose: () => void }
@@ -40,6 +41,7 @@ export default function AdminUsageDialog({ id, name, onClose }: Props) {
           <p>{t("admin.usagePayments")}: {period.payments.length ? period.payments.map(v => <span key={v.currency}><br />{t("admin.usageCash")}: <strong>{money(v.cash, v.currency)}</strong> · {t("admin.usageCard")}: <strong>{money(v.card, v.currency)}</strong></span>) : "—"}</p>
         </section>)}
       </>}
+    <AdminSupport id={id} />
     <div className="tt-prodform-actions"><button className="tt-btn tt-btn-ghost tt-btn-sm" onClick={onClose}>{t("admin.usageClose")}</button></div>
   </Modal>;
 }
