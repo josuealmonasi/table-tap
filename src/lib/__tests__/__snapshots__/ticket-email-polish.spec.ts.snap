@@ -19,7 +19,7 @@ exports[`ticket email HTML in en > keeps the card footer inside the receipt with
   
   
   <p style="margin-top:8px;color:#70707a;font-size:12px">This receipt is not a tax invoice (CFDI). If you need one, ask the restaurant.</p>
-<p style="margin-top:24px;color:#70707a;font-size:12px">You get this ticket because you linked this email to your Demo visit card. It is only used to send you your tickets. <a style="color:#0e6e6e" href="https://example.com/tickets/stop?t=token">Stop emailing me my tickets</a></p>
+<p style="margin-top:24px;color:#70707a;font-size:12px">You get this ticket because you linked this email to your Demo visit card. It is only used to send you your tickets. <a style="color:#0e6e6e" href="https://example.com/tickets/stop?t=token">Stop emailing me tickets for this card</a></p>
 </div>"
 `;
 
@@ -42,6 +42,6 @@ exports[`ticket email HTML in es > keeps the card footer inside the receipt with
   
   
   <p style="margin-top:8px;color:#70707a;font-size:12px">Este recibo no es un comprobante fiscal (CFDI). Si necesitas factura, pídesela al restaurante.</p>
-<p style="margin-top:24px;color:#70707a;font-size:12px">Recibes este ticket porque vinculaste este correo a tu tarjeta de visitas de Demo. Solo se usa para enviarte tus tickets. <a style="color:#0e6e6e" href="https://example.com/tickets/stop?t=token">Dejar de recibir mis tickets por correo</a></p>
+<p style="margin-top:24px;color:#70707a;font-size:12px">Recibes este ticket porque vinculaste este correo a tu tarjeta de visitas de Demo. Solo se usa para enviarte tus tickets. <a style="color:#0e6e6e" href="https://example.com/tickets/stop?t=token">Dejar de recibir los tickets de esta tarjeta por correo</a></p>
 </div>"
 `;
