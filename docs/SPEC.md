@@ -156,6 +156,18 @@ signed-in login's RLS, which a platform admin is not part of, and widening that
 was refused. Every visit writes `restaurant.view` to `platform_admin_audit`
 before anything is read; if that write fails the view is not shown.
 
+## Auth emails
+
+Supabase sends the sign-up confirmation, staff invitation, password reset and
+email-change emails, from `no-reply@tabletap.shop` through Resend. Their
+templates live in `docs/auth-email-templates/` and are pasted into the
+Supabase dashboard. Each is written in Spanish and English, switched on
+`user_metadata.locale`, which signup, staff invites and admin-created logins
+save from the request's language cookie (`requestLocale`); without it,
+Spanish. Links go to `tabletap.shop/auth/confirm`, never to the Supabase host.
+That page only shows a button that POSTs the token to `/auth/callback`, so a
+mail scanner that opens the link cannot spend it.
+
 ## The free trial, told
 
 A new restaurant gets 30 days of Servicio free with no card; it then falls

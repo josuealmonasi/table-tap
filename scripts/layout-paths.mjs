@@ -96,6 +96,10 @@ export const PUBLIC = [
   "/tickets/stop",
   `/tickets/stop?t=${SEED_STOP_TOKEN}`,
   "/rewards",
+  // Where the auth emails land: one button that posts the token. Opening it
+  // spends nothing, so a made-up token shows the real screen.
+  "/auth/confirm",
+  "/auth/confirm?token_hash=layout-preview-token&type=email",
 ];
 
 /**
