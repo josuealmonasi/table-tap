@@ -28,3 +28,13 @@ it("signup, invites and admin-created logins record the language the emails use"
     expect(readFileSync(f, "utf8"), f).toMatch(/user_metadata: \{ locale/);
   }
 });
+
+it("password placeholders state the same minimum the forms enforce", async () => {
+  const { PASSWORD_MIN } = await import("@/lib/password");
+  const { messagesFor, translate } = await import("@/lib/i18n");
+  for (const locale of ["es", "en"] as const) {
+    for (const key of ["auth.passwordMinPlaceholder", "auth.newPasswordPlaceholder"]) {
+      expect(translate(messagesFor(locale), key), `${locale} ${key}`).toContain(String(PASSWORD_MIN));
+    }
+  }
+});
