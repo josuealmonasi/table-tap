@@ -8243,3 +8243,10 @@ the route, the hook and their tests all handle. The probe was wrong, not the
 code. Run unchanged against an unreachable database, every probe errored and the
 runner exited 1. It now runs on GitHub in every gates run.
 
+## A trial nobody was told about (2026-11-18)
+
+Signing up started a free month of Servicio and, at its end, a quiet fall back
+to Carta. The only trace was a line on the Plan page, so the owner read the
+trial as being put on a plan without asking. The owner now gets a welcome once
+and a days-left banner everywhere. Check: `trial-notice.spec.ts`.
+

@@ -5,6 +5,8 @@ import { getMembership } from "@/lib/membership";
 import { getPlatformAdmin } from "@/lib/admin";
 import Navbar from "@/components/layout/Navbar";
 import FrozenBanner from "@/components/dashboard/plan/FrozenBanner";
+import TrialBanner from "@/components/dashboard/plan/TrialBanner";
+import { trialNotice } from "@/lib/trial-notice";
 import SuspendedBanner from "@/components/dashboard/SuspendedBanner";
 import { dashboardFrozen } from "@/lib/plan";
 import type { PlanStatus } from "@/lib/plan";
@@ -125,6 +127,11 @@ export default async function RootLayout({ children }: { children: React.ReactNo
               ) && <FrozenBanner isOwner={membership.role === "owner"} />}
             {/* A payment failed and is being retried: the owner is told (terms,
                 §5), everywhere, before anything freezes. */}
+            {/* A free trial: how long is left and what comes after, to the owner. */}
+            {membership?.role === "owner" && (() => {
+              const notice = trialNotice(membership.restaurant);
+              return notice ? <TrialBanner notice={notice} /> : null;
+            })()}
             {membership?.role === "owner" && membership.restaurant.plan_status === "past_due" && (
               <FrozenBanner isOwner pastDue />
             )}
