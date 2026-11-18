@@ -3844,15 +3844,18 @@ alter table loyalty_cards add constraint loyalty_cards_email_consented check (em
 drop index if exists loyalty_cards_email_once;
 create unique index if not exists loyalty_cards_email_unsubscribe on loyalty_cards(email_unsubscribe) where email_unsubscribe is not null;
 
--- A repeated save must keep links already delivered, even when saves overlap.
+-- A repeated save of the same address keeps its stop link, so a ticket already
+-- delivered can still stop it (review 1117b, finding 5). Consent is given again
+-- with every save, so its time, notice version and author always record the
+-- latest one: a re-save under a newer notice must not keep the older version.
 create or replace function public.set_card_email(p_restaurant uuid, p_code text, p_email text, p_set_by text, p_notice text)
 returns boolean language plpgsql security definer set search_path = public as $$
 begin
   update loyalty_cards set
     email_unsubscribe = case when p_email is null then null when email = p_email then email_unsubscribe else gen_random_uuid() end,
-    email_consent_at = case when p_email is null then null when email = p_email then email_consent_at else now() end,
-    email_notice_version = case when p_email is null then null when email = p_email then email_notice_version else p_notice end,
-    email_set_by = case when p_email is null then null when email = p_email then email_set_by else p_set_by end,
+    email_consent_at = case when p_email is null then null else now() end,
+    email_notice_version = case when p_email is null then null else p_notice end,
+    email_set_by = case when p_email is null then null else p_set_by end,
     email = p_email
   where restaurant_id = p_restaurant and code = p_code;
   return found;
