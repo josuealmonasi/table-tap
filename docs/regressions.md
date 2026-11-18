@@ -46,6 +46,7 @@ and that a new party cannot see the previous party's waiting phones.
 | Rule | The bug it came from |
 | The retry schedule must run on the hosting plan and identify its caller | Vercel rejected the five-minute cron on Hobby; `recovery-schedule-platform.spec.ts`, `github-cron-auth.spec.ts` and `recovery-scheduler-client.spec.ts` pin the daily fallback and the exact signed main-branch job |
 |---|---|
+| Reopened split pages keep the tip and total the diner chose (review F4) | Both saved-principal shares and parts could return an earlier or concurrent page with another amount; route specs check the quote and safe retirement |
 | An old split without a frozen principal accepts exact tips only (review N14) | Gross amount included earlier gratuities, and an open checkout could silently keep a different tip; legacy-split-tip, legacy-split-tip-route and legacy-split-tip-input regression specs cover calculation, request, preview and retry |
 | The account promise opens its own unsplit bill | The first Collect could open another table's divided bill, which correctly offers parts instead of an account charge; `promise-account-bill.spec.ts` checks the target and cleanup |
 | A duplicate refund tracks customer completion and fee completion separately (S11 I5) | A failed fee return disappeared behind an already-refunded customer payment |
@@ -7695,6 +7696,44 @@ bundle to reload. Known follow-up (F4): modern v1 splits with a principal still
 reopen an earlier page or return a winner whose tip differs from the screen.
 
 
+### Reopened split pages use the diner's current quote (F4)
+
+The phone showed its new tip while an older Stripe page could still charge the
+previous one. Both share models compare the saved tip and total before returning
+a page. A stale total is closed before a replacement is opened; an unverified
+closure or a concurrent winner is never replaced. Route tests cover both models.
+
+
+| Regression | Two places that must agree | Check |
+| --- | --- | --- |
+| A changed tip leaves a cancelled split payable | The diner's current quote and the resumed Stripe page | `legacy-split-tip-route.react-component.spec.tsx`, `split-slots-pay.spec.ts` |
+| A racing page explains the next step | The refusal and the diner's available controls in both languages | `split-race-copy.spec.ts` |
+| A slot retry preserves a valid page | The server's slot amount and the phone's expected amount | `split-slots-pay.spec.ts` |
+| Slot state takes precedence over a food read | Revision, payment and reservation checks and the percentage-tip read | `split-slots-pay.spec.ts` |
+
+### A changed tip leaves a cancelled split payable
+
+A resumed page and the current tip had to agree. A different tip now closes
+the earlier page through the same verified expiry and fee release as a changed
+total. If closure is uncertain the diner is asked to retry; a concurrent
+winner stays open and a different quote is refused. Route tests cover a
+cancelled modern split, a later dish and percentage tip, slots and races.
+
+### A racing page explains the next step
+
+The refusal and the screen's controls had to agree. A diner with no tip field
+can now understand the English or Spanish message and try again.
+
+### A slot retry preserves a valid page
+
+The phone's expected amount and the server's selected slots had to agree
+before expiring a page. A stale phone amount now leaves the valid page open.
+
+### Slot state takes precedence over a food read
+
+The selected slots and the percentage-tip food read had to agree on which
+answer comes first. Stale, paid and taken parts are reported before an
+unavailable food read can hide them.
 ## Deleted restaurant books expire after ten years
 
 | Places that must agree | What went wrong | What checks it |

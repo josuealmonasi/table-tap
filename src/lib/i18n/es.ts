@@ -1569,7 +1569,7 @@ foundingLeftBody: "Quien contrata ahora conserva este precio de suscripción mie
     requestsFailed: "No pudimos revisar si hay otros teléfonos esperando entrar. Lo intentaremos de nuevo en unos segundos.",
   },
   apiErr: {
-    splitOpenTip: "La página de pago anterior tiene {tip} de propina. Escribe ese importe para volver a ella.",
+    splitOpenTip: "Se acaba de abrir otra página de pago para tu parte. Inténtalo de nuevo en un momento.",
     splitExactTip: "Escribe el importe de la propina o elige sin propina para pagar tu parte. Si no ves el campo para el importe de la propina, recarga la página.",
     splitPageChanged: "Tu parte cambió mientras una página de pago anterior seguía abierta. Recarga la página e inténtalo de nuevo en unos minutos.",
     heldResolveManager: "Solo el dueño o un gerente puede resolver este comprobante.",
