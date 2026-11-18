@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Archivo } from "next/font/google";
+import localFont from "next/font/local";
 import "./globals.css";
 import { getMembership } from "@/lib/membership";
 import { getPlatformAdmin } from "@/lib/admin";
@@ -23,11 +23,16 @@ import { currentUser } from "@/lib/current-user";
 import { privateCacheIdentity } from "@/lib/private-cache-identity";
 import DashboardCache from "@/components/layout/DashboardCache.react-component";
 
-// One family, weight carries the hierarchy. next/font self-hosts the files at
-// build time, so there's no request to a font CDN at runtime and no swap flash.
-const archivo = Archivo({
-  subsets: ["latin"],
-  weight: ["400", "500", "600", "700", "800"],
+// One family, weight carries the hierarchy. The file lives in the repo
+// (Archivo, SIL OFL 1.1 — src/app/fonts/Archivo-OFL.txt): next/font/google
+// fetched it from Google at every build, and a bad answer from Google failed
+// a Vercel deploy and a CI build on 2026-11-17 ("Cannot read properties of null
+// (reading '1')" in its loader) with no code at fault. Google's latin subset of
+// the variable font, weights 400–800: Spanish accents, ñ, ×, · and — included.
+const archivo = localFont({
+  src: "./fonts/archivo-latin.woff2",
+  weight: "400 800",
+  style: "normal",
   variable: "--tt-font",
   display: "swap",
 });
