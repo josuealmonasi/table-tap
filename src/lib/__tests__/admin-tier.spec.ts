@@ -142,9 +142,9 @@ describe("a platform admin assigns a tier with a payment link", () => {
     expect(restaurant).toMatchObject({ plan: "grupo", plan_status: "trialing", trial_ends_at: payBy, subscription_sync_revision: 5 });
     expect(mails).toHaveLength(1);
     expect(mails[0].to).toBe("owner@x.dev");
-    expect(mails[0].text).toContain(assignedPayLink("https://tabletap.shop", "grupo", payBy));
-    // The link is bound to this assignment by its pay-by day.
-    expect(mails[0].text).toContain(`until=${payBy.slice(0, 10)}`);
+    // The link is bound to this assignment's id, stored on the restaurant.
+    expect(restaurant.tier_assignment_id).toMatch(/^[0-9a-f-]{36}$/);
+    expect(mails[0].text).toContain(assignedPayLink("https://tabletap.shop", "grupo", restaurant.tier_assignment_id as string));
     expect(logged[0].detail).toContain("billing=payment_link");
   });
 
@@ -161,6 +161,13 @@ describe("a platform admin assigns a tier with a payment link", () => {
     const answer = await assignTier(fakeDb(), { ...base, plan: "grupo", billing: "payment_link" }, "admin@x.dev", fakeStripe);
     expect(answer).toMatchObject({ ok: true });
     expect(expired).toEqual(["cs_old_casa"]);
+  });
+
+  it("a free move closes open Checkout pages too, under the lock (review finding 3)", async () => {
+    sessions = [{ id: "cs_pay_link" }];
+    const answer = await assignTier(fakeDb(), { ...base, plan: "casa", billing: "free" }, "admin@x.dev", fakeStripe);
+    expect(answer).toMatchObject({ ok: true, billing: "free" });
+    expect(expired).toEqual(["cs_pay_link"]);
   });
 
   it("refuses Carta, which costs nothing", async () => {

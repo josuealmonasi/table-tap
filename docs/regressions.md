@@ -8079,6 +8079,27 @@ other; `review2-deferred-probes.spec.ts` keeps the original regression.
 
 Checks: `admin-tier.spec.ts`, `billing-assigned.spec.ts`.
 
+## A zero-balance retry keeps the collector's ticket choice
+
+| Places that must agree | What went wrong | What checks it |
+| --- | --- | --- |
+| The successful collection and the later zero-balance close | A retry could replace the collector's ticket choice and send an unwanted email | `zero-close-ticket-email.spec.ts`; database probe |
+
+The receipt and the close must agree on whose choice applies. The close checks
+recorded allocations under the money lock before changing any order's mark;
+when a receipt exists it keeps the successful collector's choice for the whole
+bill. A genuinely free bill still uses the current cashier's choice. The unit
+spec models both choices and pins the SQL; Claude's database probe must exercise
+the real transaction, including a failed close and a retry.
+## Pay link bound to a day, and free moves outside the lock (review 1117b, findings 3 and 7)
+
+The pay link matched any trial on the same tier and pay-by day, so a replaced
+assignment recreated for the same tier and day reopened an old link; and a free
+assignment ran outside the billing lock, so a Checkout opened just before it
+could still be paid and its subscription wrote over the free tier. Each
+payment-link assignment now stores `restaurants.tier_assignment_id` and the link
+carries it (`a=`); a free move runs under the lock, closes open Checkouts and
+clears the id. Checks: `billing-assigned.spec.ts`, `admin-tier.spec.ts`.
 ## Dish deal callout and selected price
 
 The deal hint and the add-to-cart price must describe the same selection. The
