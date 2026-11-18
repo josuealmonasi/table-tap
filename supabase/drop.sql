@@ -427,6 +427,7 @@ drop function if exists public.settled_by_write_off(uuid, uuid);
 drop function if exists public.fix_loyalty_card_on_payment() cascade;
 drop function if exists public.queue_ticket_email() cascade;
 drop function if exists public.claim_ticket_emails(int);
+drop function if exists public.set_card_email(uuid, text, text, text, text);
 drop function if exists public.attach_loyalty_card_v1(uuid, text, uuid, uuid, text);
 drop function if exists public.attach_loyalty_card_v2(uuid, text, uuid, uuid, text, boolean, text);
 drop function if exists public.loyalty_open(uuid);
