@@ -15121,11 +15121,12 @@ create index if not exists offline_sale_queue_decision_page
   on public.offline_sale_queue (restaurant_id, decision_at desc, pos_ref)
   where decision_at is not null;
 
--- Audit of #648 (server F1): closing a table whose parts already paid it all
--- (a MX$0 close) carries the cashier's ticket choice too. Before, that path
--- reached only the five-argument settle and queued the ticket after "don't
--- send". The mark is written under the money lock, on rows locked in id
--- order, only where it changes; any refusal from settlement rolls it back.
+-- Audit of #648 (server F1): closing a free table (a MX$0 close) carries
+-- the cashier's ticket choice too. Before, that path reached only the
+-- five-argument settle and queued the ticket after "don't send". The mark is
+-- written under the money lock, on rows locked in id order, only where it
+-- changes; any refusal from settlement rolls it back. A retry after a receipt
+-- keeps the successful collector's choice instead.
 -- The five-argument signature stays for callers without a choice.
 create or replace function public.settle_orders_v2(
   p_restaurant uuid, p_orders uuid[], p_method text, p_actor text, p_sittings jsonb, p_skip_ticket_email boolean
@@ -15133,10 +15134,17 @@ create or replace function public.settle_orders_v2(
 begin
   perform public.lock_restaurant_money(p_restaurant);
   if p_skip_ticket_email is null then raise exception 'not_owed'; end if;
+  perform set_config('tabletap.allocation_writer', 'v1', true);
+  if p_restaurant is not null then perform public.backfill_payment_allocations(p_restaurant); end if;
   perform 1 from orders where restaurant_id = p_restaurant and id = any(p_orders) order by id for update;
-  update orders set ticket_email_skip = p_skip_ticket_email
-    where restaurant_id = p_restaurant and id = any(p_orders) and not paid
-      and ticket_email_skip is distinct from p_skip_ticket_email;
+  -- A retry after a receipt must keep the collector's choice, including for
+  -- zero-value orders in the same bill. Only a free bill has a new choice.
+  if not exists (select 1 from payment_allocations a
+    where a.restaurant_id = p_restaurant and a.order_id = any(p_orders)) then
+    update orders set ticket_email_skip = p_skip_ticket_email
+      where restaurant_id = p_restaurant and id = any(p_orders) and not paid
+        and ticket_email_skip is distinct from p_skip_ticket_email;
+  end if;
   return public.settle_orders_v2(p_restaurant, p_orders, p_method, p_actor, p_sittings);
 end; $$;
 revoke all on function public.settle_orders_v2(uuid, uuid[], text, text, jsonb, boolean) from public, anon, authenticated;
