@@ -8,6 +8,13 @@ table owed MX$105 and the diner's screen said it owed nothing.
 So this is not a style guide. It is the list of things that have actually bitten
 us, and what now catches each one.
 
+## The ticket stop button stays in the layout gate
+
+The demo seed and the layout page list disagreed: the gate opened only the
+invalid link, so it never measured the stop button. The seed now gives one
+card a consented example address and a fixed link; the layout gate visits it
+and the bare link. `seed-stop-layout.spec.ts` checks both sides.
+
 ## Historical card return imports stop retrying
 
 The import and the bill read disagreed about what a card return log could prove.
@@ -53,6 +60,7 @@ and that a new party cannot see the previous party's waiting phones.
 
 | Rule | The bug it came from |
 |---|---|
+| The demo stop link and layout paths agree | The gate measured only an invalid link and missed the button overflowing its card; `seed-stop-layout.spec.ts` checks the seed and both paths |
 | Earlier acceptance rows and the backfill index agree | Relabeling every old row as a backfill could stop schema application; `acceptance-schema.spec.ts` pins the migration |
 | Terms evidence and the privacy notice agree | Acceptance saved request network details despite the notice; `acceptance-history.spec.ts` and `rate-limit-key.spec.ts` forbid collection |
 | Terms history access and kitchen denial agree | A table grant allowed authenticated reads to reach RLS; `acceptance-schema.spec.ts` pins service-only access |
