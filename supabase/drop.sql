@@ -434,3 +434,4 @@ drop function if exists public.loyalty_open(uuid);
 drop function if exists public.schedule_plan_price_change(text, numeric, timestamptz, text);
 drop table if exists plan_price_notices cascade;
 drop table if exists plan_price_changes cascade;
+drop function if exists public.admin_restaurant_last_sign_in_v1(uuid);
