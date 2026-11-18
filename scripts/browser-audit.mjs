@@ -1,3 +1,4 @@
+import { saveEvidence } from "./layout-evidence.mjs";
 import { deadline } from "./browser-deadline.mjs";
 import { AUDIT } from "./layout-audit.mjs";
 
@@ -39,6 +40,8 @@ export async function look(tab, where, phase, log) {
   else {
     log(`    BAD      ${where}`);
     for (const f of faults) log(`             ${f.kind}: «${f.text}» (${f.w}px)`);
+    const saved = await saveEvidence(tab, where, faults);
+    if (saved) log(`             evidence: ${saved}.png / .json`);
   }
   return faults.length;
 }
