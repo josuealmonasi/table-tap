@@ -65,6 +65,8 @@ export function useAdminActions() {
       call("/api/admin/users", "DELETE", { userId }, t("admin.loginDeleted")),
     deleteRestaurant: (id: string) =>
       call("/api/admin/restaurants", "DELETE", { id }, t("admin.restaurantDeleted")),
+    schedulePrice: (plan: string, newPrice: number, effectiveAt: string, doneMsg: string) =>
+      call("/api/admin/plan-price-changes", "POST", { plan, newPrice, effectiveAt }, doneMsg),
     movePlan: (id: string, plan: string, doneMsg: string, choice: TierAssignment) =>
       call("/api/admin/restaurants", "PATCH", { id, plan, ...choice }, doneMsg),
   };
