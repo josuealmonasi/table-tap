@@ -116,134 +116,136 @@ export default function ItemDetailScreen({
   }
 
   return (
-    <div className="tt-root">
-      <div className="tt-item-hero">
-        <DishImage url={item.image_url} emoji={item.emoji} name={item.name} variant="hero" />
-        <button className="tt-back" onClick={onBack} aria-label={t("common.back")}>
-          <BackIcon size={18} weight="bold" />
-        </button>
-      </div>
-      <div style={{ padding: 20 }}>
-        <div className="tt-detail-head">
-          <h2 className="tt-serif" style={{ margin: 0, fontSize: 24 }}>
-            {item.name}
-          </h2>
-          <span className="tt-price-lg">
-            {onSale && <s className="tt-was">{formatMoney(item.price, currency)}</s>}
-            {formatMoney(onSale ? salePrice : item.price, currency)}
-          </span>
-        </div>
-        <p className="tt-muted" style={{ lineHeight: 1.6 }}>
-          {item.description}
-        </p>
-
-        {promo && (
-          <div className="tt-promo-callout">
-            <span className="tt-deal">{promo.name}</span>
-            {deal.applied && <span>{t("promos.applied", { name: promo.name })}</span>}
-            {step && (
-              <span>
-                {t("promos.oneMore", {
-                  qty: step.addQty,
-                  amount: formatMoney(step.save, currency),
-                })}
-              </span>
-            )}
-          </div>
-        )}
-
-        {dietaryTags(item.dietary, allTags).length > 0 && (
-          <div className="tt-diet-row" style={{ marginBottom: 16 }}>
-            {dietaryTags(item.dietary, allTags).map(tag => (
-              <span
-                key={tag.key}
-                className="tt-diet-badge"
-                title={tagLabel(tag, t, lang)}
-              >
-                {tag.emoji} {tagLabel(tag, t, lang)}
-              </span>
-            ))}
-          </div>
-        )}
-
-        {item.modifiers.map(mod => (
-          <ModifierGroup
-            key={mod.label}
-            modifier={mod}
-            value={mods[mod.label]}
-            missing={showMissing && missing.includes(mod.label)}
-            onToggle={option => toggleMod(mod.label, option, mod.type)}
-          />
-        ))}
-
-        {extras.length > 0 && (
-          <div style={{ marginBottom: 20 }}>
-            <div className="tt-mod-label">
-              {t("item.addExtras")} <span className="tt-muted">{t("item.optional")}</span>
-            </div>
-            <div className="tt-chips">
-              {extras.map(extra => {
-                const on = extraIds.includes(extra.id);
-                return (
-                  <button
-                    key={extra.id}
-                    className={`tt-chip ${on ? "tt-chip-on" : ""}`}
-                    onClick={() => toggleExtra(extra.id)}
-                  >
-                    {extra.emoji ? `${extra.emoji} ` : ""}
-                    {extra.name}
-                    {extra.price > 0 ? ` +${formatMoney(extra.price, currency)}` : ""}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        )}
-
-        <div style={{ marginBottom: 20 }}>
-          <NoteField
-            label={t("item.specialRequests")}
-            placeholder={t("item.requestsPlaceholder")}
-            value={notes}
-            onChange={setNotes}
-          />
-        </div>
-
-        {/* Pinned to the bottom of the scroll area. A dish with a dozen extras
-            and nine dietary tags pushes this well past the fold, and an
-            "Add to cart" you have to go looking for is the one control on the
-            screen that must never need finding. */}
-        {missing.length > 0 && (
-          <p className="tt-req-note" role="status">
-            {t("item.chooseFirst", { groups: missing.join(", ") })}
-          </p>
-        )}
-        <div className="tt-detail-actions">
-          <div className="tt-stepper">
-            <button onClick={() => setQty(q => Math.max(1, q - 1))}>−</button>
-            <span>{qty}</span>
-            <button
-              disabled={qty >= MAX_LINE_QTY}
-              onClick={() => setQty(q => Math.min(MAX_LINE_QTY, q + 1))}
-            >
-              +
-            </button>
-          </div>
-          <button
-            className="tt-btn tt-btn-primary"
-            style={{ flex: 1 }}
-            disabled={missing.length > 0}
-            onClick={handleAdd}
-          >
-            <span>{t(initialLine ? "item.updateItem" : "item.addToCart")}</span>
-            <span className="tt-btn-price">
-              {lineTotal < fullPrice && (
-                <s className="tt-was">{formatMoney(fullPrice, currency)}</s>
-              )}
-              {formatMoney(lineTotal, currency)}
-            </span>
+    <div className="tt-root tt-dish-detail">
+      <div className="tt-dish-detail-scroll">
+        <div className="tt-item-hero">
+          <DishImage url={item.image_url} emoji={item.emoji} name={item.name} variant="hero" />
+          <button className="tt-back" onClick={onBack} aria-label={t("common.back")}>
+            <BackIcon size={18} weight="bold" />
           </button>
         </div>
+        <div style={{ padding: 20 }}>
+          <div className="tt-detail-head">
+            <h2 className="tt-serif" style={{ margin: 0, fontSize: 24 }}>
+              {item.name}
+            </h2>
+            <span className="tt-price-lg">
+              {onSale && <s className="tt-was">{formatMoney(item.price, currency)}</s>}
+              {formatMoney(onSale ? salePrice : item.price, currency)}
+            </span>
+          </div>
+          <p className="tt-muted" style={{ lineHeight: 1.6 }}>
+            {item.description}
+          </p>
+
+          {promo && (
+            <div className="tt-promo-callout">
+              <span className="tt-deal">{promo.name}</span>
+              {deal.applied && <span>{t("promos.applied", { name: promo.name })}</span>}
+              {step && (
+                <span>
+                  {t("promos.oneMore", {
+                    qty: step.addQty,
+                    amount: formatMoney(step.save, currency),
+                  })}
+                </span>
+              )}
+            </div>
+          )}
+
+          {dietaryTags(item.dietary, allTags).length > 0 && (
+            <div className="tt-diet-row" style={{ marginBottom: 16 }}>
+              {dietaryTags(item.dietary, allTags).map(tag => (
+                <span
+                  key={tag.key}
+                  className="tt-diet-badge"
+                  title={tagLabel(tag, t, lang)}
+                >
+                  {tag.emoji} {tagLabel(tag, t, lang)}
+                </span>
+              ))}
+            </div>
+          )}
+
+          {item.modifiers.map(mod => (
+            <ModifierGroup
+              key={mod.label}
+              modifier={mod}
+              value={mods[mod.label]}
+              missing={showMissing && missing.includes(mod.label)}
+              onToggle={option => toggleMod(mod.label, option, mod.type)}
+            />
+          ))}
+
+          {extras.length > 0 && (
+            <div className="tt-dish-extras" style={{ marginBottom: 20 }}>
+              <div className="tt-mod-label">
+                {t("item.addExtras")} <span className="tt-muted">{t("item.optional")}</span>
+              </div>
+              <div className="tt-chips">
+                {extras.map(extra => {
+                  const on = extraIds.includes(extra.id);
+                  return (
+                    <button
+                      key={extra.id}
+                      className={`tt-chip ${on ? "tt-chip-on" : ""}`}
+                      onClick={() => toggleExtra(extra.id)}
+                    >
+                      {extra.emoji ? `${extra.emoji} ` : ""}
+                      {extra.name}
+                      {extra.price > 0 ? ` +${formatMoney(extra.price, currency)}` : ""}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          <div style={{ marginBottom: 20 }}>
+            <NoteField
+              label={t("item.specialRequests")}
+              placeholder={t("item.requestsPlaceholder")}
+              value={notes}
+              onChange={setNotes}
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* Pinned below the scroll area. A dish with a dozen extras
+          and nine dietary tags pushes this well past the fold, and an
+          "Add to cart" you have to go looking for is the one control on the
+          screen that must never need finding. */}
+      {missing.length > 0 && (
+        <p className="tt-req-note" role="status">
+          {t("item.chooseFirst", { groups: missing.join(", ") })}
+        </p>
+      )}
+      <div className="tt-detail-actions">
+        <div className="tt-stepper">
+          <button onClick={() => setQty(q => Math.max(1, q - 1))}>−</button>
+          <span>{qty}</span>
+          <button
+            disabled={qty >= MAX_LINE_QTY}
+            onClick={() => setQty(q => Math.min(MAX_LINE_QTY, q + 1))}
+          >
+            +
+          </button>
+        </div>
+        <button
+          className="tt-btn tt-btn-primary"
+          style={{ flex: 1 }}
+          disabled={missing.length > 0}
+          onClick={handleAdd}
+        >
+          <span>{t(initialLine ? "item.updateItem" : "item.addToCart")}</span>
+          <span className="tt-btn-price">
+            {lineTotal < fullPrice && (
+              <s className="tt-was">{formatMoney(fullPrice, currency)}</s>
+            )}
+            {formatMoney(lineTotal, currency)}
+          </span>
+        </button>
       </div>
     </div>
   );
