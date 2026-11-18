@@ -52,7 +52,7 @@ interface AdminPanelProps {
   /** Every plan in the catalog, cheapest first. */
   plans: string[];
   /** Silent failures across the platform, counted. */
-  health: PlatformHealth;
+  health: PlatformHealth | null;
   /** Paid plans' prices and scheduled changes. */
   prices: AdminPlanPrice[];
 }

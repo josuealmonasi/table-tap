@@ -19,16 +19,20 @@ export interface WebhookBeat {
   stream: "platform" | "connect";
   lastOkAt: string | null;
   lastRefusedAt: string | null;
+  lastRefusal: "no_secret" | "bad_signature" | null;
 }
 
+const WEBHOOK_QUIET_DAYS = 7;
+
 /**
- * An endpoint needs a look when it has never accepted an event, or when its
- * latest event was refused: a missing or wrong signing secret looks exactly
- * like this, and does nothing else anyone would notice.
+ * An endpoint needs a look when it has never accepted an event, or has
+ * accepted none for a week: a missing or wrong secret, a deleted endpoint and
+ * a stale URL all look like this. A refusal alone is not enough: anyone can
+ * send one, so it is shown beside the time but never turns the tile red.
  */
-export function webhookBad(beat: WebhookBeat): boolean {
+export function webhookBad(beat: WebhookBeat, now = Date.now()): boolean {
   if (!beat.lastOkAt) return true;
-  return Boolean(beat.lastRefusedAt) && Date.parse(beat.lastRefusedAt as string) > Date.parse(beat.lastOkAt);
+  return now - Date.parse(beat.lastOkAt) > WEBHOOK_QUIET_DAYS * 86_400_000;
 }
 
 /** The scheduler runs every 5 minutes; 15 without a run is a problem worth showing. */

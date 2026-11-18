@@ -20,7 +20,7 @@ export async function readPlatformHealth(now = Date.now()): Promise<PlatformHeal
     db.from("ticket_email_outbox").select("id", { count: "exact", head: true }).in("outcome", ["failed", "unconfigured"]).gte("finished_at", since),
     db.from("plan_price_notices").select("change_id", { count: "exact", head: true }).is("sent_at", null).gt("attempts", 0),
     db.from("restaurants").select("id", { count: "exact", head: true }).or("stripe_account_id.is.null,stripe_charges_enabled.is.false"),
-    db.from("webhook_heartbeats").select("stream, last_ok_at, last_refused_at"),
+    db.from("webhook_heartbeats").select("stream, last_ok_at, last_refused_at, last_refusal"),
   ]);
   for (const [name, r] of [["scheduler", run], ["tickets", tickets], ["notices", notices], ["cards", cards], ["webhooks", beats]] as const) {
     if (r.error) throw new Error(`Health read failed (${name}): ${r.error.message}`);
@@ -34,7 +34,7 @@ export async function readPlatformHealth(now = Date.now()): Promise<PlatformHeal
     // and is exactly the one to show.
     webhooks: (["platform", "connect"] as const).map((stream): WebhookBeat => {
       const row = (beats.data ?? []).find(b => b.stream === stream);
-      return { stream, lastOkAt: row?.last_ok_at ?? null, lastRefusedAt: row?.last_refused_at ?? null };
+      return { stream, lastOkAt: row?.last_ok_at ?? null, lastRefusedAt: row?.last_refused_at ?? null, lastRefusal: row?.last_refusal ?? null };
     }),
   };
 }

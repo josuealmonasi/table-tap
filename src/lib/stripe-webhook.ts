@@ -43,7 +43,7 @@ export async function readStripeEvent(
   if (!signature || !secret) {
     console.error(`stripe webhook (${stream}): no signature or no secret configured`);
     // Only a missing secret is ours to show: an unsigned request is anyone's.
-    if (signature) await beat(stream, { last_refused_at: new Date().toISOString(), last_refusal: "no_secret" });
+    if (signature) await refused(stream, "no_secret");
     return { refusal: NextResponse.json({ error: "Missing signature" }, { status: 400 }) };
   }
 
@@ -57,9 +57,23 @@ export async function readStripeEvent(
     // Nearly always the wrong secret for this endpoint: the two are easy to
     // swap, and swapped they fail silently apart from this line.
     console.error(`stripe webhook (${stream}): signature verification failed`, err);
-    await beat(stream, { last_refused_at: new Date().toISOString(), last_refusal: "bad_signature" });
+    await refused(stream, "bad_signature");
     return { refusal: NextResponse.json({ error: "Invalid signature" }, { status: 400 }) };
   }
+}
+
+/**
+ * A refusal is written at most once a minute per server: anyone can send a
+ * request with a made-up signature, and each one must not cost a write on the
+ * row the real events update. It is shown as information, never as the reason
+ * the tile is red (see `webhookBad`).
+ */
+const lastRefusal = new Map<string, number>();
+async function refused(stream: "platform" | "connect", reason: "no_secret" | "bad_signature"): Promise<void> {
+  const now = Date.now();
+  if (now - (lastRefusal.get(stream) ?? 0) < 60_000) return;
+  lastRefusal.set(stream, now);
+  await beat(stream, { last_refused_at: new Date(now).toISOString(), last_refusal: reason });
 }
 
 /**

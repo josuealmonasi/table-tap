@@ -14,7 +14,7 @@ import { schedulerStale, webhookBad } from "@/lib/admin-health-rules";
 
 it("counts the platform's silent failures in one read", async () => {
   expect(await readPlatformHealth()).toEqual({ schedulerLastRun: "2026-11-18T13:55:00Z", failedTickets7d: 3, stuckPriceNotices: 1, noCards: 2,
-    webhooks: [{ stream: "platform", lastOkAt: null, lastRefusedAt: null }, { stream: "connect", lastOkAt: null, lastRefusedAt: null }] });
+    webhooks: [{ stream: "platform", lastOkAt: null, lastRefusedAt: null, lastRefusal: null }, { stream: "connect", lastOkAt: null, lastRefusedAt: null, lastRefusal: null }] });
 });
 
 it("calls the scheduler stale after 15 minutes without a run, or when it never ran", () => {
@@ -24,10 +24,12 @@ it("calls the scheduler stale after 15 minutes without a run, or when it never r
   expect(schedulerStale(null, now)).toBe(true);
 });
 
-it("flags a webhook endpoint that never accepted an event, or whose latest was refused", () => {
-  const ok = "2026-11-18T13:00:00Z", later = "2026-11-18T14:00:00Z";
-  expect(webhookBad({ stream: "platform", lastOkAt: null, lastRefusedAt: null })).toBe(true);
-  expect(webhookBad({ stream: "platform", lastOkAt: ok, lastRefusedAt: null })).toBe(false);
-  expect(webhookBad({ stream: "connect", lastOkAt: ok, lastRefusedAt: later })).toBe(true);
-  expect(webhookBad({ stream: "connect", lastOkAt: later, lastRefusedAt: ok })).toBe(false);
+it("flags a webhook endpoint that never accepted an event, or none for a week, but not for a refusal anyone can send", () => {
+  const now = Date.parse("2026-11-18T14:00:00Z");
+  const beat = (lastOkAt: string | null, lastRefusedAt: string | null = null) =>
+    ({ stream: "connect" as const, lastOkAt, lastRefusedAt, lastRefusal: lastRefusedAt ? "bad_signature" as const : null });
+  expect(webhookBad(beat(null), now)).toBe(true);
+  expect(webhookBad(beat("2026-11-17T14:00:00Z"), now)).toBe(false);
+  expect(webhookBad(beat("2026-11-10T13:00:00Z"), now)).toBe(true);
+  expect(webhookBad(beat("2026-11-17T14:00:00Z", "2026-11-18T13:59:00Z"), now)).toBe(false);
 });

@@ -111,7 +111,8 @@ export default async function AdminPage() {
         users={userRows}
         restaurantOptions={restaurantOptions}
         plans={(await allPlans()).map(p => p.plan)}
-        health={await readPlatformHealth()}
+        // One failed count must not take the console down with it.
+        health={await readPlatformHealth().catch(err => { console.error("admin health", err); return null; })}
         prices={await adminPlanPrices()}
       />
     </ConfirmProvider>

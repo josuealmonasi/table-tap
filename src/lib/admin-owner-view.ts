@@ -23,6 +23,13 @@ export interface OwnerView {
 
 const RECENT_ORDERS = 15;
 
+/** Whether the restaurant exists: a visit to one that does not is not recorded as a view. */
+export async function restaurantExists(restaurantId: string): Promise<boolean> {
+  const { data, error } = await createAdminClient().from("restaurants").select("id").eq("id", restaurantId).maybeSingle();
+  if (error) throw error;
+  return Boolean(data);
+}
+
 /**
  * Records that a platform admin opened a restaurant's owner view, before
  * anything is read. Every use is logged; if the record cannot be written the
