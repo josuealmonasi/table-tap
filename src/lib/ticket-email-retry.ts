@@ -31,12 +31,13 @@ export function ticketOutcome(result: MailResult): TicketOutcome {
 
 /** The outbox update for a group after one attempt, given its rows' attempt count. */
 export function outboxPatch(result: TicketOutcome, attempts: number, now = Date.now()): Record<string, unknown> {
-  if ((result.outcome === "unconfigured" || (result.outcome === "failed" && result.retryable)) && attempts < TICKET_EMAIL_MAX_ATTEMPTS) {
+  // Missing mail configuration is a retryable failure like any other.
+  if (result.outcome === "unconfigured") result = { outcome: "failed", retryable: true, reason: "unconfigured" };
+  if (result.outcome === "failed" && result.retryable && attempts < TICKET_EMAIL_MAX_ATTEMPTS) {
     const wait = BACKOFF_MS[Math.min(Math.max(attempts, 1), BACKOFF_MS.length) - 1];
     return { claimed_at: null, claim: null, next_attempt_at: new Date(now + wait).toISOString(),
-      failure_reason: result.outcome === "unconfigured" ? "unconfigured" : result.reason.slice(0, 300) };
+      failure_reason: result.reason.slice(0, 300) };
   }
-  if (result.outcome === "unconfigured") result = { outcome: "failed", retryable: true, reason: "unconfigured" };
   const reason = result.outcome !== "failed" ? null
     : `${result.retryable ? "retries exhausted" : "refused"}: ${result.reason}`.slice(0, 300);
   return { finished_at: new Date(now).toISOString(), outcome: result.outcome, mail_body: null, failure_reason: reason };
