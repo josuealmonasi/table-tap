@@ -32,6 +32,12 @@ export async function middleware(request: NextRequest) {
   const carry = () => {
     const headers = new Headers(request.headers);
     headers.set("content-security-policy", csp);
+    // Mail clients POST the public link; opening that same link must still show the confirmation page.
+    if (request.method === "POST" && request.nextUrl.pathname === "/tickets/stop") {
+      const target = request.nextUrl.clone();
+      target.pathname = "/api/tickets/stop";
+      return NextResponse.rewrite(target, { request: { headers } });
+    }
     return NextResponse.next({ request: { headers } });
   };
 

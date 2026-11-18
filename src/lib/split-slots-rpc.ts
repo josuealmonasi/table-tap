@@ -30,12 +30,13 @@ const refusals: Record<string, string> = {
   reserved: "splitSlotPaying", paid: "splitSlotPaid", below_minimum: "splitCombineSlots",
   conflict: "splitRequestChanged", busy: "splitAlready", nothing: "nothingToSplit", currency: "mixedCurrencies",
   gone: "splitGone", forbidden: "forbidden", invalid: "invalidRequest", paying: "splitBillPaying",
+  split_disabled: "splitDisabled",
 };
 /** Keep the writer's refusal: a generic failure leaves a cashier guessing about cash. */
 export async function splitResponse(result: SplitOutcome, accepted: string[]): Promise<NextResponse> {
   if (accepted.includes(result.outcome)) return NextResponse.json({ ok: true, ...result });
   const key = refusals[result.outcome];
   if (!key) return await apiError("apiErr.generic", 503);
-  return await apiError(`apiErr.${key}`, result.outcome === "forbidden" ? 403 : result.outcome === "invalid" ? 400 : 409,
+  return await apiError(`apiErr.${key}`, result.outcome === "forbidden" || result.outcome === "split_disabled" ? 403 : result.outcome === "invalid" ? 400 : 409,
     undefined, { ...result, code: result.outcome });
 }

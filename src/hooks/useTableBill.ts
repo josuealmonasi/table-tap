@@ -39,7 +39,7 @@ export function useTableBill(
   const [dividing, setDividing] = useState(false);
   const [loading, setLoading] = useState(false);
 
-  const reload = useCallback(async () => {
+  const read = useCallback(async (signal?: AbortSignal) => {
     if (!tableId) return;
     setLoading(true);
     // Our own sitting, so a bill we opened stays ours to settle.
@@ -50,7 +50,7 @@ export function useTableBill(
     // poll hid the bill under a diner who owed it and asked them if they
     // wanted a receipt for paying it.
     try {
-      const r = await fetch(`/api/bill?restaurantId=${restaurantId}&tableId=${tableId}${mine}&own=${encodeURIComponent(myOrderIds(restaurantId).join(","))}`);
+      const r = await fetch(`/api/bill?restaurantId=${restaurantId}&tableId=${tableId}${mine}&own=${encodeURIComponent(myOrderIds(restaurantId).join(","))}`, { signal });
       if (r.status === 403) { setOrders(null); return; }
       if (!r.ok) return;
       const d = await r.json();
@@ -64,17 +64,20 @@ export function useTableBill(
       setLoading(false);
     }
   }, [restaurantId, tableId]);
+  // Callers get a reload that takes no argument: one wired to a click must
+  // never hand its event to fetch as the abort signal.
+  const reload = useCallback(() => read(), [read]);
 
   useEffect(() => {
     // While the bill is open on screen, poll: a manager can apply a promotion
     // to it from their side, and the diner should watch the amount drop rather
     // than be told about it. The route's limit is sized from this interval,
     // for every phone behind the room's address (see poll.ts).
-    const poll = pollAfterSettle(reload, watching ? BILL_POLL_MS : null, {
+    const poll = pollAfterSettle(read, watching ? BILL_POLL_MS : null, {
       refreshOnVisible: true, refreshOnFocus: true,
     });
     return () => poll.stop();
-  }, [reload, watching]);
+  }, [read, watching]);
 
   return {
     // Which of these are "mine" is read at render: the phone may have placed an

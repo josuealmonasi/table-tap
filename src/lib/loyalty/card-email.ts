@@ -21,14 +21,12 @@ export function maskEmail(email: string): string {
 export type SetEmailResult =
   | { outcome: "saved"; email: string }
   | { outcome: "removed" }
-  | { outcome: "taken"; suffix: string }
   | { outcome: "unknown" };
 
 /**
  * Link, replace or remove a card's address, inside one restaurant. A new
  * address gets a new "stop" link secret, so an old email's link cannot remove
- * the new one. An address already on another card of this restaurant is
- * refused with that card's last four, so staff can use that card instead.
+ * the new one. Each card may use the same address independently.
  */
 export async function setCardEmail(restaurantId: string, code: string, email: string | null, setBy: string): Promise<SetEmailResult> {
   const db = createAdminClient();
@@ -37,11 +35,6 @@ export async function setCardEmail(restaurantId: string, code: string, email: st
     : { email: null, email_consent_at: null, email_notice_version: null, email_set_by: null, email_unsubscribe: null };
   const { data, error } = await db.from("loyalty_cards").update(patch)
     .eq("restaurant_id", restaurantId).eq("code", code).select("id").maybeSingle();
-  if (error?.code === "23505" && email) {
-    const { data: other } = await db.from("loyalty_cards").select("code")
-      .eq("restaurant_id", restaurantId).eq("email", email).maybeSingle();
-    return { outcome: "taken", suffix: String(other?.code ?? "").slice(-4) };
-  }
   if (error) throw new Error(`Could not save the card's email: ${error.message}`);
   if (!data) return { outcome: "unknown" };
   return email ? { outcome: "saved", email } : { outcome: "removed" };

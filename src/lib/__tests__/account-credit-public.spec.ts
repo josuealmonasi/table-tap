@@ -1,10 +1,11 @@
 import { expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
+const state = vi.hoisted(() => ({ email: "guest@example.com" as string | null }));
 vi.mock("@/lib/rate-limit", () => ({ clientKey: () => "client", isRateLimited: async () => false }));
 vi.mock("@/lib/mail", () => ({ mailConfigured: () => false }));
 vi.mock("@/lib/account-checkout-state", () => ({ unresolvedAccounts: async () => new Set() }));
 vi.mock("@/lib/accounts-server", () => ({
-  accountByCode: async () => ({ id: "account", restaurant_id: "restaurant", name: "Guest", status: "open" }),
+  accountByCode: async () => ({ id: "account", restaurant_id: "restaurant", name: "Guest", status: "open", email: state.email }),
   statementOf: async () => ({ owed: 40, currency: "MXN", balances: [], payments: [], returns: [], chargedBy: { order: "private@test" },
     days: [{ day: "2026-11-10", total: 40, charges: [{ orderId: "order", at: "2026-11-10T12:00:00Z", total: 40, lines: [], tableLabel: null,
       credits: [{ at: "2026-11-10T13:00:00Z", amount: 10, currency: "MXN", actor: "private@test", reason: "error", note: "private dispute" }] }] }] }),
@@ -18,4 +19,13 @@ it("public statements explicitly expose credit amount/date/currency only", async
   expect(response.status).toBe(200); const data = await response.json();
   expect(data.days[0].charges[0].credits).toEqual([{ at: "2026-11-10T13:00:00Z", amount: 10, currency: "MXN" }]);
   expect(JSON.stringify(data)).not.toMatch(/private|orderId|chargedBy|actor|reason|note/);
+});
+
+it("exposes only whether the account has an email", async () => {
+  for (const email of ["guest@example.com", null]) {
+    state.email = email;
+    const data = await (await GET(new NextRequest("https://test/api/account?c=123456789ABC"))).json();
+    expect(data.hasEmail).toBe(Boolean(email));
+    expect(JSON.stringify(data)).not.toContain("guest@example.com");
+  }
 });

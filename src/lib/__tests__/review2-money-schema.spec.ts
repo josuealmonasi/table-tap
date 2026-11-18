@@ -30,13 +30,32 @@ it.each([["collect_table_reviewed_v1", "written"], ["collect_split_slots_v1", "c
     expect(fn).toContain("where restaurant_id = p_restaurant");
     if (name === "collect_split_slots_v1") {
       expect(fn).toContain("where id = p_split and restaurant_id = p_restaurant and model_version = 2");
-      expect(fn).toContain("id = any((select order_ids from bill_splits");
+      expect(fn).toContain("select order_ids::uuid[] into v_orders from bill_splits");
+      expect(fn).toContain("where restaurant_id = p_restaurant and id = any(v_orders)");
     } else {
       expect(fn).toContain("table_id = p_table and currency = p_currency");
       expect(fn).toContain("status not in ('cancelled','pending_payment')");
     }
   },
 );
+it.each(["settle_orders_v2", "collect_table_reviewed_v1", "collect_split_slots_v1"])(
+  "audit #648 (server F2): %s locks its rows in id order and rewrites only a changed ticket choice", name => {
+    const fn = body(name);
+    const lock = fn.indexOf("public.lock_restaurant_money(p_restaurant)");
+    const rows = fn.indexOf("order by id for update");
+    const flag = fn.indexOf("update orders set ticket_email_skip");
+    expect(rows).toBeGreaterThan(lock); expect(flag).toBeGreaterThan(rows);
+    // Every rewrite fires the kitchen-board and audit triggers.
+    expect(fn.slice(flag, fn.indexOf(";", flag))).toContain("and ticket_email_skip is distinct from p_skip_ticket_email");
+    // The row lock sits outside the subtransaction a refused outcome rolls back.
+    if (name !== "settle_orders_v2") expect(rows).toBeLessThan(fn.indexOf("\n  begin\n"));
+  },
+);
+it("audit #648: a split refused because splitting is off says so, never \"forbidden\"", () => {
+  const fn = body("start_bill_split_v2");
+  expect(fn).toContain("not split_enabled) then\n    return jsonb_build_object('outcome', 'split_disabled');");
+  expect(fn).not.toContain("not split_enabled) then\n    return jsonb_build_object('outcome', 'forbidden');");
+});
 it("N1/N7: required overloads preserve old signatures and service-only grants", () => {
   for (const signature of [
     "settle_orders_v2(uuid, uuid[], text, text, jsonb, numeric, text, boolean)",

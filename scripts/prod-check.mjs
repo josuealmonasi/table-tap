@@ -20,6 +20,7 @@
 
 import pg from "pg";
 import { readFile } from "node:fs/promises";
+import { schedulerHealth } from "../src/lib/recovery/health.mjs";
 
 // Which menu to prod. A hardcoded id survives right up until production data
 // is reseeded, and then this check reports a 404 that says nothing about
@@ -120,6 +121,25 @@ async function liveMenuUrl() {
 }
 
 let failed = false;
+
+console.log("Recovery scheduler\n");
+console.log(`  ${schedulerHealth(false, null, false).status}`);
+try {
+  const env = await envFrom(".env.production.local");
+  const client = new pg.Client({ connectionString: env.DATABASE_URL, ssl: { rejectUnauthorized: false } });
+  await client.connect();
+  let last;
+  try {
+    const { rows } = await client.query("select at from public.recovery_runs where source = 'database' and ok order by at desc limit 1");
+    last = rows[0]?.at?.toISOString() ?? null;
+  } finally { await client.end(); }
+  const health = schedulerHealth(true, last, false);
+  if (!health.ok) failed = true;
+  console.log(`  ${health.ok ? "ok" : "FAILED"}       production: ${health.status}`);
+} catch (error) {
+  failed = true;
+  console.log(`  FAILED   production scheduler: ${error.message}`);
+}
 
 const [dev, prod] = await Promise.all([
   envFrom(".env.development.local").then(e => snapshot(e.DATABASE_URL)),

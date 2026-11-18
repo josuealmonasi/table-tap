@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { apiError } from "@/lib/api-error";
 import { jsonBody } from "@/lib/json-body";
 import { TERMS_VERSION } from "@/lib/legal";
+import { TERMS_TEXT_HASH } from "@/lib/terms-evidence";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { clientKey, isRateLimited } from "@/lib/rate-limit";
 import { sendSignupConfirmation } from "@/lib/signup-confirmation";
@@ -71,25 +72,21 @@ export async function POST(req: NextRequest) {
     return await apiError("apiErr.signupFailed", 400);
   }
 
-  const { error: restaurantErr } = await admin
-    .from("restaurants")
-    .insert({
-      name: restaurantName.trim(),
-      owner_id: created.user.id,
-      owner_signup_pending: true,
-      // A month of everything, no card. Sold on the top self-serve tier
-      // because a restaurant deciding whether this is worth paying for should
-      // be deciding about the product, not about a cut-down version of it.
-      // Confirmation starts these 30 days afresh: mail delays must not spend the trial.
-      plan: TRIAL_PLAN,
-      plan_status: "trialing",
-      // What they agreed to and when. Versioned, because "they accepted" is
-      // only worth something if we can say which document they accepted.
-      terms_version: TERMS_VERSION,
-      terms_accepted_at: new Date().toISOString(),
-      terms_accepted_email: email,
-      trial_ends_at: new Date(Date.now() + TRIAL_DAYS * 86_400_000).toISOString(),
-    });
+  // A month of everything, no card. Sold on the top self-serve tier
+  // because a restaurant deciding whether this is worth paying for should
+  // be deciding about the product, not about a cut-down version of it.
+  // Confirmation starts these 30 days afresh: mail delays must not spend the trial.
+  // What they agreed to and when. Versioned, because "they accepted" is
+  // only worth something if we can say which document they accepted.
+  const { error: restaurantErr } = await admin.rpc("signup_restaurant_with_terms_v1", {
+    p_name: restaurantName.trim(),
+    p_user: created.user.id,
+    p_email: email,
+    p_version: TERMS_VERSION,
+    p_text_hash: TERMS_TEXT_HASH,
+    p_plan: TRIAL_PLAN,
+    p_trial_ends_at: new Date(Date.now() + TRIAL_DAYS * 86_400_000).toISOString(),
+  });
 
   if (restaurantErr) {
     // Roll back the orphaned user so the email is free to try again.

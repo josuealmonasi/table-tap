@@ -87,7 +87,8 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   const { data: restaurant, error: settingError } = await db.from("restaurants")
     .select("split_enabled").eq("id", restaurantId).maybeSingle();
   if (settingError || !restaurant) return await apiError("apiErr.verifyOrders", 503);
-  if (restaurant.split_enabled === false) return await apiError("apiErr.forbidden", 403);
+  // Said as what it is: a diner is not "without permission" (audit of #648).
+  if (restaurant.split_enabled === false) return await apiError("apiErr.splitDisabled", 403, undefined, { code: "split_disabled" });
 
   // The sitting has to be this table's, and open. Otherwise a stale id from a
   // phone that sat here last night could start a split on tonight's diners.

@@ -7,7 +7,12 @@ import { createClient } from "@/lib/supabase/client";
 import { useT } from "@/lib/i18n/context";
 
 /** Email + password sign in for restaurant staff. Redirects to /dashboard. */
-export default function LoginForm() {
+interface LoginFormProps {
+  /** A checked place to go after signing in (`safeLoginNext`); the dashboard otherwise. */
+  next?: string | null;
+}
+
+export default function LoginForm({ next = null }: LoginFormProps) {
   const t = useT();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -27,7 +32,7 @@ export default function LoginForm() {
         return;
       }
       // Hard navigate so the server picks up the fresh auth cookies.
-      window.location.assign("/signup/complete");
+      window.location.assign(next ?? "/signup/complete");
     } catch {
       setError(t("auth.unavailable"));
       setLoading(false);

@@ -39,7 +39,8 @@ it("S21 still closes a fully collected table after a failed close without record
   const result = await table.POST(request({ tableId: "t", settlement: "cash", expected: 0, currency: "USD", ref: "close" }));
   expect(result.status).toBe(200);
   expect(mocks.record).not.toHaveBeenCalled();
-  expect(mocks.close).toHaveBeenCalledWith(expect.anything(),"t","cash","USD");
+  // The close is the collection here, so it carries the ticket choice (audit of #648).
+  expect(mocks.close).toHaveBeenCalledWith(expect.anything(),"t","cash","USD",false);
 });
 
 it("L1: a table collected without the balance its screen showed records nothing and asks for a refresh", async () => {

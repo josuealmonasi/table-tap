@@ -31,8 +31,11 @@ const NOT_DEMO_DATA = new Set([
   "plan_price_changes", // real admin schedules only; demo data must not change prices
   "plan_price_notices", // a fake queue must never send a real notice
   "restaurant_accounting_records", // only real deletions retain books; the demo stays live
+  "terms_acceptances", // the seeded restaurant acceptance fills this through its trigger
   "profiles", // created with the logins
   "rate_limits", // throttling counters
+  "recovery_nonces", // replay protection for real scheduled calls
+  "recovery_runs", // health of the real scheduler, never seeded
   "menus",
   "categories",
   "menu_items",

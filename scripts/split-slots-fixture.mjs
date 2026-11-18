@@ -64,7 +64,14 @@ export async function splitSlotFixture(admin, restaurantId, { currency = "MXN", 
       table_label: `split-${ref.slice(0, 8)}`, items: [], subtotal: totalCents / 100, total: totalCents / 100,
       tip: 0, service_fee: 0, tax_pct: 0, discount: 0, status: "received", paid: false, currency, note: "split-slot-fixture" }));
     if (start) await begin();
-    return { scope, startBody, body, begin, hold, rpc, cleanup, orderId, get splitId() { return splitId; },
+    // What a shared read-only borrower must leave as it found it: the order,
+    // its parts and its receipts (run-fixtures names the first case that did not).
+    const fingerprint = async () => JSON.stringify([
+      await checked(admin.from("orders").select("*").eq("id", orderId).maybeSingle()),
+      splitId ? await checked(admin.from("bill_split_slots").select("*").eq("split_id", splitId).order("share_no")) : [],
+      await checked(admin.from("payments").select("id").eq("session_id", sessionId).order("id")),
+    ]);
+    return { scope, startBody, body, begin, hold, rpc, cleanup, fingerprint, orderId, get splitId() { return splitId; },
       slots: () => checked(admin.from("bill_split_slots").select("*").eq("split_id", splitId).order("share_no")),
       receipts: () => checked(admin.from("payments").select("*").eq("session_id", sessionId)) };
   } catch (error) { await cleanup(); throw error; }

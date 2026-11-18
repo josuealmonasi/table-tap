@@ -110,13 +110,6 @@ it("editing the email clears the previous consent", async () => {
   await act(async () => charge.charge("cash"));
   expect(vi.mocked(fetch).mock.calls.some(([url, init]) => url === "/api/loyalty/card-email" && init?.method === "POST")).toBe(false);
 });
-it("a duplicate card email explains which card to use and still charges", async () => {
-  await withoutEmail(); await act(async () => check("cardEmail.staffConsent")!.click());
-  const original = vi.mocked(fetch).getMockImplementation()!;
-  vi.mocked(fetch).mockImplementation((url, init) => url === "/api/loyalty/card-email" ? Promise.resolve(Response.json({ outcome: "taken", suffix: "ABCD" }, { status: 409 })) : original(url, init));
-  await act(async () => charge.charge("cash"));
-  expect(post()).toBeTruthy(); expect(s.toast.mock.calls.some(([text]) => text.includes("···· ABCD"))).toBe(true);
-});
 it("offline charging preserves the skip choice without attempting an email save", async () => {
   await withoutEmail(); await act(async () => check("cardEmail.staffConsent")!.click());
   await act(async () => details.setSkipTicketEmail(true));
