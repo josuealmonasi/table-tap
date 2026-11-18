@@ -50,9 +50,20 @@ runs:
     # makes the menu bucket). The rest only cost pull time. The build job
     # starts the same set: `supabase status` reports the API URL and keys the
     # build inlines only while the API gateway is up.
+    # Retried: a hosted runner sometimes still holds port 54322 from a previous
+    # job ("failed to bind host port 0.0.0.0:54322: address already in use").
+    # That failed #649 and #653's roles gate on 2026-11-17 with no code at fault,
+    # so a red gate there meant nothing. Stop what half-started, wait, try again.
     - name: Start a throwaway Supabase
       shell: bash
-      run: supabase start --workdir ci -x studio,imgproxy,edge-runtime,logflare,vector,supavisor,postgres-meta,mailpit
+      run: |
+        for attempt in 1 2 3; do
+          supabase start --workdir ci -x studio,imgproxy,edge-runtime,logflare,vector,supavisor,postgres-meta,mailpit && exit 0
+          echo "::warning::supabase start failed (attempt $attempt); stopping and retrying"
+          supabase stop --no-backup --workdir ci || true
+          sleep $((attempt * 15))
+        done
+        exit 1
 
     - name: Point the gates at it
       shell: bash

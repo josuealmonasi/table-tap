@@ -11,7 +11,7 @@ const state = vi.hoisted(() => ({
   accountAmount: 100,
   orderFee: 0.75,
   shareNo: 1,
-  prior: null as { url: string } | null,
+  prior: null as { url: string; metadata: { settle_tip: string }; amount_total: number } | null,
   reserve: vi.fn(async () => ({ id: null, cents: 0 })),
   record: vi.fn<(...args: unknown[]) => Promise<void>>(async () => {}),
   create: vi.fn(async () => ({ id: "cs_test", url: "https://stripe.test" })),
@@ -33,7 +33,8 @@ vi.mock("@/lib/diner-attempt", () => ({
   openDinerAttempt: async (_stripe: unknown, params: unknown, quote: unknown) => {
     const session = await (state.create as (...args: unknown[]) => Promise<unknown>)(params, {});
     await state.record(session, quote, () => {});
-    return session;
+    const p = params as { metadata: { settle_tip?: string }; line_items: { price_data: { unit_amount: number } }[] };
+    return { ...session as object, metadata: p.metadata, amount_total: p.line_items[0].price_data.unit_amount };
   },
 }));
 vi.mock("@/lib/diner-checkout", () => ({ recordDinerCheckout: state.record }));
@@ -123,10 +124,10 @@ it("E11 a valid older sitting's displayed debt remains payable", async () => {
 });
 
 it.each([["bill", bill.POST], ["split", split.POST], ["account", account.POST]] as const)("E8 %s reuses its open payment page before reserving another fee", async (_name, post) => {
-  state.prior = { url: "https://stripe.test/existing" };
+  state.prior = { url: "https://stripe.test/existing", metadata: { settle_tip: "0" }, amount_total: 5000 };
   const response = await post(request());
   expect(response.status).toBe(200);
-  expect(await response.json()).toEqual(state.prior);
+  expect(await response.json()).toEqual({ url: state.prior.url });
   expect(state.create).not.toHaveBeenCalled();
   expect(state.reserve).not.toHaveBeenCalled();
 });
