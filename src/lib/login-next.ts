@@ -6,7 +6,7 @@
  * checkout they were sent to pay (review 2026-11-17, finding 6). Anything else
  * is refused, so `?next=` can never point sign-in at another site or page.
  */
-const ALLOWED = /^\/api\/billing\/assigned\?plan=[a-z]+&until=\d{4}-\d{2}-\d{2}$/;
+const ALLOWED = /^\/api\/billing\/assigned\?plan=[a-z]+&a=[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
 export function safeLoginNext(value: unknown): string | null {
   return typeof value === "string" && ALLOWED.test(value) ? value : null;

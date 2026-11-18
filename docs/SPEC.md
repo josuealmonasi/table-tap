@@ -58,15 +58,16 @@ the restaurant. A dialog asks how the tier is paid (`billing`):
   ending on a pay-by date (default 7 days, at most 60), so whatever ends trials
   drops an unpaid one to Carta. Assigning runs under the billing lock and
   closes any Checkout the owner left open. The owner gets an email linking to
-  `GET /api/billing/assigned?plan=<tier>&until=<pay-by day>`, which opens
+  `GET /api/billing/assigned?plan=<tier>&a=<assignment id>`, which opens
   Stripe Checkout only for that exact assignment, checked again inside the
-  billing lock (`assertStillAssigned`): same tier and pay-by day, unpaid, not
-  expired, nothing live (Grupo included, though it is not self-serve); anything
+  billing lock (`assertStillAssigned`): same tier and `tier_assignment_id`,
+  unpaid, not expired, nothing live (Grupo included, though it is not self-serve); anything
   else lands on the Plan screen. Signed out, sign-in returns to the link
   (`/login?next=`, that link shape only). Paying replaces the trial with the
   subscription.
-- `free` — the original assignment (`moveRestaurantPlan`): `active`, trial
-  cleared, nothing charged; refused while a live subscription would write
+- `free` — the original assignment (`moveRestaurantPlan`), under the billing
+  lock after closing open Checkouts: `active`, trial and assignment id cleared,
+  nothing charged; refused while a live subscription would write
   Stripe's plan back over it.
 Carta costs nothing, so it is only ever assigned free. Every assignment is
 written in the restaurant's activity log with its billing mode.
