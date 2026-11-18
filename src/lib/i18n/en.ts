@@ -3164,6 +3164,9 @@ votes: "Votes",
     confirm: "Schedule change",
     scheduled: "{plan} price change scheduled. Owners will be told.",
   },
+  trial: {
+    rfcUsed: "Saved. This RFC already used its free trial on another account, so your restaurant moves to Carta, the free plan. You can choose a plan under Plan.",
+  },
 };
 
 export type Messages = typeof en;

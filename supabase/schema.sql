@@ -10249,6 +10249,40 @@ alter table platform_admin_audit enable row level security;
 revoke all on platform_admin_audit from anon, authenticated, public, service_role;
 grant select, insert on platform_admin_audit to service_role;
 
+-- One free trial per RFC. A restaurant's RFC is recorded here once it has had
+-- a trial (no FK: it outlives the restaurant, which is the point). Saving an
+-- RFC that another restaurant already used for a trial ends this one's trial
+-- and moves it to Carta, exactly as an expired trial would. Never touches a
+-- paying restaurant or an admin-assigned pay-by window (tier_assignment_id).
+create table if not exists trial_rfcs (
+  rfc text primary key,
+  restaurant_id uuid not null,
+  claimed_at timestamptz not null default now()
+);
+alter table trial_rfcs enable row level security;
+revoke all on trial_rfcs from anon, authenticated, public, service_role;
+grant select on trial_rfcs to service_role;
+
+create or replace function public.one_trial_per_rfc() returns trigger
+language plpgsql security definer set search_path = public as $$
+begin
+  if new.rfc is null or new.rfc is not distinct from old.rfc then return new; end if;
+  if new.stripe_subscription_id is not null or new.tier_assignment_id is not null then return new; end if;
+  if exists (select 1 from trial_rfcs where rfc = new.rfc and restaurant_id <> new.id) then
+    if new.plan_status = 'trialing' then
+      new.plan := 'carta'; new.plan_status := 'active'; new.trial_ends_at := null;
+      new.subscription_sync_revision := coalesce(new.subscription_sync_revision, 0) + 1;
+    end if;
+  elsif new.trial_ends_at is not null then
+    insert into trial_rfcs (rfc, restaurant_id) values (new.rfc, new.id) on conflict (rfc) do nothing;
+  end if;
+  return new;
+end; $$;
+revoke all on function public.one_trial_per_rfc() from public, anon, authenticated;
+drop trigger if exists restaurants_one_trial_per_rfc on restaurants;
+create trigger restaurants_one_trial_per_rfc before update of rfc on restaurants
+  for each row execute function public.one_trial_per_rfc();
+
 -- When each Stripe webhook endpoint last accepted a signed event, and last
 -- refused one. A missing or wrong signing secret fails silently apart from a
 -- log line; this is what lets the admin panel's health show it.

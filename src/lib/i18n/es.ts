@@ -3147,4 +3147,7 @@ votes: "Votos",
     confirm: "Programar cambio",
     scheduled: "Cambio de precio de {plan} programado. Los dueños recibirán el aviso.",
   },
+  trial: {
+    rfcUsed: "Guardado. Este RFC ya usó su prueba gratis en otra cuenta, así que tu restaurante pasa a Carta, el plan gratuito. Puedes elegir un plan en Plan.",
+  },
 };
