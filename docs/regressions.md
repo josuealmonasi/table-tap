@@ -8298,4 +8298,10 @@ the platform admin. They now use `@tabletap.shop`, which the owner holds;
 production's 18 logins were renamed in place (same ids, passwords and roles,
 `loop/tools/rename-login-domain.cjs`). Check: `invariants/operations.spec.ts`
 (seeded logins) and a DNS look at any new login domain before using it.
+## A trial ended with no email (2026-11-18)
+
+The only warning that a free month was ending was a banner inside a dashboard
+the owner might not open that week, so Carta arrived unannounced. The recovery
+job `trial_reminders` now emails the owner three days before, once per trial
+end. Check: `recovery/__tests__/trial-reminders.spec.ts`.
 

@@ -13,6 +13,7 @@ import { recoverDisputes } from "@/lib/recovery/disputes";
 import { recoverPriceNotices } from "@/lib/recovery/price-notices";
 import { recoverPriceMoves, recoverPriceCatalogue } from "@/lib/recovery/price-moves";
 import { recoverPriceRecipients } from "@/lib/recovery/price-recipients";
+import { recoverTrialReminders } from "@/lib/recovery/trial-reminders";
 import { signedRecoveryAuthorized } from "@/lib/recovery/signed-auth";
 import { schedulerHealth } from "@/lib/recovery/health.mjs";
 import { purgeAccounting } from "@/lib/recovery/accounting-purge";
@@ -58,7 +59,8 @@ async function recover(request: Request) {
   const priceMoves = priceNotices.then(() => isolateJob("price_moves", () => recoverPriceMoves(recoveryContext())));
   const priceCatalogue = isolateJob("price_catalogue", () => recoverPriceCatalogue(recoveryContext()));
   const accounting = isolateJob("accounting", () => purgeAccounting(recoveryContext()));
-  const jobs: Record<string, RecoveryJob> = { stock: recoverStock, refunds: recoverRefunds, fees: recoverFees, subscriptions: recoverSubscriptions, disputes: recoverDisputes };
+  const jobs: Record<string, RecoveryJob> = { stock: recoverStock, refunds: recoverRefunds, fees: recoverFees, subscriptions: recoverSubscriptions, disputes: recoverDisputes,
+    trial_reminders: recoverTrialReminders };
   const results: Record<string, RecoveryResult> = {};
   for (const [name, job] of Object.entries(jobs)) {
     // Each job gets its own deadline even when the previous provider failed.
