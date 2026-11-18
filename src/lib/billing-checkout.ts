@@ -7,11 +7,14 @@ import { restaurantBilling } from "@/lib/billing-state";
 import { BILLING_CURRENCY, checkoutPrice } from "@/lib/billing-price";
 import type { PlanLimits } from "@/lib/plan";
 import type { createAdminClient } from "@/lib/supabase/admin";
+import { assertStillAssigned, type AssignedTier } from "@/lib/billing-assigned";
 
 export async function startRestaurantBilling(
   db: ReturnType<typeof createAdminClient>,
   owner: { restaurantId: string; email: string },
   limits: PlanLimits, taken: number, origin: string,
+  /** Set by the emailed pay link: only the exact assignment it was sent for may open Checkout. */
+  assigned?: AssignedTier,
 ): Promise<{ url: string }> {
   return await withRestaurantBilling(db, owner.restaurantId, async operation => {
     const { restaurant, live, sessions, snapshot, exists } = await restaurantBilling(db, owner.restaurantId);
@@ -24,6 +27,7 @@ export async function startRestaurantBilling(
       if (error) throw new Error(`Billing customer recovery failed: ${error.message}`);
       restaurant.stripe_customer_id = recovered;
     }
+    if (assigned) await assertStillAssigned(db, owner.restaurantId, assigned, live.length);
     if (live.length > 1) throw new BillingError("apiErr.billingConflict");
     const subscription = live[0];
     if (subscription) {

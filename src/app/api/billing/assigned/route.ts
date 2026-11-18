@@ -20,22 +20,30 @@ export const runtime = "nodejs";
 // the Plan screen, which shows the restaurant where it stands.
 export async function GET(req: NextRequest): Promise<NextResponse> {
   const origin = siteOrigin(req);
-  const actor = await actingOwner();
-  if (!actor) return NextResponse.redirect(`${origin}/login`, 303);
   const plan = readPlanName(req.nextUrl.searchParams.get("plan"));
+  const until = req.nextUrl.searchParams.get("until") ?? "";
   const toPlanScreen = NextResponse.redirect(`${origin}/dashboard/plan`, 303);
-  if (!plan || plan === "carta") return toPlanScreen;
+  if (!plan || plan === "carta" || !/^\d{4}-\d{2}-\d{2}$/.test(until)) return toPlanScreen;
+  const actor = await actingOwner();
+  // Signed out, sign-in brings them back here (`safeLoginNext`), not to the
+  // dashboard: this link is what they were asked to pay (review finding 6).
+  if (!actor) {
+    const self = `/api/billing/assigned?plan=${plan}&until=${until}`;
+    return NextResponse.redirect(`${origin}/login?next=${encodeURIComponent(self)}`, 303);
+  }
 
   const db = createAdminClient();
   const { data: restaurant } = await db.from("restaurants")
     .select("plan, plan_status, stripe_subscription_id").eq("id", actor.restaurantId).maybeSingle();
+  // A cheap early answer; the binding check runs again inside the billing
+  // lock (`assertStillAssigned`), where nothing can change underneath it.
   if (!restaurant || restaurant.plan !== plan || restaurant.plan_status !== "trialing" || restaurant.stripe_subscription_id) {
     return toPlanScreen;
   }
   const limits = (await allPlans()).find(p => p.plan === plan);
   if (!limits) return toPlanScreen;
   try {
-    const { url } = await startRestaurantBilling(db, actor, limits, await foundersTaken(), origin);
+    const { url } = await startRestaurantBilling(db, actor, limits, await foundersTaken(), origin, { plan, until });
     return NextResponse.redirect(url, 303);
   } catch (err) {
     if (!(err instanceof BillingError)) console.error("assigned tier checkout failed", err);

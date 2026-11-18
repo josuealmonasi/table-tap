@@ -39,15 +39,21 @@ the restaurant. A dialog asks how the tier is paid (`billing`):
   single item moves to the new tier's Price with `proration_behavior: "none"`:
   nothing is charged or credited today, the period already paid stays as paid,
   and the next invoice is at the new price. The tier changes at once
-  (`applySubscription`). Refused for an overdue subscription (settle first)
-  and under the same billing lock as the owner's own checkout.
+  (`applySubscription`). Refused for an overdue subscription (settle first),
+  one already set to end (there is no next bill), and a non-monthly one
+  (Stripe would bill at once); under the same billing lock as the owner's own
+  checkout.
 - `payment_link` — no subscription. The tier starts now as the app's own trial
   ending on a pay-by date (default 7 days, at most 60), so whatever ends trials
-  drops an unpaid one to Carta. The owner gets an email linking to
-  `GET /api/billing/assigned?plan=<tier>`, which opens Stripe Checkout only for
-  the tier the restaurant was given and has not paid (Grupo included, though it
-  is not self-serve); anything else lands on the Plan screen. Paying replaces
-  the trial with the subscription.
+  drops an unpaid one to Carta. Assigning runs under the billing lock and
+  closes any Checkout the owner left open. The owner gets an email linking to
+  `GET /api/billing/assigned?plan=<tier>&until=<pay-by day>`, which opens
+  Stripe Checkout only for that exact assignment, checked again inside the
+  billing lock (`assertStillAssigned`): same tier and pay-by day, unpaid, not
+  expired, nothing live (Grupo included, though it is not self-serve); anything
+  else lands on the Plan screen. Signed out, sign-in returns to the link
+  (`/login?next=`, that link shape only). Paying replaces the trial with the
+  subscription.
 - `free` — the original assignment (`moveRestaurantPlan`): `active`, trial
   cleared, nothing charged; refused while a live subscription would write
   Stripe's plan back over it.
