@@ -1,3 +1,4 @@
+import { chooseDish } from "./layout-dish-choice.mjs";
 import { DIALOGS, TILL } from "./layout-paths.mjs";
 import { look } from "./browser-audit.mjs";
 import { navigate, observe, overlay, ready, trackData } from "./browser-ready.mjs";
@@ -52,6 +53,39 @@ export const OPEN = {
   },
 };
 
+// Inspect the actual menu, because the seed changes extras and offers on each
+// run. A quantity deal may need two or more units before both prices appear.
+async function openCrowdedDish(tab, phase) {
+  const selector = ".tt-item[role=button]";
+  const count = await tab.locator(selector).count();
+  const shapes = [];
+  async function open(index) {
+    await tab.locator(selector).nth(index).click();
+    await phase("readiness", () => overlay(tab, ".tt-detail-actions", true));
+  }
+  async function applyDeal() {
+    for (let n = 0; n < 12; n++) {
+      if (await tab.locator(".tt-detail-actions .tt-btn-price s").count()) return true;
+      if (!(await tab.locator(".tt-promo-callout").count())) return false;
+      await tab.locator(".tt-detail-actions .tt-stepper button").last().click();
+    }
+    return (await tab.locator(".tt-detail-actions .tt-btn-price s").count()) > 0;
+  }
+  for (let index = 0; index < count; index++) {
+    const name = await tab.locator(selector).nth(index).getAttribute("aria-label") ?? "";
+    await open(index);
+    const extras = await tab.locator(".tt-dish-extras .tt-chip").count();
+    const deal = await applyDeal();
+    shapes.push({ index, name, extras, deal });
+    await tab.keyboard.press("Escape");
+    await phase("readiness", () => overlay(tab, ".tt-detail-overlay", false));
+  }
+  const best = chooseDish(shapes);
+  if (!best) throw new Error("no dish to measure");
+  await open(best.index);
+  if (best.deal && !(await applyDeal())) throw new Error("dish deal no longer applies");
+}
+
 export async function dinerVisit({ ctx, tab, phase, log }, { lang, flow, base, r, table, anyOrder }) {
   // The language belongs to the restaurant, not the phone: the app starts in
   // Spanish no matter what and only the cookie changes it. Setting the browser
@@ -64,6 +98,7 @@ export async function dinerVisit({ ctx, tab, phase, log }, { lang, flow, base, r
   const pending = trackData(tab);
   await navigate(tab, start, phase, pending);
   for (const step of flow.steps) {
+    if (step.dishDetail) await openCrowdedDish(tab, phase);
     if (step.addToCart) {
       if (!(await tap(tab, lang === "es" ? "button[aria-label^='Agregar ']" : "button[aria-label^='Add ']"))) {
         throw new Error("could not find a dish to add");
