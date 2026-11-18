@@ -31,7 +31,7 @@ This receipt is not a tax invoice (CFDI). If you need one, ask the restaurant.
 
 You get this ticket because you linked this email to your Demo Bistro visit card. It is only used to send you your tickets.
 
-Stop emailing me my tickets:
+Stop emailing me tickets for this card:
 https://tabletap.test/tickets/stop?t=token"
 `;
 
@@ -83,7 +83,7 @@ Este recibo no es un comprobante fiscal (CFDI). Si necesitas factura, pídesela 
 
 Recibes este ticket porque vinculaste este correo a tu tarjeta de visitas de Demo Bistro. Solo se usa para enviarte tus tickets.
 
-Dejar de recibir mis tickets por correo:
+Dejar de recibir los tickets de esta tarjeta por correo:
 https://tabletap.test/tickets/stop?t=token"
 `;
 

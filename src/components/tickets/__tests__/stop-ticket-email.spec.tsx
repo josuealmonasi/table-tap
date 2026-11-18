@@ -15,10 +15,10 @@ beforeEach(() => {
 afterEach(async () => { await act(async () => root.unmount()); vi.unstubAllGlobals(); });
 it("never unsubscribes on page load, including a Strict Mode mount", async () => {
   await act(async () => root.render(<React.StrictMode><StopTicketEmail token={token} /></React.StrictMode>));
-  expect(fetch).not.toHaveBeenCalled(); expect(host.textContent).toContain("¿Dejar de recibir tus tickets por correo?");
+  expect(fetch).not.toHaveBeenCalled(); expect(host.textContent).toContain("¿Dejar de recibir los tickets de esta tarjeta por correo?");
   await act(async () => host.querySelector<HTMLButtonElement>("button")!.click());
   expect(JSON.parse(vi.mocked(fetch).mock.calls[0][1]!.body as string)).toEqual({ token });
-  expect(host.textContent).toContain("Ya no recibirás tickets de Cafe"); expect(host.querySelector("button")).toBeNull();
+  expect(host.textContent).toContain("Ya no recibirás tickets de esta tarjeta de Cafe"); expect(host.querySelector("button")).toBeNull();
 });
 it.each([null, "bad-token"])("a missing or invalid token makes no request: %s", async token => {
   await act(async () => root.render(<StopTicketEmail token={token} />));
