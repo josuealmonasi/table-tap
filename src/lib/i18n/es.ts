@@ -54,7 +54,7 @@ export const es: Messages = {
     saveOnCard: "Guardar en la tarjeta",
     saveFailed: "El correo no se guardó en la tarjeta. La venta sigue con su propio ticket.",
     stopTitle: "¿Dejar de recibir los tickets de esta tarjeta por correo?",
-    stopAction: "Dejar de recibir tickets de esta tarjeta",
+    stopAction: "Sí, dejar de recibirlos",
     stopped: "Ya no recibirás tickets de esta tarjeta de {restaurant} por correo.",
     stopMissing: "Este enlace ya no está disponible. Puedes pedir al restaurante que quite tu correo.",
     stopFailed: "No pudimos quitar tu correo. Intenta de nuevo.",

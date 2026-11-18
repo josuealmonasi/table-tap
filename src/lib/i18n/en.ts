@@ -52,7 +52,7 @@ export const en = {
     saveOnCard: "Save on the card",
     saveFailed: "The email was not saved on the card. This sale continues with its own ticket.",
     stopTitle: "Stop receiving tickets for this card by email?",
-    stopAction: "Stop receiving tickets for this card",
+    stopAction: "Yes, stop them",
     stopped: "You will no longer receive tickets for this card from {restaurant} by email.",
     stopMissing: "This link is no longer available. You can ask the restaurant to remove your email.",
     stopFailed: "We could not remove your email. Try again.",
