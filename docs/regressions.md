@@ -8281,3 +8281,11 @@ same business could take a free month again and again. A unique RFC would have
 blocked a legitimate second location; now a trial is once per RFC
 (`trial_rfcs`). Check: `one-trial-per-rfc.spec.ts`.
 
+## The privacy notice said the menu shows no fiscal data; it shows two (2026-11-18)
+
+The notice promised the restaurant's fiscal data "no se muestran en el menú",
+while `PlaceIdentity` shows the legal name and address on the menu and before
+paying, as consumer law expects. Two places that had to agree, and the legal one
+was the promise. It now names the two fields shown and why (terms 2026-11-18.2).
+Check: `invariants/place-identity.spec.ts`.
+
