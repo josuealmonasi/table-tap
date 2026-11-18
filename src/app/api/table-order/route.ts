@@ -1,4 +1,5 @@
 import { orderItemsWithRevenue } from "@/lib/order-line-revenue";
+import { suspensionRefusal } from "@/lib/restaurant-suspension";
 import { invalidatePublicMenu } from "@/lib/public-menu-cache";
 import { orderRequestScope } from "@/lib/order-request";
 import { NextRequest, NextResponse } from "next/server";
@@ -100,10 +101,13 @@ export async function POST(req: NextRequest) {
   // to price from the row rather than from what a screen last showed.
   const { data: restaurant } = await db
     .from("restaurants")
-    .select("id, currency, service_pct, service_enabled, tax_pct, timezone, low_stock_threshold, low_stock_alerts_enabled")
+    .select("id, currency, service_pct, service_enabled, tax_pct, timezone, low_stock_threshold, low_stock_alerts_enabled, suspended_at")
     .eq("id", actor.restaurantId)
     .maybeSingle();
   if (!restaurant) return await apiError("apiErr.restaurantNotFound", 404);
+  // A suspended restaurant takes no new orders; bills already open stay payable.
+  const suspended = await suspensionRefusal(restaurant.suspended_at);
+  if (suspended) return suspended;
 
   // Only what the restaurant is actually serving. A waiter should no more be
   // able to write down a dish from a menu that closed at lunch than a diner can

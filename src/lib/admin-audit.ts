@@ -6,7 +6,8 @@ import { jsonBody } from "@/lib/json-body";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 type Facts = Record<string, string | boolean | number | null>;
-type Action = "login.create" | "login.update" | "login.delete" | "restaurant.delete" | "restaurant.plan" | "plan.price";
+type Action = "login.create" | "login.update" | "login.delete" | "restaurant.delete" | "restaurant.plan" | "plan.price"
+  | "restaurant.suspend" | "restaurant.unsuspend";
 export interface AdminAuditContext { targetId?: string }
 type Handler = (req: NextRequest, audit: AdminAuditContext) => Promise<Response>;
 type Db = ReturnType<typeof createAdminClient>;

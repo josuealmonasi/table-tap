@@ -8039,3 +8039,14 @@ other; `review2-deferred-probes.spec.ts` keeps the original regression.
   keeps it, and only that exact link shape (`safeLoginNext`).
 
 Checks: `admin-tier.spec.ts`, `billing-assigned.spec.ts`.
+
+## Suspending a restaurant without losing money already collected (2026-11-18)
+
+A suspension refuses new sales on checkout, table orders and POS through one
+shared answer. The POS case is two places that must agree: refusing every POS
+request would also have refused a sale the till had already collected offline,
+and the device would have discarded money that is in the drawer. A collected
+sale from before the suspension is recorded; one from after is kept on the
+device as held. Checks: `pos-atomic.spec.tsx` (both collected cases),
+`cart-quantity-routes.spec.ts` (all three routes refuse and write nothing; the
+table-order case fails without its check), `admin-suspend.spec.ts`.

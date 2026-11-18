@@ -1437,6 +1437,13 @@ end $$;
 alter table restaurants add column if not exists plan_status text;
 -- Separate from billing health: a suspended restaurant must not start new sales.
 alter table restaurants add column if not exists suspended_at timestamptz;
+-- Why and by whom, shown to the admin and in the restaurant's own banner.
+alter table restaurants add column if not exists suspended_reason text;
+alter table restaurants add column if not exists suspended_by text;
+alter table restaurants drop constraint if exists restaurants_suspension_reason;
+alter table restaurants add constraint restaurants_suspension_reason check (
+  (suspended_at is null and suspended_reason is null and suspended_by is null)
+  or (suspended_at is not null and suspended_reason in ('non_payment', 'abuse', 'owner_request', 'other') and suspended_by is not null));
 update restaurants set plan_status = 'active' where plan_status is null;
 alter table restaurants alter column plan_status set default 'trialing';
 alter table restaurants alter column plan_status set not null;
@@ -15283,7 +15290,8 @@ alter table platform_admin_audit add constraint platform_admin_audit_target_type
   check (target_type in ('restaurant', 'login', 'plan'));
 alter table platform_admin_audit drop constraint if exists platform_admin_audit_action_check;
 alter table platform_admin_audit add constraint platform_admin_audit_action_check
-  check (action in ('login.create', 'login.update', 'login.delete', 'restaurant.delete', 'restaurant.plan', 'plan.price'));
+  check (action in ('login.create', 'login.update', 'login.delete', 'restaurant.delete', 'restaurant.plan', 'plan.price',
+    'restaurant.suspend', 'restaurant.unsuspend'));
 
 revoke truncate, references, trigger on all tables in schema public from authenticated;
 -- Audit of #648: recovery every five minutes, scheduled by the database.
