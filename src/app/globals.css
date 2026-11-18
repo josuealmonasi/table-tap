@@ -4328,6 +4328,19 @@ a.tt-btn {
 }
 .tt-admin-billing--warn { color: var(--tt-warning); }
 .tt-admin-billing--danger { color: var(--tt-danger); }
+/* The platform team's notes about a restaurant, newest first. */
+.tt-admin-notes {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.tt-admin-notes li {
+  border-top: 1px solid var(--tt-cream);
+  padding-top: 8px;
+}
 .tt-admin-tr:first-of-type {
   border-top: none;
 }
