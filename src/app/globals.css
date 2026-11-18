@@ -4328,6 +4328,27 @@ a.tt-btn {
 }
 .tt-admin-billing--warn { color: var(--tt-warning); }
 .tt-admin-billing--danger { color: var(--tt-danger); }
+/* Platform health counts; a red one needs a look. */
+.tt-admin-health {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+}
+.tt-admin-health li {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 12px;
+  border: 1px solid var(--tt-cream);
+  border-radius: var(--tt-radius-sm);
+  font-size: 13px;
+}
+.tt-admin-health li strong { font-size: 16px; }
+.tt-admin-health li.tt-admin-health--bad { border-color: var(--tt-danger); }
+.tt-admin-health li.tt-admin-health--bad strong { color: var(--tt-danger); }
 /* A plan's price, its next change and the button to change it. */
 .tt-admin-price-row {
   display: grid;

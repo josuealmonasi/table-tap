@@ -142,7 +142,7 @@ export default function AdminEditUser({ user, onClose }: AdminEditUserProps) {
         </div>
       </form>
       {/* Only someone already on a team, never the founding owner themself. */}
-      {!user.founding && user.restaurant_id && ["manager", "waiter", "cashier", "kitchen"].includes(user.role) && (
+      {!user.founding && user.restaurant_id && ["owner", "manager", "waiter", "cashier", "kitchen"].includes(user.role) && (
         <div className="tt-prodform-actions" style={{ justifyContent: "flex-start", marginTop: 12 }}>
           {confirmTransfer ? (
             <>

@@ -10248,6 +10248,20 @@ create index if not exists platform_admin_audit_attempt on platform_admin_audit(
 alter table platform_admin_audit enable row level security;
 revoke all on platform_admin_audit from anon, authenticated, public, service_role;
 grant select, insert on platform_admin_audit to service_role;
+
+-- When each Stripe webhook endpoint last accepted a signed event, and last
+-- refused one. A missing or wrong signing secret fails silently apart from a
+-- log line; this is what lets the admin panel's health show it.
+create table if not exists webhook_heartbeats (
+  stream text primary key check (stream in ('platform', 'connect')),
+  last_ok_at timestamptz,
+  last_type text,
+  last_refused_at timestamptz,
+  last_refusal text check (last_refusal in ('no_secret', 'bad_signature'))
+);
+alter table webhook_heartbeats enable row level security;
+revoke all on webhook_heartbeats from anon, authenticated, public, service_role;
+grant select, insert, update on webhook_heartbeats to service_role;
 -- The platform team's own notes about a restaurant (support history). Never
 -- shown to the restaurant; service role only, like every admin table.
 create table if not exists restaurant_admin_notes (

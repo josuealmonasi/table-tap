@@ -8,6 +8,8 @@ import Breadcrumb from "@/components/layout/Breadcrumb";
 import AdminCreateUser from "./AdminCreateUser";
 import AdminEditUser from "./AdminEditUser";
 import AdminRestaurants from "./AdminRestaurants";
+import AdminHealth from "./AdminHealth";
+import type { PlatformHealth } from "@/lib/admin-health-rules";
 import AdminPrices from "./AdminPrices";
 import type { AdminPlanPrice } from "@/lib/admin-prices";
 import { planLabel } from "@/lib/plan";
@@ -49,6 +51,8 @@ interface AdminPanelProps {
   restaurantOptions: { id: string; name: string }[];
   /** Every plan in the catalog, cheapest first. */
   plans: string[];
+  /** Silent failures across the platform, counted. */
+  health: PlatformHealth | null;
   /** Paid plans' prices and scheduled changes. */
   prices: AdminPlanPrice[];
 }
@@ -70,6 +74,7 @@ export default function AdminPanel({
   users,
   restaurantOptions,
   plans,
+  health,
   prices,
 }: AdminPanelProps) {
   const t = useT();
@@ -87,6 +92,8 @@ export default function AdminPanel({
         <header className="tt-dash-head">
           <Breadcrumb trail={[{ labelKey: "admin.title" }]} />
         </header>
+
+        <AdminHealth health={health} />
 
         <AdminRestaurants
           restaurants={restaurants}

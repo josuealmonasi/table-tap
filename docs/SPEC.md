@@ -144,7 +144,8 @@ that login the restaurant's owner (`POST /api/admin/restaurants/owner`,
 `admin_transfer_ownership`). Only someone already on that restaurant's team
 qualifies; the row is locked, their staff row is removed (an owner's role comes
 from `restaurants.owner_id`), and the former owner stays on as a manager. It is
-audited as `restaurant.owner_transfer` and written in the restaurant's log.
+audited as `restaurant.owner_transfer` (before: `owner_id`; requested:
+`new_owner_id`) and written in the restaurant's log. Co-owners qualify too.
 
 **View as owner.** "Ver como dueño" on a restaurant in the console opens
 `/dashboard/admin/restaurants/[id]`: plan and status, setup steps, menus with
@@ -3547,3 +3548,17 @@ change at least 31 days out. `price_recipients` runs first every time: for each 
 notice row for every live Stripe subscription whose Price maps to the plan
 (except founders), so a subscriber whose local plan had not synced yet is
 still told, and still gets its 30 days.
+
+**Platform health** heads the admin panel: when the database scheduler last
+completed a recovery run (red after 15 minutes without one), ticket emails
+that ended failed or unconfigured in the last 7 days, price notices still
+unsent after a failed attempt, and restaurants that cannot take cards. Each
+of these failed silently once; the counts read existing records
+(`readPlatformHealth`).
+Each Stripe webhook endpoint (platform and connect) also has a tile: when it
+last accepted a signed event, red if it never has or has accepted none for 7
+days. The last refusal and its reason (no secret, invalid signature) show
+beside it but never turn it red, since anyone can send one; refusals are
+written at most once a minute per server. `readStripeEvent` records both in
+`webhook_heartbeats` (service-only); a failed record never stops the event.
+A failed health read shows "unavailable" instead of taking the console down.
