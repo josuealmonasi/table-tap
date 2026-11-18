@@ -8,6 +8,19 @@ table owed MX$105 and the diner's screen said it owed nothing.
 So this is not a style guide. It is the list of things that have actually bitten
 us, and what now catches each one.
 
+## Mail configuration and recovery health agree
+
+The outbox and scheduler disagreed when mail was unconfigured: tickets were
+finished without a failure. They now retry on the bounded schedule and report
+failure, and recovery stays unhealthy during backoff. `card-email.spec.ts` and
+`recovery-route-health.spec.ts` check both sides.
+
+## A saved address keeps its stop link
+
+A card save and an earlier ticket's stop link must agree on the consent
+generation. Saving the same address keeps its token; changing or removing it
+starts a new generation. `shared-address.spec.ts` checks the link and card scope.
+
 ## The ticket stop button stays in the layout gate
 
 The demo seed and the layout page list disagreed: the gate opened only the
@@ -141,6 +154,8 @@ and that a new party cannot see the previous party's waiting phones.
 | Staff discounts preserve existing gratuities (review N2) | Both pricing and SQL discounted tips below the order total; `staff-discount-tip.spec.ts` and `staff-discount-tip-route.spec.ts` check direct and approved principal-only discounts |
 | Each subscription source has time to run (review N8) | Persistently unpaid reads starved cancellation recovery; `subscriptions.spec.ts` advances the clock across all three sources |
 | Overdue refunds remind each restaurant (review N9) | Only the globally oldest case got a reminder; `refunds.spec.ts` keeps two tenants pending and checks both bells |
+| Missing mail configuration is visible to recovery | The outbox discarded tickets while health stayed green; `card-email.spec.ts` and `recovery-route-health.spec.ts` check retry and health |
+| Repeated card saves keep delivered stop links | A retry rotated the token and left the address subscribed; `shared-address.spec.ts` checks the link and per-card scope |
 | A shared card email saves independently | The generic save answer and rewards read disagreed when another card used the address; `shared-address.spec.ts` compares both paths and stops each card independently |
 | Ticket retries run before tickets expire (review N10) | Daily recovery missed the backoff window; `ticket-email-schedule.spec.ts` models recovery without payment traffic |
 | A table payment check names the actual table relation (review N3) | `payment-check-route.spec.ts` rejects unknown relations and checks the tenant and table before Stripe |

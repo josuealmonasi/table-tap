@@ -87,6 +87,8 @@ export async function drainTicketEmails(limit = 20): Promise<void> {
 export async function drainTicketEmailQueue(rounds = 20, limit = 50, deadline = Infinity): Promise<TicketDrain> {
   const seen = new Set<string>();
   const tally = emptyDrain();
+  // Backoff can leave no claimable rows; configuration is still unhealthy.
+  if (!mailConfigured()) tally.errors++;
   for (let round = 0; round < rounds && Date.now() < deadline; round++) {
     const ids = await drainOnce(limit, deadline, tally);
     const fresh = ids.filter(id => !seen.has(id));
@@ -97,7 +99,7 @@ export async function drainTicketEmailQueue(rounds = 20, limit = 50, deadline = 
 }
 
 /** What one recovery drain did, counted in tickets (outbox rows). `failed`
- * finished failed (refused, or out of retries); `retrying` failed and waits
+ * finished failed (refused, or out of retries), or was unconfigured; `retrying` failed and waits
  * for its backoff; `errors` are claims or sends that could not be attempted. */
 export interface TicketDrain { claimed: number; sent: number; retrying: number; failed: number; released: number; errors: number }
 const emptyDrain = (): TicketDrain => ({ claimed: 0, sent: 0, retrying: 0, failed: 0, released: 0, errors: 0 });
@@ -143,6 +145,7 @@ async function drainOnce(limit: number, deadline = Infinity, tally = emptyDrain(
       const { data: updated, error: updateError } = await writeRows(patch);
       if (updateError || updated?.length !== ids.length) { tally.errors++; continue; }
       if (result.outcome === "sent") tally.sent += ids.length;
+      else if (result.outcome === "unconfigured") tally.failed += ids.length;
       else if (result.outcome === "failed") {
         if (patch.finished_at) tally.failed += ids.length;
         else tally.retrying += ids.length;
