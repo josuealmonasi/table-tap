@@ -8289,3 +8289,13 @@ paying, as consumer law expects. Two places that had to agree, and the legal one
 was the promise. It now names the two fields shown and why (terms 2026-11-18.2).
 Check: `invariants/place-identity.spec.ts`.
 
+## The platform admin's login was on a domain nobody owned (2026-11-18)
+
+Every seeded login — the platform admin, the demo team, the test restaurants —
+used `@tabletap.dev`, which is not registered (`NXDOMAIN`). Whoever bought it
+for a few dollars would receive their password-reset emails and could take over
+the platform admin. They now use `@tabletap.shop`, which the owner holds;
+production's 18 logins were renamed in place (same ids, passwords and roles,
+`loop/tools/rename-login-domain.cjs`). Check: `invariants/operations.spec.ts`
+(seeded logins) and a DNS look at any new login domain before using it.
+

@@ -46,7 +46,7 @@ describe("the demo team is one list", () => {
       const email = m[1] ?? m[4];
       // A request body carries an email and a role too — `POST /api/staff` with
       // `nope@x.dev` is a refusal being tested, not somebody who signs in.
-      if (email.endsWith("@tabletap.dev")) out.set(email, m[2] ?? m[3]);
+      if (email.endsWith("@tabletap.shop")) out.set(email, m[2] ?? m[3]);
     }
     return out;
   };

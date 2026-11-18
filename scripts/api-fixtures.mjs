@@ -46,15 +46,15 @@ export async function setup(env, base) {
   };
 
   const who = {
-    owner: await cookieFor("demo@tabletap.dev"),
-    manager: await cookieFor("demo-manager@tabletap.dev"),
-    waiter: await cookieFor("demo-waiter@tabletap.dev"),
-    cashier: await cookieFor("demo-cashier@tabletap.dev"),
-    kitchen: await cookieFor("demo-kitchen@tabletap.dev"),
+    owner: await cookieFor("demo@tabletap.shop"),
+    manager: await cookieFor("demo-manager@tabletap.shop"),
+    waiter: await cookieFor("demo-waiter@tabletap.shop"),
+    cashier: await cookieFor("demo-cashier@tabletap.shop"),
+    kitchen: await cookieFor("demo-kitchen@tabletap.shop"),
     // The platform admin has a password of its own. Missing, the admin cases
     // would sign in as nobody and be refused — which reads as working.
     platformAdmin: env.PLATFORM_ADMIN_PASSWORD
-      ? await cookieFor("admin@tabletap.dev", env.PLATFORM_ADMIN_PASSWORD)
+      ? await cookieFor("admin@tabletap.shop", env.PLATFORM_ADMIN_PASSWORD)
       : (() => { throw new Error("PLATFORM_ADMIN_PASSWORD is not set: the admin cases cannot run"); })(),
     diner: "",
   };
@@ -381,7 +381,7 @@ export async function setup(env, base) {
   // Made directly rather than by invitation, because the invitation is the
   // part that cannot work here. `staff.user_id` is not null and points at
   // auth.users, so there has to be a real login behind it.
-  const staffEmail = `${MARK}-crew@tabletap.dev`;
+  const staffEmail = `${MARK}-crew@tabletap.shop`;
   let staffUserId = null;
   {
     staffUserId = (await loginByEmail(admin, staffEmail))?.id ?? null;
@@ -498,7 +498,7 @@ export async function setup(env, base) {
   // cancelling does not take it off: the cash arrived, and it stays arrived.
   await admin.from("payments").insert({
     restaurant_id: restaurant.id, order_id: cashPaidOrder, amount: line.price,
-    method: "cash", actor_email: "demo@tabletap.dev", client_ref: `${MARK}-cash-${cashPaidOrder}`,
+    method: "cash", actor_email: "demo@tabletap.shop", client_ref: `${MARK}-cash-${cashPaidOrder}`,
   });
 
   // A sale settled with no payment of its own — the way an order ends up when
@@ -513,7 +513,7 @@ export async function setup(env, base) {
   const posCardOrder = await make({ paid: true, pay_method: "card", status: "received" });
   await admin.from("payments").insert({
     restaurant_id: restaurant.id, order_id: posCardOrder, amount: line.price,
-    method: "card", actor_email: "demo-cashier@tabletap.dev", client_ref: `${MARK}-pos-${posCardOrder}`,
+    method: "card", actor_email: "demo-cashier@tabletap.shop", client_ref: `${MARK}-pos-${posCardOrder}`,
   });
 
   // One order of a table's bill paid online in one go: the intent is on the
@@ -848,8 +848,8 @@ export async function teardown(fx) {
   await admin.from("restaurant_tables").delete().eq("restaurant_id", restaurant.id).like("label", `${MARK}%`);
   await admin.from("write_off_requests").delete().eq("restaurant_id", restaurant.id).eq("note", MARK);
   // The test login: the row and the user holding it up.
-  const { data: hired } = await admin.from("staff").select("user_id").eq("email", `${MARK}@tabletap.dev`).maybeSingle();
-  await admin.from("staff").delete().eq("email", `${MARK}@tabletap.dev`);
+  const { data: hired } = await admin.from("staff").select("user_id").eq("email", `${MARK}@tabletap.shop`).maybeSingle();
+  await admin.from("staff").delete().eq("email", `${MARK}@tabletap.shop`);
   if (hired?.user_id) await admin.auth.admin.deleteUser(hired.user_id).catch(() => {});
   const failedCleanup = sharedCleanup.find(result => result.status === "rejected");
   if (failedCleanup) throw failedCleanup.reason;

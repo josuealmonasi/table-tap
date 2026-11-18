@@ -9,8 +9,8 @@ import { fileURLToPath } from "node:url";
 import pg from "pg";
 
 const tables = ["orders", "service_requests", "kitchen_tickets", "kitchen_requests"];
-const demo = ["demo@tabletap.dev", "demo-manager@tabletap.dev", "demo-cashier@tabletap.dev",
-  "demo-waiter@tabletap.dev", "demo-kitchen@tabletap.dev"];
+const demo = ["demo@tabletap.shop", "demo-manager@tabletap.shop", "demo-cashier@tabletap.shop",
+  "demo-waiter@tabletap.shop", "demo-kitchen@tabletap.shop"];
 const unassigned = "00000000-0000-0000-0000-000000000001";
 /** @typedef {{ count: number, fingerprint: string }} RowCount */
 

@@ -89,7 +89,7 @@ export function ciEnv(status, { stripeKey = "", makeSecret = secret } = {}) {
     STRIPE_WEBHOOK_SECRET_CONNECT: `whsec_${makeSecret()}`,
     GATE_NO_STRIPE: stripeKey ? "" : "1",
     CRON_SECRET: makeSecret(),
-    PLATFORM_ADMIN_EMAIL: "admin@tabletap.dev",
+    PLATFORM_ADMIN_EMAIL: "admin@tabletap.shop",
     PLATFORM_ADMIN_PASSWORD: makeSecret(),
     DEMO_PASSWORD: makeSecret(),
     TEST_PASSWORD: makeSecret(),

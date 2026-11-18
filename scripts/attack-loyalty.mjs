@@ -95,7 +95,7 @@ export async function attackLoyalty({ admin, post, who, home, ok, bad }) {
     // is refused for insufficient visits and the missing round check hides.
     const seeded = await admin.from("loyalty_visits").insert(Array.from({ length: 1 + program.goal }, (_, i) => ({
       card_id: ours.id, restaurant_id: home.id,
-      visit_day: new Date(Date.UTC(2025, 0, i + 1)).toISOString().slice(0, 10), actor_email: "attack@tabletap.dev",
+      visit_day: new Date(Date.UTC(2025, 0, i + 1)).toISOString().slice(0, 10), actor_email: "attack@tabletap.shop",
     })));
     if (seeded.error) throw seeded.error;
     const handover = { code: CARD, step: 2, round: 0, requestKey: randomUUID() };
@@ -134,7 +134,7 @@ export async function attackLoyalty({ admin, post, who, home, ok, bad }) {
       .select("id").single();
     planted.push(ladder.id);
     await admin.from("loyalty_visits").insert(["2026-01-01", "2026-01-02", "2026-01-03"].map(visit_day => ({
-      card_id: ladder.id, restaurant_id: home.id, visit_day, actor_email: "attack@tabletap.dev",
+      card_id: ladder.id, restaurant_id: home.id, visit_day, actor_email: "attack@tabletap.shop",
     })));
     await post("/api/loyalty/redeem", { code: LADDER_CARD, step: 3, round: 0, requestKey: randomUUID() }, who.waiter);
     const outOfOrder = await count("loyalty_redemptions", ladder.id);

@@ -38,7 +38,7 @@ export function ingredientsCases(fx) {
           .select("previous_cost, unit_cost, changed_by").eq("ingredient_id", f.costIngredient).not("previous_cost", "is", null);
         const rise = data?.[0];
         return data?.length === 1 && Number(rise.previous_cost) === 0.03 && Number(rise.unit_cost) === 0.036
-          && rise.changed_by === "demo-manager@tabletap.dev" || `history ${JSON.stringify(data)}`;
+          && rise.changed_by === "demo-manager@tabletap.shop" || `history ${JSON.stringify(data)}`;
       } },
     { name: "PUT  /api/costs/recipe (a line on a choice the product offers)", as: "owner", method: "PUT",
       path: "/api/costs/recipe",

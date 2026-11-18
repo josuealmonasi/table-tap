@@ -28,11 +28,11 @@ const { createClient } = await import("@supabase/supabase-js");
 const admin = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.SUPABASE_SECRET_KEY);
 
 const ROLES = [
-  { email: "demo@tabletap.dev", password, role: "owner" },
-  { email: "demo-manager@tabletap.dev", password, role: "manager" },
-  { email: "demo-waiter@tabletap.dev", password, role: "waiter" },
-  { email: "demo-cashier@tabletap.dev", password, role: "cashier" },
-  { email: "demo-kitchen@tabletap.dev", password, role: "kitchen" },
+  { email: "demo@tabletap.shop", password, role: "owner" },
+  { email: "demo-manager@tabletap.shop", password, role: "manager" },
+  { email: "demo-waiter@tabletap.shop", password, role: "waiter" },
+  { email: "demo-cashier@tabletap.shop", password, role: "cashier" },
+  { email: "demo-kitchen@tabletap.shop", password, role: "kitchen" },
 ];
 
 // Page → who should be able to open it, and text ONLY that page prints.
@@ -245,7 +245,7 @@ reportScope("roles");
 // The console's marker, seen by the one person who may open it. Without this
 // every bounce above would pass on a page that had stopped printing it.
 if (pageInScope("/dashboard/admin")) {
-  const email = process.env.PLATFORM_ADMIN_EMAIL ?? "admin@tabletap.dev";
+  const email = process.env.PLATFORM_ADMIN_EMAIL ?? "admin@tabletap.shop";
   const password = process.env.PLATFORM_ADMIN_PASSWORD;
   console.log(`  platform admin (${email})`);
   if (!password) bad("could not check the console's marker: PLATFORM_ADMIN_PASSWORD is not set");

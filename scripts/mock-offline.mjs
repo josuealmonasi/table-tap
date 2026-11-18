@@ -10,7 +10,7 @@ export async function seedOffline(pg, restaurantId) {
     offline: { at: new Date(Date.now() - 40 * 86_400_000).toISOString(), subtotal: 45, serviceFee: 0, tip: 0, discount: 0, total: 45 },
   };
   await pg.query(`insert into offline_sale_queue(restaurant_id,pos_ref,body,currency,submitted_by,reason)
-    values($1,$2,$3::jsonb,'MXN','demo-cashier@tabletap.dev','apiErr.offlineTooOld')`, [restaurantId, posRef, JSON.stringify(body)]);
+    values($1,$2,$3::jsonb,'MXN','demo-cashier@tabletap.shop','apiErr.offlineTooOld')`, [restaurantId, posRef, JSON.stringify(body)]);
 }
 
 /** Two held receipts a manager resolved without a sale: one whose cash stayed
@@ -32,9 +32,9 @@ export async function seedResolvedOffline(pg, restaurantId) {
       offline: { at, subtotal: amount, serviceFee: 0, tip: 0, discount: 0, total: amount },
     };
     await pg.query(`insert into offline_sale_queue(restaurant_id,pos_ref,body,collector,currency,submitted_by,reason)
-      values($1,$2,$3::jsonb,'demo-cashier@tabletap.dev','MXN','demo-cashier@tabletap.dev','apiErr.offlineTooOld')`,
+      values($1,$2,$3::jsonb,'demo-cashier@tabletap.shop','MXN','demo-cashier@tabletap.shop','apiErr.offlineTooOld')`,
       [restaurantId, posRef, JSON.stringify(body)]);
-    await pg.query("select resolve_held_sale($1,$2,$3,$4,$5,'demo-cashier@tabletap.dev',$6,'MXN',$7)",
+    await pg.query("select resolve_held_sale($1,$2,$3,$4,$5,'demo-cashier@tabletap.shop',$6,'MXN',$7)",
       [restaurantId, posRef, owner.email, reason, disposition, amount, at]);
   }
   // A seed that wrote nothing would leave the screens and gates with nothing to show.

@@ -1,8 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 import { captureOrdersAccess, compareOrdersAccess, developmentConfig } from "../../../scripts/probe-orders-rls-equivalence.mjs";
 
-const emails = ["demo@tabletap.dev", "demo-manager@tabletap.dev", "demo-cashier@tabletap.dev",
-  "demo-waiter@tabletap.dev", "demo-kitchen@tabletap.dev"];
+const emails = ["demo@tabletap.shop", "demo-manager@tabletap.shop", "demo-cashier@tabletap.shop",
+  "demo-waiter@tabletap.shop", "demo-kitchen@tabletap.shop"];
 const tables = ["orders", "service_requests", "kitchen_tickets", "kitchen_requests"];
 
 function database(failRead = false) {
@@ -20,7 +20,7 @@ function database(failRead = false) {
     else if (sql.includes("select exists(select 1 from auth.users")) rows = [{ present: false }];
     else if (sql.includes("from auth.users where email")) rows = emails.map((email, i) => ({ id: `user-${i}`, email }));
     else if (sql.includes("join auth.users")) rows = [{ id: "demo-restaurant" }];
-    else if (sql.includes("from auth.users u")) rows = [{ id: "admin-id", email: "admin@tabletap.dev" }];
+    else if (sql.includes("from auth.users u")) rows = [{ id: "admin-id", email: "admin@tabletap.shop" }];
     else if (sql.includes("select current_user")) rows = [{ role, id }];
     else if (sql.includes("has_table_privilege")) rows = [{ allowed: role !== "anon" }];
     else if (sql.includes("count(*)::int")) {
