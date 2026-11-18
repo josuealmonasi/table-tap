@@ -1572,7 +1572,7 @@ foundingLeftBody: "Subscribe now and keep this subscription price for as long as
     requestsFailed: "Could not check for other phones waiting to join. We’ll check again in a few seconds.",
   },
   apiErr: {
-    splitOpenTip: "An earlier payment page has a {tip} tip. Enter that amount to return to it.",
+    splitOpenTip: "Another payment page for your share just opened. Try again in a moment.",
     splitExactTip: "Enter a tip amount or choose no tip to pay this share. If you don’t see a tip amount field, reload the page.",
     splitPageChanged: "Your share changed while an earlier payment page was still open. Reload the page and try again in a few minutes.",
     heldResolveManager: "Only an owner or manager can resolve this receipt.",
@@ -2963,6 +2963,14 @@ votes: "Votes",
     unpriced: "not compared: a product is no longer on the menu",
     drift: "against the menu: {amount}",
   },
+  placeIdentity: {
+    privacy: "Privacy notice",
+  },
+  privacyHint: {
+    email: "We use your email only to send you the receipt.",
+    name: "We use your name only to call you when your order is ready.",
+    link: "Privacy notice",
+  },
   footer: {
     privacy: "Privacy",
     rights: "All rights reserved.",
@@ -3002,6 +3010,17 @@ votes: "Votes",
     intro: "We turned on the {plan} plan for {restaurant}. Your team can use it now. To keep it, pay for it by {date}.",
     button: "Pay for {plan}",
     after: "The link opens Stripe's secure payment page, with the price, before you confirm. If it asks you to sign in, sign in with your owner account and open the link again. If it is not paid by {date}, your restaurant goes back to the Carta plan and keeps everything you built.",
+  },
+  adminBilling: {
+    locked: "Locked for non-payment",
+    pastDue: "Payment overdue in Stripe",
+    cancelling: "Stripe · cancelled, active until {date}",
+    stripeTrial: "Stripe · trial until {date}",
+    paying: "Stripe · {price}/month · renews {date}",
+    payingNoDate: "Pays through Stripe",
+    unpaidUntil: "No subscription · until {date}, then Carta",
+    free: "Free",
+    comped: "Assigned at no charge",
   },
 };
 
