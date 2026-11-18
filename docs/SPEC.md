@@ -3006,8 +3006,12 @@ response body to the public log, and fails when recovery cannot observe a queue.
 Overlapping scheduled runs are queued rather than cancelling a running writer.
 No additional production secret or paid scheduler is required.
 
-Five isolated jobs use the admin client and the existing locked writers:
+Six isolated jobs use the admin client and the existing locked writers:
 
+- Accounting deletes at most 1,000 archived records per run when the restaurant
+  was deleted more than ten years ago and no longer exists. The archive records
+  when the accounting copy was made in the deletion transaction. This job runs
+  alongside the other jobs within its own time budget.
 - Stock calls `recover_stock_reservations` across restaurants. SQL keeps its
   one-hour grace period, checks that no order owns the reservation, and releases
   at most one orphan per call, at most ten calls per invocation.
