@@ -2678,6 +2678,9 @@ votes: "Votes",
   },
   /** A customer's statement: what their account owes, and how to pay it. */
   account: {
+    removeEmail: "Remove my email",
+    removeEmailConfirm: "Remove the email saved on your account?",
+    removeEmailDone: "Your email was removed from this account.",
     title: "{name}'s account",
     invalid: "That doesn't look like an account code.",
     notFound: "We couldn't find that account. Ask the restaurant to show you its code.",
@@ -2708,6 +2711,9 @@ votes: "Votes",
   },
   /** Customer accounts, as the staff keep them. */
   accounts: {
+    removeEmail: "Remove email",
+    removeEmailConfirm: "Remove the email saved on this account?",
+    removeEmailDone: "The email was removed from this account.",
     intro: "Trusted customers who take their order now and pay later, all at once. Every account has a limit, and every charge is recorded with who made it and for how much.",
     owedTotal: "In all you are owed {amount}.",
     openAction: "Open account",

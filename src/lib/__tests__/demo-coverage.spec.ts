@@ -29,6 +29,7 @@ const NOT_DEMO_DATA = new Set([
   "platform_admins", // not a restaurant's data
   "platform_admin_audit", // real platform actions only; never fabricate audit history
   "restaurant_accounting_records", // only real deletions retain books; the demo stays live
+  "terms_acceptances", // the seeded restaurant acceptance fills this through its trigger
   "profiles", // created with the logins
   "rate_limits", // throttling counters
   "menus",
