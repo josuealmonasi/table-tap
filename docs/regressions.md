@@ -122,6 +122,7 @@ and that a new party cannot see the previous party's waiting phones.
 | Scheduled plan prices keep their eligible notice queue | A scheduled price without its recipients could leave an owner without notice; the route and schema specs pin validation and the atomic queue |
 | One-click ticket unsubscribe retries return the same success | A cleared or unknown token returned 404 to mail providers; `ticket-stop-one-click.spec.ts` checks retries, invalid forms and the separate confirmation response |
 |---|---|
+| Dish deal callout and price agree | The hint looked ahead while the selected quantity already saved money; `deal-callout.spec.tsx` checks both together |
 | The demo stop link and layout paths agree | The gate measured only an invalid link and missed the button overflowing its card; `seed-stop-layout.spec.ts` checks the seed and both paths |
 | Dish choices and the pinned cart button keep their distance | The deal button wrapped beside a scrolling extra; `dish-footer-gap.spec.ts` and the dish detail layout case cover the structure and the rendered spacing |
 | Earlier acceptance rows and the backfill index agree | Relabeling every old row as a backfill could stop schema application; `acceptance-schema.spec.ts` pins the migration |
@@ -8062,3 +8063,10 @@ other; `review2-deferred-probes.spec.ts` keeps the original regression.
   keeps it, and only that exact link shape (`safeLoginNext`).
 
 Checks: `admin-tier.spec.ts`, `billing-assigned.spec.ts`.
+
+## Dish deal callout and selected price
+
+The deal hint and the add-to-cart price must describe the same selection. The
+hint looked for the next deal even when the chosen quantity already earned one.
+Both now use the selected line's price and saving, including other cart lines;
+`deal-callout.spec.tsx` renders quantities one through three in both languages.
