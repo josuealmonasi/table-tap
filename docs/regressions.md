@@ -8162,6 +8162,13 @@ a renewal billed before it ran, charging the old price for another month, or,
 run early, prorate a charge nobody was told about. The move is a Stripe
 subscription schedule whose second phase starts at a renewal boundary at least
 30 days after the notice; Stripe bills it there. Check: `price-moves.spec.ts`.
+## The diner menu has two loaders that must agree (2026-11-18)
+
+A suspended restaurant first read as "not taking orders" only through the
+cached menu loader, which runs in production; dev and any uncached read use
+`loadOrderingData`'s own restaurant read, so the diner still saw add buttons
+there. Both now go through `asDinerSees`. Seen in the browser while checking
+the suspension, before it shipped.
 
 ## Price-change recipients read from Stripe too (review 1117b, finding 4)
 

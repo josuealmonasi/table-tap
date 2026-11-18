@@ -81,7 +81,22 @@ open stay payable (a diner who ate can always pay) and refunds keep working.
 A POS sale the till already collected keeps its money: collected before the
 suspension it is recorded as usual; collected after it (the device was
 offline) it stays held on the device for a manager (`posSuspensionAnswer`).
-Banners for diners and staff come in part 2.
+Every staff screen shows a suspended banner with the reason; diners see the
+restaurant as not taking orders (`asDinerSees`, used by both menu loaders). In
+the admin list each row has suspend/reactivate (reason dialog) and the billing
+line reads "Suspendido · <reason>".
+
+A platform admin can also **extend or end a trial** (`PATCH
+/api/admin/restaurants/trial { id, endsAt | null }`): extend to a date at most
+90 days out, or end it now, which drops to Carta exactly as an expired trial
+does. Refused for a restaurant paying through Stripe or not on a trial.
+
+**Support tools** live in each restaurant's usage dialog: private notes by the
+platform team (`restaurant_admin_notes`, author and time, never shown to the
+restaurant; `GET/POST /api/admin/restaurants/notes`), and a button that emails
+the owner the standard password-reset link (`POST
+/api/admin/restaurants/owner-reset`, audited `restaurant.owner_reset`). The admin
+never sees or sets a password.
 Under each restaurant's name the list says how it pays (`billingSummary`):
 the Stripe price and renewal date, a cancellation's last day, overdue or
 locked, a trial or unpaid assignment with the day it drops to Carta, free, or

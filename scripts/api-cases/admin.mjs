@@ -184,6 +184,29 @@ export function adminOwnerCases(fx) {
       path: "/api/admin/restaurants/suspend", body: { id: r, reason: "abuse" }, expect: [403] },
     { name: "POST /api/admin/restaurants/suspend (unknown reason refused)", as: "platformAdmin", method: "POST",
       path: "/api/admin/restaurants/suspend", body: { id: r, reason: "because" }, expect: [400] },
+    // Trial control: the demo is not on a trial, so ending one is the right refusal.
+    { name: "PATCH /api/admin/restaurants/trial (not on a trial refused)", as: "platformAdmin", method: "PATCH",
+      path: "/api/admin/restaurants/trial", body: { id: r, endsAt: null }, expect: [409],
+      expectError: /prueba|trial/i },
+    { name: "PATCH /api/admin/restaurants/trial (an owner refused)", as: "owner", method: "PATCH",
+      path: "/api/admin/restaurants/trial", body: { id: r, endsAt: null }, expect: [403] },
+    // Support notes: the admin writes one and reads it back; cleaned up after.
+    { name: "POST /api/admin/restaurants/notes (add a note)", as: "platformAdmin", method: "POST",
+      path: "/api/admin/restaurants/notes",
+      arrange: async f => async () => { await f.admin.from("restaurant_admin_notes").delete().eq("restaurant_id", r).like("body", "apicheck note%"); },
+      body: { id: r, body: "apicheck note: called about the card reader" }, expect: [200],
+      check: async (_d, f) => {
+        const res = await fetch(`${f.base}/api/admin/restaurants/notes?id=${r}`, { headers: { cookie: f.who.platformAdmin } });
+        const { notes } = await res.json();
+        return notes?.some(n => n.body.startsWith("apicheck note")) || "the note was not read back";
+      } },
+    { name: "GET  /api/admin/restaurants/notes (an owner refused)", as: "owner", method: "GET",
+      path: `/api/admin/restaurants/notes?id=${r}`, expect: [403] },
+    // The owner's reset email goes to a real address, so only refusals run here.
+    { name: "POST /api/admin/restaurants/owner-reset (an owner refused)", as: "owner", method: "POST",
+      path: "/api/admin/restaurants/owner-reset", body: { id: r }, expect: [403] },
+    { name: "POST /api/admin/restaurants/owner-reset (no such restaurant)", as: "platformAdmin", method: "POST",
+      path: "/api/admin/restaurants/owner-reset", body: { id: "00000000-0000-4000-8000-000000000000" }, expect: [404] },
     // An owner cannot give themselves a plan — only the platform admin moves one.
     { name: "PATCH /api/admin/restaurants (an owner refused)", as: "owner", method: "PATCH",
       path: "/api/admin/restaurants",

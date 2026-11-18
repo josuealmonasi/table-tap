@@ -7,7 +7,8 @@ import { createAdminClient } from "@/lib/supabase/admin";
 
 type Facts = Record<string, string | boolean | number | null>;
 type Action = "login.create" | "login.update" | "login.delete" | "restaurant.delete" | "restaurant.plan" | "plan.price"
-  | "restaurant.suspend" | "restaurant.unsuspend";
+  | "restaurant.suspend" | "restaurant.unsuspend" | "restaurant.trial"
+  | "restaurant.owner_reset";
 export interface AdminAuditContext { targetId?: string }
 type Handler = (req: NextRequest, audit: AdminAuditContext) => Promise<Response>;
 type Db = ReturnType<typeof createAdminClient>;

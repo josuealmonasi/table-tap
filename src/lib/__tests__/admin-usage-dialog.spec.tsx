@@ -8,6 +8,7 @@ vi.mock("swr", () => ({ default: () => ({ data: {
   last30: { orders: 1, sales: [{ currency: "MXN", amount: 70 }], tips: [], fees: [{ currency: null, amount: 3 }], payments: [{ currency: "MXN", cash: 100, card: 0 }] },
   month: { orders: 0, sales: [], tips: [], fees: [], payments: [] },
 } }) }));
+vi.mock("../../components/dashboard/admin/AdminSupport", () => ({ default: () => null }));
 vi.mock("@/components/ui/Modal", () => ({ Modal: ({ children }: { children: React.ReactNode }) => <div>{children}</div> }));
 vi.mock("@/lib/i18n/context", () => ({ useLocale: () => ({ locale: "es" }), useT: () => (key: string) => translate(messagesFor("es"), key) }));
 import AdminUsageDialog from "@/components/dashboard/admin/AdminUsageDialog";
