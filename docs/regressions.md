@@ -81,6 +81,7 @@ and that a new party cannot see the previous party's waiting phones.
 `src/lib/__tests__/invariants.spec.ts` enforces the rules that span files:
 
 | Rule | The bug it came from |
+| One-click ticket unsubscribe retries return the same success | A cleared or unknown token returned 404 to mail providers; `ticket-stop-one-click.spec.ts` checks retries, invalid forms and the separate confirmation response |
 |---|---|
 | Earlier acceptance rows and the backfill index agree | Relabeling every old row as a backfill could stop schema application; `acceptance-schema.spec.ts` pins the migration |
 | Terms evidence and the privacy notice agree | Acceptance saved request network details despite the notice; `acceptance-history.spec.ts` and `rate-limit-key.spec.ts` forbid collection |
@@ -137,6 +138,9 @@ and that a new party cannot see the previous party's waiting phones.
 | Statement text separates days and the payment link | HTML headings separated days while plain text ran them together; `mail-plaintext.spec.ts` snapshots both languages |
 | Receipt text keeps paragraph breaks | Empty separators were discarded before sending POS and diner receipts; `mail-plaintext.spec.ts` snapshots items, totals and paragraphs in both languages |
 | Card ticket text gives the stop link its own line | The HTML link stood apart while plain text buried its URL beside the label; `mail-plaintext.spec.ts` and `card-email.spec.ts` check the copy and actual sender |
+| Card ticket footer stays inside the receipt | Removing only its text left an empty paragraph and put the card footer outside the receipt; `ticket-email-polish.spec.ts` snapshots both languages |
+| Receipt emails use the Counter palette | The receipt kept retired colors while the app moved to Counter; `ticket-email-polish.spec.ts` checks ink, muted, line and link colors |
+| A mail provider can stop ticket emails in one click | The header and stop route disagreed about POST forms; `ticket-stop-one-click.spec.ts` checks the public rewrite and card update, and `card-email.spec.ts` checks the header |
 | Restaurant logos use PNG bytes, content type and path, and the bucket accepts PNG | The photo encoder stored WebP logos that the ticket PDF could not print; changing only the encoder would leave a WebP path and a bucket that refused PNG. `image-resize.spec.ts` checks logos and unchanged photo encodings; `images.spec.ts` checks the bucket allowlist |
 | A new card save cannot duplicate today's ticket after a lost reply (card email UI) | The save could commit unseen and both the card outbox and the per-sale sender mailed the same ticket; `card-email-pos.spec.tsx` holds the lost reply and checks skip in the charge and held replay |
 | A new card reader does not reuse another reader's address (card email UI) | A cashier could briefly see an owner's full address from the shared SWR cache; `card-email.spec.tsx` reproduces the flash with a delayed masked reply |
@@ -7819,6 +7823,36 @@ exists. The button disappears after removal, and the shared confirmation dialog
 works where native confirms are blocked. The account removal specs pin these
 boundaries; the API gate checks manager, customer, retry and unknown code.
 
+### Ticket email footer and colors
+
+The card footer belongs inside the same receipt container as the ticket; removing
+the old promise must also remove its paragraph. The receipt colors follow the
+Counter tokens so the email and the app do not drift apart. Both languages have
+HTML snapshots in `ticket-email-polish.spec.ts`.
+
+### Ticket email one-click unsubscribe
+
+A mail provider posts the one-click form to the link in the email header. The
+public link must route that POST to the same card update as the confirmation
+button, while a GET only opens the confirmation page: scanners open links.
+`ticket-stop-one-click.spec.ts` checks the route and rewrite, and
+`card-email.spec.ts` checks the outgoing header.
+
+### One-click ticket retries and confirmation
+
+The provider's retry and the card update had to agree after the token was
+cleared. A well-formed one-click form now returns the same success for a match,
+a retry or an unknown token; the confirmation page still gets its 404. Invalid
+forms and rate limits still stop before the update. `ticket-stop-one-click.spec.ts`
+checks both paths. Emails already queued before one-click support keep their
+original headers until they are sent.
+
+The emailed PDF and Settings preview both read the restaurant's fiscal fields
+through `ticketPlace`; the preview's sale lines alone are samples. A comparison
+of both actual paths with one restaurant row did not reproduce the reported
+regime mismatch. `ticket-place-regime.spec.ts` pins their saved regime, and
+`ticket-email-polish.spec.ts` checks the old receipt footer is absent in both
+languages.
 ### Reopened split pages use the diner's current quote (F4)
 
 The phone showed its new tip while an older Stripe page could still charge the
