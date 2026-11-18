@@ -10278,8 +10278,7 @@ begin
   delete from staff where restaurant_id = p_restaurant and user_id = p_new_owner;
   if v_old is not null then
     select email into v_email from auth.users where id = v_old;
-    insert into staff (restaurant_id, user_id, email, role) values (p_restaurant, v_old, coalesce(v_email, ''), 'manager')
-      on conflict (user_id) do nothing;
+    insert into staff (restaurant_id, user_id, email, role) values (p_restaurant, v_old, coalesce(v_email, ''), 'manager');
   end if;
   update restaurants set owner_id = p_new_owner where id = p_restaurant;
   return 'transferred';
