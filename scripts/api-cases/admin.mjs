@@ -184,6 +184,12 @@ export function adminOwnerCases(fx) {
       path: "/api/admin/restaurants/suspend", body: { id: r, reason: "abuse" }, expect: [403] },
     { name: "POST /api/admin/restaurants/suspend (unknown reason refused)", as: "platformAdmin", method: "POST",
       path: "/api/admin/restaurants/suspend", body: { id: r, reason: "because" }, expect: [400] },
+    // Trial control: the demo is not on a trial, so ending one is the right refusal.
+    { name: "PATCH /api/admin/restaurants/trial (not on a trial refused)", as: "platformAdmin", method: "PATCH",
+      path: "/api/admin/restaurants/trial", body: { id: r, endsAt: null }, expect: [409],
+      expectError: /prueba|trial/i },
+    { name: "PATCH /api/admin/restaurants/trial (an owner refused)", as: "owner", method: "PATCH",
+      path: "/api/admin/restaurants/trial", body: { id: r, endsAt: null }, expect: [403] },
     // An owner cannot give themselves a plan — only the platform admin moves one.
     { name: "PATCH /api/admin/restaurants (an owner refused)", as: "owner", method: "PATCH",
       path: "/api/admin/restaurants",
