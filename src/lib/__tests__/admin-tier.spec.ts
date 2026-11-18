@@ -43,14 +43,18 @@ function fakeDb() {
     auth: { admin: { getUserById: async () => ({ data: { user: { email: "owner@x.dev" } } }) } },
     from() {
       const where: Record<string, unknown> = {};
+      const nulls: [string, boolean][] = [];
       let patch: Record<string, unknown> | null = null;
       const q = {
         select: () => q,
         eq: (k: string, v: unknown) => ((where[k] = v), q),
+        is: (k: string) => (nulls.push([k, true]), q),
+        not: (k: string) => (nulls.push([k, false]), q),
         update: (p: Record<string, unknown>) => ((patch = p), q),
         maybeSingle: async () => ({ data: { ...restaurant } }),
         then: (resolve: (v: unknown) => void) => {
-          const hit = patch && Object.entries(where).every(([k, v]) => restaurant[k] === v);
+          const hit = patch && Object.entries(where).every(([k, v]) => restaurant[k] === v)
+            && nulls.every(([k, isNull]) => (restaurant[k] == null) === isNull);
           if (hit) Object.assign(restaurant, patch);
           resolve({ data: hit ? [{ id: restaurant.id }] : [], error: null });
         },
@@ -170,6 +174,27 @@ describe("a platform admin assigns a tier with a payment link", () => {
     expect(expired).toEqual(["cs_pay_link"]);
   });
 
+  it("a test account is free and gives back its founding place", async () => {
+    restaurant.founding_number = 7; restaurant.stripe_subscription_id = null;
+    const answer = await assignTier(fakeDb(), { ...base, plan: "servicio", billing: "test" }, "admin@x.dev", fakeStripe);
+    expect(answer).toMatchObject({ ok: true, billing: "test", seatReleased: true });
+    expect(restaurant.founding_number).toBeNull();
+  });
+
+  it("a founder paid by a live subscription keeps its place, even marked as a test account", async () => {
+    restaurant.founding_number = 2; restaurant.stripe_subscription_id = "sub_live";
+    const answer = await assignTier(fakeDb(), { ...base, plan: "servicio", billing: "test" }, "admin@x.dev", fakeStripe);
+    expect(answer).toMatchObject({ ok: true, seatReleased: false });
+    expect(restaurant.founding_number).toBe(2);
+  });
+
+  it("a plain free move never touches the founding place", async () => {
+    restaurant.founding_number = 4; restaurant.stripe_subscription_id = null;
+    const answer = await assignTier(fakeDb(), { ...base, plan: "casa", billing: "free" }, "admin@x.dev", fakeStripe);
+    expect(answer).toMatchObject({ ok: true, billing: "free", seatReleased: false });
+    expect(restaurant.founding_number).toBe(4);
+  });
+
   it("refuses Carta, which costs nothing", async () => {
     const answer = await assignTier(fakeDb(), { ...base, plan: "carta", billing: "payment_link" }, "admin@x.dev", fakeStripe);
     expect(answer).toEqual({ ok: false, error: "apiErr.tierCartaIsFree", status: 400 });
@@ -200,4 +225,13 @@ describe("the pay-by date and the owner's email", () => {
     // A restaurant name is typed by a person: it never reaches the HTML raw.
     expect(mail.html).not.toContain("<Bistro>");
   });
+});
+
+it("the founding limit counts places held, so a given-back place is free again", async () => {
+  const { readFileSync } = await import("node:fs");
+  const sql = readFileSync("supabase/schema.sql", "utf8");
+  const fn = sql.split("create or replace function public.claim_founding_price(")[1]?.split("$$;")[0] ?? "";
+  expect(fn).toContain("(select count(*) from restaurants where founding_number is not null) >= p_limit then return null");
+  expect(fn).not.toContain("if v_next > p_limit");
+  expect(fn.indexOf("pg_advisory_xact_lock")).toBeLessThan(fn.indexOf("select count(*)"));
 });
