@@ -3525,9 +3525,12 @@ price without a month's notice. Subscriptions set to end, non-monthly, or
 already on a schedule are skipped with the reason recorded; overdue ones are
 retried later. Founding-price restaurants are never queued, so never moved.
 `price_catalogue` changes the plan's catalogue price for new subscriptions
-once, at the effective date. Not yet: an admin screen to schedule a change
-(the API exists), and reconciling subscribers whose Stripe price moved before
-their local plan synced.
+once, at the effective date. The admin panel's "Precios de los planes" section lists each paid plan's
+price and any scheduled change (with owners told of queued), and schedules a
+change at least 31 days out. `price_recipients` runs first every time: for each pending change it adds a
+notice row for every live Stripe subscription whose Price maps to the plan
+(except founders), so a subscriber whose local plan had not synced yet is
+still told, and still gets its 30 days.
 
 **Platform health** heads the admin panel: when the database scheduler last
 completed a recovery run (red after 15 minutes without one), ticket emails

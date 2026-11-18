@@ -4349,6 +4349,22 @@ a.tt-btn {
 .tt-admin-health li strong { font-size: 16px; }
 .tt-admin-health li.tt-admin-health--bad { border-color: var(--tt-danger); }
 .tt-admin-health li.tt-admin-health--bad strong { color: var(--tt-danger); }
+/* A plan's price, its next change and the button to change it. */
+.tt-admin-price-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 2fr) auto;
+  align-items: center;
+  gap: 12px;
+  padding: 9px 4px;
+  border-top: 1px solid var(--tt-cream);
+  font-size: 14px;
+}
+.tt-admin-price-row:first-of-type { border-top: none; }
+.tt-admin-price-next { font-size: 13px; }
+@media (max-width: 700px) {
+  .tt-admin-price-row { grid-template-columns: minmax(0, 1fr) auto; }
+  .tt-admin-price-next { grid-column: 1 / -1; }
+}
 /* The platform team's notes about a restaurant, newest first. */
 .tt-admin-notes {
   list-style: none;
