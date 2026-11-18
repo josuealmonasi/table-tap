@@ -7722,3 +7722,15 @@ the account statement's order lines painted 1px into each other. Every inline
 price); `.tt-statement-lines` spaces its lines with a parent `gap`.
 
 The i18n strings (`es.ts`, `en.ts`) join with the same no-break spaces around the dot.
+
+## A gate's fake card reader that outlived every run (2026-11-17)
+
+The API cases lend Demo Bistro a fake Stripe account (`acct_api_check…`) so
+card routes get past "this restaurant takes no cards", and put back what they
+found afterwards. A run stopped mid-case left the fake on. Every later case
+then saved the fake as the "original" and restored it, and `db:mock` kept it
+too, because a reseed preserves a real test account. Every card route then
+failed at Stripe (500/502) and the attack gate refused its admission case, on
+every branch, looking like a bug in whatever PR was being gated (#653).
+`scripts/lent-stripe-account.mjs` names the fakes once; restores and reseeds
+never keep one. Check: `src/lib/__tests__/lent-stripe-account.spec.ts`.
