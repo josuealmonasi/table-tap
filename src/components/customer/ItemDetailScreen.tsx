@@ -141,7 +141,7 @@ export default function ItemDetailScreen({
           {promo && (
             <div className="tt-promo-callout">
               <span className="tt-deal">{promo.name}</span>
-              {deal.applied && <span>{t("promos.applied", { name: promo.name })}</span>}
+              {deal.applied && <span>{t("promos.applied")}</span>}
               {step && (
                 <span>
                   {t("promos.oneMore", {

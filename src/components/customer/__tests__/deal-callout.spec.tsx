@@ -28,14 +28,14 @@ describe("dish deal callout and price", () => {
     expect(one).not.toContain('<s class="tt-was">');
     for (const qty of [2, 3]) {
       const html = screen(qty, locale);
-      expect(html).toContain(locale === "en" ? "2x1 applied" : "2x1 aplicado");
+      expect(html).toContain(locale === "en" ? "Applied" : "Aplicado");
       expect(html).toContain(qty === 2 ? '<s class="tt-was">MX$6.00</s>MX$3.00' : '<s class="tt-was">MX$9.00</s>MX$6.00');
       expect(html).not.toContain(locale === "en" ? "Add 2 more" : "Agrega 2 más");
     }
   });
   it("counts other cart lines when the selected dish completes the deal", () => {
     const html = screen(1, "en", 1);
-    expect(html).toContain("2x1 applied");
+    expect(html).toContain("Applied");
     expect(html).toContain('<s class="tt-was">');
   });
 });
