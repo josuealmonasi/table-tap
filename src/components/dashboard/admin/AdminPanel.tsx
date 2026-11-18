@@ -71,7 +71,7 @@ export default function AdminPanel({
   prices,
 }: AdminPanelProps) {
   const t = useT();
-  const { busy, deleteUser, deleteRestaurant, movePlan, schedulePrice } = useAdminActions();
+  const { busy, deleteUser, deleteRestaurant, movePlan, schedulePrice, suspend, liftSuspension, changeTrial } = useAdminActions();
   const confirm = useConfirm();
   const [editing, setEditing] = useState<AdminUserRow | null>(null);
   const roleLabel = (role: AdminUserRow["role"]): string => {
@@ -92,6 +92,9 @@ export default function AdminPanel({
           busy={busy}
           onMovePlan={movePlan}
           onDelete={deleteRestaurant}
+          onSuspend={suspend}
+          onLift={liftSuspension}
+          onTrial={changeTrial}
         />
 
         <AdminPrices prices={prices} busy={busy} onSchedule={schedulePrice} />

@@ -22,3 +22,13 @@ export async function posSuspensionAnswer(suspendedAt: unknown, collectedAt: str
   if (new Date(collectedAt).getTime() < new Date(String(suspendedAt)).getTime()) return null;
   return await apiError("apiErr.restaurantSuspended", 409, undefined, { held: true });
 }
+
+/**
+ * What a diner's menu shows for a suspended restaurant: the same as one that
+ * paused orders (readable, nothing offered to order), which is exactly what
+ * checkout answers. Both menu loaders (cached in production, direct on dev)
+ * go through this, so they cannot disagree.
+ */
+export function asDinerSees<T extends { accepting_orders: boolean }>(restaurant: T, suspendedAt: unknown): T {
+  return suspendedAt ? { ...restaurant, accepting_orders: false } : restaurant;
+}

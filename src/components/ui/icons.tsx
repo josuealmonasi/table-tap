@@ -18,6 +18,8 @@
  */
 import { AddressBook } from "@phosphor-icons/react/dist/ssr/AddressBook";
 import { QrCode } from "@phosphor-icons/react/dist/ssr/QrCode";
+import { Pause } from "@phosphor-icons/react/dist/ssr/Pause";
+import { Play } from "@phosphor-icons/react/dist/ssr/Play";
 import { ArrowLeft } from "@phosphor-icons/react/dist/ssr/ArrowLeft";
 import { ArrowsLeftRight } from "@phosphor-icons/react/dist/ssr/ArrowsLeftRight";
 import { Bell } from "@phosphor-icons/react/dist/ssr/Bell";
@@ -82,6 +84,9 @@ export const FiltersIcon = SlidersHorizontal;
 export const BackIcon = ArrowLeft;
 /** The diner's scan button: a code, not a photo. */
 export const QrIcon = QrCode;
+/** Suspend / reactivate a restaurant (platform admin). */
+export const SuspendIcon = Pause;
+export const ResumeIcon = Play;
 /** A customer account: who owes what (the user menu's AccountIcon is the login). */
 export const CustomerAccountIcon = AddressBook;
 export const EditIcon = PencilSimple;

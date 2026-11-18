@@ -1,4 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
+import { asDinerSees } from "@/lib/restaurant-suspension";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { fetchPromotions } from "@/lib/promotions-data";
 import { programOf } from "@/lib/loyalty/server";
@@ -25,12 +26,16 @@ export async function readPublicMenuShell(restaurantId: string) {
   const db = anonymousClient();
   const [restaurantRes, payRes, program] = await Promise.all([
     db.from("restaurants").select(PUBLIC_RESTAURANT_COLUMNS).eq("id", restaurantId).maybeSingle(),
-    createAdminClient().from("restaurants").select("stripe_account_id, stripe_charges_enabled").eq("id", restaurantId).maybeSingle(),
+    createAdminClient().from("restaurants").select("stripe_account_id, stripe_charges_enabled, suspended_at").eq("id", restaurantId).maybeSingle(),
     programOf(restaurantId),
   ]);
-  const pay = unwrap<{ stripe_account_id: string | null; stripe_charges_enabled: boolean | null }>(payRes, "card readiness");
+  const pay = unwrap<{ stripe_account_id: string | null; stripe_charges_enabled: boolean | null; suspended_at: string | null }>(payRes, "card readiness");
+  const restaurant = unwrap<Restaurant & { timezone?: string }>(restaurantRes, "restaurant");
   return {
-    restaurant: unwrap<Restaurant & { timezone?: string }>(restaurantRes, "restaurant"),
+    // A suspended restaurant reads to diners exactly like one that paused
+    // orders: the menu stays readable and ordering is not offered, the same
+    // refusal checkout gives. The reason is the platform's, never the diner's.
+    restaurant: restaurant ? asDinerSees(restaurant, pay?.suspended_at) : restaurant,
     // The account id never enters the cache or the browser; only its readiness does.
     cardsEnabled: Boolean(pay?.stripe_account_id && pay?.stripe_charges_enabled), program,
   };

@@ -4300,8 +4300,15 @@ a.tt-btn {
    every rule in this file, which is what stopped the phone layout below from
    applying. */
 .tt-admin-tr--rest {
-  grid-template-columns: minmax(0, 1.4fr) minmax(0, 1.4fr) 132px 56px 90px 32px;
+  grid-template-columns: minmax(0, 1.4fr) minmax(0, 1.4fr) 132px 56px 90px 104px;
 }
+/* The row's actions (suspend, delete) side by side in the last column. */
+.tt-admin-row-actions {
+  display: flex;
+  gap: 4px;
+  justify-content: flex-end;
+}
+
 /* The plan a platform admin moves a restaurant to: a field, sized to its cell. */
 .tt-admin-plan {
   width: 100%;
@@ -4336,6 +4343,19 @@ a.tt-btn {
 @media (max-width: 700px) {
   .tt-admin-price-row { grid-template-columns: minmax(0, 1fr) auto; }
   .tt-admin-price-next { grid-column: 1 / -1; }
+}
+/* The platform team's notes about a restaurant, newest first. */
+.tt-admin-notes {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.tt-admin-notes li {
+  border-top: 1px solid var(--tt-cream);
+  padding-top: 8px;
 }
 .tt-admin-tr:first-of-type {
   border-top: none;
