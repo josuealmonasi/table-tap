@@ -3107,6 +3107,20 @@ votes: "Votes",
     none: "No notes yet.",
     notesError: "We couldn't load the notes.",
   },
+  adminPrices: {
+    title: "Plan prices",
+    perMonth: "{price}/month",
+    none: "No change scheduled",
+    pending: "Becomes {price} on {date} · {sent} of {queued} owners told",
+    change: "Change price",
+    dialogTitle: "New price for {plan}",
+    current: "Today it costs {price} a month.",
+    newPrice: "New monthly price (MXN)",
+    from: "Starting",
+    explain: "Every owner gets an email 30 days ahead. Those already paying are charged the new price from their first renewal on or after that date and at least 30 days after the notice. Founding prices never change.",
+    confirm: "Schedule change",
+    scheduled: "{plan} price change scheduled. Owners will be told.",
+  },
 };
 
 export type Messages = typeof en;
