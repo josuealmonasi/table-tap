@@ -8169,3 +8169,13 @@ cached menu loader, which runs in production; dev and any uncached read use
 `loadOrderingData`'s own restaurant read, so the diner still saw add buttons
 there. Both now go through `asDinerSees`. Seen in the browser while checking
 the suspension, before it shipped.
+
+## A support view that cannot write (2026-11-18)
+
+The platform team needed to see what an owner sees. Signing in as the owner,
+or letting admins through RLS, would have made every support look a possible
+change to somebody's restaurant. The owner view reads with the service key on
+one server page, records each visit first, and renders nothing that writes.
+Check: `admin-owner-view.spec.ts` (order of guard, record and read; no write,
+no control) and `pnpm roles` (the admin opens it from the console's link).
+
