@@ -8177,3 +8177,12 @@ A subscriber Stripe already billed on that tier, whose sync had not landed,
 was missed and would have been moved without a notice. `price_recipients`
 reconciles every pending change from Stripe each run. Check:
 `price-recipients.spec.ts`.
+
+## Ownership moves in one place (2026-11-18)
+
+An owner is `restaurants.owner_id`, a manager is a `staff` row. Moving ownership
+by hand meant three writes that had to agree, and a half-done one left a login
+that was both owner and staff, or an owner with no way back in.
+`admin_transfer_ownership` does all three under the restaurant's row lock.
+Check: `admin-owner-transfer.spec.ts` and the api case that transfers and checks
+the former owner is a manager.

@@ -139,6 +139,13 @@ are refused. `GET /api/admin/audit` checks platform membership and returns
 uncached keyset pages of 100. The API checks intentionally retain their genuine
 admin audit events after removing disposable business fixtures.
 
+**Owner transfer.** From a team member's edit dialog, a platform admin can make
+that login the restaurant's owner (`POST /api/admin/restaurants/owner`,
+`admin_transfer_ownership`). Only someone already on that restaurant's team
+qualifies; the row is locked, their staff row is removed (an owner's role comes
+from `restaurants.owner_id`), and the former owner stays on as a manager. It is
+audited as `restaurant.owner_transfer` and written in the restaurant's log.
+
 ## The two ways in
 
 - **A table QR** → `/r/<restaurantId>/t/<tableId>`. The order knows its table,

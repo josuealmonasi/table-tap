@@ -1895,6 +1895,8 @@ foundingLeftBody: "Quien contrata ahora conserva este precio de suscripción mie
     notSuspended: "Este restaurante no está suspendido.",
     trialDateInvalid: "Elige una fecha entre mañana y dentro de 90 días.",
     notOnTrial: "Este restaurante no está en periodo de prueba.",
+    alreadyOwner: "Esa persona ya es la dueña.",
+    notOnTeam: "Solo puede ser dueño alguien que ya forma parte del equipo de este restaurante.",
     ownerMissing: "Este restaurante no tiene un dueño con correo.",
     restaurantSuspended: "Este restaurante no está tomando pedidos ni cobros por ahora. Lo que ya cobraste se conserva.",
     notAccepting:
@@ -3076,6 +3078,12 @@ votes: "Votos",
     endConfirm: "Terminar prueba",
     extended: "La prueba de {name} se extendió.",
     ended: "La prueba de {name} terminó; ahora está en Carta.",
+  },
+  adminOwner: {
+    button: "Hacer dueño del restaurante",
+    confirm: "¿Transferir {name} a {email}? El dueño actual se queda como gerente.",
+    transfer: "Transferir",
+    done: "{email} ahora es dueño del restaurante.",
   },
   adminSupport: {
     title: "Soporte",
