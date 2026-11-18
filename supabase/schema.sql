@@ -10259,8 +10259,8 @@ create table if not exists restaurant_admin_notes (
 );
 create index if not exists restaurant_admin_notes_restaurant on restaurant_admin_notes (restaurant_id, created_at desc);
 alter table restaurant_admin_notes enable row level security;
-revoke all on restaurant_admin_notes from anon, authenticated, public;
-grant select, insert on restaurant_admin_notes to service_role;
+revoke all on restaurant_admin_notes from anon, authenticated, public, service_role;
+grant select, insert, delete on restaurant_admin_notes to service_role;
 
 
 -- Even a service-side mistake must append a correction, never rewrite history.
