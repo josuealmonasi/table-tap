@@ -130,6 +130,7 @@ and that a new party cannot see the previous party's waiting phones.
 `src/lib/__tests__/invariants.spec.ts` enforces the rules that span files:
 
 | Rule | The bug it came from |
+| A held sale offers paper when its one-sale email may be lost | The first request carried the address but replay did not; `card-email-pos.spec.tsx` checks the warning and printable ticket |
 | Admin usage and returned tips agree | A returned tip must not be deducted from sales; `admin-usage-returns.spec.ts` checks partial pieces |
 | Admin usage and fee currency evidence agree | A fee cannot inherit today's restaurant currency; `admin-usage-read.spec.ts` checks other currencies and missing evidence |
 | Scheduled plan prices keep their eligible notice queue | A scheduled price without its recipients could leave an owner without notice; the route and schema specs pin validation and the atomic queue |
@@ -8079,6 +8080,13 @@ other; `review2-deferred-probes.spec.ts` keeps the original regression.
 
 Checks: `admin-tier.spec.ts`, `billing-assigned.spec.ts`.
 
+## A held POS sale offers a ticket when email is uncertain
+
+The one-sale email and the held sale's replay disagreed: replay kept the card
+email skip but had no one-sale address. The first request may already have
+sent the email, so the held ticket tells the cashier it may not arrive and
+offers the printable receipt. `card-email-pos.spec.tsx` checks a lost reply,
+a sale taken offline and a sale without a one-sale address.
 ## A zero-balance retry keeps the collector's ticket choice
 
 | Places that must agree | What went wrong | What checks it |
