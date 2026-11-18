@@ -180,6 +180,12 @@ a welcome dialog the first time they reach the dashboard (remembered per
 restaurant on that device), and a banner on every dashboard screen with the
 days left and a link to Plan, which takes the warning look in the last 7
 days (`trialNotice`). Staff see neither: only the owner can choose a plan.
+Three days before the end, the recovery job `trial_reminders` emails the owner
+once (Spanish or English by `user_metadata.locale`): the date, that they then
+move to Carta keeping their menu, tables and orders, and a link to Plan. It
+reads the service-only view `trial_reminders_due` and records the reminded end
+date in `restaurants.trial_reminded_for`, so an extended trial is reminded again
+and none twice; the mail's idempotency key is that date too.
 
 **One free trial per RFC.** Once a restaurant that had a trial saves an RFC,
 it is recorded in `trial_rfcs` (service-only, no FK: it outlives the

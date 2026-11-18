@@ -8281,3 +8281,10 @@ same business could take a free month again and again. A unique RFC would have
 blocked a legitimate second location; now a trial is once per RFC
 (`trial_rfcs`). Check: `one-trial-per-rfc.spec.ts`.
 
+## A trial ended with no email (2026-11-18)
+
+The only warning that a free month was ending was a banner inside a dashboard
+the owner might not open that week, so Carta arrived unannounced. The recovery
+job `trial_reminders` now emails the owner three days before, once per trial
+end. Check: `recovery/__tests__/trial-reminders.spec.ts`.
+

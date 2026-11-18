@@ -1,3 +1,4 @@
+drop view if exists trial_reminders_due;
 drop table if exists restaurant_admin_notes cascade;
 -- The database's five-minute recovery call (audit of #648). The extensions
 -- stay: other projects' jobs may use them.

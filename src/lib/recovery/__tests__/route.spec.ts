@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
 
-const { jobs, context, drain, githubAuth, expired } = vi.hoisted(() => ({ jobs: { stock: vi.fn(), refunds: vi.fn(), fees: vi.fn(), subscriptions: vi.fn(), disputes: vi.fn(), accounting: vi.fn(), price_notices: vi.fn(), price_moves: vi.fn(), price_catalogue: vi.fn(), price_recipients: vi.fn() }, context: vi.fn(), drain: vi.fn(), githubAuth: vi.fn(), expired: vi.fn() }));
+const { jobs, context, drain, githubAuth, expired } = vi.hoisted(() => ({ jobs: { stock: vi.fn(), refunds: vi.fn(), fees: vi.fn(), subscriptions: vi.fn(), disputes: vi.fn(), accounting: vi.fn(), price_notices: vi.fn(), price_moves: vi.fn(), price_catalogue: vi.fn(), price_recipients: vi.fn(), trial_reminders: vi.fn() }, context: vi.fn(), drain: vi.fn(), githubAuth: vi.fn(), expired: vi.fn() }));
 vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({ from: () => ({ select: () => ({ eq: () => ({ gte: expired }) }) }) }) }));
 vi.mock("@/lib/github-cron-auth", () => ({ githubCronAuthorized: githubAuth }));
 vi.mock("@/lib/ticket-email", () => ({ drainTicketEmailQueue: drain }));
@@ -12,6 +12,7 @@ vi.mock("../fees", () => ({ recoverFees: jobs.fees }));
 vi.mock("../subscriptions", () => ({ recoverSubscriptions: jobs.subscriptions }));
 vi.mock("../disputes", () => ({ recoverDisputes: jobs.disputes }));
 vi.mock("../price-notices", () => ({ recoverPriceNotices: jobs.price_notices }));
+vi.mock("../trial-reminders", () => ({ recoverTrialReminders: jobs.trial_reminders }));
 vi.mock("../price-recipients", () => ({ recoverPriceRecipients: jobs.price_recipients }));
 vi.mock("../price-moves", () => ({ recoverPriceMoves: jobs.price_moves, recoverPriceCatalogue: jobs.price_catalogue }));
 vi.mock("../accounting-purge", () => ({ purgeAccounting: jobs.accounting }));
@@ -48,9 +49,9 @@ it("runs every job without a user session and returns uncached per-job counts", 
   const result = await GET(request("Bearer cron-test-secret"));
   expect(result.status).toBe(200);
   expect(result.headers.get("cache-control")).toBe("no-store");
-  expect(await result.json()).toEqual({ jobs: { stock: clean, refunds: clean, fees: clean, subscriptions: clean, disputes: clean, accounting: clean, price_notices: clean, price_moves: clean, price_catalogue: clean, price_recipients: clean }, tickets: { ...drained, expired: 0 },
+  expect(await result.json()).toEqual({ jobs: { stock: clean, refunds: clean, fees: clean, subscriptions: clean, disputes: clean, accounting: clean, price_notices: clean, price_moves: clean, price_catalogue: clean, price_recipients: clean, trial_reminders: clean }, tickets: { ...drained, expired: 0 },
     scheduler: { ok: true, status: "skipped: no scheduler on dev" } });
-  expect(context).toHaveBeenCalledTimes(10);
+  expect(context).toHaveBeenCalledTimes(11);
   expect(githubAuth).not.toHaveBeenCalled();
 });
 it("accepts the verified scheduler identity without a shared cron secret", async () => {
@@ -58,12 +59,12 @@ it("accepts the verified scheduler identity without a shared cron secret", async
   githubAuth.mockResolvedValue(true);
   expect((await GET(request("Bearer fixture-identity"))).status).toBe(200);
   expect(githubAuth).toHaveBeenCalledOnce();
-  expect(context).toHaveBeenCalledTimes(10);
+  expect(context).toHaveBeenCalledTimes(11);
 });
 it("audit #648: the database's five-minute job POSTs with the same bearer, and nothing else gets in", async () => {
   const post = (authorization?: string) => new NextRequest("https://test/api/cron/recover", { method: "POST", headers: authorization ? { authorization } : {} });
   expect((await POST(post("Bearer cron-test-secret"))).status).toBe(200);
-  expect(context).toHaveBeenCalledTimes(10);
+  expect(context).toHaveBeenCalledTimes(11);
   vi.clearAllMocks(); githubAuth.mockResolvedValue(false);
   for (const authorization of [undefined, "Bearer wrong", "Bearer cron-test-secreT"]) expect((await POST(post(authorization))).status).toBe(401);
   expect(context).not.toHaveBeenCalled();
