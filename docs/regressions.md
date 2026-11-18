@@ -8261,3 +8261,10 @@ form said "mínimo 6 caracteres" under a rule of 8. Check:
 `auth-email-templates.spec.ts` (links, languages, POST only, placeholders match
 `PASSWORD_MIN`).
 
+## "*" did not match a branch with a slash (2026-11-18)
+
+#691 turned previews off with `"*": false`, but minimatch's `*` stops at `/`
+and every branch here is `claude/…` or `codex/…`, so every push still built a
+preview and the day's cap refused #692's production deploy. It is `"**"` now.
+Check: `invariants/operations.spec.ts`.
+
