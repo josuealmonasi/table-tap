@@ -88,6 +88,9 @@ export type Restaurant = {
   service_pct: number;
   service_enabled: boolean;
   accepting_orders: boolean;
+  /** Set while a platform admin has the restaurant suspended: no new sales. */
+  suspended_at?: string | null;
+  suspended_reason?: string | null;
   /** IVA %, already included in menu prices (0 = no tax shown). */
   tax_pct: number;
   /** Show the net + IVA split to customers, or just the total. */
