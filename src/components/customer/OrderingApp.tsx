@@ -36,6 +36,7 @@ import LoyaltyOffer from "./LoyaltyOffer";
 import type { LoyaltyOfferInfo } from "@/lib/loyalty/offer";
 import { useSitting } from "@/hooks/useSitting";
 import BillSheet from "./BillSheet";
+import type { PlaceIdentity } from "@/lib/place-identity";
 import ReceiptPrompt from "./ReceiptPrompt";
 import TrackerOverlay from "./TrackerOverlay";
 import type { TrackedOrder } from "@/lib/order-tracking";
@@ -61,6 +62,7 @@ export default function OrderingApp({
   loyalty = null,
   trackOrder = null,
   dietaryTags = null,
+  identity = null,
 }: {
   restaurant: Restaurant;
   table: RestaurantTable | null;
@@ -81,6 +83,8 @@ export default function OrderingApp({
   loyalty?: LoyaltyOfferInfo | null;
   /** The restaurant's dietary tags. Without them the built-ins are shown. */
   dietaryTags?: StoredDietaryTag[] | null;
+  /** Who the diner is paying; shown on the menu, the cart and the bill. */
+  identity?: PlaceIdentity | null;
   /**
    * An order to open the tracker on: the landing Stripe returns to, and any
    * shared /order/<id> link. The menu is rendered behind it.
@@ -232,6 +236,7 @@ export default function OrderingApp({
           restaurant={restaurant}
           table={table}
           loyalty={tableLoyalty}
+          identity={identity}
           trackIds={trackIds}
           categories={categories}
           items={items}
@@ -269,6 +274,7 @@ export default function OrderingApp({
         {(screen === "cart" || screen === "edit") && (
           <CartOverlay
             restaurant={restaurant}
+            identity={identity}
             table={table}
             cart={cart}
             totals={totals}
@@ -308,6 +314,7 @@ export default function OrderingApp({
             bill={bill}
             photoOf={photoOf}
             restaurant={restaurant}
+            identity={identity}
             tableId={table.id}
             tableLabel={table.label}
             sessionId={membership.state?.status === "approved" ? membership.state.sessionId : sittingSessionId}

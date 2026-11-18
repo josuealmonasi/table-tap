@@ -53,6 +53,11 @@ the restaurant. A dialog asks how the tier is paid (`billing`):
   Stripe's plan back over it.
 Carta costs nothing, so it is only ever assigned free. Every assignment is
 written in the restaurant's activity log with its billing mode.
+Under each restaurant's name the list says how it pays (`billingSummary`):
+the Stripe price and renewal date, a cancellation's last day, overdue or
+locked, a trial or unpaid assignment with the day it drops to Carta, free, or
+assigned at no charge. It reads the columns the subscription sync writes, not
+Stripe, so it shows exactly what the app enforces.
 
 Permanent deletion is refused only while a refund, duplicate-payment return or
 provider operation is unfinished, or until 30 days after the latest successful Stripe refund evidence (operations, duplicate-payment returns and attempts); refusals return the unlock time. `admin_delete_restaurant` takes
@@ -1463,6 +1468,12 @@ measure. Its amounts come from
   2.7.1.24): razón social, address (street and number, colonia and CP,
   municipio and estado), phone, RFC and régimen fiscal. These columns are
   optional, owner-only and never granted to anon (`ticket-place.ts`).
+- Diners see who they are paying: the menu, the cart and the table bill end
+  with a muted line holding the razón social (else the trade name), the
+  address as the ticket prints it, and a link to the privacy notice. It is read
+  server-side by `place-identity.ts` (secret key, only those two strings reach
+  the browser); the public restaurant columns are unchanged. The pickup-name
+  and receipt-email fields carry a one-line notice with the same link.
 - Body: date, folio (the order code), table, four columns (quantity, item,
   unit price, amount), the number of items, the receipt's rows, the total,
   the IVA it includes, and how it was paid.
@@ -3012,8 +3023,12 @@ response body to the public log, and fails when recovery cannot observe a queue.
 Overlapping scheduled runs are queued rather than cancelling a running writer.
 No additional production secret or paid scheduler is required.
 
-Five isolated jobs use the admin client and the existing locked writers:
+Six isolated jobs use the admin client and the existing locked writers:
 
+- Accounting deletes at most 1,000 archived records per run when the restaurant
+  was deleted more than ten years ago and no longer exists. The archive records
+  when the accounting copy was made in the deletion transaction. This job runs
+  alongside the other jobs within its own time budget.
 - Stock calls `recover_stock_reservations` across restaurants. SQL keeps its
   one-hour grace period, checks that no order owns the reservation, and releases
   at most one orphan per call, at most ten calls per invocation.
