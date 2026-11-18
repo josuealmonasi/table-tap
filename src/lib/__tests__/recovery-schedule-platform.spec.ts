@@ -22,7 +22,7 @@ it("starts only the approved main-branch workflow without a stored production se
 it("audit #648: the backup job runs on a fixed Node from a SHA-pinned setup-node", () => {
   const workflow = readFileSync(".github/workflows/recovery.yml", "utf8");
   expect(workflow).toMatch(/uses: actions\/setup-node@[0-9a-f]{40} # v\d+\.\d+\.\d+/);
-  expect(workflow).toContain('node-version: "22"');
+  expect(workflow).toContain('node-version: "24"');
   for (const use of workflow.match(/uses: \S+/g) ?? []) expect(use).toMatch(/@[0-9a-f]{40}$/);
 });
 

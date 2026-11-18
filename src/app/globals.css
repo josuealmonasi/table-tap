@@ -5755,6 +5755,35 @@ a.tt-btn {
   padding: 14px 20px calc(14px + env(safe-area-inset-bottom));
 }
 
+/* A scrolling choice can otherwise stop right beside the pinned button. Clip
+   the choices above the bar, leaving its padding between the two controls even
+   when a deal wraps the button onto two lines. */
+.tt-dish-detail {
+  height: 100dvh;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.tt-dish-detail-scroll {
+  min-height: 0;
+  flex: 1;
+  overflow-y: auto;
+}
+.tt-dish-detail .tt-detail-actions {
+  position: static;
+  flex: none;
+  margin: 0;
+  padding: 20px 20px calc(20px + env(safe-area-inset-bottom));
+}
+.tt-dish-detail > .tt-req-note {
+  margin: 0 20px;
+}
+@media (min-width: 1025px) {
+  .tt-detail-panel .tt-dish-detail {
+    height: 88vh;
+  }
+}
+
 /* Inside the action bar the stepper is a sibling control, not a standalone
    widget: it holds its width, matches the button's height and radius, and
    gets a border so both read as the same kind of thing. */

@@ -2,7 +2,8 @@
 // What a ticket email's send attempt leaves on its outbox rows. A failure that
 // may pass (429, 5xx, a dropped connection) waits 1 minute, then 10, then an
 // hour before the next claim; the fourth failure, or any refusal that a retry
-// cannot change, finishes the rows as failed with the reason. Released rows
+// cannot change, finishes the rows as failed with the reason. Missing mail
+// configuration follows the same bounded retry schedule. Released rows
 // were all claimed again within seconds before, so a short provider outage
 // spent every attempt (background review, finding 2).
 // ============================================================================
@@ -30,6 +31,8 @@ export function ticketOutcome(result: MailResult): TicketOutcome {
 
 /** The outbox update for a group after one attempt, given its rows' attempt count. */
 export function outboxPatch(result: TicketOutcome, attempts: number, now = Date.now()): Record<string, unknown> {
+  // Missing mail configuration is a retryable failure like any other.
+  if (result.outcome === "unconfigured") result = { outcome: "failed", retryable: true, reason: "unconfigured" };
   if (result.outcome === "failed" && result.retryable && attempts < TICKET_EMAIL_MAX_ATTEMPTS) {
     const wait = BACKOFF_MS[Math.min(Math.max(attempts, 1), BACKOFF_MS.length) - 1];
     return { claimed_at: null, claim: null, next_attempt_at: new Date(now + wait).toISOString(),

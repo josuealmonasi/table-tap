@@ -3853,6 +3853,26 @@ alter table loyalty_cards add constraint loyalty_cards_email_consented check (em
 drop index if exists loyalty_cards_email_once;
 create unique index if not exists loyalty_cards_email_unsubscribe on loyalty_cards(email_unsubscribe) where email_unsubscribe is not null;
 
+-- A repeated save of the same address keeps its stop link, so a ticket already
+-- delivered can still stop it (review 1117b, finding 5). Consent is given again
+-- with every save, so its time, notice version and author always record the
+-- latest one: a re-save under a newer notice must not keep the older version.
+create or replace function public.set_card_email(p_restaurant uuid, p_code text, p_email text, p_set_by text, p_notice text)
+returns boolean language plpgsql security definer set search_path = public as $$
+begin
+  update loyalty_cards set
+    email_unsubscribe = case when p_email is null then null when email = p_email then email_unsubscribe else gen_random_uuid() end,
+    email_consent_at = case when p_email is null then null else now() end,
+    email_notice_version = case when p_email is null then null else p_notice end,
+    email_set_by = case when p_email is null then null else p_set_by end,
+    email = p_email
+  where restaurant_id = p_restaurant and code = p_code;
+  return found;
+end;
+$$;
+revoke all on function public.set_card_email(uuid, text, text, text, text) from public, anon, authenticated;
+grant execute on function public.set_card_email(uuid, text, text, text, text) to service_role;
+
 -- The cashier's choice not to email one sale's ticket, written with it.
 alter table orders add column if not exists ticket_email_skip boolean not null default false;
 
@@ -4744,6 +4764,10 @@ grant execute on function public.abandon_checkout(uuid, boolean, jsonb) to servi
 
 -- Compare-and-set version for subscription synchronization.
 alter table restaurants add column if not exists subscription_sync_revision int not null default 0;
+-- The admin tier assignment an emailed pay link belongs to. A new assignment
+-- gets a new id and a free move clears it, so an older link (even for the same
+-- tier and day) opens nothing (review 2026-11-17, finding 7).
+alter table restaurants add column if not exists tier_assignment_id uuid;
 
 -- An interrupted request may have taken stock without inserting its order.
 -- A grace period keeps ordinary requests out; the reservation lock and the
@@ -15126,11 +15150,12 @@ create index if not exists offline_sale_queue_decision_page
   on public.offline_sale_queue (restaurant_id, decision_at desc, pos_ref)
   where decision_at is not null;
 
--- Audit of #648 (server F1): closing a table whose parts already paid it all
--- (a MX$0 close) carries the cashier's ticket choice too. Before, that path
--- reached only the five-argument settle and queued the ticket after "don't
--- send". The mark is written under the money lock, on rows locked in id
--- order, only where it changes; any refusal from settlement rolls it back.
+-- Audit of #648 (server F1): closing a free table (a MX$0 close) carries
+-- the cashier's ticket choice too. Before, that path reached only the
+-- five-argument settle and queued the ticket after "don't send". The mark is
+-- written under the money lock, on rows locked in id order, only where it
+-- changes; any refusal from settlement rolls it back. A retry after a receipt
+-- keeps the successful collector's choice instead.
 -- The five-argument signature stays for callers without a choice.
 create or replace function public.settle_orders_v2(
   p_restaurant uuid, p_orders uuid[], p_method text, p_actor text, p_sittings jsonb, p_skip_ticket_email boolean
@@ -15138,10 +15163,17 @@ create or replace function public.settle_orders_v2(
 begin
   perform public.lock_restaurant_money(p_restaurant);
   if p_skip_ticket_email is null then raise exception 'not_owed'; end if;
+  perform set_config('tabletap.allocation_writer', 'v1', true);
+  if p_restaurant is not null then perform public.backfill_payment_allocations(p_restaurant); end if;
   perform 1 from orders where restaurant_id = p_restaurant and id = any(p_orders) order by id for update;
-  update orders set ticket_email_skip = p_skip_ticket_email
-    where restaurant_id = p_restaurant and id = any(p_orders) and not paid
-      and ticket_email_skip is distinct from p_skip_ticket_email;
+  -- A retry after a receipt must keep the collector's choice, including for
+  -- zero-value orders in the same bill. Only a free bill has a new choice.
+  if not exists (select 1 from payment_allocations a
+    where a.restaurant_id = p_restaurant and a.order_id = any(p_orders)) then
+    update orders set ticket_email_skip = p_skip_ticket_email
+      where restaurant_id = p_restaurant and id = any(p_orders) and not paid
+        and ticket_email_skip is distinct from p_skip_ticket_email;
+  end if;
   return public.settle_orders_v2(p_restaurant, p_orders, p_method, p_actor, p_sittings);
 end; $$;
 revoke all on function public.settle_orders_v2(uuid, uuid[], text, text, jsonb, boolean) from public, anon, authenticated;
@@ -15335,3 +15367,14 @@ select cron.schedule('tabletap-recover', '*/5 * * * *', $job$
     timeout_milliseconds := 60000)
   from signed
 $job$);
+
+-- Auth does not expose a restaurant-scoped sign-in read. Fetch only its team;
+-- listing all platform logins or calling Auth once per person does not scale.
+create or replace function public.admin_restaurant_last_sign_in_v1(p_restaurant uuid)
+returns timestamptz language sql stable security definer set search_path = public as $$
+  select max(u.last_sign_in_at) from auth.users u
+  where u.id in (select user_id from public.staff where restaurant_id = p_restaurant
+    union select owner_id from public.restaurants where id = p_restaurant);
+$$;
+revoke all on function public.admin_restaurant_last_sign_in_v1(uuid) from public, anon, authenticated;
+grant execute on function public.admin_restaurant_last_sign_in_v1(uuid) to service_role;

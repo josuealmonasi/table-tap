@@ -64,3 +64,43 @@ it("SQL: the six-argument settle marks under the money lock, rows in id order, o
   expect(schema).toContain("grant execute on function public.settle_orders_v2(uuid, uuid[], text, text, jsonb, boolean) to service_role;");
   expect(readFileSync("supabase/drop.sql", "utf8")).toContain("drop function if exists public.settle_orders_v2(uuid, uuid[], text, text, jsonb, boolean);");
 });
+
+// Model the SQL overload at the RPC boundary; the SQL pin below checks that
+// the real writer makes the same decision while it holds the money lock.
+it.each([
+  { covered: true, saved: true, choice: false, want: true },
+  { covered: true, saved: false, choice: true, want: false },
+  { covered: false, saved: true, choice: false, want: false },
+  { covered: false, saved: false, choice: true, want: true },
+])("a zero close keeps a paid collection's choice, and uses a new choice for a free bill: $covered $saved $choice", async ({ covered, saved, choice, want }) => {
+  const schema = readFileSync("supabase/schema.sql", "utf8");
+  const start = schema.indexOf("p_restaurant uuid, p_orders uuid[], p_method text, p_actor text, p_sittings jsonb, p_skip_ticket_email boolean");
+  const fn = schema.slice(start, schema.indexOf("$$;", start));
+  let mark = saved;
+  s.rpc.mockImplementation(async (_name, args) => {
+    const protectsCoverage = /if not exists\s*\(\s*select 1 from payment_allocations a[\s\S]*?a\.restaurant_id = p_restaurant[\s\S]*?a\.order_id = any\(p_orders\)/.test(fn);
+    if (!covered || !protectsCoverage) mark = args.p_skip_ticket_email;
+    return { error: null };
+  });
+  const res = await settleReviewedTable(actor, "t", { expected: 0, currency: "MXN", ref: "retry", skipTicketEmail: choice }, "cash");
+  expect(res.status).toBe(200);
+  expect(mark).toBe(want);
+});
+
+it("SQL: zero close checks recorded coverage under the money lock before changing any ticket choice", () => {
+  const schema = readFileSync("supabase/schema.sql", "utf8");
+  const start = schema.indexOf("p_restaurant uuid, p_orders uuid[], p_method text, p_actor text, p_sittings jsonb, p_skip_ticket_email boolean");
+  const fn = schema.slice(start, schema.indexOf("$$;", start));
+  const lock = fn.indexOf("perform public.lock_restaurant_money(p_restaurant)");
+  const backfill = fn.indexOf("perform public.backfill_payment_allocations(p_restaurant)");
+  const rowsLocked = fn.indexOf("order by id for update");
+  const coverage = fn.indexOf("if not exists (select 1 from payment_allocations a");
+  const mark = fn.indexOf("update orders set ticket_email_skip = p_skip_ticket_email");
+  const settle = fn.indexOf("return public.settle_orders_v2(p_restaurant, p_orders, p_method, p_actor, p_sittings);");
+  expect(backfill).toBeGreaterThan(lock);
+  expect(rowsLocked).toBeGreaterThan(backfill);
+  expect(coverage).toBeGreaterThan(rowsLocked);
+  expect(mark).toBeGreaterThan(coverage);
+  expect(fn.slice(coverage, mark)).toMatch(/a\.restaurant_id = p_restaurant[\s\S]*a\.order_id = any\(p_orders\)/);
+  expect(fn.slice(mark, settle)).toContain("end if;");
+});

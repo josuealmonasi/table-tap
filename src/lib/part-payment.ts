@@ -179,7 +179,8 @@ export async function sittingFor(
  *
  * `skipTicketEmail` is the cashier's ticket choice when this close is the
  * collection itself (a MX$0 table): SQL marks it under the same lock that
- * settles. Left out, the marks stay as the collection that paid wrote them.
+ * settles, unless recorded coverage already carries the collector's choice.
+ * Left out, the marks stay as the collection that paid wrote them.
  */
 export async function closeBill(
   actor: Actor,

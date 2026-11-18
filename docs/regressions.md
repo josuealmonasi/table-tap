@@ -14,6 +14,32 @@ The suspension marker and checkout admission must agree. A new checkout now
 stops before stock and order writes; an existing checkout retry is resolved
 first so a payment already underway can finish. `checkout/route.spec.ts`
 checks the new-order refusal.
+## Mail configuration and recovery health agree
+
+The outbox and scheduler disagreed when mail was unconfigured: tickets were
+finished without a failure. They now retry on the bounded schedule and report
+failure, and recovery stays unhealthy during backoff. `card-email.spec.ts` and
+`recovery-route-health.spec.ts` check both sides.
+
+## A saved address keeps its stop link
+
+A card save and an earlier ticket's stop link must agree on the consent
+generation. Saving the same address keeps its token; changing or removing it
+starts a new generation. `shared-address.spec.ts` checks the link and card scope.
+
+## The ticket stop button stays in the layout gate
+
+The demo seed and the layout page list disagreed: the gate opened only the
+invalid link, so it never measured the stop button. The seed now gives one
+card a consented example address and a fixed link; the layout gate visits it
+and the bare link. `seed-stop-layout.spec.ts` checks both sides.
+## Dish choices stay above the cart button
+
+The scrolling choices and the pinned cart button must keep their distance. A
+quantity deal made the button wrap and an extra could sit within 4px of it. The
+dish clips its scrolling content above the footer, whose padding keeps the
+controls apart. `dish-footer-gap.spec.ts` pins the structure; the layout case
+chooses the promoted dish with the most extras and checks both languages.
 
 ## Recovery requests carry one-use proof
 
@@ -51,6 +77,19 @@ A matching log kept the import pending even though only provider evidence can
 resolve the card return. The import records that reason on the review row; the
 need check skips it and the money check still lists it. `historical-card-import.spec.ts`
 checks the shared rule, and the rolled-back development probe checks both reads.
+
+## Admin usage keeps returned tips out of sales
+
+The usage report and return operations must agree on which part was a tip.
+Subtracting the whole return from sales would charge a returned tip to sales.
+`admin-usage-returns.spec.ts` checks partial pieces across periods and
+`admin-usage-read.spec.ts` checks the saved operation against its sale.
+
+## Admin usage keeps each fee in its own currency
+
+The fee ledger and checkout evidence must agree on a currency. The ledger has
+no currency column, so today's restaurant setting cannot relabel an older fee.
+`admin-usage-read.spec.ts` checks the matching restaurant and the unknown bucket.
 
 ## What runs on its own
 
@@ -98,9 +137,15 @@ and that a new party cannot see the previous party's waiting phones.
 
 | Rule | The bug it came from |
 | Suspended restaurants refuse new diner checkouts | Checkout ignored the suspension marker and could start a new order |
+| A held sale offers paper when its one-sale email may be lost | The first request carried the address but replay did not; `card-email-pos.spec.tsx` checks the warning and printable ticket |
+| Admin usage and returned tips agree | A returned tip must not be deducted from sales; `admin-usage-returns.spec.ts` checks partial pieces |
+| Admin usage and fee currency evidence agree | A fee cannot inherit today's restaurant currency; `admin-usage-read.spec.ts` checks other currencies and missing evidence |
 | Scheduled plan prices keep their eligible notice queue | A scheduled price without its recipients could leave an owner without notice; the route and schema specs pin validation and the atomic queue |
 | One-click ticket unsubscribe retries return the same success | A cleared or unknown token returned 404 to mail providers; `ticket-stop-one-click.spec.ts` checks retries, invalid forms and the separate confirmation response |
 |---|---|
+| Dish deal callout and price agree | The hint looked ahead while the selected quantity already saved money; `deal-callout.spec.tsx` checks both together |
+| The demo stop link and layout paths agree | The gate measured only an invalid link and missed the button overflowing its card; `seed-stop-layout.spec.ts` checks the seed and both paths |
+| Dish choices and the pinned cart button keep their distance | The deal button wrapped beside a scrolling extra; `dish-footer-gap.spec.ts` and the dish detail layout case cover the structure and the rendered spacing |
 | Earlier acceptance rows and the backfill index agree | Relabeling every old row as a backfill could stop schema application; `acceptance-schema.spec.ts` pins the migration |
 | Terms evidence and the privacy notice agree | Acceptance saved request network details despite the notice; `acceptance-history.spec.ts` and `rate-limit-key.spec.ts` forbid collection |
 | Terms history access and kitchen denial agree | A table grant allowed authenticated reads to reach RLS; `acceptance-schema.spec.ts` pins service-only access |
@@ -133,6 +178,8 @@ and that a new party cannot see the previous party's waiting phones.
 | Staff discounts preserve existing gratuities (review N2) | Both pricing and SQL discounted tips below the order total; `staff-discount-tip.spec.ts` and `staff-discount-tip-route.spec.ts` check direct and approved principal-only discounts |
 | Each subscription source has time to run (review N8) | Persistently unpaid reads starved cancellation recovery; `subscriptions.spec.ts` advances the clock across all three sources |
 | Overdue refunds remind each restaurant (review N9) | Only the globally oldest case got a reminder; `refunds.spec.ts` keeps two tenants pending and checks both bells |
+| Missing mail configuration is visible to recovery | The outbox discarded tickets while health stayed green; `card-email.spec.ts` and `recovery-route-health.spec.ts` check retry and health |
+| Repeated card saves keep delivered stop links | A retry rotated the token and left the address subscribed; `shared-address.spec.ts` checks the link and per-card scope |
 | A shared card email saves independently | The generic save answer and rewards read disagreed when another card used the address; `shared-address.spec.ts` compares both paths and stops each card independently |
 | Ticket retries run before tickets expire (review N10) | Daily recovery missed the backoff window; `ticket-email-schedule.spec.ts` models recovery without payment traffic |
 | A table payment check names the actual table relation (review N3) | `payment-check-route.spec.ts` rejects unknown relations and checks the tenant and table before Stripe |
@@ -8050,3 +8097,37 @@ sale from before the suspension is recorded; one from after is kept on the
 device as held. Checks: `pos-atomic.spec.tsx` (both collected cases),
 `cart-quantity-routes.spec.ts` (all three routes refuse and write nothing; the
 table-order case fails without its check), `admin-suspend.spec.ts`.
+## A held POS sale offers a ticket when email is uncertain
+
+The one-sale email and the held sale's replay disagreed: replay kept the card
+email skip but had no one-sale address. The first request may already have
+sent the email, so the held ticket tells the cashier it may not arrive and
+offers the printable receipt. `card-email-pos.spec.tsx` checks a lost reply,
+a sale taken offline and a sale without a one-sale address.
+## A zero-balance retry keeps the collector's ticket choice
+
+| Places that must agree | What went wrong | What checks it |
+| --- | --- | --- |
+| The successful collection and the later zero-balance close | A retry could replace the collector's ticket choice and send an unwanted email | `zero-close-ticket-email.spec.ts`; database probe |
+
+The receipt and the close must agree on whose choice applies. The close checks
+recorded allocations under the money lock before changing any order's mark;
+when a receipt exists it keeps the successful collector's choice for the whole
+bill. A genuinely free bill still uses the current cashier's choice. The unit
+spec models both choices and pins the SQL; Claude's database probe must exercise
+the real transaction, including a failed close and a retry.
+## Pay link bound to a day, and free moves outside the lock (review 1117b, findings 3 and 7)
+
+The pay link matched any trial on the same tier and pay-by day, so a replaced
+assignment recreated for the same tier and day reopened an old link; and a free
+assignment ran outside the billing lock, so a Checkout opened just before it
+could still be paid and its subscription wrote over the free tier. Each
+payment-link assignment now stores `restaurants.tier_assignment_id` and the link
+carries it (`a=`); a free move runs under the lock, closes open Checkouts and
+clears the id. Checks: `billing-assigned.spec.ts`, `admin-tier.spec.ts`.
+## Dish deal callout and selected price
+
+The deal hint and the add-to-cart price must describe the same selection. The
+hint looked for the next deal even when the chosen quantity already earned one.
+Both now use the selected line's price and saving, including other cart lines;
+`deal-callout.spec.tsx` renders quantities one through three in both languages.

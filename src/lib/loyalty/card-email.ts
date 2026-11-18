@@ -1,7 +1,6 @@
 // The address a diner linked to their visit card, to receive every ticket by
 // email (owner's request, 2026-11-11: paperless). Used for tickets and nothing
 // else; consent is recorded with the notice version it was given under.
-import { randomUUID } from "node:crypto";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { TERMS_VERSION } from "@/lib/legal";
 
@@ -30,11 +29,9 @@ export type SetEmailResult =
  */
 export async function setCardEmail(restaurantId: string, code: string, email: string | null, setBy: string): Promise<SetEmailResult> {
   const db = createAdminClient();
-  const patch = email
-    ? { email, email_consent_at: new Date().toISOString(), email_notice_version: TERMS_VERSION, email_set_by: setBy, email_unsubscribe: randomUUID() }
-    : { email: null, email_consent_at: null, email_notice_version: null, email_set_by: null, email_unsubscribe: null };
-  const { data, error } = await db.from("loyalty_cards").update(patch)
-    .eq("restaurant_id", restaurantId).eq("code", code).select("id").maybeSingle();
+  const { data, error } = await db.rpc("set_card_email", {
+    p_restaurant: restaurantId, p_code: code, p_email: email, p_set_by: setBy, p_notice: TERMS_VERSION,
+  });
   if (error) throw new Error(`Could not save the card's email: ${error.message}`);
   if (!data) return { outcome: "unknown" };
   return email ? { outcome: "saved", email } : { outcome: "removed" };

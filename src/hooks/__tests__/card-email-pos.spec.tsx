@@ -7,6 +7,7 @@ import { messagesFor, translate } from "@/lib/i18n";
 import { usePosSaleDetails } from "../usePosSaleDetails";
 import { usePosCharge } from "../usePosCharge";
 import PosAsk from "@/components/dashboard/pos/PosAsk";
+import PosTicketModal from "@/components/dashboard/pos/PosTicketModal";
 import { replayBody, type HeldSale } from "@/lib/offline-sales";
 const s = vi.hoisted(() => ({ toast: vi.fn(), print: vi.fn(), hold: vi.fn((sale: HeldSale) => Boolean(sale)) }));
 vi.mock("@/lib/i18n/context", () => ({ useT: () => (key: string, vars?: Record<string, string | number>) => translate(messagesFor("es"), key, vars), useLocale: () => ({ locale: "es" }) }));
@@ -23,7 +24,7 @@ function Harness() {
     offline: { hold: s.hold, acknowledge: () => true, discard: vi.fn(), setOnline: vi.fn() }, canEmailReceipt: true,
     pricing: { subtotal: 100, serviceFee: 0, tip: 0, discount: 0, total: 100, lines: [], promoSavings: {} },
   } as unknown as Parameters<typeof usePosCharge>[0]);
-  return <PosAsk details={details} method="cash" total={100} subtotal={100} currency="MXN" canEmailReceipt busy={charge.busy} allHandedOver onClose={vi.fn()} onSend={() => void charge.charge("cash")} />;
+  return <><PosAsk details={details} method="cash" total={100} subtotal={100} currency="MXN" canEmailReceipt busy={charge.busy} allHandedOver onClose={vi.fn()} onSend={() => void charge.charge("cash")} /><PosTicketModal ticket={charge.ticket} currency="MXN" title="Cafe" onClose={vi.fn()} /></>;
 }
 const t = (key: string) => translate(messagesFor("es"), key);
 const check = (key: string) => [...host.querySelectorAll("label")].find(l => l.textContent === t(key))?.querySelector<HTMLInputElement>("input");
@@ -125,4 +126,27 @@ it("a lost card-save reply cannot send both a per-sale and an automatic ticket",
   await act(async () => charge.charge("cash"));
   expect(JSON.parse(post()[1]!.body as string)).toMatchObject({ email: "new@example.com", skipTicketEmail: true });
   expect(replayBody(s.hold.mock.calls[0][0]).skipTicketEmail).toBe(true);
+});
+
+it("a lost sale reply tells the cashier to print the ticket when the email may be lost", async () => {
+  await withoutEmail();
+  const original = vi.mocked(fetch).getMockImplementation()!;
+  vi.mocked(fetch).mockImplementation((url, init) => url === "/api/pos/order" ? Promise.reject(new Error("request lost")) : original(url, init));
+  await act(async () => charge.charge("cash"));
+  expect(replayBody(s.hold.mock.calls[0][0])).toMatchObject({ skipTicketEmail: true, noReceipt: true });
+  expect(host.textContent).toContain(t("pos.heldEmailPrint"));
+  expect([...host.querySelectorAll("button")].some(button => button.textContent === t("orders.printReceipt"))).toBe(true);
+});
+
+it("an offline one-sale email offers the printable ticket without stopping the sale", async () => {
+  await withoutEmail();
+  vi.stubGlobal("navigator", { onLine: false });
+  await act(async () => charge.charge("cash"));
+  expect(host.textContent).toContain(t("pos.heldEmailPrint"));
+  expect([...host.querySelectorAll("button")].some(button => button.textContent === t("orders.printReceipt"))).toBe(true);
+});
+it("a held sale without a one-sale email does not show the email warning", async () => {
+  vi.stubGlobal("navigator", { onLine: false });
+  await act(async () => charge.charge("cash"));
+  expect(host.textContent).not.toContain(t("pos.heldEmailPrint"));
 });
