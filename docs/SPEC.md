@@ -3512,5 +3512,7 @@ retried later. Founding-price restaurants are never queued, so never moved.
 `price_catalogue` changes the plan's catalogue price for new subscriptions
 once, at the effective date. The admin panel's "Precios de los planes" section lists each paid plan's
 price and any scheduled change (with owners told of queued), and schedules a
-change at least 31 days out. Not yet: reconciling subscribers whose Stripe price moved before
-their local plan synced.
+change at least 31 days out. `price_recipients` runs first every time: for each pending change it adds a
+notice row for every live Stripe subscription whose Price maps to the plan
+(except founders), so a subscriber whose local plan had not synced yet is
+still told, and still gets its 30 days.

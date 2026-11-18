@@ -8162,3 +8162,11 @@ a renewal billed before it ran, charging the old price for another month, or,
 run early, prorate a charge nobody was told about. The move is a Stripe
 subscription schedule whose second phase starts at a renewal boundary at least
 30 days after the notice; Stripe bills it there. Check: `price-moves.spec.ts`.
+
+## Price-change recipients read from Stripe too (review 1117b, finding 4)
+
+Scheduling a change queued the restaurants whose local `plan` was the tier.
+A subscriber Stripe already billed on that tier, whose sync had not landed,
+was missed and would have been moved without a notice. `price_recipients`
+reconciles every pending change from Stripe each run. Check:
+`price-recipients.spec.ts`.

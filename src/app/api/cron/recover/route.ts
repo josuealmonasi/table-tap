@@ -12,6 +12,7 @@ import { recoverSubscriptions } from "@/lib/recovery/subscriptions";
 import { recoverDisputes } from "@/lib/recovery/disputes";
 import { recoverPriceNotices } from "@/lib/recovery/price-notices";
 import { recoverPriceMoves, recoverPriceCatalogue } from "@/lib/recovery/price-moves";
+import { recoverPriceRecipients } from "@/lib/recovery/price-recipients";
 import { signedRecoveryAuthorized } from "@/lib/recovery/signed-auth";
 import { schedulerHealth } from "@/lib/recovery/health.mjs";
 import { purgeAccounting } from "@/lib/recovery/accounting-purge";
@@ -49,7 +50,9 @@ async function recover(request: Request) {
   // #622). Never throws; it stops between groups and releases what it claimed.
   const tickets = drainTickets().catch(() => null);
   // More sequential budgets would exceed the route limit.
-  const priceNotices = isolateJob("price_notices", () => recoverPriceNotices(recoveryContext()));
+  // Recipients first (anyone Stripe bills on the tier), then their notices.
+  const priceRecipients = isolateJob("price_recipients", () => recoverPriceRecipients(recoveryContext()));
+  const priceNotices = priceRecipients.then(() => isolateJob("price_notices", () => recoverPriceNotices(recoveryContext())));
   // Moves run after notices are sent (they only touch notified subscribers),
   // and the catalogue change once its effective date has arrived.
   const priceMoves = priceNotices.then(() => isolateJob("price_moves", () => recoverPriceMoves(recoveryContext())));
@@ -62,6 +65,8 @@ async function recover(request: Request) {
     results[name] = await isolateJob(name, () => job(recoveryContext()));
     console.info("Scheduled recovery", { job: name, ...results[name] });
   }
+  results.price_recipients = await priceRecipients;
+  console.info("Scheduled recovery", { job: "price_recipients", ...results.price_recipients });
   results.price_notices = await priceNotices;
   console.info("Scheduled recovery", { job: "price_notices", ...results.price_notices });
   results.price_moves = await priceMoves;
