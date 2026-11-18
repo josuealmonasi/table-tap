@@ -3,7 +3,7 @@ import { recoverProduction, RECOVERY_URL } from "../../../scripts/recover-produc
 
 const env = { ACTIONS_ID_TOKEN_REQUEST_TOKEN: "fixture-request-token",
   ACTIONS_ID_TOKEN_REQUEST_URL: "https://pipelines.actions.githubusercontent.com/fixture?api-version=2" };
-const jobs = Object.fromEntries(["stock", "refunds", "fees", "subscriptions", "disputes", "accounting"]
+const jobs = Object.fromEntries(["stock", "refunds", "fees", "subscriptions", "disputes", "accounting", "price_notices"]
   .map(name => [name, { failed: 0, pending: 0 }]));
 const tickets = { claimed: 2, sent: 1, retrying: 1, failed: 0, released: 0, errors: 0, expired: 0 };
 const response = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status });
@@ -53,6 +53,14 @@ it("fails when the accounting purge fails or is missing", async () => {
   for (const accounting of [{ failed: 1, pending: 0 }, undefined]) {
     const send = vi.fn().mockResolvedValueOnce(response({ value: "fixture-identity" }))
       .mockResolvedValueOnce(response({ jobs: { ...jobs, accounting } }));
+    await expect(recoverProduction(env, send)).rejects.toThrow("unfinished checks");
+  }
+});
+
+it("fails when price notices fail or are missing", async () => {
+  for (const price_notices of [{ failed: 1, pending: 0 }, undefined]) {
+    const send = vi.fn().mockResolvedValueOnce(response({ value: "fixture-identity" }))
+      .mockResolvedValueOnce(response({ jobs: { ...jobs, price_notices } }));
     await expect(recoverProduction(env, send)).rejects.toThrow("unfinished checks");
   }
 });

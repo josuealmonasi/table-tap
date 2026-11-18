@@ -93,14 +93,34 @@ no currency column, so today's restaurant setting cannot relabel an older fee.
 
 ## What runs on its own
 
+### Price notice wording names the first bill
+
+The notice needs to describe the same renewal boundary as the scheduled price.
+`price-notices.spec.ts` checks the first bill wording in both languages.
+
+### Price notices reach restaurants without a subscription
+
+A scheduled change queues every eligible restaurant, including one without a
+subscription. The mail worker used to require a Stripe subscription for every
+recipient, leaving those notices pending. `price-notices.spec.ts` checks that
+the owner gets the new price without a Stripe lookup.
+
+### Price notices keep their message on retry
+
+The owner address and current Stripe price can change after a mail reply is
+lost. The notice keeps its exact message before sending, so a retry uses the
+same provider key and body. `price-notices.spec.ts` checks the batch, retries,
+sent rows, founder exclusion, languages and missing subscription; `route.spec.ts`
+and `recovery-scheduler-client.spec.ts` keep the job in the healthy run. A
+notice without a readable subscription price stays pending for review.
+
 ### Scheduled prices keep their notice queue
 
 The scheduled price and its recipients must be written together, and the queue
 must exclude founding prices. `plan-price-change-route.spec.ts` checks the
 admin, date, plan and price refusals and the single RPC call;
 `plan-price-change-schema.spec.ts` pins the transaction and service-only grant.
-The API case checks real recipients and removes its fixture. Sending notices and
-changing Stripe prices are later work.
+The API case checks real recipients and removes its fixture. Notice delivery is separate from changing Stripe prices.
 
 ### Login passwords stay outside the repository
 
@@ -136,6 +156,9 @@ and that a new party cannot see the previous party's waiting phones.
 `src/lib/__tests__/invariants.spec.ts` enforces the rules that span files:
 
 | Rule | The bug it came from |
+| Price notice wording names the first bill | The email and the renewal boundary must describe the same bill |
+| A queued price notice reaches an owner without a subscription | Queue eligibility included restaurants whose notice worker required a subscription |
+| A price notice keeps its message across retries | A changed owner email or subscription price would make a retry conflict with the mail provider key |
 | Suspended restaurants refuse new diner checkouts | Checkout ignored the suspension marker and could start a new order |
 | A held sale offers paper when its one-sale email may be lost | The first request carried the address but replay did not; `card-email-pos.spec.tsx` checks the warning and printable ticket |
 | Admin usage and returned tips agree | A returned tip must not be deducted from sales; `admin-usage-returns.spec.ts` checks partial pieces |
@@ -8132,6 +8155,13 @@ hint looked for the next deal even when the chosen quantity already earned one.
 Both now use the selected line's price and saving, including other cart lines;
 `deal-callout.spec.tsx` renders quantities one through three in both languages.
 
+## A price move must not depend on when the job runs (2026-11-18)
+
+A job that changed a subscription's price after the effective date could miss
+a renewal billed before it ran, charging the old price for another month, or,
+run early, prorate a charge nobody was told about. The move is a Stripe
+subscription schedule whose second phase starts at a renewal boundary at least
+30 days after the notice; Stripe bills it there. Check: `price-moves.spec.ts`.
 ## The diner menu has two loaders that must agree (2026-11-18)
 
 A suspended restaurant first read as "not taking orders" only through the
