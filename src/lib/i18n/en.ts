@@ -3016,6 +3016,7 @@ votes: "Votes",
   priceNoticeMail: {
     subject: "A change to your plan price",
     intro: "Your current monthly price is {current}. The new monthly price will be {next}.",
+    introNoCurrent: "The new monthly price for your plan will be {next}.",
     after: "The new price will apply to your next bill on or after {date}.",
     button: "View your plan",
   },

@@ -47,6 +47,13 @@ checks the shared rule, and the rolled-back development probe checks both reads.
 
 ## What runs on its own
 
+### Price notices reach restaurants without a subscription
+
+A scheduled change queues every eligible restaurant, including one without a
+subscription. The mail worker used to require a Stripe subscription for every
+recipient, leaving those notices pending. `price-notices.spec.ts` checks that
+the owner gets the new price without a Stripe lookup.
+
 ### Price notices keep their message on retry
 
 The owner address and current Stripe price can change after a mail reply is
@@ -98,6 +105,7 @@ and that a new party cannot see the previous party's waiting phones.
 `src/lib/__tests__/invariants.spec.ts` enforces the rules that span files:
 
 | Rule | The bug it came from |
+| A queued price notice reaches an owner without a subscription | Queue eligibility included restaurants whose notice worker required a subscription |
 | A price notice keeps its message across retries | A changed owner email or subscription price would make a retry conflict with the mail provider key |
 | Scheduled plan prices keep their eligible notice queue | A scheduled price without its recipients could leave an owner without notice; the route and schema specs pin validation and the atomic queue |
 | One-click ticket unsubscribe retries return the same success | A cleared or unknown token returned 404 to mail providers; `ticket-stop-one-click.spec.ts` checks retries, invalid forms and the separate confirmation response |

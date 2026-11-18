@@ -3474,4 +3474,4 @@ tip; that is a known follow-up.
 
 ## Scheduled plan price notices
 
-A platform admin can schedule a positive plan price at least 30 full days ahead. The change and a notice queue for restaurants on that plan are saved together; founding-price restaurants are excluded. Recovery sends queued notices to owner email addresses in Spanish, using the current Stripe subscription price and a saved message for retries. Notices without a readable subscription price remain pending. Moving Stripe prices is separate work.
+A platform admin can schedule a positive plan price at least 30 full days ahead. The change and a notice queue for restaurants on that plan are saved together; founding-price restaurants are excluded. Recovery sends queued notices to owner email addresses in Spanish, using the current Stripe subscription price and a saved message for retries. Restaurants without a subscription receive the new price without a current-price comparison. Notices with an unreadable subscription price remain pending. Moving Stripe prices is separate work.

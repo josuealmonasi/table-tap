@@ -59,11 +59,12 @@ it("keeps the same address and body when a delivery reply is lost", async () => 
   expect(second).toEqual(first);
 });
 
-it("leaves a restaurant without a subscription pending without inventing a price", async () => {
+it("sends the new price to an owner without a subscription", async () => {
   const { recoverPriceNotices } = await import("../price-notices");
   const f = fixture(1); f.rows[0].restaurants.stripe_subscription_id = null as unknown as string;
-  expect(await recoverPriceNotices(f.context)).toMatchObject({ done: 0, pending: 1, failed: 1 });
-  expect(f.rows[0]).toMatchObject({ attempts: 1, last_error: "owner or subscription unavailable" }); expect(send).not.toHaveBeenCalled();
+  expect(await recoverPriceNotices(f.context)).toMatchObject({ done: 1, pending: 0, failed: 0 });
+  expect(send).toHaveBeenCalledWith(expect.objectContaining({ to: "owner0@example.com", text: expect.stringContaining("900.00") }));
+  expect(f.client.subscriptions.retrieve).not.toHaveBeenCalled();
 });
 
 it("writes both languages and escapes the plan link in HTML", async () => {
