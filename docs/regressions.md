@@ -8250,3 +8250,10 @@ to Carta. The only trace was a line on the Plan page, so the owner read the
 trial as being put on a plan without asking. The owner now gets a welcome once
 and a days-left banner everywhere. Check: `trial-notice.spec.ts`.
 
+## A new email was a new free month (2026-11-18)
+
+The trial was once per restaurant, and a restaurant is one email away, so the
+same business could take a free month again and again. A unique RFC would have
+blocked a legitimate second location; now a trial is once per RFC
+(`trial_rfcs`). Check: `one-trial-per-rfc.spec.ts`.
+

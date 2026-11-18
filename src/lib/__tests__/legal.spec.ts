@@ -42,6 +42,10 @@ describe("the text and the version cannot drift apart", () => {
       .digest("hex")
       .slice(0, 16);
 
+  // 2026-11-18, bumped from 2026-11-12: the free trial is once per RFC, not
+  // only per restaurant, and the privacy notice keeps a trial's RFC after the
+  // account closes for that one purpose, a new retention, so every restaurant
+  // is asked again.
   // 2026-11-12, bumped from 2026-11-11: a diner may link an email to their
   // visit card to receive every ticket there — the notice stopped promising
   // that no diner email is ever kept, so every restaurant is asked again.
@@ -68,15 +72,15 @@ describe("the text and the version cannot drift apart", () => {
   // kept the version as a clarification.)
   it("has terms that match the version in force", () => {
     expect({ version: TERMS_VERSION, text: fingerprint("terms-es") }).toEqual({
-      version: "2026-11-12",
-      text: "21015364f21d4e53",
+      version: "2026-11-18",
+      text: "8cce805f4850523f",
     });
   });
 
   it("has a privacy notice that matches the version in force", () => {
     expect({ version: TERMS_VERSION, text: fingerprint("privacy-es") }).toEqual({
-      version: "2026-11-12",
-      text: "0922b8bc438bfb34",
+      version: "2026-11-18",
+      text: "fe3fb6f35a812460",
     });
   });
 });
