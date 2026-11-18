@@ -7,14 +7,13 @@ import { dietaryTags, tagLabel } from "@/lib/dietary";
 import { useDietaryTags } from "@/components/DietaryTagsContext";
 import { itemSalePrice, MAX_LINE_QTY } from "@/lib/pricing";
 import { missingRequired } from "@/lib/modifiers";
-import { addedLineCost, nextPromoStep } from "@/lib/promo-math";
+import { detailPromoPrice } from "@/lib/promo-math";
 import NoteField from "./NoteField";
 import type { CartPromo } from "@/lib/pricing";
 import { useT, useLocale } from "@/lib/i18n/context";
 import ModifierGroup from "./ModifierGroup";
 import { BackIcon } from "@/components/ui/icons";
 import DishImage from "./DishImage";
-import { round2 } from "@/lib/money";
 
 /** Item customisation screen: modifiers, extras, special requests, qty → add to cart. */
 export default function ItemDetailScreen({
@@ -77,7 +76,6 @@ export default function ItemDetailScreen({
   // Extras are never discounted, so only the base price gets the % off.
   const onSale = (item.discount_pct ?? 0) > 0;
   const salePrice = itemSalePrice(item.price, item.discount_pct);
-  const unitPrice = salePrice + extrasTotal;
 
   // What this deal is, and what one more would earn. A dish covered by a 2x1
   // used to look exactly like any other on this screen — the offer only
@@ -87,12 +85,10 @@ export default function ItemDetailScreen({
   // already has in the cart decides what this one costs. When editing a line,
   // its own quantity is excluded — it is being replaced, not added to.
   const otherQty = Math.max(0, inCartQty - (initialLine?.qty ?? 0));
-  const lineTotal = addedLineCost(promo, otherQty, qty, salePrice, extrasTotal);
+  const deal = detailPromoPrice(promo, otherQty, qty, salePrice, extrasTotal);
   // What the same items would cost without the deal, so the saving is visible
   // before committing rather than only once it lands in the cart.
-  const fullPrice = round2(unitPrice * qty);
-
-  const step = promo ? nextPromoStep(promo, otherQty + qty, unitPrice) : null;
+  const { total: lineTotal, full: fullPrice, step } = deal;
 
   function handleAdd() {
     if (missing.length > 0) {
@@ -145,6 +141,7 @@ export default function ItemDetailScreen({
           {promo && (
             <div className="tt-promo-callout">
               <span className="tt-deal">{promo.name}</span>
+              {deal.applied && <span>{t("promos.applied")}</span>}
               {step && (
                 <span>
                   {t("promos.oneMore", {
