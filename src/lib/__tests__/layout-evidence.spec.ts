@@ -16,7 +16,7 @@ it("the same seed gives the same choices, a different one does not", () => {
 
 it("leaves Math.random alone without SEED", () => {
   const before = Math.random;
-  expect(installSeed({})).toBeNull();
+  expect(installSeed({} as NodeJS.ProcessEnv)).toBeNull();
   expect(Math.random).toBe(before);
 });
 
