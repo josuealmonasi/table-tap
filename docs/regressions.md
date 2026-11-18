@@ -45,6 +45,19 @@ resolve the card return. The import records that reason on the review row; the
 need check skips it and the money check still lists it. `historical-card-import.spec.ts`
 checks the shared rule, and the rolled-back development probe checks both reads.
 
+## Admin usage keeps returned tips out of sales
+
+The usage report and return operations must agree on which part was a tip.
+Subtracting the whole return from sales would charge a returned tip to sales.
+`admin-usage-returns.spec.ts` checks partial pieces across periods and
+`admin-usage-read.spec.ts` checks the saved operation against its sale.
+
+## Admin usage keeps each fee in its own currency
+
+The fee ledger and checkout evidence must agree on a currency. The ledger has
+no currency column, so today's restaurant setting cannot relabel an older fee.
+`admin-usage-read.spec.ts` checks the matching restaurant and the unknown bucket.
+
 ## What runs on its own
 
 ### Scheduled prices keep their notice queue
@@ -90,6 +103,8 @@ and that a new party cannot see the previous party's waiting phones.
 `src/lib/__tests__/invariants.spec.ts` enforces the rules that span files:
 
 | Rule | The bug it came from |
+| Admin usage and returned tips agree | A returned tip must not be deducted from sales; `admin-usage-returns.spec.ts` checks partial pieces |
+| Admin usage and fee currency evidence agree | A fee cannot inherit today's restaurant currency; `admin-usage-read.spec.ts` checks other currencies and missing evidence |
 | Scheduled plan prices keep their eligible notice queue | A scheduled price without its recipients could leave an owner without notice; the route and schema specs pin validation and the atomic queue |
 | One-click ticket unsubscribe retries return the same success | A cleared or unknown token returned 404 to mail providers; `ticket-stop-one-click.spec.ts` checks retries, invalid forms and the separate confirmation response |
 |---|---|
