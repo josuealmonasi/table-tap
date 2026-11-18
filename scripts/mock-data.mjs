@@ -19,6 +19,7 @@
 // ============================================================================
 
 import { randomBytes, randomUUID } from "node:crypto";
+import { installSeed } from "./seeded-random.mjs";
 import { isLentAccount } from "./lent-stripe-account.mjs";
 import { createClient } from "@supabase/supabase-js";
 import { populateMenu } from "./menu-catalog.mjs";
@@ -35,6 +36,17 @@ import { finalizeMockCashShift } from "./mock-cash-shift.mjs";
 import { bulkInsert, randInt, sample } from "./menu-catalog.mjs";
 import { loginSecret } from "./login-secrets.mjs";
 import { resetDemoUser } from "./mock-logins.mjs";
+
+// Replayable when SEED is set (CI sets one); random otherwise.
+installSeed();
+
+// Every list a random choice is drawn from comes in a fixed order. A query with
+// no ORDER BY returns rows as Postgres likes, so the same seeded draw picked a
+// different dish each run (the stock-out dish moved between menus).
+const STABLE_DISHES = `select mi.id, mi.name from menu_items mi
+  left join menus m on m.id = mi.menu_id left join categories c on c.id = mi.category_id
+  where mi.restaurant_id = $1 and not mi.is_addon
+  order by m.sort_order, c.sort_order, mi.sort_order, mi.name`;
 
 export const DEMO_RESTAURANT = "Demo Bistro";
 // Read when the seeder runs, after its caller loaded the env file: production's
@@ -279,7 +291,7 @@ async function seedDemo(pg, production) {
 
   // Showcase option groups (modifiers) on a handful of products.
   const { rows: allProducts } = await pg.query(
-    "select id, name from menu_items where restaurant_id = $1 and not is_addon",
+    STABLE_DISHES,
     [rid],
   );
   const spice = { label: "Spice level", type: "single", options: ["Mild", "Medium", "Hot"] };
@@ -340,15 +352,17 @@ async function seedDemo(pg, production) {
   const { rows: products } = await pg.query(
     `select p.id, p.name, p.emoji, p.price, p.modifiers, c.station,
        coalesce(
-         json_agg(json_build_object('id', a.id, 'name', a.name, 'emoji', a.emoji, 'price', a.price))
+         json_agg(json_build_object('id', a.id, 'name', a.name, 'emoji', a.emoji, 'price', a.price) order by a.name)
            filter (where a.id is not null), '[]'
        ) as extras
      from menu_items p
      left join categories c on c.id = p.category_id
      left join item_addons ia on ia.product_id = p.id
      left join menu_items a on a.id = ia.addon_id
+     left join menus m on m.id = p.menu_id
      where p.restaurant_id = $1 and not p.is_addon and p.available
-     group by p.id, c.station`,
+     group by p.id, c.station, c.sort_order, m.sort_order
+     order by m.sort_order, c.sort_order, p.sort_order, p.name`,
     [rid],
   );
 
@@ -803,7 +817,7 @@ async function seedDemo(pg, production) {
     [rid],
   );
   const { rows: menuIds } = await pg.query(
-    "select id, name from menu_items where restaurant_id = $1 and not is_addon", [rid]);
+    STABLE_DISHES, [rid]);
   const byName = new Map(menuIds.map(m => [m.name, m.id]));
   const ratings = [];
   for (const o of rateable) {
@@ -963,7 +977,7 @@ async function seedDemo(pg, production) {
   // one comfortable, one about to run out, one already gone. The rest stay
   // untracked, which is how most of a real menu looks.
   const counted = sample(
-    (await pg.query("select id, name from menu_items where restaurant_id = $1 and not is_addon", [rid])).rows,
+    (await pg.query(STABLE_DISHES, [rid])).rows,
     3,
   );
   if (counted.length === 3) {

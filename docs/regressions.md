@@ -8281,3 +8281,16 @@ same business could take a free month again and again. A unique RFC would have
 blocked a legitimate second location; now a trial is once per RFC
 (`trial_rfcs`). Check: `one-trial-per-rfc.spec.ts`.
 
+## A red layout run left a sentence and an unrepeatable menu (2026-11-18)
+
+GitHub's layout gate failed "360px · diner en · dish detail — controls-touching
+(3.6px)" on some runs and could not be reproduced: the demo seed was random per
+run, and the artifact was a line of text. Now CI seeds with a fixed `SEED`
+(`scripts/seeded-random.mjs`; replay with `SEED=tabletap-ci-1 pnpm db:mock`),
+every list a random draw picks from comes in a fixed order (an unordered query
+had moved the stock-out dish between menus with the same seed), and a failed
+visit saves a full-page screenshot plus the offending boxes and their scroll
+container under `gate-output/evidence`. Checked on dev: the same seed twice gave
+the same 67 dishes, extras, modifiers and promotions. Check:
+`layout-evidence.spec.ts`.
+

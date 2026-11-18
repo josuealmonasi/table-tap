@@ -27,6 +27,14 @@ concurrency:
 permissions:
   contents: read
 
+# One demo menu for every job, replayable: run `SEED=<this> pnpm db:mock`
+# locally to get the menu a failing run had. A failed browser visit saves a
+# screenshot and the offending boxes under gate-output/evidence, which the
+# "Keep the output" steps upload.
+env:
+  SEED: tabletap-ci-1
+  GATE_EVIDENCE_DIR: gate-output/evidence
+
 jobs:
   # One production build for every gate job. Nine jobs each building at once
   # also asked Google Fonts nine times at once (next/font fetches at build
