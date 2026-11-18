@@ -3083,6 +3083,15 @@ setup follows [Vercel's authorization contract](https://vercel.com/docs/cron-job
 
 ## Owner email verification and review fixes (9 Nov 2026)
 
+Owner terms acceptance records the restaurant, user, email, version, time,
+source and SHA-256 of the compact JSON encoding of the Spanish terms source.
+It does not record an IP address or browser. A repeat by the same user for the
+same version and hash within one minute shares the existing record. Only the
+service role reads the history; it cannot be edited or individually deleted.
+Restaurant deletion archives it with the accounting records for ten years.
+The acceptance previously stored on each restaurant is backfilled without
+guessing its user or text hash. Current acceptance fields remain on the restaurant.
+
 Self-serve signup creates an unconfirmed auth user and a restaurant with
 `owner_signup_pending = true`. The verification screen offers resend and sign-in;
 it does not sign the owner in with the password just chosen. The server callback

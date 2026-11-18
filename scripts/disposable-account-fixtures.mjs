@@ -16,7 +16,10 @@ export async function disposableAccountRestaurant(admin, env, name, roles = []) 
   const users = [], who = { diner: "" }, emails = {};
   let restaurant;
   const cleanup = async () => {
-    if (restaurant) await checked(admin.from("restaurants").delete().eq("id", restaurant.id));
+    if (restaurant) {
+      await checked(admin.from("restaurants").delete().eq("id", restaurant.id));
+      await checked(admin.from("restaurant_accounting_records").delete().eq("restaurant_id", restaurant.id));
+    }
     for (const id of users) await checked(admin.auth.admin.deleteUser(id));
   };
   try {

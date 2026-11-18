@@ -53,6 +53,15 @@ and that a new party cannot see the previous party's waiting phones.
 
 | Rule | The bug it came from |
 |---|---|
+| Earlier acceptance rows and the backfill index agree | Relabeling every old row as a backfill could stop schema application; `acceptance-schema.spec.ts` pins the migration |
+| Terms evidence and the privacy notice agree | Acceptance saved request network details despite the notice; `acceptance-history.spec.ts` and `rate-limit-key.spec.ts` forbid collection |
+| Terms history access and kitchen denial agree | A table grant allowed authenticated reads to reach RLS; `acceptance-schema.spec.ts` pins service-only access |
+| Legacy acceptance capture and seed updates agree | An unchanged seed wrote another immutable record; `acceptance-schema.spec.ts` pins changed values |
+| Acceptance retries and history growth agree | Repeated requests could grow immutable history; `acceptance-schema.spec.ts` pins serialized deduplication and text limits |
+| Acceptance writer and owner authorization agree | The definer trusted its caller's restaurant and user; `acceptance-schema.spec.ts` pins the owner check |
+| Terms acceptances survive newer acceptances and restaurant deletion | The restaurant kept only its latest acceptance and was deleted with it; `acceptance-history.spec.ts`, `acceptance-schema.spec.ts` and `signup-verification.spec.ts` cover the writers and archive contract |
+| The retry schedule must run on the hosting plan and identify its caller | Vercel rejected the five-minute cron on Hobby; `recovery-schedule-platform.spec.ts`, `github-cron-auth.spec.ts` and `recovery-scheduler-client.spec.ts` pin the daily fallback and the exact signed main-branch job |
+|---|---|
 | Historical card reviews do not retry on each bill read | The importer cannot use a log as provider evidence, but the need check kept finding it; `historical-card-import.spec.ts` checks the review marker |
 | The retry schedule must run on the hosting plan and identify its caller | Vercel rejected the five-minute cron on Hobby; `recovery-schedule-platform.spec.ts`, `github-cron-auth.spec.ts` and `recovery-scheduler-client.spec.ts` pin the daily fallback and the exact signed main-branch job |
 | Account email removal matches each caller and the saved address | Staff shared a customer IP limit, and a statement offered removal without an address; `account-email-remove.spec.ts`, `account-credit-public.spec.ts` and `remove-email.spec.tsx` cover the limits, projection and dialog |
@@ -7706,6 +7715,17 @@ share `splitTakesExactTipOnly`, tested against one fixture table
 bundle to reload. Known follow-up (F4): modern v1 splits with a principal still
 reopen an earlier page or return a winner whose tip differs from the screen.
 
+## Terms acceptance history
+
+Signup and later consent both wrote the restaurant's one current acceptance,
+while deletion kept the books but not that acceptance. Both writers now save
+the current value and an individual history row together; deletion copies each
+row with the books before the cascade. The old value is backfilled once, with
+unknown identity and text hash left empty rather than guessed.
+`acceptance-history.spec.ts` exercises repeat acceptance, permission and failure;
+`signup-verification.spec.ts` covers the first acceptance and rollback;
+`acceptance-schema.spec.ts` pins the archive and service-only grant. Database
+execution and cascade behavior still need Claude's isolated gate.
 ## Removing an account email
 
 The privacy notice and the account screens had to agree: an address could be
@@ -7787,6 +7807,42 @@ The scheduler checks the accounting result. The purge uses the existing
 `retained_at`, excludes live restaurants from both deletion and pending counts,
 and reports the age since the retention deadline. The SQL contract test reads
 the function itself; the database probe must exercise the actual predicate.
+
+## Acceptance evidence and privacy
+
+The privacy notice and acceptance writer disagreed about network details.
+Acceptance keeps neither IP nor browser; `acceptance-history.spec.ts` and
+`rate-limit-key.spec.ts` check both writers and the address readers.
+
+## Acceptance history access
+
+The authenticated table grant disagreed with the kitchen denial check. Only
+the service role may read this history; `acceptance-schema.spec.ts` pins it.
+
+## Legacy acceptance capture
+
+Seed updates wrote history even when the values did not change. The capture
+trigger now checks the values; `acceptance-schema.spec.ts` pins that condition.
+
+## Acceptance retries and history growth
+
+Repeated accepts could grow immutable history without bound. The same user,
+version and hash within a minute share a row, and SQL bounds the text.
+`acceptance-schema.spec.ts` pins the lock, deduplication and limits.
+
+## Acceptance writer authorization
+
+The route checked ownership but its SQL writer trusted the caller's user and
+restaurant. The writer now checks the owner too; `acceptance-schema.spec.ts`
+pins the check. Claude's database probe must exercise these contracts, including
+concurrent retries and the ten-year archive purge.
+
+## Earlier acceptance rows and the backfill index
+
+An earlier draft could have more than one acceptance for a restaurant. Giving
+every row the backfill source would make the new unique index fail. The schema
+keeps the earlier backfill marker and labels the other rows separately;
+`acceptance-schema.spec.ts` pins the migration.
 ## Rate limits that capped the answer, not the cost (security review 2026-11-17)
 
 Three limits each guarded one side of something that had to agree:
