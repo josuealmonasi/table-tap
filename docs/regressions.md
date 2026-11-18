@@ -114,6 +114,7 @@ and that a new party cannot see the previous party's waiting phones.
 | Failed loyalty reads cannot open an empty editor (E2E D7) | A read failure looked like a program that had never existed |
 | Replay waits for the online send and preserves preparation (E2E C5) | Background replay raced a live request and completed food nobody had made |
 | Processing fees keep the payment currency (E2E D4) | A dollar charge used the fixed peso processing fee |
+| Diner menu, cart and bill show the restaurant's legal identity, read through the ticket's server-side path and never the public columns; the pickup-name and receipt-email fields carry the short privacy notice (`invariants/place-identity.spec.ts`, `place-identity.spec.tsx`) | The legal review found diners paying with no restaurant identity, address or notice in sight (LFPC 76 Bis, LFPDPPP 16) |
 | An elapsed time goes through `src/lib/elapsed.ts`; no dictionary key outside `elapsed` takes a raw count of minutes, hours or days, and no screen divides by 60 000 itself (`invariants/elapsed.spec.ts`) | The Pedidos board read "hace 1741 min" for a ticket a day and five hours old |
 | Terminal bank movements keep their sign (E2E C7) | A refund-heavy day's bank debit could not be recorded |
 | New owners prove email ownership before their trial starts (E2E E4) | Signup confirmed an address nobody had verified |
@@ -7773,3 +7774,44 @@ An earlier draft could have more than one acceptance for a restaurant. Giving
 every row the backfill source would make the new unique index fail. The schema
 keeps the earlier backfill marker and labels the other rows separately;
 `acceptance-schema.spec.ts` pins the migration.
+## Rate limits that capped the answer, not the cost (security review 2026-11-17)
+
+Three limits each guarded one side of something that had to agree:
+- The floor's membership poll started the session check and two membership
+  reads before awaiting its limiter, to save a round trip. A caller over the
+  limit got 429 but still cost auth plus two reads per request. The limiter is
+  now awaited first.
+- Diner card-email changes were counted per network address, removals included.
+  One diner on the restaurant's Wi-Fi could spend the shared allowance and
+  leave everyone there unable to remove their own address for an hour. Removal
+  probes nothing and withdraws consent, so it is no longer counted; linking is.
+- Dispute history paged through the restaurant's whole dispute book and
+  checked each case's ownership for any request, including one with no order.
+  An empty request now answers `{}` without reading, and reads are capped at 30
+  a minute per manager.
+
+Check: `src/lib/__tests__/secreview-1117-limits.spec.ts` (fails on the old code
+for the first two; the third asserts no dispute read happens).
+## Android layout — separators stay with the word before them
+
+The GitHub layout gate renders text like Linux/Android Chrome, which wraps
+where macOS did not. A " · " joint could start a line (check payment, divided
+bill, part receipt), the dish or combo name ran up against its price (3px), and
+the account statement's order lines painted 1px into each other. Every inline
+" · " now joins with no-break spaces on both sides of the dot (a line can neither start nor end with one); the dish/combo head is
+`.tt-detail-head` (elastic name with `min-width: 0` and `overflow-wrap`, fixed
+price); `.tt-statement-lines` spaces its lines with a parent `gap`.
+
+The i18n strings (`es.ts`, `en.ts`) join with the same no-break spaces around the dot.
+
+## A gate's fake card reader that outlived every run (2026-11-17)
+
+The API cases lend Demo Bistro a fake Stripe account (`acct_api_check…`) so
+card routes get past "this restaurant takes no cards", and put back what they
+found afterwards. A run stopped mid-case left the fake on. Every later case
+then saved the fake as the "original" and restored it, and `db:mock` kept it
+too, because a reseed preserves a real test account. Every card route then
+failed at Stripe (500/502) and the attack gate refused its admission case, on
+every branch, looking like a bug in whatever PR was being gated (#653).
+`scripts/lent-stripe-account.mjs` names the fakes once; restores and reseeds
+never keep one. Check: `src/lib/__tests__/lent-stripe-account.spec.ts`.

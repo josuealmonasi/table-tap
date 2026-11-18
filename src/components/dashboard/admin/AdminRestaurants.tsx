@@ -7,6 +7,7 @@ import { planLabel } from "@/lib/plan";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { DeleteIcon } from "@/components/ui/icons";
 import type { AdminRestaurantRow } from "./AdminPanel";
+import BillingLine from "./AdminBillingLine";
 import AdminTierDialog, { type TierAssignment } from "./AdminTierDialog";
 
 interface AdminRestaurantsProps {
@@ -75,6 +76,7 @@ export default function AdminRestaurants({ restaurants, plans, busy, onMovePlan,
           <div key={r.id} className="tt-admin-tr tt-admin-tr--rest">
             <span className="tt-staff-cell" title={r.name}>
               <strong>{r.name}</strong>
+              <BillingLine billing={r.billing} />
             </span>
             <span className="tt-staff-cell tt-muted" title={r.owner_email}>
               {r.owner_email}

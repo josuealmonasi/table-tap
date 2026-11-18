@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { accountToRestore } from "../lent-stripe-account.mjs";
 import { splitSlotFixture } from "../split-slots-fixture.mjs";
 import { chargeAccountFixture } from "../disposable-account-fixtures.mjs";
 import { ordersTipBase, frozenTipPrincipal, splitTipBase, tipFromPercent } from "../api-tip-helper.mjs";
@@ -35,7 +36,7 @@ export function tipBaseCase(kind) {
             await checked(f.admin.from("account_checkouts").delete().eq("account_id", accountId));
             // Every later account case shares this restaurant: "no card
             // reader" must find it without one again.
-            await checked(f.admin.from("restaurants").update(cardsBefore).eq("id", f.restaurant.id));
+            await checked(f.admin.from("restaurants").update(accountToRestore(cardsBefore)).eq("id", f.restaurant.id));
             return;
           }
           if (laterId) await checked(f.admin.from("orders").delete().eq("id", laterId));

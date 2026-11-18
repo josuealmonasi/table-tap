@@ -6,6 +6,7 @@ import { useT } from "@/lib/i18n/context";
 import { Modal } from "@/components/ui/Modal";
 import { EMAIL_MAX, isValidEmail } from "@/lib/email";
 import ReceiptPrint from "./ReceiptPrint";
+import PrivacyHint from "./PrivacyHint";
 
 /**
  * Offers a receipt by email or print/save, once, after paying.
@@ -132,6 +133,7 @@ export default function ReceiptPrompt({ orderIds = [], paymentId, email: canEmai
             onBlur={() => setTouched(true)}
             aria-invalid={showInvalid}
           />
+          <PrivacyHint field="email" />
 
           {showInvalid && (
             <p className="tt-receipt-error" role="alert">
