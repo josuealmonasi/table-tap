@@ -19,6 +19,8 @@ export interface Mail {
   idempotencyKey?: string;
   /** Files sent with it, such as the ticket's PDF. */
   attachments?: { filename: string; content: Buffer }[];
+  /** Stop a provider request when its caller runs out of time. */
+  signal?: AbortSignal;
   /** Extra headers, such as List-Unsubscribe. */
   headers?: Record<string, string>;
 }
@@ -50,6 +52,7 @@ export async function sendMail(mail: Mail): Promise<MailResult> {
   try {
     const res = await fetch("https://api.resend.com/emails", {
       method: "POST",
+      signal: mail.signal,
       headers: {
         Authorization: `Bearer ${process.env.RESEND_API_KEY}`,
         "Content-Type": "application/json",

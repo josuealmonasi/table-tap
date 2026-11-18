@@ -4349,6 +4349,19 @@ a.tt-btn {
 .tt-admin-health li strong { font-size: 16px; }
 .tt-admin-health li.tt-admin-health--bad { border-color: var(--tt-danger); }
 .tt-admin-health li.tt-admin-health--bad strong { color: var(--tt-danger); }
+/* The platform team's notes about a restaurant, newest first. */
+.tt-admin-notes {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.tt-admin-notes li {
+  border-top: 1px solid var(--tt-cream);
+  padding-top: 8px;
+}
 .tt-admin-tr:first-of-type {
   border-top: none;
 }

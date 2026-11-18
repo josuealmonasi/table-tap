@@ -10248,6 +10248,20 @@ create index if not exists platform_admin_audit_attempt on platform_admin_audit(
 alter table platform_admin_audit enable row level security;
 revoke all on platform_admin_audit from anon, authenticated, public, service_role;
 grant select, insert on platform_admin_audit to service_role;
+-- The platform team's own notes about a restaurant (support history). Never
+-- shown to the restaurant; service role only, like every admin table.
+create table if not exists restaurant_admin_notes (
+  id uuid primary key default gen_random_uuid(),
+  restaurant_id uuid not null references restaurants(id) on delete cascade,
+  author text not null,
+  body text not null check (char_length(body) between 1 and 2000),
+  created_at timestamptz not null default now()
+);
+create index if not exists restaurant_admin_notes_restaurant on restaurant_admin_notes (restaurant_id, created_at desc);
+alter table restaurant_admin_notes enable row level security;
+revoke all on restaurant_admin_notes from anon, authenticated, public, service_role;
+grant select, insert, delete on restaurant_admin_notes to service_role;
+
 
 -- Even a service-side mistake must append a correction, never rewrite history.
 create or replace function public.keep_platform_admin_audit()
@@ -15291,6 +15305,19 @@ create table if not exists plan_price_notices (
   last_error text,
   primary key (change_id, restaurant_id)
 );
+-- A retry must send the same message, even if the owner or price changes.
+alter table plan_price_notices add column if not exists mail_body jsonb;
+-- The oldest queued notice, not an arbitrary UUID, sets the recovery age.
+alter table plan_price_notices add column if not exists created_at timestamptz not null default now();
+-- The Stripe subscription schedule that bills the new price from the first
+-- renewal on or after the effective date and 30 days after the notice; set
+-- once, so the move is never made twice. `move_skipped` says why a
+-- subscription was not moved (set to cancel, not monthly, overdue).
+alter table plan_price_notices add column if not exists stripe_schedule_id text;
+alter table plan_price_notices add column if not exists moves_at timestamptz;
+alter table plan_price_notices add column if not exists move_skipped text;
+-- When the catalogue price changed for new subscriptions (once, at effective_at).
+alter table plan_price_changes add column if not exists applied_at timestamptz;
 alter table plan_price_changes enable row level security;
 alter table plan_price_notices enable row level security;
 revoke all on plan_price_changes from anon, authenticated, public;
@@ -15323,7 +15350,7 @@ alter table platform_admin_audit add constraint platform_admin_audit_target_type
 alter table platform_admin_audit drop constraint if exists platform_admin_audit_action_check;
 alter table platform_admin_audit add constraint platform_admin_audit_action_check
   check (action in ('login.create', 'login.update', 'login.delete', 'restaurant.delete', 'restaurant.plan', 'plan.price',
-    'restaurant.suspend', 'restaurant.unsuspend', 'restaurant.trial'));
+    'restaurant.suspend', 'restaurant.unsuspend', 'restaurant.trial', 'restaurant.owner_reset'));
 
 revoke truncate, references, trigger on all tables in schema public from authenticated;
 -- Audit of #648: recovery every five minutes, scheduled by the database.
