@@ -43,7 +43,13 @@ async function plantOffer(f, table, active) {
         .insert({ promotion_id: data.id, item_id: f.dish.id, qty: 1 });
       if (linkError) throw linkError;
     }
-    return { data, cleanup };
+    // Shared by the refusal cases: the run names the first one that changed it.
+    const fingerprint = async () => {
+      const { data: now, error: readError } = await f.admin.from(table).select("*").eq("id", data.id).maybeSingle();
+      if (readError) throw readError;
+      return JSON.stringify(now);
+    };
+    return { data, cleanup, fingerprint };
   } catch (error) { await cleanup(); throw error; }
 }
 

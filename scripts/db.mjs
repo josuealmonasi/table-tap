@@ -125,7 +125,7 @@ try {
     }
     console.log(`Returned ${returned} orphan stock reservation(s). Run pnpm ${isProd ? "money:prod" : "money"} to check for remaining work.`);
   } else if (config.custom === "mock") {
-    const summary = await seedMock(client);
+    const summary = await seedMock(client, { production: isProd });
     if (!isProd) {
       await client.query("begin");
       await client.query(await readFile(join(root, "supabase/journal-activate.sql"), "utf8"));

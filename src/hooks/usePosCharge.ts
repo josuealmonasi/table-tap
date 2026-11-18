@@ -193,7 +193,7 @@ export function usePosCharge({ collector, collectorContext, restaurant, cart, de
       // Saving a card address is optional: a failed save must never hold up collected money.
       if (!retriedAccount && canEmailReceipt && details.saveCardEmail && details.emailConsent && details.loyaltyCard && details.email.trim() && !details.noTicket && details.cardEmail === null) {
         const saved = await saveSaleEmail(details.loyaltyCard.code, details.email.trim());
-        if (!saved.saved) toast(saved.suffix ? t("cardEmail.taken", { suffix: saved.suffix }) : t("cardEmail.saveFailed"), "error");
+        if (!saved.saved) toast(t("cardEmail.saveFailed"), "error");
       }
       let res: Response;
       try {

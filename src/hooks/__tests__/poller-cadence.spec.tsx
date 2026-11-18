@@ -12,6 +12,7 @@ import { useSlotReceiptOffer } from "../useSlotReceiptOffer";
 import TableCalculator from "@/components/dashboard/TableCalculator";
 import TrackerOverlay from "@/components/customer/TrackerOverlay";
 import { rememberSitting } from "@/lib/table-binding";
+import { readTimeoutMs } from "@/lib/poll-after-settle";
 
 const state = vi.hoisted(() => ({ t: (key: string) => key, router: { refresh: vi.fn() }, toast: vi.fn() }));
 vi.mock("@/lib/i18n/context", () => ({ useT: () => state.t }));
@@ -49,6 +50,8 @@ let root: Root;
 let finish: (response: Response) => void;
 const calls = vi.fn<typeof fetch>();
 const reply = () => Response.json({ open: true, status: "received", id: "order", restaurant_id: "restaurant", table_id: "table", payments: [], splitOrderIds: [], orders: [] });
+/** A read slower than the interval, but inside its timeout (audit of #648). */
+const slow = (interval: number) => readTimeoutMs(interval) - 100;
 const advance = async (ms: number) => { await act(async () => { await vi.advanceTimersByTimeAsync(ms); }); };
 beforeEach(() => {
   vi.useFakeTimers(); vi.stubGlobal("React", React); vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
@@ -69,7 +72,7 @@ it.each(pollers)("$name waits a full interval after a slow read", async ({ View,
   await act(async () => root.render(<View />));
   if (initial) await advance(initial);
   expect(calls).toHaveBeenCalledTimes(1);
-  await advance(interval * 2 + 100);
+  await advance(slow(interval));
   expect(calls).toHaveBeenCalledTimes(1);
   await act(async () => {
     document.dispatchEvent(new Event("visibilitychange"));
@@ -81,7 +84,7 @@ it.each(pollers)("$name waits a full interval after a slow read", async ({ View,
   expect(calls).toHaveBeenCalledTimes(1);
   await advance(1);
   expect(calls).toHaveBeenCalledTimes(2);
-  await advance(interval * 2 + 100);
+  await advance(slow(interval));
   expect(calls).toHaveBeenCalledTimes(2);
   await act(async () => finish(name === "useOnline" || name === "useOfflineSales" ? Response.json({}, { status: 503 }) : reply()));
   await advance(interval - 1);
@@ -99,12 +102,28 @@ it.each(pollers)("$name keeps its hidden-tab behaviour", async ({ View, interval
   vi.spyOn(document, "visibilityState", "get").mockReturnValue("hidden");
   if (name === "useOfflineSales") vi.spyOn(navigator, "onLine", "get").mockReturnValue(true);
   await act(async () => root.render(<View />));
-  await advance(initial + interval * 2);
+  await advance(initial + Math.min(interval * 2, slow(interval)));
   expect(calls).toHaveBeenCalledTimes(paused ? 0 : 1);
   vi.spyOn(document, "visibilityState", "get").mockReturnValue("visible");
   await act(async () => document.dispatchEvent(new Event("visibilitychange")));
   await act(async () => window.dispatchEvent(new Event("focus")));
   expect(calls).toHaveBeenCalledTimes(1);
+});
+
+it.each(pollers)("$name polls again after a read that never answers", async ({ View, interval, initial, name }) => {
+  // Audit of #648: a half-open connection must not freeze the poll.
+  // A held sale's POST is never abandoned mid-write; admission has its own deadline (membershipDeadline).
+  if (name === "useOfflineSales" || name === "useTableMembership") return;
+  // Like the browser's fetch, the mock gives up when its signal aborts.
+  calls.mockImplementation((_url, init) => new Promise((resolve, reject) => {
+    finish = resolve;
+    init?.signal?.addEventListener("abort", () => reject(init.signal!.reason));
+  }));
+  await act(async () => root.render(<View />));
+  if (initial) await advance(initial);
+  expect(calls).toHaveBeenCalledTimes(1);
+  await advance(readTimeoutMs(interval) + interval);
+  expect(calls).toHaveBeenCalledTimes(2);
 });
 
 it("stops probing once the server answers successfully", async () => {

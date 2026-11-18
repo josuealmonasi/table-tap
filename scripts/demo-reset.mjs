@@ -42,7 +42,7 @@ for (const [name, file] of targets) {
   await client.connect();
   console.log(`\n▸ [${name}] rebuilding Demo Bistro…`);
   try {
-    const out = await seedMock(client);
+    const out = await seedMock(client, { production: name === "production" });
     console.log(`✓ [${name}] ${out.orders} order(s) · ${out.products} dish(es)`);
     console.log(`  menu: /r/${out.restaurantId}/t/${out.tableId}`);
   } finally {

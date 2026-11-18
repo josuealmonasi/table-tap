@@ -66,5 +66,5 @@ it("fresh dev mock accounts are charged by the writer and activated", () => {
   const seed = read("scripts/mock-accounts.mjs"), runner = read("scripts/db.mjs");
   expect(seed).toContain("select account_charge_v2(");
   expect(seed).toContain('if (result.value.outcome !== "charged") throw');
-  expect(runner).toMatch(/await seedMock\(client\)[\s\S]*?if \(!isProd\)[\s\S]*?journal-activate\.sql[\s\S]*?query\("commit"\)/);
+  expect(runner).toMatch(/await seedMock\(client, \{ production: isProd \}\)[\s\S]*?if \(!isProd\)[\s\S]*?journal-activate\.sql[\s\S]*?query\("commit"\)/);
 });

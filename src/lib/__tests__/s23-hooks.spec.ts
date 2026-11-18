@@ -61,3 +61,15 @@ it.each(["refusal", "network"])("K18: split %s leaves a visible error and the la
   expect(again).toHaveProperty("error", kind === "refusal" ? "Try later" : "done.networkError");
   expect(again.split).toMatchObject({ id: "s" });
 });
+
+it("a refused cancellation keeps the start reference for a retry", async () => {
+  vi.mocked(fetch).mockResolvedValueOnce(new Response("{}"))
+    .mockResolvedValueOnce(new Response('{"error":"Try later"}', { status: 409 }))
+    .mockResolvedValueOnce(new Response("{}"));
+  const hook = useSplit("r", "t", "s", false);
+  await hook.propose(2);
+  await hook.cancel();
+  await hook.propose(2);
+  const calls = vi.mocked(fetch).mock.calls;
+  expect(JSON.parse(calls[2][1]!.body as string).ref).toBe(JSON.parse(calls[0][1]!.body as string).ref);
+});

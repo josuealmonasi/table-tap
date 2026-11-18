@@ -108,18 +108,6 @@ export default function BillSheet({
     bill.mine.orders.map(order => order.id),
   );
 
-  // What this bill can actually be settled with. Every route that charges a
-  // card refuses without a connected Stripe account, so a screen that offers
-  // one is a screen promising a refusal — which is what Mesa 10 got, dressed
-  // up as a network error.
-  const pay = {
-    cardsEnabled: Boolean(restaurant.cards_enabled),
-    staffBill,
-    splitAllowed: restaurant.split_enabled !== false,
-  };
-  const can = billActions(pay);
-  const noCard = billHintKey(pay);
-
   // Only while the sheet is open, and only while dividing it leads anywhere:
   // a bill nobody is looking at does not need asking about every five
   // seconds. Existing parts stay visible even if the owner turns splitting
@@ -130,6 +118,7 @@ export default function BillSheet({
     diner,
     busy: splitBusy,
     error: splitError,
+    disabled: splitTurnedOff,
     propose,
     join,
     resize,
@@ -143,6 +132,20 @@ export default function BillSheet({
     bill.mine.orders.filter(o => !o.paid).map(o => o.id),
     { expectedCents: Math.round(bill.total * 100), currency },
   );
+
+  // What this bill can actually be settled with. Every route that charges a
+  // card refuses without a connected Stripe account, so a screen that offers
+  // one is a screen promising a refusal — which is what Mesa 10 got, dressed
+  // up as a network error.
+  const pay = {
+    cardsEnabled: Boolean(restaurant.cards_enabled),
+    staffBill,
+    // The menu's flag is read once; a refusal since then says the owner
+    // turned splitting off while this sheet was open (audit of #648).
+    splitAllowed: restaurant.split_enabled !== false && !splitTurnedOff,
+  };
+  const can = billActions(pay);
+  const noCard = billHintKey(pay);
 
   // Once it has frozen, the split card is how this table pays. Everything that
   // settles the WHOLE bill is put away — whether or not this phone took a

@@ -3840,8 +3840,8 @@ alter table loyalty_cards add column if not exists email_unsubscribe uuid;
 alter table loyalty_cards drop constraint if exists loyalty_cards_email_consented;
 alter table loyalty_cards add constraint loyalty_cards_email_consented check (email is null
   or (email_consent_at is not null and email_notice_version is not null and email_unsubscribe is not null));
--- One card per address in a restaurant: the address finds the card.
-create unique index if not exists loyalty_cards_email_once on loyalty_cards(restaurant_id, email) where email is not null;
+-- Each card keeps its own address; uniqueness exposed another card through rewards.
+drop index if exists loyalty_cards_email_once;
 create unique index if not exists loyalty_cards_email_unsubscribe on loyalty_cards(email_unsubscribe) where email_unsubscribe is not null;
 
 -- The cashier's choice not to email one sale's ticket, written with it.
@@ -15070,9 +15070,10 @@ begin
     order by created_at desc limit 1;
   if found then return jsonb_build_object('outcome', 'busy', 'split', v_split.id); end if;
 
-  -- Existing parts stay payable; this switch only refuses a new split.
+  -- Existing parts stay payable; this switch only refuses a new split. Its
+  -- own outcome, so the diner reads why rather than "no permission".
   if exists (select 1 from restaurants where id = p_restaurant and not split_enabled) then
-    return jsonb_build_object('outcome', 'forbidden');
+    return jsonb_build_object('outcome', 'split_disabled');
   end if;
 
   perform 1 from orders where session_id = p_session and restaurant_id = p_restaurant and table_id = p_table
@@ -15116,6 +15117,27 @@ create index if not exists offline_sale_queue_decision_page
   on public.offline_sale_queue (restaurant_id, decision_at desc, pos_ref)
   where decision_at is not null;
 
+-- Audit of #648 (server F1): closing a table whose parts already paid it all
+-- (a MX$0 close) carries the cashier's ticket choice too. Before, that path
+-- reached only the five-argument settle and queued the ticket after "don't
+-- send". The mark is written under the money lock, on rows locked in id
+-- order, only where it changes; any refusal from settlement rolls it back.
+-- The five-argument signature stays for callers without a choice.
+create or replace function public.settle_orders_v2(
+  p_restaurant uuid, p_orders uuid[], p_method text, p_actor text, p_sittings jsonb, p_skip_ticket_email boolean
+) returns int language plpgsql security definer set search_path = public as $$
+begin
+  perform public.lock_restaurant_money(p_restaurant);
+  if p_skip_ticket_email is null then raise exception 'not_owed'; end if;
+  perform 1 from orders where restaurant_id = p_restaurant and id = any(p_orders) order by id for update;
+  update orders set ticket_email_skip = p_skip_ticket_email
+    where restaurant_id = p_restaurant and id = any(p_orders) and not paid
+      and ticket_email_skip is distinct from p_skip_ticket_email;
+  return public.settle_orders_v2(p_restaurant, p_orders, p_method, p_actor, p_sittings);
+end; $$;
+revoke all on function public.settle_orders_v2(uuid, uuid[], text, text, jsonb, boolean) from public, anon, authenticated;
+grant execute on function public.settle_orders_v2(uuid, uuid[], text, text, jsonb, boolean) to service_role;
+
 -- Review N1/N7: the quote and ticket choice belong to the payment, under its
 -- money lock. Keep the five-argument signature for callers deployed before
 -- this overload; required parameters make PostgREST choose one unambiguously.
@@ -15138,8 +15160,11 @@ begin
       and currency = p_currency and not paid and not written_off and account_id is null
       and status not in ('cancelled','pending_payment');
   if v_count = 0 or v_count <> cardinality(p_orders) or v_total <> p_expected then raise exception 'not_owed'; end if;
+  -- Only where the choice changes: every rewrite fires the kitchen-board and
+  -- audit triggers (audit of #648, server F2).
   update orders set ticket_email_skip = p_skip_ticket_email
-    where restaurant_id = p_restaurant and id = any(p_orders);
+    where restaurant_id = p_restaurant and id = any(p_orders)
+      and ticket_email_skip is distinct from p_skip_ticket_email;
   -- Any refusal from settlement rolls the mark back with the receipt.
   return public.settle_orders_v2(p_restaurant, p_orders, p_method, p_actor, p_sittings);
 end; $$;
@@ -15158,10 +15183,17 @@ declare v_result jsonb;
 begin
   perform public.lock_restaurant_money(p_restaurant);
   if p_skip_ticket_email is null then raise exception 'invalid ticket choice'; end if;
+  -- The table's rows are locked in id order, like every money writer, before
+  -- the mark; outside the subtransaction, so a rolled-back mark keeps them.
+  perform 1 from orders where restaurant_id = p_restaurant and table_id = p_table and currency = p_currency
+    and not paid and not written_off and account_id is null and status not in ('cancelled','pending_payment')
+    order by id for update;
   begin
+    -- Only where the choice changes (audit of #648, server F2).
     update orders set ticket_email_skip = p_skip_ticket_email
       where restaurant_id = p_restaurant and table_id = p_table and currency = p_currency
-        and not paid and not written_off and account_id is null and status not in ('cancelled','pending_payment');
+        and not paid and not written_off and account_id is null and status not in ('cancelled','pending_payment')
+        and ticket_email_skip is distinct from p_skip_ticket_email;
     v_result := public.collect_table_reviewed_v1(p_restaurant, p_table, p_expected, p_currency,
       p_amount, p_tip, p_method, p_actor, p_ref);
     if v_result->>'outcome' is distinct from 'written' then raise exception using errcode = 'PT001'; end if;
@@ -15177,15 +15209,19 @@ create or replace function public.collect_split_slots_v1(
   p_restaurant uuid, p_split uuid, p_revision int, p_slots int[], p_expected_cents int,
   p_currency text, p_tip_cents int, p_method text, p_actor text, p_ref text, p_skip_ticket_email boolean
 ) returns jsonb language plpgsql security definer set search_path = public as $$
-declare v_result jsonb;
+declare v_result jsonb; v_orders uuid[];
 begin
   perform public.lock_restaurant_money(p_restaurant);
   if p_skip_ticket_email is null then raise exception 'invalid ticket choice'; end if;
+  select order_ids::uuid[] into v_orders from bill_splits
+    where id = p_split and restaurant_id = p_restaurant and model_version = 2;
+  -- The split's rows are locked in id order before the mark (audit of #648, server F2).
+  perform 1 from orders where restaurant_id = p_restaurant and id = any(v_orders) order by id for update;
   begin
     update orders set ticket_email_skip = p_skip_ticket_email
-      where restaurant_id = p_restaurant and id = any((select order_ids from bill_splits
-        where id = p_split and restaurant_id = p_restaurant and model_version = 2)::uuid[])
-        and not paid and not written_off and account_id is null;
+      where restaurant_id = p_restaurant and id = any(v_orders)
+        and not paid and not written_off and account_id is null
+        and ticket_email_skip is distinct from p_skip_ticket_email;
     v_result := public.collect_split_slots_v1(p_restaurant, p_split, p_revision, p_slots, p_expected_cents,
       p_currency, p_tip_cents, p_method, p_actor, p_ref);
     if v_result->>'outcome' is distinct from 'collected' then raise exception using errcode = 'PT001'; end if;
@@ -15195,3 +15231,45 @@ begin
 end; $$;
 revoke all on function public.collect_split_slots_v1(uuid, uuid, int, int[], int, text, int, text, text, text, boolean) from public, anon, authenticated;
 grant execute on function public.collect_split_slots_v1(uuid, uuid, int, int[], int, text, int, text, text, text, boolean) to service_role;
+
+-- Audit of #648: recovery every five minutes, scheduled by the database.
+-- GitHub's schedule ran 8 times in two days, hours apart, and Vercel Hobby
+-- allows one cron a day. pg_cron is part of Supabase and runs on time; pg_net
+-- makes the call. A one-time signature is made from a Vault secret at run
+-- time: a project without 'recovery_signing_secret' (dev) makes no call.
+-- The reusable secret never enters pg_net's readable request queue. The
+-- GitHub workflow stays as a backup; the route accepts all three callers.
+create table if not exists recovery_nonces (nonce uuid primary key, at timestamptz not null default now());
+create table if not exists recovery_runs (source text not null, ok boolean not null, at timestamptz not null default now());
+create index if not exists recovery_runs_source_at on public.recovery_runs (source, at desc) where ok;
+alter table public.recovery_nonces enable row level security;
+alter table public.recovery_runs enable row level security;
+revoke all on recovery_nonces from anon, authenticated, public;
+revoke all on recovery_runs from anon, authenticated, public;
+grant select, insert, delete on public.recovery_nonces, public.recovery_runs to service_role;
+revoke truncate, references, trigger on all tables in schema public from authenticated;
+create extension if not exists pg_cron;
+create extension if not exists pg_net;
+do $$ begin
+  if exists (select 1 from cron.job where jobname = 'tabletap-recover') then
+    perform cron.unschedule('tabletap-recover');
+  end if;
+end $$;
+select cron.schedule('tabletap-recover', '*/5 * * * *', $job$
+  set local search_path = public, extensions, pg_catalog;
+  with signed as materialized (
+    select s.decrypted_secret, floor(extract(epoch from clock_timestamp()))::bigint::text as ts,
+      gen_random_uuid()::text as nonce
+    from vault.decrypted_secrets s
+    where s.name = 'recovery_signing_secret' and coalesce(s.decrypted_secret, '') <> ''
+    limit 1
+  )
+  select net.http_post(
+    url := 'https://tabletap.shop/api/cron/recover',
+    headers := jsonb_build_object('X-Recover-Ts', ts, 'X-Recover-Nonce', nonce,
+      'X-Recover-Signature', encode(hmac(ts || '.' || nonce, decrypted_secret, 'sha256'), 'hex'),
+      'Content-Type', 'application/json'),
+    body := '{}'::jsonb,
+    timeout_milliseconds := 60000)
+  from signed
+$job$);
