@@ -8,6 +8,8 @@ import Breadcrumb from "@/components/layout/Breadcrumb";
 import AdminCreateUser from "./AdminCreateUser";
 import AdminEditUser from "./AdminEditUser";
 import AdminRestaurants from "./AdminRestaurants";
+import AdminPrices from "./AdminPrices";
+import type { AdminPlanPrice } from "@/lib/admin-prices";
 import { planLabel } from "@/lib/plan";
 import { DeleteIcon, EditIcon } from "@/components/ui/icons";
 import { SEP } from "@/lib/separator";
@@ -47,6 +49,8 @@ interface AdminPanelProps {
   restaurantOptions: { id: string; name: string }[];
   /** Every plan in the catalog, cheapest first. */
   plans: string[];
+  /** Paid plans' prices and scheduled changes. */
+  prices: AdminPlanPrice[];
 }
 
 const ROLE_META: Record<AdminUserRow["role"], { key: string }> = {
@@ -66,9 +70,10 @@ export default function AdminPanel({
   users,
   restaurantOptions,
   plans,
+  prices,
 }: AdminPanelProps) {
   const t = useT();
-  const { busy, deleteUser, deleteRestaurant, movePlan, suspend, liftSuspension, changeTrial } = useAdminActions();
+  const { busy, deleteUser, deleteRestaurant, movePlan, schedulePrice, suspend, liftSuspension, changeTrial } = useAdminActions();
   const confirm = useConfirm();
   const [editing, setEditing] = useState<AdminUserRow | null>(null);
   const roleLabel = (role: AdminUserRow["role"]): string => {
@@ -93,6 +98,8 @@ export default function AdminPanel({
           onLift={liftSuspension}
           onTrial={changeTrial}
         />
+
+        <AdminPrices prices={prices} busy={busy} onSchedule={schedulePrice} />
 
         <div className="tt-section">
           <div className="tt-section-head">
