@@ -430,3 +430,6 @@ drop function if exists public.claim_ticket_emails(int);
 drop function if exists public.attach_loyalty_card_v1(uuid, text, uuid, uuid, text);
 drop function if exists public.attach_loyalty_card_v2(uuid, text, uuid, uuid, text, boolean, text);
 drop function if exists public.loyalty_open(uuid);
+drop function if exists public.schedule_plan_price_change(text, numeric, timestamptz, text);
+drop table if exists plan_price_notices cascade;
+drop table if exists plan_price_changes cascade;
