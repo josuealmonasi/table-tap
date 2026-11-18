@@ -3410,3 +3410,7 @@ percentage by it and `splitTipPrincipal` sends the screen `null` by it, so a
 split frozen at zero or with no amount keeps percentages on both sides. The
 modern v1 paths (with a principal) still reopen an earlier page whatever its
 tip; that is a known follow-up.
+
+## Scheduled plan price notices
+
+A platform admin can schedule a positive plan price at least 30 full days ahead. The change and a notice queue for restaurants on that plan are saved together; founding-price restaurants are excluded. This records the schedule only: notice delivery and Stripe price changes are separate work.

@@ -28,6 +28,8 @@ const NOT_DEMO_DATA = new Set([
   "restaurant_subscription_prices", // historical Price-to-tier map, shared by everyone
   "platform_admins", // not a restaurant's data
   "platform_admin_audit", // real platform actions only; never fabricate audit history
+  "plan_price_changes", // real admin schedules only; demo data must not change prices
+  "plan_price_notices", // a fake queue must never send a real notice
   "restaurant_accounting_records", // only real deletions retain books; the demo stays live
   "profiles", // created with the logins
   "rate_limits", // throttling counters

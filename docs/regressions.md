@@ -10,6 +10,15 @@ us, and what now catches each one.
 
 ## What runs on its own
 
+### Scheduled prices keep their notice queue
+
+The scheduled price and its recipients must be written together, and the queue
+must exclude founding prices. `plan-price-change-route.spec.ts` checks the
+admin, date, plan and price refusals and the single RPC call;
+`plan-price-change-schema.spec.ts` pins the transaction and service-only grant.
+The API case checks real recipients and removes its fixture. Sending notices and
+changing Stripe prices are later work.
+
 ### Login passwords stay outside the repository
 
 Seeds and the checks signing into those accounts have to agree on the target's
@@ -44,6 +53,7 @@ and that a new party cannot see the previous party's waiting phones.
 `src/lib/__tests__/invariants.spec.ts` enforces the rules that span files:
 
 | Rule | The bug it came from |
+| Scheduled plan prices keep their eligible notice queue | A scheduled price without its recipients could leave an owner without notice; the route and schema specs pin validation and the atomic queue |
 | The retry schedule must run on the hosting plan and identify its caller | Vercel rejected the five-minute cron on Hobby; `recovery-schedule-platform.spec.ts`, `github-cron-auth.spec.ts` and `recovery-scheduler-client.spec.ts` pin the daily fallback and the exact signed main-branch job |
 |---|---|
 | An old split without a frozen principal accepts exact tips only (review N14) | Gross amount included earlier gratuities, and an open checkout could silently keep a different tip; legacy-split-tip, legacy-split-tip-route and legacy-split-tip-input regression specs cover calculation, request, preview and retry |
