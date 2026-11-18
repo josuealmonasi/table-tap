@@ -9,7 +9,17 @@ vi.mock("@/lib/rate-limit", () => ({ clientKey: () => "ip", isRoomLimited: async
 vi.mock("@/lib/loyalty/server", () => ({ CARD_COLUMNS: "id,code", cardState: async () => ({ ladder: [] }) }));
 vi.mock("@/lib/loyalty/face", () => ({ cardFace: () => ({ qrPayload: "url", standing: {} }) }));
 vi.mock("@/lib/loyalty/qr-grid", () => ({ qrGrid: () => [] }));
-vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({ from: (table: string) => {
+vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({ rpc: async (_name: string, args: Record<string, string | null>) => {
+  const card = state.cards.find(row => row.restaurant_id === args.p_restaurant && row.code === args.p_code);
+  if (!card) return { data: false, error: null };
+  if (card.email !== args.p_email) {
+    Object.assign(card, { email_unsubscribe: args.p_email ? crypto.randomUUID() : null,
+      email_consent_at: args.p_email ? new Date().toISOString() : null,
+      email_notice_version: args.p_email ? args.p_notice : null, email_set_by: args.p_email ? args.p_set_by : null });
+  }
+  card.email = args.p_email;
+  return { data: true, error: null };
+}, from: (table: string) => {
   const filters: Record<string, string> = {};
   let patch: Record<string, string | null> | undefined;
   const answer = () => {
@@ -81,4 +91,40 @@ it("a stop link removes only its own card and an old link cannot remove a replac
   expect(state.cards[0].email).toBeNull();
   expect(state.cards[1].email).toBe("ana@example.invalid");
   expect(state.cards[1].email_unsubscribe).toBe(otherToken);
+});
+
+it("a repeated same-address save keeps the delivered stop link on its own card", async () => {
+  state.cards = [
+    { id: "own", code: "K7QM3XW9K7P2", restaurant_id: "r", email: null },
+    { id: "other", code: "K7QM3XW9K7P3", restaurant_id: "r", email: null },
+  ];
+  const { setCardEmail } = await import("@/lib/loyalty/card-email");
+  const { POST: stop } = await import("@/app/api/tickets/stop/route");
+  await setCardEmail("r", state.cards[0].code!, "ana@example.invalid", "diner");
+  await setCardEmail("r", state.cards[1].code!, "ana@example.invalid", "diner");
+  const token = state.cards[0].email_unsubscribe!;
+  await setCardEmail("r", state.cards[0].code!, "ana@example.invalid", "diner");
+  expect(state.cards[0].email_unsubscribe).toBe(token);
+  const response = await stop(new NextRequest("https://test/api/tickets/stop", { method: "POST", body: JSON.stringify({ token }) }));
+  expect(response.status).toBe(200);
+  expect(state.cards[0].email).toBeNull();
+  expect(state.cards[1].email).toBe("ana@example.invalid");
+});
+
+it("the atomic card update keeps a token only for the same address and is service-only", () => {
+  const schema = readFileSync("supabase/schema.sql", "utf8");
+  expect(schema).toMatch(/email_unsubscribe = case when p_email is null then null when email = p_email then email_unsubscribe else gen_random_uuid\(\) end/i);
+  expect(schema).toMatch(/revoke all on function public\.set_card_email\(uuid, text, text, text, text\) from public, anon, authenticated/i);
+  expect(schema).toMatch(/grant execute on function public\.set_card_email\(uuid, text, text, text, text\) to service_role/i);
+});
+
+it("removing and re-adding an address starts a new consent generation", async () => {
+  state.cards = [{ id: "own", code: "K7QM3XW9K7P2", restaurant_id: "r", email: null }];
+  const { setCardEmail } = await import("@/lib/loyalty/card-email");
+  await Promise.all([setCardEmail("r", state.cards[0].code!, "ana@example.invalid", "diner"),
+    setCardEmail("r", state.cards[0].code!, "ana@example.invalid", "diner")]);
+  const token = state.cards[0].email_unsubscribe;
+  await setCardEmail("r", state.cards[0].code!, null, "diner");
+  await setCardEmail("r", state.cards[0].code!, "ana@example.invalid", "diner");
+  expect(state.cards[0].email_unsubscribe).not.toBe(token);
 });

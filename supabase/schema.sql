@@ -3844,6 +3844,23 @@ alter table loyalty_cards add constraint loyalty_cards_email_consented check (em
 drop index if exists loyalty_cards_email_once;
 create unique index if not exists loyalty_cards_email_unsubscribe on loyalty_cards(email_unsubscribe) where email_unsubscribe is not null;
 
+-- A repeated save must keep links already delivered, even when saves overlap.
+create or replace function public.set_card_email(p_restaurant uuid, p_code text, p_email text, p_set_by text, p_notice text)
+returns boolean language plpgsql security definer set search_path = public as $$
+begin
+  update loyalty_cards set
+    email_unsubscribe = case when p_email is null then null when email = p_email then email_unsubscribe else gen_random_uuid() end,
+    email_consent_at = case when p_email is null then null when email = p_email then email_consent_at else now() end,
+    email_notice_version = case when p_email is null then null when email = p_email then email_notice_version else p_notice end,
+    email_set_by = case when p_email is null then null when email = p_email then email_set_by else p_set_by end,
+    email = p_email
+  where restaurant_id = p_restaurant and code = p_code;
+  return found;
+end;
+$$;
+revoke all on function public.set_card_email(uuid, text, text, text, text) from public, anon, authenticated;
+grant execute on function public.set_card_email(uuid, text, text, text, text) to service_role;
+
 -- The cashier's choice not to email one sale's ticket, written with it.
 alter table orders add column if not exists ticket_email_skip boolean not null default false;
 
