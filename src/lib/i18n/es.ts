@@ -1609,6 +1609,7 @@ foundingLeftBody: "Quien contrata ahora conserva este precio de suscripción mie
     splitCombineSlots: "Elige más partes para pagar con tarjeta o pide al mesero que cobre esta parte.",
     splitRequestChanged: "Este pago ya se envió con otras partes o cantidades. Revisa la cuenta.",
     splitGone: "Esta división ya no está disponible. Revisa cuánto falta por pagar.",
+    splitDisabled: "El restaurante desactivó dividir la cuenta. Aún puedes pagar la cuenta.",
     comboNotCheaper: "El combo debe costar menos que comprar los platillos por separado ({regular}).",
     tierNotCheaper: "Comprar {qty} ya cuesta {regular}. Pon un precio menor para la promoción.",
     accountCurrency: "Esta cuenta debe en otra moneda. Cobra primero ese saldo o paga este pedido en efectivo o con tarjeta.",

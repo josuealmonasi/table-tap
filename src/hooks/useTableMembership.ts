@@ -1,6 +1,6 @@
 "use client";
 
-import { pollAfterSettle } from "@/lib/poll-after-settle";
+import { eitherSignal, pollAfterSettle } from "@/lib/poll-after-settle";
 import { useCallback, useEffect, useState } from "react";
 import { requestPhoneMembership, type PhoneMembership } from "@/lib/table-member-client";
 export type { PhoneMembership } from "@/lib/table-member-client";
@@ -30,11 +30,11 @@ export function useTableMembership(restaurantId: string, tableId: string | null)
     let active = true;
     let running = false;
     const controller = new AbortController();
-    const read = async () => {
+    const read = async (signal?: AbortSignal) => {
       if (running) return;
       running = true;
       try {
-        const next = await requestPhoneMembership(restaurantId, targetTable, controller.signal);
+        const next = await requestPhoneMembership(restaurantId, targetTable, eitherSignal(controller.signal, signal));
         if (!active) return;
         const approved = next.status === "approved" && next.sessionId !== null;
         if (approved && next.sessionId) rememberSitting(restaurantId, next.sessionId, targetTable);

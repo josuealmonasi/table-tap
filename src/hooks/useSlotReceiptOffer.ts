@@ -39,13 +39,13 @@ export function useSlotReceiptOffer(scope?: SplitScope, settled: boolean | null 
       && saved?.restaurantId === restaurantId && saved.tableId === tableId && saved.sessionId === sessionId
       && Array.isArray(saved.slots) ? saved : null;
     let stopped = false, busy = false;
-    async function reload(): Promise<void> {
+    async function reload(signal?: AbortSignal): Promise<void> {
       if (busy || document.visibilityState === "hidden") return;
       busy = true;
       const forDecision = latestDecision.current;
       setDiscovery(null);
       try {
-        const response = await fetch(`/api/receipt/payments?${params}`);
+        const response = await fetch(`/api/receipt/payments?${params}`, { signal });
         if (!response.ok) return;
         const data = await response.json() as { payments: SlotReceiptTarget[]; split: boolean; splitOrderIds: string[] };
         if (stopped || !Array.isArray(data.payments) || !Array.isArray(data.splitOrderIds)) return;

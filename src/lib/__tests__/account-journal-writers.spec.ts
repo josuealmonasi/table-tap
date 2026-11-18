@@ -87,6 +87,6 @@ it("activation remains a transaction fragment and dev mock runs it before gates"
   expect(sql).not.toMatch(/^commit;/im);
   expect(sql).toContain("set default now()");
   const runner = readFileSync("scripts/db.mjs", "utf8");
-  expect(runner.indexOf('join(root, "supabase/journal-activate.sql")')).toBeGreaterThan(runner.indexOf("await seedMock(client)"));
+  expect(runner.indexOf('join(root, "supabase/journal-activate.sql")')).toBeGreaterThan(runner.indexOf("await seedMock(client, { production: isProd })"));
   expect(fn("start_new_account_journal_v1")).toContain("new.journal_started_at := now()");
 });

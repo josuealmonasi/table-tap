@@ -12,6 +12,11 @@ async function inactiveOrder(f) {
   return { data, cleanup: async () => {
     const { error: cleanupError } = await f.admin.from("orders").delete().eq("id", data.id);
     if (cleanupError) throw new Error(cleanupError.message);
+  }, fingerprint: async () => {
+    // Shared by four refusals: the run names the first one that changed it.
+    const { data: now, error: readError } = await f.admin.from("orders").select("*").eq("id", data.id).maybeSingle();
+    if (readError) throw new Error(readError.message);
+    return JSON.stringify(now);
   } };
 }
 

@@ -32,13 +32,13 @@ export function useFinishedOrders(orderIds: string[]): string[] {
     if (ids.length === 0) return;
 
     let alive = true;
-    const read = async (): Promise<void> => {
+    const read = async (signal?: AbortSignal): Promise<void> => {
       // All of them each pass. A diner has one or two orders open, not
       // twenty — the cap on what is remembered keeps this small.
       const finished = await Promise.all(
         ids.map(async id => {
           try {
-            const res = await fetch(`/api/order-status?id=${id}`);
+            const res = await fetch(`/api/order-status?id=${id}`, { signal });
             // A 404 is an order that was deleted; the next pass will say so.
             if (!res.ok) return null;
             const order = (await res.json()) as { status?: string; written_off?: boolean };

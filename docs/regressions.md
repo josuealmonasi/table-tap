@@ -8,6 +8,35 @@ table owed MX$105 and the diner's screen said it owed nothing.
 So this is not a style guide. It is the list of things that have actually bitten
 us, and what now catches each one.
 
+## Recovery requests carry one-use proof
+
+The database queue and recovery route must agree on a signature, timestamp and
+nonce: a queued bearer exposed the reusable secret. The route rejects stale,
+invalid and replayed proof before it runs recovery.
+
+## Production demo resets replace logins
+
+The reset and the access token must agree on identity. Deleting sessions alone
+left an issued token attached to the rebuilt demo; production recreates the
+logins, while development keeps its existing sessions for the gates.
+
+## The scheduler reports actual recovery
+
+The SQL enqueue and the HTTP result must agree. A successful cron statement did
+not prove the request worked, so only a successful signed database run updates
+the health record; production checks its age and development shows a skip.
+
+## Ticket counts require confirmed writes
+
+The email provider and the outbox must agree on the outcome. A refused update
+or a claim taken by another worker cannot be counted as a completed transition.
+The saved body and provider key allow the next worker to retry safely.
+
+## Split cancellation keeps an unconfirmed start
+
+The cancellation response and the start reference must agree. A refusal does
+not prove the split ended, so a retry keeps its reference until cancellation
+succeeds or a read confirms there is no split.
 ## Historical card return imports stop retrying
 
 The import and the bill read disagreed about what a card return log could prove.
@@ -62,6 +91,11 @@ and that a new party cannot see the previous party's waiting phones.
 | Terms acceptances survive newer acceptances and restaurant deletion | The restaurant kept only its latest acceptance and was deleted with it; `acceptance-history.spec.ts`, `acceptance-schema.spec.ts` and `signup-verification.spec.ts` cover the writers and archive contract |
 | The retry schedule must run on the hosting plan and identify its caller | Vercel rejected the five-minute cron on Hobby; `recovery-schedule-platform.spec.ts`, `github-cron-auth.spec.ts` and `recovery-scheduler-client.spec.ts` pin the daily fallback and the exact signed main-branch job |
 |---|---|
+| A database recovery request contains only a one-use signature | The queue exposed the reusable bearer; `recovery-signed.spec.ts` checks freshness, signature and replay, and `recovery-schedule-platform.spec.ts` checks the SQL request |
+| Production demo resets replace identities while development keeps them | Revoked sessions left issued access tokens attached to the rebuilt demo; `mock-logins.spec.ts` and `seed-logins.spec.ts` check both paths |
+| Scheduled recovery health records successful database runs | An enqueue could succeed while recovery failed; `recovery-health.spec.ts` and `recovery-route-health.spec.ts` check freshness and caller |
+| Ticket drain counts follow confirmed outbox writes | A failed or lost update looked sent or released; `card-email.spec.ts` checks errors and lost claims |
+| A refused split cancellation keeps its start reference | A separate disabled check cleared the reference after other errors; `s23-hooks.spec.ts` retries the same start |
 | Historical card reviews do not retry on each bill read | The importer cannot use a log as provider evidence, but the need check kept finding it; `historical-card-import.spec.ts` checks the review marker |
 | The retry schedule must run on the hosting plan and identify its caller | Vercel rejected the five-minute cron on Hobby; `recovery-schedule-platform.spec.ts`, `github-cron-auth.spec.ts` and `recovery-scheduler-client.spec.ts` pin the daily fallback and the exact signed main-branch job |
 | Account email removal matches each caller and the saved address | Staff shared a customer IP limit, and a statement offered removal without an address; `account-email-remove.spec.ts`, `account-credit-public.spec.ts` and `remove-email.spec.tsx` cover the limits, projection and dialog |
@@ -75,7 +109,7 @@ and that a new party cannot see the previous party's waiting phones.
 | Seeds and checks read the same private login passwords | Public scripts and README published login passwords while some checks ignored rotated env values; `login-password-invariant.spec.ts` scans tracked files and plants violations, and `login-secrets.spec.ts` mocks seed creation |
 | Seed receipts and allocation backfill keep the same historical evidence | Every seed inserted version-0 receipts, so reading a bill rewrote hundreds of rows; `seed-payment-allocations.spec.ts` compares every explicit-order field and allocation value with the backfill |
 | Read-only gate cases share their run's fixtures | Identical refusals repeatedly inserted and deleted orders, tables and splits; `gate-fixture-reuse.spec.ts`, `api-readonly-fixtures.spec.ts` and `run-fixtures.spec.ts` check reuse, writer isolation and cleanup |
-| Reseeding restores demo logins without replacing their identities | Deleting the restaurant also deleted five healthy logins and sessions; `seed-logins.spec.ts` and `mock-logins.spec.ts` check identity reuse, changed passwords, metadata reset and explicit drop |
+| Development reseeding restores demo logins without replacing their identities | Deleting the restaurant also deleted five healthy logins and sessions; `seed-logins.spec.ts` and `mock-logins.spec.ts` check identity reuse, changed passwords, metadata reset and explicit drop |
 | A counter quote is checked under the payment lock (review N1) | A discount after the route read could record less than the cash received; `counter-collection-race.spec.ts` and `review2-money-schema.spec.ts` hold the quote and writer together |
 | Staff discounts preserve existing gratuities (review N2) | Both pricing and SQL discounted tips below the order total; `staff-discount-tip.spec.ts` and `staff-discount-tip-route.spec.ts` check direct and approved principal-only discounts |
 | Each subscription source has time to run (review N8) | Persistently unpaid reads starved cancellation recovery; `subscriptions.spec.ts` advances the clock across all three sources |
@@ -7665,6 +7699,46 @@ resolution clocks before paging. A request past the end counts once, clamps
 to the last page and retrieves at most that page plus one lookahead row,
 including its resolution evidence, even under a smaller Data API row cap.
 
+## Audit of #648 — The five-minute schedule that ran every few hours
+
+The spec's "every five minutes" and the scheduler had to agree. GitHub ran
+the workflow 8 times in two days, 3.5 to 10 hours apart, and N10's test
+modelled a delay, not a dropped run. The database now schedules the call
+itself: pg_cron job `tabletap-recover` posts to the route every five minutes
+with the Vault secret `cron_secret` as its bearer, and does nothing on a
+project without that secret. `ticket-email-schedule.spec.ts` counts only the
+daily Vercel cron and the pg_cron job; `recovery-schedule-platform.spec.ts`
+pins the job, its Vault read and the unschedule in `drop.sql`. The route's
+answer now carries the ticket drain, and the GitHub backup fails on a failed,
+expired or unattempted ticket (`recovery-scheduler-client.spec.ts`).
+
+## Audit of #648 — Polls the invariant could not see
+
+The poll rule and two fixed ticks had to agree. `SettleTableDialog` bumped a
+counter on a 5 s interval that re-ran its fetching effect, and
+`useMenuFreshness` called `router.refresh()` every 45 s. Both use
+`pollAfterSettle` now, and `invariants/polls.spec.ts` flags a setter chain and
+`router.refresh` as well as `fetch`; its sabotage cases are the two old shapes.
+A read that never answers is aborted after `max(2 × interval, 15 s)` and the
+poll goes on (`poll-after-settle.spec.ts`, `poller-cadence.spec.tsx`).
+
+## Audit of #648 — Smaller agreements
+
+- A MX$0 table close and the cashier's ticket choice: the close now uses a
+  six-argument `settle_orders_v2` that marks the skip under the money lock
+  (`zero-close-ticket-email.spec.ts`).
+- The ticket-choice wrappers and the kitchen board: they lock their rows in id
+  order and rewrite the flag only where it changes
+  (`review2-money-schema.spec.ts`).
+- The owner's split switch and the diner's copy: `split_disabled` with its own
+  ES and EN message, and the bill sheet stops offering to divide on it.
+- A kept production demo login and what a stranger gave it: a production
+  reseed deletes its MFA factors, sessions and pending email change
+  (`mock-logins.spec.ts`, `seed-logins.spec.ts`), and the seed's historical
+  receipt setting is cleared however the seed ends.
+- Shared read-only fixtures and failure order: the api and attack runners
+  fingerprint shared rows after each case and name the first case that
+  changed one (`run-fixtures.spec.ts`).
 ### Legacy split tips use an amount when the frozen principal is unknown (N14)
 
 A split locked before `food_principal` existed froze gross debt, including any
