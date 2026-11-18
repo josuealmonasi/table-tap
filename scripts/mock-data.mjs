@@ -90,6 +90,8 @@ export async function dropMock(pg, { keepLogins = false } = {}) {
       };
     }
     await pg.query("delete from restaurants where id = $1", [r.id]);
+    // Demo consent is fixture data, not a real contract to retain on reseed.
+    await pg.query("delete from restaurant_accounting_records where restaurant_id = $1 and source_table = 'terms_acceptances'", [r.id]);
   }
   if (keepLogins) return rows.length;
   const admin = adminClient();

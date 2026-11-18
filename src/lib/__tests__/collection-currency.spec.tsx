@@ -11,6 +11,7 @@ vi.mock("react", async original => ({ ...await original<typeof React>(), useStat
   const n = state.index++;
   return [n in state.values ? state.values[n] : typeof initial === "function" ? initial() : initial, vi.fn()];
 } }));
+vi.mock("@/components/ui/ConfirmDialog", () => ({ useConfirm: () => vi.fn() }));
 vi.mock("@/lib/i18n/context", () => ({ useLocale: () => ({ locale: "en" }), useT: () => (key: string, vars?: Record<string, string | number>) => translate(messagesFor("en"), key, vars) }));
 vi.mock("@/components/ui/Toast", () => ({ useToast: () => vi.fn() }));
 vi.mock("@/components/ui/Modal", () => ({ Modal: ({ children }: { children: React.ReactNode }) => <div>{children}</div> }));

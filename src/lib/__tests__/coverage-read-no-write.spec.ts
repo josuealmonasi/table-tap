@@ -46,7 +46,7 @@ describe("order_coverage reads without writing when nothing needs a backfill", (
     expect(importer).toContain("on conflict (order_id) where kind = 'cancel' do nothing");
     expect(importer).toContain("p.allocation_origin = 'legacy' and (r.id is null or (f.historical_review and f.status = 'review'))");
     expect(need).toContain("o.status = 'cancelled' and p.allocation_origin = 'legacy'");
-    expect(need).toContain("(r.id is null or (f.historical_review and f.status = 'review' and exists (select 1 from user_logs l");
+    expect(need).toContain("(r.id is null or (f.historical_review and f.status = 'review' and f.historical_import_reason is null and exists (select 1 from user_logs l");
     expect(need).toContain("or not exists (select 1 from order_adjustments d where d.order_id = o.id and d.kind = 'cancel'))");
   });
 

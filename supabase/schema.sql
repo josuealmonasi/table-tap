@@ -5918,6 +5918,7 @@ create table if not exists refund_operations (
   foreign key (restaurant_id, adjustment_id) references order_adjustments(restaurant_id, id) on delete cascade
 );
 alter table refund_operations add column if not exists historical_review boolean not null default false;
+alter table refund_operations add column if not exists historical_import_reason text;
 create unique index if not exists user_logs_tenant_identity on user_logs(restaurant_id, id);
 alter table refund_operations add column if not exists historical_log_id uuid;
 alter table refund_operations drop constraint if exists refund_operations_historical_log_id_fkey;
@@ -6276,6 +6277,11 @@ begin
     if g.stripe_payment_intent is not null or g.currency is distinct from o.currency then v_log := null; end if;
     select * into l from user_logs where id = v_log;
     if g.existing_operation is not null then
+      if g.stripe_payment_intent is not null then
+        update refund_operations set historical_import_reason = 'Historical card return needs provider evidence'
+          where id = g.existing_operation and historical_review and status = 'review'
+            and historical_import_reason is null;
+      end if;
       if v_log is not null then
         update refund_operations set status = 'succeeded', historical_log_id = v_log,
           completed_at = l.created_at, payout_actor = g.actor_email, confirmed_by = l.actor_email
@@ -6284,12 +6290,13 @@ begin
       continue;
     end if;
     insert into refund_operations(restaurant_id, adjustment_id, source, amount, tip, currency,
-      stripe_payment_intent, stripe_account_id, original_collector, status, historical_log_id, completed_at, payout_actor, confirmed_by, historical_review)
+      stripe_payment_intent, stripe_account_id, original_collector, status, historical_log_id, completed_at, payout_actor, confirmed_by, historical_review, historical_import_reason)
       values(p_restaurant, d, case when g.stripe_payment_intent is not null or g.currency is distinct from o.currency then 'review'
         when g.method = 'cash' then 'cash' else 'terminal' end,
         g.amount, g.tip, coalesce(g.currency, o.currency), g.stripe_payment_intent, g.stripe_account_id, g.actor_email,
         case when v_log is null then 'review' else 'succeeded' end, v_log, l.created_at,
-        case when v_log is not null then g.actor_email end, l.actor_email, true) returning id into v_operation;
+        case when v_log is not null then g.actor_email end, l.actor_email, true,
+        case when g.stripe_payment_intent is not null then 'Historical card return needs provider evidence' end) returning id into v_operation;
     insert into refund_allocations(restaurant_id, operation_id, allocation_id, amount, tip)
       select p_restaurant, v_operation, (x->>'id')::uuid, (x->>'amount')::numeric, (x->>'tip')::numeric
         from jsonb_array_elements(g.entries) x;
@@ -6394,7 +6401,7 @@ returns boolean language sql stable security definer set search_path = public as
         -- Match only the order code here: the importer still proves the amount,
         -- collector, currency and unique log before accepting any return.
         and (r.id is null or (f.historical_review and f.status = 'review'
-          and exists (select 1 from user_logs l where l.restaurant_id = o.restaurant_id
+          and f.historical_import_reason is null and exists (select 1 from user_logs l where l.restaurant_id = o.restaurant_id
             and l.entity = 'order' and l.action = 'refunded'
             and substring(l.detail from '(?:^| )order=([^ ]+)') = left(o.id::text, 8)
             and not exists (select 1 from refund_operations used where used.historical_log_id = l.id)))
@@ -7140,10 +7147,17 @@ begin
       current_setting('tabletap.importing_return', true) is distinct from 'v1') then
     raise exception 'historical evidence is immutable';
   end if;
+  -- Only the importer can mark a card return that needs provider evidence.
+  if new.historical_import_reason is distinct from old.historical_import_reason and
+    (old.historical_import_reason is not null or not old.historical_review or old.status <> 'review' or
+      old.stripe_payment_intent is null or new.historical_import_reason is distinct from 'Historical card return needs provider evidence' or
+      current_setting('tabletap.importing_return', true) is distinct from 'v1') then
+    raise exception 'historical import reason is immutable';
+  end if;
   -- Fee verification changes after customer completion; the return's money
   -- and original charge identity remain immutable throughout recovery.
-  if (to_jsonb(new) - array['status','stripe_refund_id','provider_status','completed_at','payout_actor','confirmed_by','fee_reconciled_at','fee_verification_pending','fee_target_cents','historical_log_id'])
-    is distinct from (to_jsonb(old) - array['status','stripe_refund_id','provider_status','completed_at','payout_actor','confirmed_by','fee_reconciled_at','fee_verification_pending','fee_target_cents','historical_log_id']) then
+  if (to_jsonb(new) - array['status','stripe_refund_id','provider_status','completed_at','payout_actor','confirmed_by','fee_reconciled_at','fee_verification_pending','fee_target_cents','historical_log_id','historical_import_reason'])
+    is distinct from (to_jsonb(old) - array['status','stripe_refund_id','provider_status','completed_at','payout_actor','confirmed_by','fee_reconciled_at','fee_verification_pending','fee_target_cents','historical_log_id','historical_import_reason']) then
     raise exception 'return money is immutable';
   end if;
   return new;
@@ -10215,6 +10229,147 @@ drop trigger if exists platform_admin_audit_immutable on platform_admin_audit;
 create trigger platform_admin_audit_immutable before update or delete or truncate
   on platform_admin_audit for each statement execute function public.keep_platform_admin_audit();
 
+-- Keep acceptance evidence instead of overwriting the only value on the restaurant.
+create table if not exists terms_acceptances (
+  id uuid primary key default gen_random_uuid(),
+  restaurant_id uuid not null references restaurants(id) on delete cascade,
+  user_id uuid,
+  accepted_email text,
+  version text,
+  accepted_at timestamptz,
+  text_hash text check (char_length(text_hash) <= 64),
+  source text not null check (source in ('accept', 'signup', 'backfill', 'legacy_trigger')),
+  check (char_length(accepted_email) <= 320),
+  check (char_length(version) <= 100),
+  check (source = 'backfill' or (version is not null and accepted_at is not null))
+);
+-- Remove old network evidence even if an earlier draft of this schema was applied.
+drop trigger if exists terms_acceptances_immutable on terms_acceptances;
+alter table terms_acceptances add column if not exists source text;
+-- Earlier drafts distinguished backfills; do not label every old row a backfill.
+do $$ begin
+  if exists (select 1 from information_schema.columns where table_schema = 'public'
+    and table_name = 'terms_acceptances' and column_name = 'legacy') then
+    execute $migration$update terms_acceptances set source = case when legacy then 'backfill' else 'legacy_trigger' end where source is null$migration$;
+  end if;
+end $$;
+alter table terms_acceptances alter column source set not null;
+-- Older drafts had no limits. Enforce them on new rows without rewriting evidence.
+alter table terms_acceptances drop constraint if exists terms_acceptances_source_allowed;
+alter table terms_acceptances add constraint terms_acceptances_source_allowed
+  check (source in ('accept', 'signup', 'backfill', 'legacy_trigger')) not valid;
+alter table terms_acceptances drop constraint if exists terms_acceptances_text_lengths;
+alter table terms_acceptances add constraint terms_acceptances_text_lengths
+  check (char_length(accepted_email) <= 320 and char_length(version) <= 100
+    and char_length(text_hash) <= 64) not valid;
+alter table terms_acceptances drop column if exists ip;
+alter table terms_acceptances drop column if exists user_agent;
+alter table terms_acceptances drop column if exists legacy;
+create unique index if not exists terms_acceptances_backfill_restaurant
+  on terms_acceptances (restaurant_id) where source = 'backfill';
+alter table terms_acceptances enable row level security;
+revoke all on terms_acceptances from anon;
+revoke all on terms_acceptances from public, authenticated, service_role;
+grant select on terms_acceptances to service_role;
+drop policy if exists "owners read terms acceptances" on terms_acceptances;
+
+-- The old row proves only these fields; do not invent the person or document.
+insert into terms_acceptances (restaurant_id, accepted_email, version, accepted_at, source)
+  select id, left(terms_accepted_email, 320), left(terms_version, 100), terms_accepted_at, 'backfill'
+  from restaurants r where (terms_version is not null or terms_accepted_at is not null)
+    and not exists (select 1 from terms_acceptances a where a.restaurant_id = r.id)
+  on conflict (restaurant_id) where source = 'backfill' do nothing;
+
+create or replace function public.keep_terms_acceptance_v1()
+returns trigger language plpgsql security definer set search_path = public as $$
+begin
+  -- Direct fixture cleanup can delete a restaurant too. Keep the evidence
+  -- before its cascade, just as the admin deletion does.
+  if tg_op = 'DELETE' and pg_trigger_depth() > 1 then
+    insert into restaurant_accounting_records (restaurant_id, source_table, source_id, row_data)
+      values (old.restaurant_id, 'terms_acceptances', old.id, to_jsonb(old))
+      on conflict (restaurant_id, source_table, source_id) do nothing;
+    if exists (select 1 from restaurant_accounting_records a where a.restaurant_id = old.restaurant_id
+      and a.source_table = 'terms_acceptances' and a.source_id = old.id and a.row_data = to_jsonb(old))
+      then return old; end if;
+  end if;
+  raise exception 'terms acceptance is immutable';
+end; $$;
+revoke all on function public.keep_terms_acceptance_v1() from public, anon, authenticated;
+grant execute on function public.keep_terms_acceptance_v1() to service_role;
+drop trigger if exists terms_acceptances_immutable on terms_acceptances;
+create trigger terms_acceptances_immutable before update or delete on terms_acceptances
+  for each row execute function public.keep_terms_acceptance_v1();
+drop trigger if exists terms_acceptances_no_truncate on terms_acceptances;
+create trigger terms_acceptances_no_truncate before truncate on terms_acceptances
+  for each statement execute function public.keep_terms_acceptance_v1();
+
+-- Old application instances may still write the current fields while the new
+-- code rolls out. Preserve those clicks too, without inventing their evidence.
+create or replace function public.capture_legacy_terms_v1()
+returns trigger language plpgsql security definer set search_path = public as $$
+begin
+  if current_setting('tabletap.terms_writer', true) is distinct from 'on'
+    and new.terms_version is not null and new.terms_accepted_at is not null
+    and (tg_op = 'INSERT' or old.terms_version is distinct from new.terms_version
+      or old.terms_accepted_at is distinct from new.terms_accepted_at
+      or old.terms_accepted_email is distinct from new.terms_accepted_email) then
+    insert into terms_acceptances (restaurant_id, accepted_email, version, accepted_at, source)
+      values (new.id, left(new.terms_accepted_email, 320), left(new.terms_version, 100), new.terms_accepted_at, 'legacy_trigger');
+  end if;
+  return new;
+end; $$;
+revoke all on function public.capture_legacy_terms_v1() from public, anon, authenticated;
+grant execute on function public.capture_legacy_terms_v1() to service_role;
+drop trigger if exists capture_legacy_terms_insert on restaurants;
+create trigger capture_legacy_terms_insert after insert on restaurants
+  for each row execute function public.capture_legacy_terms_v1();
+drop trigger if exists capture_legacy_terms_update on restaurants;
+create trigger capture_legacy_terms_update after update of terms_version, terms_accepted_at, terms_accepted_email on restaurants
+  for each row execute function public.capture_legacy_terms_v1();
+
+-- Remove the earlier signatures so PostgREST cannot pick a stale overload.
+drop function if exists public.accept_terms_v1(uuid, uuid, text, text, text, text, text);
+drop function if exists public.signup_restaurant_with_terms_v1(text, uuid, text, text, text, text, text, text, timestamptz);
+create or replace function public.accept_terms_v1(
+  p_restaurant uuid, p_user uuid, p_email text, p_version text, p_text_hash text
+) returns void language plpgsql security definer set search_path = public as $$
+begin
+  -- The row lock makes simultaneous retries share the same one-minute window.
+  perform 1 from restaurants r where r.id = p_restaurant
+    and (r.owner_id = p_user or exists (select 1 from staff s where s.restaurant_id = r.id
+      and s.user_id = p_user and s.role = 'owner')) for update;
+  if not found then raise exception 'restaurant not found or not owned'; end if;
+  if exists (select 1 from terms_acceptances where restaurant_id = p_restaurant
+    and user_id = p_user and version = left(p_version, 100) and text_hash = left(p_text_hash, 64)
+    and accepted_at >= now() - interval '1 minute') then return; end if;
+  perform set_config('tabletap.terms_writer', 'on', true);
+  update restaurants set terms_version = left(p_version, 100), terms_accepted_at = now(), terms_accepted_email = left(p_email, 320)
+    where id = p_restaurant;
+  insert into terms_acceptances (restaurant_id, user_id, accepted_email, version, accepted_at, text_hash, source)
+    values (p_restaurant, p_user, left(p_email, 320), left(p_version, 100), now(), left(p_text_hash, 64), 'accept');
+end; $$;
+revoke all on function public.accept_terms_v1(uuid, uuid, text, text, text) from public, anon, authenticated;
+grant execute on function public.accept_terms_v1(uuid, uuid, text, text, text) to service_role;
+
+create or replace function public.signup_restaurant_with_terms_v1(
+  p_name text, p_user uuid, p_email text, p_version text, p_text_hash text,
+  p_plan text, p_trial_ends_at timestamptz
+) returns uuid language plpgsql security definer set search_path = public as $$
+declare v_restaurant uuid;
+begin
+  perform set_config('tabletap.terms_writer', 'on', true);
+  insert into restaurants (name, owner_id, owner_signup_pending, plan, plan_status,
+    terms_version, terms_accepted_at, terms_accepted_email, trial_ends_at)
+  values (p_name, p_user, true, p_plan, 'trialing', left(p_version, 100), now(), left(p_email, 320), p_trial_ends_at)
+  returning id into v_restaurant;
+  insert into terms_acceptances (restaurant_id, user_id, accepted_email, version, accepted_at, text_hash, source)
+    values (v_restaurant, p_user, left(p_email, 320), left(p_version, 100), now(), left(p_text_hash, 64), 'signup');
+  return v_restaurant;
+end; $$;
+revoke all on function public.signup_restaurant_with_terms_v1(text, uuid, text, text, text, text, timestamptz) from public, anon, authenticated;
+grant execute on function public.signup_restaurant_with_terms_v1(text, uuid, text, text, text, text, timestamptz) to service_role;
+
 -- Accounting survives the live restaurant. Keep original IDs and row contents,
 -- not a restaurant/profile copy; no FK may cascade this retained record away.
 create table if not exists restaurant_accounting_records (
@@ -10420,7 +10575,7 @@ begin
     -- returned, discounts and losses someone approved, coupons and rewards
     -- given as money off, and how a bill was divided (review bg8).
     'fee_returns', 'coupon_redemptions', 'write_off_requests', 'discount_requests',
-    'loyalty_redemptions', 'bill_splits'
+    'loyalty_redemptions', 'bill_splits', 'terms_acceptances'
   ] loop
     -- Lock existing rows as they are copied too: an update must not change a
     -- receipt after its copy. A failed copy or cascade rolls back both writes.
