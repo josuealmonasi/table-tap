@@ -59,6 +59,19 @@ resolve the card return. The import records that reason on the review row; the
 need check skips it and the money check still lists it. `historical-card-import.spec.ts`
 checks the shared rule, and the rolled-back development probe checks both reads.
 
+## Admin usage keeps returned tips out of sales
+
+The usage report and return operations must agree on which part was a tip.
+Subtracting the whole return from sales would charge a returned tip to sales.
+`admin-usage-returns.spec.ts` checks partial pieces across periods and
+`admin-usage-read.spec.ts` checks the saved operation against its sale.
+
+## Admin usage keeps each fee in its own currency
+
+The fee ledger and checkout evidence must agree on a currency. The ledger has
+no currency column, so today's restaurant setting cannot relabel an older fee.
+`admin-usage-read.spec.ts` checks the matching restaurant and the unknown bucket.
+
 ## What runs on its own
 
 ### Scheduled prices keep their notice queue
@@ -104,9 +117,12 @@ and that a new party cannot see the previous party's waiting phones.
 `src/lib/__tests__/invariants.spec.ts` enforces the rules that span files:
 
 | Rule | The bug it came from |
+| Admin usage and returned tips agree | A returned tip must not be deducted from sales; `admin-usage-returns.spec.ts` checks partial pieces |
+| Admin usage and fee currency evidence agree | A fee cannot inherit today's restaurant currency; `admin-usage-read.spec.ts` checks other currencies and missing evidence |
 | Scheduled plan prices keep their eligible notice queue | A scheduled price without its recipients could leave an owner without notice; the route and schema specs pin validation and the atomic queue |
 | One-click ticket unsubscribe retries return the same success | A cleared or unknown token returned 404 to mail providers; `ticket-stop-one-click.spec.ts` checks retries, invalid forms and the separate confirmation response |
 |---|---|
+| Dish deal callout and price agree | The hint looked ahead while the selected quantity already saved money; `deal-callout.spec.tsx` checks both together |
 | The demo stop link and layout paths agree | The gate measured only an invalid link and missed the button overflowing its card; `seed-stop-layout.spec.ts` checks the seed and both paths |
 | Dish choices and the pinned cart button keep their distance | The deal button wrapped beside a scrolling extra; `dish-footer-gap.spec.ts` and the dish detail layout case cover the structure and the rendered spacing |
 | Earlier acceptance rows and the backfill index agree | Relabeling every old row as a backfill could stop schema application; `acceptance-schema.spec.ts` pins the migration |
@@ -8057,3 +8073,9 @@ could still be paid and its subscription wrote over the free tier. Each
 payment-link assignment now stores `restaurants.tier_assignment_id` and the link
 carries it (`a=`); a free move runs under the lock, closes open Checkouts and
 clears the id. Checks: `billing-assigned.spec.ts`, `admin-tier.spec.ts`.
+## Dish deal callout and selected price
+
+The deal hint and the add-to-cart price must describe the same selection. The
+hint looked for the next deal even when the chosen quantity already earned one.
+Both now use the selected line's price and saving, including other cart lines;
+`deal-callout.spec.tsx` renders quantities one through three in both languages.

@@ -120,6 +120,12 @@ export function adminOwnerCases(fx) {
       path: "/api/admin/users",
       body: () => ({ email: "nobody@tabletap.dev", password: loginSecret("TEST_PASSWORD"), role: "admin" }),
       expect: [401, 403] },
+    { name: "GET /api/admin/restaurants/usage", as: "platformAdmin", method: "GET",
+      path: `/api/admin/restaurants/usage?id=${r}`, expect: [200],
+      check: d => Number.isInteger(d.staff) && Number.isInteger(d.last30?.orders) && Number.isInteger(d.month?.orders)
+        || "usage figures missing" },
+    { name: "GET /api/admin/restaurants/usage (owner refused)", as: "owner", method: "GET",
+      path: `/api/admin/restaurants/usage?id=${r}`, expect: [403] },
     // A platform admin moves a restaurant to another plan, and its team with
     // it. Put back afterwards, trial and all.
     { name: "PATCH /api/admin/restaurants (move a plan)", as: "platformAdmin", method: "PATCH",
