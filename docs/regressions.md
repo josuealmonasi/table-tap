@@ -8,6 +8,14 @@ table owed MX$105 and the diner's screen said it owed nothing.
 So this is not a style guide. It is the list of things that have actually bitten
 us, and what now catches each one.
 
+## Historical card return imports stop retrying
+
+The import and the bill read disagreed about what a card return log could prove.
+A matching log kept the import pending even though only provider evidence can
+resolve the card return. The import records that reason on the review row; the
+need check skips it and the money check still lists it. `historical-card-import.spec.ts`
+checks the shared rule, and the rolled-back development probe checks both reads.
+
 ## What runs on its own
 
 ### Login passwords stay outside the repository
@@ -44,8 +52,9 @@ and that a new party cannot see the previous party's waiting phones.
 `src/lib/__tests__/invariants.spec.ts` enforces the rules that span files:
 
 | Rule | The bug it came from |
-| The retry schedule must run on the hosting plan and identify its caller | Vercel rejected the five-minute cron on Hobby; `recovery-schedule-platform.spec.ts`, `github-cron-auth.spec.ts` and `recovery-scheduler-client.spec.ts` pin the daily fallback and the exact signed main-branch job |
 |---|---|
+| Historical card reviews do not retry on each bill read | The importer cannot use a log as provider evidence, but the need check kept finding it; `historical-card-import.spec.ts` checks the review marker |
+| The retry schedule must run on the hosting plan and identify its caller | Vercel rejected the five-minute cron on Hobby; `recovery-schedule-platform.spec.ts`, `github-cron-auth.spec.ts` and `recovery-scheduler-client.spec.ts` pin the daily fallback and the exact signed main-branch job |
 | Account email removal matches each caller and the saved address | Staff shared a customer IP limit, and a statement offered removal without an address; `account-email-remove.spec.ts`, `account-credit-public.spec.ts` and `remove-email.spec.tsx` cover the limits, projection and dialog |
 | Account email removal follows the privacy notice | Neither staff nor the code holder could remove a saved address; `account-email-remove.spec.ts`, `remove-email.spec.tsx` and `staff-remove-email.spec.tsx` cover the route and both screens |
 | Reopened split pages keep the tip and total the diner chose (review F4) | Both saved-principal shares and parts could return an earlier or concurrent page with another amount; route specs check the quote and safe retirement |

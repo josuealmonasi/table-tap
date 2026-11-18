@@ -2462,8 +2462,10 @@ bill coverage read (`order_coverage`) runs it only when
 `payment_allocations_need_backfill` finds something for it to do: a receipt
 still at allocation version 0 or a retryable overlap receipt, or a cancelled
 order whose legacy money has no cancel record, an unreturned allocation, or a
-return still in historical review. Otherwise the read takes no lock and writes
-nothing, and returns the same numbers.
+return still in historical review. A historical card return records that it
+needs provider evidence, stays in the money review list and is not retried on
+every bill read. Otherwise the read takes no lock and writes nothing, and
+returns the same numbers.
 
 #### Schema-first deployment and enforcement switch
 
