@@ -8186,3 +8186,13 @@ that was both owner and staff, or an owner with no way back in.
 `admin_transfer_ownership` does all three under the restaurant's row lock.
 Check: `admin-owner-transfer.spec.ts` and the api case that transfers and checks
 the former owner is a manager.
+
+## Branch previews used up the day's deployments (2026-11-18)
+
+Vercel's plan caps deployments per day, and every push to any branch built a
+preview nobody opened: the gates run on GitHub, and the ship train reads only
+the deployment of a merge to main. On a busy day the cap was reached and the
+merge of #688 was refused ("Deployment rate limited — retry in 24 hours"),
+leaving production on the previous release. `vercel.json` now deploys main only
+(`git.deploymentEnabled`). Check: `invariants/operations.spec.ts`.
+
