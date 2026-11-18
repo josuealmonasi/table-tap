@@ -9,6 +9,8 @@ import { logDetail } from "@/lib/log-detail";
 
 export const runtime = "nodejs";
 
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 const ANSWERS: Record<string, [string, number]> = {
   not_found: ["apiErr.restaurantNotFound", 404],
   already_owner: ["apiErr.alreadyOwner", 409],
@@ -22,7 +24,9 @@ async function transfer(req: NextRequest) {
   const admin = await getPlatformAdmin();
   if (!admin) return await apiError("apiErr.forbidden", 403);
   const body = await jsonBody<{ id?: unknown; userId?: unknown }>(req);
-  if (!body || typeof body.id !== "string" || typeof body.userId !== "string") return await apiError("apiErr.invalidRequest", 400);
+  if (!body || typeof body.id !== "string" || typeof body.userId !== "string" || !UUID.test(body.id) || !UUID.test(body.userId)) {
+    return await apiError("apiErr.invalidRequest", 400);
+  }
   const { data, error } = await createAdminClient().rpc("admin_transfer_ownership", { p_restaurant: body.id, p_new_owner: body.userId });
   if (error) return await apiError("apiErr.generic", 500);
   if (data !== "transferred") {

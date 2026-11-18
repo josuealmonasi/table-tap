@@ -23,6 +23,8 @@ function requestedFacts(body: Record<string, unknown>, action: Action): Facts {
   }
   if (typeof body.fullName === "string") facts.full_name = body.fullName.trim();
   if (typeof body.password === "string") facts[action === "login.create" ? "password_set" : "password_reset"] = true;
+  // Who receives the restaurant; who it came from is in the before facts.
+  if (action === "restaurant.owner_transfer" && typeof body.userId === "string") facts.new_owner_id = body.userId;
   if (action === "plan.price") {
     if (typeof body.newPrice === "number") facts.new_price = body.newPrice;
     if (typeof body.effectiveAt === "string") facts.effective_at = body.effectiveAt;
@@ -34,9 +36,9 @@ async function beforeFacts(db: Db, action: Action, id?: string): Promise<Facts> 
   // Invalid targets still reach the route's validation, never a uuid cast.
   if (action === "plan.price" || !id || !/^[0-9a-f-]{36}$/i.test(id)) return {};
   if (action.startsWith("restaurant.")) {
-    const { data, error } = await db.from("restaurants").select("name, plan, plan_status").eq("id", id).maybeSingle();
+    const { data, error } = await db.from("restaurants").select("name, plan, plan_status, owner_id").eq("id", id).maybeSingle();
     if (error) throw error;
-    return data ? { name: data.name, plan: data.plan, plan_status: data.plan_status } : {};
+    return data ? { name: data.name, plan: data.plan, plan_status: data.plan_status, owner_id: data.owner_id } : {};
   }
   const { data: admin, error: adminError } = await db.from("platform_admins").select("email").eq("user_id", id).maybeSingle();
   if (adminError) throw adminError;

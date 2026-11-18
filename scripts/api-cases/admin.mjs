@@ -212,6 +212,8 @@ export function adminOwnerCases(fx) {
     { name: "POST /api/admin/restaurants/owner (someone off the team refused)", as: "platformAdmin", method: "POST",
       path: "/api/admin/restaurants/owner", body: { id: r, userId: randomUUID() }, expect: [409],
       expectError: /equipo|team/i },
+    { name: "POST /api/admin/restaurants/owner (malformed ids refused, not uncertain)", as: "platformAdmin", method: "POST",
+      path: "/api/admin/restaurants/owner", body: { id: "abc", userId: "x" }, expect: [400] },
     { name: "POST /api/admin/restaurants/owner (an owner refused)", as: "owner", method: "POST",
       path: "/api/admin/restaurants/owner", body: { id: r, userId: randomUUID() }, expect: [403] },
     // Trial control: the demo is not on a trial, so ending one is the right refusal.

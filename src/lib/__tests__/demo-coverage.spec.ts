@@ -31,6 +31,7 @@ const NOT_DEMO_DATA = new Set([
   "plan_price_changes", // real admin schedules only; demo data must not change prices
   "plan_price_notices", // a fake queue must never send a real notice
   "restaurant_admin_notes", // the platform team's own notes, never a restaurant's data
+  "webhook_heartbeats", // written only by Stripe's signed calls; a seeded one would show health as fine
   "restaurant_accounting_records", // only real deletions retain books; the demo stays live
   "terms_acceptances", // the seeded restaurant acceptance fills this through its trigger
   "profiles", // created with the logins
