@@ -6,6 +6,7 @@ import { getPlatformAdmin } from "@/lib/admin";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { allPlans } from "@/lib/plan-server";
 import { readPlatformHealth } from "@/lib/admin-health";
+import { adminPlanPrices } from "@/lib/admin-prices";
 import { ConfirmProvider } from "@/components/ui/ConfirmDialog";
 import AdminPanel, {
   type AdminRestaurantRow,
@@ -111,6 +112,7 @@ export default async function AdminPage() {
         restaurantOptions={restaurantOptions}
         plans={(await allPlans()).map(p => p.plan)}
         health={await readPlatformHealth()}
+        prices={await adminPlanPrices()}
       />
     </ConfirmProvider>
   );

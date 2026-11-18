@@ -8170,6 +8170,14 @@ cached menu loader, which runs in production; dev and any uncached read use
 there. Both now go through `asDinerSees`. Seen in the browser while checking
 the suspension, before it shipped.
 
+## Price-change recipients read from Stripe too (review 1117b, finding 4)
+
+Scheduling a change queued the restaurants whose local `plan` was the tier.
+A subscriber Stripe already billed on that tier, whose sync had not landed,
+was missed and would have been moved without a notice. `price_recipients`
+reconciles every pending change from Stripe each run. Check:
+`price-recipients.spec.ts`.
+
 ## Ownership moves in one place (2026-11-18)
 
 An owner is `restaurants.owner_id`, a manager is a `staff` row. Moving ownership
