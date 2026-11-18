@@ -3005,6 +3005,12 @@ votes: "Votes",
     blocked: "Allow pop-ups to print or save your receipt.",
     failed: "We couldn't open your receipt. Try again.",
   },
+  priceNoticeMail: {
+    subject: "A change to your plan price",
+    intro: "Your current monthly price is {current}. The new monthly price will be {next}.",
+    after: "The new price will apply to your next bill on or after {date}.",
+    button: "View your plan",
+  },
   tierMail: {
     subject: "{restaurant}: your {plan} plan is ready to pay",
     intro: "We turned on the {plan} plan for {restaurant}. Your team can use it now. To keep it, pay for it by {date}.",

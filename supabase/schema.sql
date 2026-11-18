@@ -15059,6 +15059,10 @@ create table if not exists plan_price_notices (
   last_error text,
   primary key (change_id, restaurant_id)
 );
+-- A retry must send the same message, even if the owner or price changes.
+alter table plan_price_notices add column if not exists mail_body jsonb;
+-- The oldest queued notice, not an arbitrary UUID, sets the recovery age.
+alter table plan_price_notices add column if not exists created_at timestamptz not null default now();
 alter table plan_price_changes enable row level security;
 alter table plan_price_notices enable row level security;
 revoke all on plan_price_changes from anon, authenticated, public;

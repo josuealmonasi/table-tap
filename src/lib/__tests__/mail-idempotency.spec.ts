@@ -20,3 +20,12 @@ it("preserves paragraph and item breaks in the provider's plain-text payload", a
   await sendMail({ to: "diner@example.com", subject: "Statement", html: "<p>Statement</p>", text });
   expect(JSON.parse(fetcher.mock.calls[0][1].body).text).toBe(text);
 });
+
+it("passes a caller's deadline signal to the provider", async () => {
+  vi.stubEnv("RESEND_API_KEY", "test-key"); vi.stubEnv("RECEIPT_FROM_EMAIL", "test@example.com");
+  const fetcher = vi.fn().mockResolvedValue(new Response("{}", { status: 200 }));
+  vi.stubGlobal("fetch", fetcher);
+  const signal = new AbortController().signal;
+  await sendMail({ to: "owner@example.com", subject: "Plan", html: "Plan", text: "Plan", signal });
+  expect(fetcher.mock.calls[0][1].signal).toBe(signal);
+});

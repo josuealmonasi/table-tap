@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
 
-const { jobs, context, drain, githubAuth } = vi.hoisted(() => ({ jobs: { stock: vi.fn(), refunds: vi.fn(), fees: vi.fn(), subscriptions: vi.fn(), disputes: vi.fn(), accounting: vi.fn() }, context: vi.fn(), drain: vi.fn(), githubAuth: vi.fn() }));
+const { jobs, context, drain, githubAuth } = vi.hoisted(() => ({ jobs: { stock: vi.fn(), refunds: vi.fn(), fees: vi.fn(), subscriptions: vi.fn(), disputes: vi.fn(), accounting: vi.fn(), price_notices: vi.fn() }, context: vi.fn(), drain: vi.fn(), githubAuth: vi.fn() }));
 vi.mock("@/lib/github-cron-auth", () => ({ githubCronAuthorized: githubAuth }));
 vi.mock("@/lib/ticket-email", () => ({ drainTicketEmailQueue: drain }));
 vi.mock("../context", () => ({ recoveryContext: context }));
@@ -10,6 +10,7 @@ vi.mock("../refunds", () => ({ recoverRefunds: jobs.refunds }));
 vi.mock("../fees", () => ({ recoverFees: jobs.fees }));
 vi.mock("../subscriptions", () => ({ recoverSubscriptions: jobs.subscriptions }));
 vi.mock("../disputes", () => ({ recoverDisputes: jobs.disputes }));
+vi.mock("../price-notices", () => ({ recoverPriceNotices: jobs.price_notices }));
 vi.mock("../accounting-purge", () => ({ purgeAccounting: jobs.accounting }));
 const { GET } = await import("@/app/api/cron/recover/route");
 const clean = { done: 0, pending: 0, failed: 0, oldest_pending_at: null, oldest_pending_age_seconds: null, age_basis: "created_at" };
@@ -42,8 +43,8 @@ it("runs every job without a user session and returns uncached per-job counts", 
   const result = await GET(request("Bearer cron-test-secret"));
   expect(result.status).toBe(200);
   expect(result.headers.get("cache-control")).toBe("no-store");
-  expect(await result.json()).toEqual({ jobs: { stock: clean, refunds: clean, fees: clean, subscriptions: clean, disputes: clean, accounting: clean } });
-  expect(context).toHaveBeenCalledTimes(6);
+  expect(await result.json()).toEqual({ jobs: { stock: clean, refunds: clean, fees: clean, subscriptions: clean, disputes: clean, accounting: clean, price_notices: clean } });
+  expect(context).toHaveBeenCalledTimes(7);
   expect(githubAuth).not.toHaveBeenCalled();
 });
 it("accepts the verified scheduler identity without a shared cron secret", async () => {
@@ -51,7 +52,7 @@ it("accepts the verified scheduler identity without a shared cron secret", async
   githubAuth.mockResolvedValue(true);
   expect((await GET(request("Bearer fixture-identity"))).status).toBe(200);
   expect(githubAuth).toHaveBeenCalledOnce();
-  expect(context).toHaveBeenCalledTimes(6);
+  expect(context).toHaveBeenCalledTimes(7);
 });
 it("a failed job cannot prevent the other jobs from running", async () => {
   jobs.stock.mockRejectedValue(new Error("database unavailable"));
