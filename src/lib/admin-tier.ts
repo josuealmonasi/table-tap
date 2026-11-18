@@ -31,12 +31,15 @@ type Db = ReturnType<typeof createAdminClient>;
  *   opens Checkout for exactly that tier. Unpaid by then, getPlan drops it to
  *   Carta the same way it ends any trial.
  * - `free`: an assignment with no charge at all (the original admin move).
+ * - `test`: free, for a tester the owner is lending the app to. It also gives
+ *   back the restaurant's founding place, if it holds one and no subscription
+ *   is paying for it, so a tester never keeps a founder away.
  */
-export type TierBilling = "next_bill" | "payment_link" | "free";
-export const TIER_BILLING: TierBilling[] = ["next_bill", "payment_link", "free"];
+export type TierBilling = "next_bill" | "payment_link" | "free" | "test";
+export const TIER_BILLING: TierBilling[] = ["next_bill", "payment_link", "free", "test"];
 
 export type TierAnswer =
-  | { ok: true; from: string; to: string; billing: TierBilling; payBy?: string; emailed?: boolean }
+  | { ok: true; from: string; to: string; billing: TierBilling; payBy?: string; emailed?: boolean; seatReleased?: boolean }
   | { ok: false; error: string; status: number };
 
 /** Days an owner has to pay a tier assigned with a payment link, unless the admin says otherwise. */
@@ -69,7 +72,7 @@ export async function assignTier(
   adminEmail: string,
   client: Stripe = stripe,
 ): Promise<TierAnswer> {
-  if (input.billing === "free") {
+  if (input.billing === "free" || input.billing === "test") {
     // Under the billing lock too, closing any open Checkout: a pay link opened
     // just before this free move could otherwise still be paid, and its
     // subscription would write over the tier given here (review finding 3).
@@ -79,9 +82,11 @@ export async function assignTier(
         if (!exists) return { ok: false, error: "apiErr.restaurantNotFound", status: 404 } as const;
         await operation.record(snapshot);
         for (const session of sessions) await operation.write(() => client.checkout.sessions.expire(session.id));
-        return await moveRestaurantPlan(db, input.restaurantId, input.plan, adminEmail, client);
+        const result = await moveRestaurantPlan(db, input.restaurantId, input.plan, adminEmail, client);
+        if (!result.ok || input.billing !== "test") return { ...result, seatReleased: false };
+        return { ...result, seatReleased: await releaseFoundingSeat(db, input.restaurantId) };
       });
-      return moved.ok ? { ...moved, billing: "free" } : moved;
+      return moved.ok ? { ...moved, billing: input.billing } : moved;
     } catch (err) {
       if (err instanceof BillingError) return { ok: false, error: err.key, status: err.status };
       console.error("admin free tier move failed", err);
@@ -263,3 +268,17 @@ export function tierMail(
       + `<p style="color:#6E7A74;font-size:13px">${escapeHtml(after)}</p></div>`,
   };
 }
+
+/**
+ * Gives back a tester's founding place. Only when nothing pays for it: a
+ * founder with a live subscription keeps the number it was charged under.
+ * The count of places is what limits new founders (`claim_founding_price`),
+ * so the place is free again at once.
+ */
+async function releaseFoundingSeat(db: Db, restaurantId: string): Promise<boolean> {
+  const { data, error } = await db.from("restaurants").update({ founding_number: null })
+    .eq("id", restaurantId).not("founding_number", "is", null).is("stripe_subscription_id", null).select("id");
+  if (error) throw new Error(`Founding place release failed: ${error.message}`);
+  return Boolean(data?.length);
+}
+

@@ -1881,8 +1881,11 @@ begin
 
   perform pg_advisory_xact_lock(hashtext('tabletap:founding'));
 
+  -- The limit counts places held, not the highest number: a tester's place
+  -- given back (admin "cuenta de prueba") is free again at once. Numbers keep
+  -- rising, so they still record who arrived in what order.
+  if (select count(*) from restaurants where founding_number is not null) >= p_limit then return null; end if;
   select coalesce(max(founding_number), 0) + 1 into v_next from restaurants;
-  if v_next > p_limit then return null; end if;
 
   update restaurants set founding_number = v_next
    where id = p_restaurant and founding_number is null;

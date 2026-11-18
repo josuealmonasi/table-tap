@@ -8243,6 +8243,12 @@ the route, the hook and their tests all handle. The probe was wrong, not the
 code. Run unchanged against an unreachable database, every probe errored and the
 runner exited 1. It now runs on GitHub in every gates run.
 
+## A freed founding place could never be taken again (2026-11-18)
+
+`claim_founding_price` gave the next number after the highest and refused past
+50, so a founding place given back in the middle (the new admin "cuenta de
+prueba") would have been lost for good: 49 founders, no place left. The limit
+now counts places held. Check: `admin-tier.spec.ts`.
 ## Auth emails went to spam, in English, with a link a scanner could spend (2026-11-18)
 
 Supabase's default templates were English only and linked to the project's

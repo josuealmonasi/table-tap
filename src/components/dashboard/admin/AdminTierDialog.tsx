@@ -5,7 +5,7 @@ import { Modal } from "@/components/ui/Modal";
 import { useT } from "@/lib/i18n/context";
 import { planLabel } from "@/lib/plan";
 
-export type TierBillingChoice = "next_bill" | "payment_link" | "free";
+export type TierBillingChoice = "next_bill" | "payment_link" | "free" | "test";
 
 export interface TierAssignment {
   billing: TierBillingChoice;
@@ -60,6 +60,7 @@ export default function AdminTierDialog({ name, plan, billedByStripe, busy, onCl
               <select className="tt-input" value={billing} onChange={e => setBilling(e.target.value as TierBillingChoice)}>
                 <option value="payment_link">{t("admin.tierPaymentLink")}</option>
                 <option value="free">{t("admin.tierFree")}</option>
+                <option value="test">{t("admin.tierTest")}</option>
               </select>
             </label>
             {billing === "payment_link" ? (
@@ -72,7 +73,9 @@ export default function AdminTierDialog({ name, plan, billedByStripe, busy, onCl
                 <p className="tt-muted" style={{ margin: 0, fontSize: 13 }}>{t("admin.tierPaymentLinkMsg", { plan: label })}</p>
               </>
             ) : (
-              <p className="tt-muted" style={{ margin: 0, fontSize: 13 }}>{t("admin.planConfirmMsg", { plan: label })}</p>
+              <p className="tt-muted" style={{ margin: 0, fontSize: 13 }}>
+                {t(billing === "test" ? "admin.tierTestMsg" : "admin.planConfirmMsg", { plan: label })}
+              </p>
             )}
           </>
         )}
