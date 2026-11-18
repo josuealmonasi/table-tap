@@ -15,9 +15,14 @@ import OrderTotals from "./OrderTotals";
 import TipPicker from "./TipPicker";
 import { BackIcon } from "@/components/ui/icons";
 import CartCheckoutActions from "./CartCheckoutActions";
+import PlaceIdentity from "./PlaceIdentity";
+import PrivacyHint from "./PrivacyHint";
+import type { PlaceIdentity as Identity } from "@/lib/place-identity";
 
 interface CartScreenProps {
   restaurant: Restaurant;
+  /** Who the diner is paying. */
+  identity?: Identity | null;
   table: RestaurantTable | null;
   items: CartItem[];
   /** The dish's photo, looked up from the live menu — null falls back to emoji. */
@@ -75,6 +80,7 @@ interface CartScreenProps {
 /** The review-and-pay screen: line items, kitchen note, totals, checkout button. */
 export default function CartScreen({
   restaurant,
+  identity,
   table,
   items,
   photoOf,
@@ -211,6 +217,7 @@ export default function CartScreen({
                     aria-label={t("cart.yourName")}
                     onChange={e => onChangeName?.(e.target.value)}
                   />
+                  <PrivacyHint field="name" />
                 </label>
               )}
 
@@ -281,6 +288,7 @@ export default function CartScreen({
               loading={loading}
               onCheckout={onCheckout}
             />
+            <PlaceIdentity identity={identity} />
           </>
         )}
       </div>

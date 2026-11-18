@@ -9,6 +9,7 @@ import { recoverFees } from "@/lib/recovery/fees";
 import { recoverRefunds } from "@/lib/recovery/refunds";
 import { recoverSubscriptions } from "@/lib/recovery/subscriptions";
 import { recoverDisputes } from "@/lib/recovery/disputes";
+import { purgeAccounting } from "@/lib/recovery/accounting-purge";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -23,6 +24,8 @@ export async function GET(request: Request) {
   // claimed until the queue is empty or the budget runs out (Codex review of
   // #622). Never throws; it stops between groups and releases what it claimed.
   const tickets = drainTicketEmailQueue(20, 50, Date.now() + TICKET_DRAIN_MS);
+  // A sixth sequential budget would exceed the route limit.
+  const accounting = isolateJob("accounting", () => purgeAccounting(recoveryContext()));
   const jobs: Record<string, RecoveryJob> = { stock: recoverStock, refunds: recoverRefunds, fees: recoverFees, subscriptions: recoverSubscriptions, disputes: recoverDisputes };
   const results: Record<string, RecoveryResult> = {};
   for (const [name, job] of Object.entries(jobs)) {
@@ -30,6 +33,8 @@ export async function GET(request: Request) {
     results[name] = await isolateJob(name, () => job(recoveryContext()));
     console.info("Scheduled recovery", { job: name, ...results[name] });
   }
+  results.accounting = await accounting;
+  console.info("Scheduled recovery", { job: "accounting", ...results.accounting });
   await tickets;
   return NextResponse.json({ jobs: results }, { headers: { "Cache-Control": "no-store" } });
 }

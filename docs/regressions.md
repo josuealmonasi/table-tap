@@ -107,6 +107,7 @@ and that a new party cannot see the previous party's waiting phones.
 | Failed loyalty reads cannot open an empty editor (E2E D7) | A read failure looked like a program that had never existed |
 | Replay waits for the online send and preserves preparation (E2E C5) | Background replay raced a live request and completed food nobody had made |
 | Processing fees keep the payment currency (E2E D4) | A dollar charge used the fixed peso processing fee |
+| Diner menu, cart and bill show the restaurant's legal identity, read through the ticket's server-side path and never the public columns; the pickup-name and receipt-email fields carry the short privacy notice (`invariants/place-identity.spec.ts`, `place-identity.spec.tsx`) | The legal review found diners paying with no restaurant identity, address or notice in sight (LFPC 76 Bis, LFPDPPP 16) |
 | An elapsed time goes through `src/lib/elapsed.ts`; no dictionary key outside `elapsed` takes a raw count of minutes, hours or days, and no screen divides by 60 000 itself (`invariants/elapsed.spec.ts`) | The Pedidos board read "hace 1741 min" for a ticket a day and five hours old |
 | Terminal bank movements keep their sign (E2E C7) | A refund-heavy day's bank debit could not be recorded |
 | New owners prove email ownership before their trial starts (E2E E4) | Signup confirmed an address nobody had verified |
@@ -7733,6 +7734,30 @@ before expiring a page. A stale phone amount now leaves the valid page open.
 The selected slots and the percentage-tip food read had to agree on which
 answer comes first. Stale, paid and taken parts are reported before an
 unavailable food read can hide them.
+## Deleted restaurant books expire after ten years
+
+| Places that must agree | What went wrong | What checks it |
+| --- | --- | --- |
+| Restaurant deletion and scheduled retention | Archived books had no expiry job and stayed indefinitely | `accounting-purge.spec.ts`, `recovery/__tests__/route.spec.ts` |
+
+The archive records when the accounting copy is made in the deletion transaction.
+The scheduled worker removes only records older than ten years for restaurants
+that no longer exist, in bounded batches. The SQL contract pins the strict
+boundary; a database probe must check the actual boundary and restored IDs.
+
+
+## Accounting purge and recovery reporting agree
+
+| Places that must agree | What went wrong | What checks it |
+| --- | --- | --- |
+| Recovery jobs and the production scheduler | A failed accounting job could still report success | `recovery-scheduler-client.spec.ts` |
+| Retained books and the expiry worker | A second deletion timestamp rewrote old archives, and a restored restaurant was not excluded | `accounting-purge.spec.ts`; database probe |
+| Retention deadline and recovery age | Pending age included the ten years books must be kept | `accounting-purge.spec.ts` |
+
+The scheduler checks the accounting result. The purge uses the existing
+`retained_at`, excludes live restaurants from both deletion and pending counts,
+and reports the age since the retention deadline. The SQL contract test reads
+the function itself; the database probe must exercise the actual predicate.
 ## Rate limits that capped the answer, not the cost (security review 2026-11-17)
 
 Three limits each guarded one side of something that had to agree:
@@ -7762,3 +7787,15 @@ the account statement's order lines painted 1px into each other. Every inline
 price); `.tt-statement-lines` spaces its lines with a parent `gap`.
 
 The i18n strings (`es.ts`, `en.ts`) join with the same no-break spaces around the dot.
+
+## A gate's fake card reader that outlived every run (2026-11-17)
+
+The API cases lend Demo Bistro a fake Stripe account (`acct_api_check…`) so
+card routes get past "this restaurant takes no cards", and put back what they
+found afterwards. A run stopped mid-case left the fake on. Every later case
+then saved the fake as the "original" and restored it, and `db:mock` kept it
+too, because a reseed preserves a real test account. Every card route then
+failed at Stripe (500/502) and the attack gate refused its admission case, on
+every branch, looking like a bug in whatever PR was being gated (#653).
+`scripts/lent-stripe-account.mjs` names the fakes once; restores and reseeds
+never keep one. Check: `src/lib/__tests__/lent-stripe-account.spec.ts`.
