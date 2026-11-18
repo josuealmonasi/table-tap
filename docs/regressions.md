@@ -8,6 +8,14 @@ table owed MX$105 and the diner's screen said it owed nothing.
 So this is not a style guide. It is the list of things that have actually bitten
 us, and what now catches each one.
 
+## Historical card return imports stop retrying
+
+The import and the bill read disagreed about what a card return log could prove.
+A matching log kept the import pending even though only provider evidence can
+resolve the card return. The import records that reason on the review row; the
+need check skips it and the money check still lists it. `historical-card-import.spec.ts`
+checks the shared rule, and the rolled-back development probe checks both reads.
+
 ## What runs on its own
 
 ### Scheduled prices keep their notice queue
@@ -54,8 +62,21 @@ and that a new party cannot see the previous party's waiting phones.
 
 | Rule | The bug it came from |
 | Scheduled plan prices keep their eligible notice queue | A scheduled price without its recipients could leave an owner without notice; the route and schema specs pin validation and the atomic queue |
+|---|---|
+| Earlier acceptance rows and the backfill index agree | Relabeling every old row as a backfill could stop schema application; `acceptance-schema.spec.ts` pins the migration |
+| Terms evidence and the privacy notice agree | Acceptance saved request network details despite the notice; `acceptance-history.spec.ts` and `rate-limit-key.spec.ts` forbid collection |
+| Terms history access and kitchen denial agree | A table grant allowed authenticated reads to reach RLS; `acceptance-schema.spec.ts` pins service-only access |
+| Legacy acceptance capture and seed updates agree | An unchanged seed wrote another immutable record; `acceptance-schema.spec.ts` pins changed values |
+| Acceptance retries and history growth agree | Repeated requests could grow immutable history; `acceptance-schema.spec.ts` pins serialized deduplication and text limits |
+| Acceptance writer and owner authorization agree | The definer trusted its caller's restaurant and user; `acceptance-schema.spec.ts` pins the owner check |
+| Terms acceptances survive newer acceptances and restaurant deletion | The restaurant kept only its latest acceptance and was deleted with it; `acceptance-history.spec.ts`, `acceptance-schema.spec.ts` and `signup-verification.spec.ts` cover the writers and archive contract |
 | The retry schedule must run on the hosting plan and identify its caller | Vercel rejected the five-minute cron on Hobby; `recovery-schedule-platform.spec.ts`, `github-cron-auth.spec.ts` and `recovery-scheduler-client.spec.ts` pin the daily fallback and the exact signed main-branch job |
 |---|---|
+| Historical card reviews do not retry on each bill read | The importer cannot use a log as provider evidence, but the need check kept finding it; `historical-card-import.spec.ts` checks the review marker |
+| The retry schedule must run on the hosting plan and identify its caller | Vercel rejected the five-minute cron on Hobby; `recovery-schedule-platform.spec.ts`, `github-cron-auth.spec.ts` and `recovery-scheduler-client.spec.ts` pin the daily fallback and the exact signed main-branch job |
+| Account email removal matches each caller and the saved address | Staff shared a customer IP limit, and a statement offered removal without an address; `account-email-remove.spec.ts`, `account-credit-public.spec.ts` and `remove-email.spec.tsx` cover the limits, projection and dialog |
+| Account email removal follows the privacy notice | Neither staff nor the code holder could remove a saved address; `account-email-remove.spec.ts`, `remove-email.spec.tsx` and `staff-remove-email.spec.tsx` cover the route and both screens |
+| Reopened split pages keep the tip and total the diner chose (review F4) | Both saved-principal shares and parts could return an earlier or concurrent page with another amount; route specs check the quote and safe retirement |
 | An old split without a frozen principal accepts exact tips only (review N14) | Gross amount included earlier gratuities, and an open checkout could silently keep a different tip; legacy-split-tip, legacy-split-tip-route and legacy-split-tip-input regression specs cover calculation, request, preview and retry |
 | The account promise opens its own unsplit bill | The first Collect could open another table's divided bill, which correctly offers parts instead of an account charge; `promise-account-bill.spec.ts` checks the target and cleanup |
 | A duplicate refund tracks customer completion and fee completion separately (S11 I5) | A failed fee return disappeared behind an already-refunded customer payment |
@@ -7704,7 +7725,74 @@ share `splitTakesExactTipOnly`, tested against one fixture table
 bundle to reload. Known follow-up (F4): modern v1 splits with a principal still
 reopen an earlier page or return a winner whose tip differs from the screen.
 
+## Terms acceptance history
 
+Signup and later consent both wrote the restaurant's one current acceptance,
+while deletion kept the books but not that acceptance. Both writers now save
+the current value and an individual history row together; deletion copies each
+row with the books before the cascade. The old value is backfilled once, with
+unknown identity and text hash left empty rather than guessed.
+`acceptance-history.spec.ts` exercises repeat acceptance, permission and failure;
+`signup-verification.spec.ts` covers the first acceptance and rollback;
+`acceptance-schema.spec.ts` pins the archive and service-only grant. Database
+execution and cascade behavior still need Claude's isolated gate.
+## Removing an account email
+
+The privacy notice and the account screens had to agree: an address could be
+saved but neither the customer nor staff could remove it. A manager or owner
+can clear it in the account dialog; the statement code holder can confirm its
+removal on the statement. Both use the same restaurant-scoped route, and the
+activity records the removal without keeping the address. A one-time statement
+email still uses the address the customer types for that message.
+
+### Account email removal matches the caller and statement
+
+The staff limit and the customer code limit shared an IP budget before staff
+authorization, so a busy restaurant could exhaust both. Staff now have a
+restaurant budget after authorization; code holders keep the small IP budget.
+The statement API and its button also have to agree on whether an address
+exists. The button disappears after removal, and the shared confirmation dialog
+works where native confirms are blocked. The account removal specs pin these
+boundaries; the API gate checks manager, customer, retry and unknown code.
+
+### Reopened split pages use the diner's current quote (F4)
+
+The phone showed its new tip while an older Stripe page could still charge the
+previous one. Both share models compare the saved tip and total before returning
+a page. A stale total is closed before a replacement is opened; an unverified
+closure or a concurrent winner is never replaced. Route tests cover both models.
+
+
+| Regression | Two places that must agree | Check |
+| --- | --- | --- |
+| A changed tip leaves a cancelled split payable | The diner's current quote and the resumed Stripe page | `legacy-split-tip-route.react-component.spec.tsx`, `split-slots-pay.spec.ts` |
+| A racing page explains the next step | The refusal and the diner's available controls in both languages | `split-race-copy.spec.ts` |
+| A slot retry preserves a valid page | The server's slot amount and the phone's expected amount | `split-slots-pay.spec.ts` |
+| Slot state takes precedence over a food read | Revision, payment and reservation checks and the percentage-tip read | `split-slots-pay.spec.ts` |
+
+### A changed tip leaves a cancelled split payable
+
+A resumed page and the current tip had to agree. A different tip now closes
+the earlier page through the same verified expiry and fee release as a changed
+total. If closure is uncertain the diner is asked to retry; a concurrent
+winner stays open and a different quote is refused. Route tests cover a
+cancelled modern split, a later dish and percentage tip, slots and races.
+
+### A racing page explains the next step
+
+The refusal and the screen's controls had to agree. A diner with no tip field
+can now understand the English or Spanish message and try again.
+
+### A slot retry preserves a valid page
+
+The phone's expected amount and the server's selected slots had to agree
+before expiring a page. A stale phone amount now leaves the valid page open.
+
+### Slot state takes precedence over a food read
+
+The selected slots and the percentage-tip food read had to agree on which
+answer comes first. Stale, paid and taken parts are reported before an
+unavailable food read can hide them.
 ## Deleted restaurant books expire after ten years
 
 | Places that must agree | What went wrong | What checks it |
@@ -7729,6 +7817,42 @@ The scheduler checks the accounting result. The purge uses the existing
 `retained_at`, excludes live restaurants from both deletion and pending counts,
 and reports the age since the retention deadline. The SQL contract test reads
 the function itself; the database probe must exercise the actual predicate.
+
+## Acceptance evidence and privacy
+
+The privacy notice and acceptance writer disagreed about network details.
+Acceptance keeps neither IP nor browser; `acceptance-history.spec.ts` and
+`rate-limit-key.spec.ts` check both writers and the address readers.
+
+## Acceptance history access
+
+The authenticated table grant disagreed with the kitchen denial check. Only
+the service role may read this history; `acceptance-schema.spec.ts` pins it.
+
+## Legacy acceptance capture
+
+Seed updates wrote history even when the values did not change. The capture
+trigger now checks the values; `acceptance-schema.spec.ts` pins that condition.
+
+## Acceptance retries and history growth
+
+Repeated accepts could grow immutable history without bound. The same user,
+version and hash within a minute share a row, and SQL bounds the text.
+`acceptance-schema.spec.ts` pins the lock, deduplication and limits.
+
+## Acceptance writer authorization
+
+The route checked ownership but its SQL writer trusted the caller's user and
+restaurant. The writer now checks the owner too; `acceptance-schema.spec.ts`
+pins the check. Claude's database probe must exercise these contracts, including
+concurrent retries and the ten-year archive purge.
+
+## Earlier acceptance rows and the backfill index
+
+An earlier draft could have more than one acceptance for a restaurant. Giving
+every row the backfill source would make the new unique index fail. The schema
+keeps the earlier backfill marker and labels the other rows separately;
+`acceptance-schema.spec.ts` pins the migration.
 ## Rate limits that capped the answer, not the cost (security review 2026-11-17)
 
 Three limits each guarded one side of something that had to agree:

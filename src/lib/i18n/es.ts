@@ -1569,7 +1569,7 @@ foundingLeftBody: "Quien contrata ahora conserva este precio de suscripción mie
     requestsFailed: "No pudimos revisar si hay otros teléfonos esperando entrar. Lo intentaremos de nuevo en unos segundos.",
   },
   apiErr: {
-    splitOpenTip: "La página de pago anterior tiene {tip} de propina. Escribe ese importe para volver a ella.",
+    splitOpenTip: "Se acaba de abrir otra página de pago para tu parte. Inténtalo de nuevo en un momento.",
     splitExactTip: "Escribe el importe de la propina o elige sin propina para pagar tu parte. Si no ves el campo para el importe de la propina, recarga la página.",
     splitPageChanged: "Tu parte cambió mientras una página de pago anterior seguía abierta. Recarga la página e inténtalo de nuevo en unos minutos.",
     heldResolveManager: "Solo el dueño o un gerente puede resolver este comprobante.",
@@ -2661,6 +2661,9 @@ votes: "Votos",
   },
   /** A customer's statement: what their account owes, and how to pay it. */
   account: {
+    removeEmail: "Quitar mi correo",
+    removeEmailConfirm: "¿Quieres quitar el correo guardado en tu cuenta?",
+    removeEmailDone: "Quitamos tu correo de esta cuenta.",
     title: "Cuenta de {name}",
     invalid: "Eso no parece el código de una cuenta.",
     notFound: "No encontramos esa cuenta. Pide al restaurante que te muestre su código.",
@@ -2691,6 +2694,9 @@ votes: "Votos",
   },
   /** Customer accounts, as the staff keep them. */
   accounts: {
+    removeEmail: "Quitar correo",
+    removeEmailConfirm: "¿Quieres quitar el correo guardado en esta cuenta?",
+    removeEmailDone: "Quitamos el correo de esta cuenta.",
     intro: "Clientes de confianza que se llevan su pedido ahora y pagan después, todo junto. Cada cuenta tiene un límite, y cada cargo queda registrado con quién lo hizo y por cuánto.",
     owedTotal: "En total te deben {amount}.",
     openAction: "Abrir cuenta",

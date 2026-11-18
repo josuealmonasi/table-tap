@@ -1,11 +1,11 @@
 import { beforeEach, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
-const mock = vi.hoisted(() => ({ create: vi.fn(), resend: vi.fn(), remove: vi.fn(), insert: vi.fn(), limited: false }));
+const mock = vi.hoisted(() => ({ create: vi.fn(), resend: vi.fn(), remove: vi.fn(), insert: vi.fn(), rpc: vi.fn(), limited: false }));
 vi.mock("@/lib/api-error", () => ({ apiError: async (error: string, status: number) => Response.json({ error }, { status }) }));
 vi.mock("@/lib/rate-limit", () => ({ clientKey: () => "ip", isRateLimited: async () => mock.limited }));
 vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({
   auth: { admin: { createUser: mock.create, deleteUser: mock.remove }, resend: mock.resend },
-  from: () => ({ insert: mock.insert }),
+  from: () => ({ insert: mock.insert }), rpc: mock.rpc,
 }) }));
 import { POST } from "@/app/api/signup/route";
 const request = () => new NextRequest("https://app.tabletap.mx/api/signup", { method: "POST", headers: { Origin: "https://evil.example" },
@@ -13,7 +13,7 @@ const request = () => new NextRequest("https://app.tabletap.mx/api/signup", { me
 beforeEach(() => {
   vi.clearAllMocks(); mock.limited = false;
   mock.create.mockResolvedValue({ data: { user: { id: "owner" } }, error: null });
-  mock.insert.mockResolvedValue({ error: null }); mock.resend.mockResolvedValue({ error: null });
+  mock.insert.mockResolvedValue({ error: null }); mock.rpc.mockResolvedValue({ error: null }); mock.resend.mockResolvedValue({ error: null });
 });
 it("E4: owner signup leaves email unconfirmed and returns a pending verification state", async () => {
   const res = await POST(request());
@@ -25,10 +25,25 @@ it("E4: sends a verification link to the app's completion path, never the suppli
   await POST(request());
   expect(mock.resend).toHaveBeenCalledWith({ type: "signup", email: "owner@example.com",
     options: { emailRedirectTo: "https://app.tabletap.mx/auth/callback?next=/signup/complete" } });
-  expect(mock.insert).toHaveBeenCalledWith(expect.objectContaining({ owner_signup_pending: true, plan: "servicio", plan_status: "trialing" }));
+  expect(mock.rpc).toHaveBeenCalledWith("signup_restaurant_with_terms_v1", expect.objectContaining({ p_plan: "servicio" }));
 });
 it("E4: a failed confirmation send keeps the account pending so resend can recover", async () => {
   mock.resend.mockResolvedValue({ error: { message: "mail unavailable" } });
   expect(await (await POST(request())).json()).toMatchObject({ pendingVerification: true, verificationSent: false });
   expect(mock.remove).not.toHaveBeenCalled();
+});
+it("records the signup acceptance together with the restaurant", async () => {
+  await POST(request());
+  expect(mock.rpc).toHaveBeenCalledWith("signup_restaurant_with_terms_v1", expect.objectContaining({
+    p_user: "owner", p_version: expect.any(String), p_text_hash: expect.stringMatching(/^[a-f0-9]{64}$/),
+  }));
+  expect(mock.rpc.mock.calls[0][1]).not.toHaveProperty("p_ip");
+  expect(mock.rpc.mock.calls[0][1]).not.toHaveProperty("p_user_agent");
+});
+it("removes the unconfirmed user if the restaurant and evidence cannot be saved", async () => {
+  mock.rpc.mockResolvedValue({ error: { message: "unavailable" } });
+  const res = await POST(request());
+  expect(res.status).toBe(400);
+  expect(mock.remove).toHaveBeenCalledWith("owner");
+  expect(mock.resend).not.toHaveBeenCalled();
 });

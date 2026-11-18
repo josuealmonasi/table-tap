@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { ConfirmProvider } from "@/components/ui/ConfirmDialog";
 import AccountStatement from "@/components/accounts/AccountStatement";
 import { normalizeCode } from "@/lib/accounts";
 
@@ -22,7 +23,7 @@ export default async function AccountPage({
   return (
     <div className="tt-login">
       <div className="container">
-        <AccountStatement code={normalizeCode(code) ?? code} paid={paid === "1"} />
+        <ConfirmProvider><AccountStatement code={normalizeCode(code) ?? code} paid={paid === "1"} /></ConfirmProvider>
       </div>
     </div>
   );
