@@ -1435,6 +1435,8 @@ end $$;
 -- the diner's menu keeps serving and keeps taking orders, because a card that
 -- bounced on Friday must not close the restaurant on Saturday.
 alter table restaurants add column if not exists plan_status text;
+-- Separate from billing health: a suspended restaurant must not start new sales.
+alter table restaurants add column if not exists suspended_at timestamptz;
 update restaurants set plan_status = 'active' where plan_status is null;
 alter table restaurants alter column plan_status set default 'trialing';
 alter table restaurants alter column plan_status set not null;

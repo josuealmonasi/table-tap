@@ -8,6 +8,13 @@ table owed MX$105 and the diner's screen said it owed nothing.
 So this is not a style guide. It is the list of things that have actually bitten
 us, and what now catches each one.
 
+## Suspended restaurants cannot start a diner checkout
+
+The suspension marker and checkout admission must agree. A new checkout now
+stops before stock and order writes; an existing checkout retry is resolved
+first so a payment already underway can finish. `checkout/route.spec.ts`
+checks the new-order refusal.
+
 ## Recovery requests carry one-use proof
 
 The database queue and recovery route must agree on a signature, timestamp and
@@ -90,6 +97,7 @@ and that a new party cannot see the previous party's waiting phones.
 `src/lib/__tests__/invariants.spec.ts` enforces the rules that span files:
 
 | Rule | The bug it came from |
+| Suspended restaurants refuse new diner checkouts | Checkout ignored the suspension marker and could start a new order |
 | Scheduled plan prices keep their eligible notice queue | A scheduled price without its recipients could leave an owner without notice; the route and schema specs pin validation and the atomic queue |
 | One-click ticket unsubscribe retries return the same success | A cleared or unknown token returned 404 to mail providers; `ticket-stop-one-click.spec.ts` checks retries, invalid forms and the separate confirmation response |
 |---|---|
