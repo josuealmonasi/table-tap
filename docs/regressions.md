@@ -8013,3 +8013,21 @@ read exposed whether another card had that address. Each card now saves its own
 address and consent, with a separate stop token. `shared-address.spec.ts` checks
 both starting states, the schema, and stopping one card without touching the
 other; `review2-deferred-probes.spec.ts` keeps the original regression.
+
+## Admin tier billing: five gaps from the 2026-11-17 review of #660
+
+- The emailed pay link checked the assignment before the billing lock; an owner
+  who subscribed to something else in between had that subscription moved to
+  the emailed tier and invoiced at once. It now checks inside the lock
+  (`assertStillAssigned`), bound to the assignment by its pay-by day (`until`),
+  and refuses once anything is live.
+- A payment-link assignment left the owner's older open Checkout payable, whose
+  subscription would then replace the assigned tier. It now runs under the
+  billing lock and closes every open Checkout first.
+- "From the next bill" accepted a subscription already set to end, promising a
+  bill that never comes; and a non-monthly one, where Stripe charges at once
+  whatever the proration. Both are refused with their own message.
+- A signed-out owner opening the pay link lost it at sign-in. `/login?next=`
+  keeps it, and only that exact link shape (`safeLoginNext`).
+
+Checks: `admin-tier.spec.ts`, `billing-assigned.spec.ts`.
