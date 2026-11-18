@@ -8047,3 +8047,16 @@ other; `review2-deferred-probes.spec.ts` keeps the original regression.
   keeps it, and only that exact link shape (`safeLoginNext`).
 
 Checks: `admin-tier.spec.ts`, `billing-assigned.spec.ts`.
+
+## A zero-balance retry keeps the collector's ticket choice
+
+| Places that must agree | What went wrong | What checks it |
+| --- | --- | --- |
+| The successful collection and the later zero-balance close | A retry could replace the collector's ticket choice and send an unwanted email | `zero-close-ticket-email.spec.ts`; database probe |
+
+The receipt and the close must agree on whose choice applies. The close checks
+recorded allocations under the money lock before changing any order's mark;
+when a receipt exists it keeps the successful collector's choice for the whole
+bill. A genuinely free bill still uses the current cashier's choice. The unit
+spec models both choices and pins the SQL; Claude's database probe must exercise
+the real transaction, including a failed close and a retry.
