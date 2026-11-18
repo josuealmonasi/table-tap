@@ -331,6 +331,8 @@ describe("the server code runs beside the database", () => {
 
   it("deploys main only: branch previews used up the plan's daily deployments and blocked a release", () => {
     const config = JSON.parse(read("vercel.json")) as { git?: { deploymentEnabled?: Record<string, boolean> } };
-    expect(config.git?.deploymentEnabled).toEqual({ main: true, "*": false });
+    // "**", not "*": minimatch's "*" stops at a slash, and every branch here is
+    // claude/… or codex/…, so "*" left previews on for all of them.
+    expect(config.git?.deploymentEnabled).toEqual({ main: true, "**": false });
   });
 });
