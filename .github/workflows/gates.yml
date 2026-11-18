@@ -82,7 +82,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        gate: [api, money, attack, rls, roles, smoke]
+        gate: [api, money, attack, rls, roles, smoke, probes]
     steps:
       - uses: actions/checkout@v4
 

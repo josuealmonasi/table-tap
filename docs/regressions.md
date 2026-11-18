@@ -198,6 +198,7 @@ and that a new party cannot see the previous party's waiting phones.
 | Read-only gate cases share their run's fixtures | Identical refusals repeatedly inserted and deleted orders, tables and splits; `gate-fixture-reuse.spec.ts`, `api-readonly-fixtures.spec.ts` and `run-fixtures.spec.ts` check reuse, writer isolation and cleanup |
 | Development reseeding restores demo logins without replacing their identities | Deleting the restaurant also deleted five healthy logins and sessions; `seed-logins.spec.ts` and `mock-logins.spec.ts` check identity reuse, changed passwords, metadata reset and explicit drop |
 | A counter quote is checked under the payment lock (review N1) | A discount after the route read could record less than the cash received; `counter-collection-race.spec.ts` and `review2-money-schema.spec.ts` hold the quote and writer together |
+| A coverage probe must check a restaurant before passing | An empty database or only restaurants awaiting backfill printed `ok`; `coverage-probe-empty.spec.ts` checks both and a refused connection |
 | Staff discounts preserve existing gratuities (review N2) | Both pricing and SQL discounted tips below the order total; `staff-discount-tip.spec.ts` and `staff-discount-tip-route.spec.ts` check direct and approved principal-only discounts |
 | Each subscription source has time to run (review N8) | Persistently unpaid reads starved cancellation recovery; `subscriptions.spec.ts` advances the clock across all three sources |
 | Overdue refunds remind each restaurant (review N9) | Only the globally oldest case got a reminder; `refunds.spec.ts` keeps two tenants pending and checks both bells |
@@ -8211,4 +8212,34 @@ the deployment of a merge to main. On a busy day the cap was reached and the
 merge of #688 was refused ("Deployment rate limited — retry in 24 hours"),
 leaving production on the previous release. `vercel.json` now deploys main only
 (`git.deploymentEnabled`). Check: `invariants/operations.spec.ts`.
+
+## A coverage probe must check something
+
+The coverage probe compared eligible restaurants, but its final success line
+did not know whether any were eligible. An empty database or only restaurants
+awaiting backfill therefore looked like proof. It now fails when none was
+checked; the unit test also refuses a broken database connection.
+
+
+| Gap | Automated check | Dev verification |
+|---|---|---|
+| Money SQL was covered by mocks and text, while a failed probe could be missed | probes-gate.spec.ts | Run the probes gate on dev; its money cases roll back every fixture. |
+
+## Database behavior needs a gate
+
+The SQL writers and the checks that describe them must agree. Source matches and
+mocked RPCs cannot show what PostgreSQL actually did. The probes gate runs the
+rolled-back money and held-sale cases and the coverage read check. A failed or
+unstartable probe fails the gate. The journal race probe commits fixtures and
+still needs separate fixture isolation; the RLS equivalence probe needs a
+baseline from before a schema change, so neither belongs in this runner yet.
+
+## The first real run of the probes found a stale expectation (2026-11-18)
+
+The probes gate was written without ever running against PostgreSQL. Its first
+run passed 40 of 41: N5 still expected `forbidden` when a restaurant has turned
+splitting off, but audit #648 made the database answer `split_disabled`, which
+the route, the hook and their tests all handle. The probe was wrong, not the
+code. Run unchanged against an unreachable database, every probe errored and the
+runner exited 1. It now runs on GitHub in every gates run.
 

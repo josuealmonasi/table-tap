@@ -47,6 +47,7 @@ const GUARDS = /^src\/(lib\/(api-guard|page-guard|membership|admin|current-user|
 
 /** A gate's own code: changing it runs that gate in full. */
 const GATE_FILES = {
+  probes: /^scripts\/(probe-|probes\.)/,
   api: /^scripts\/api-/,
   rls: /^scripts\/rls-/,
   roles: /^scripts\/roles-/,
@@ -59,7 +60,7 @@ const GATE_FILES = {
 };
 
 export const BROWSER_GATES = ["roles", "smoke", "layout", "promises", "dialogs"];
-export const ORDER = ["tsc", "lint", "test", "api", "rls", "roles", "smoke", "layout", "promises", "money", "attack", "dialogs"];
+export const ORDER = ["tsc", "lint", "test", "probes", "api", "rls", "roles", "smoke", "layout", "promises", "money", "attack", "dialogs"];
 
 /** The components a stylesheet change shows in, or "*". */
 function styleUsers(base, files, committedOnly) {
@@ -128,7 +129,9 @@ export function plan({ base = "origin/main", all = false, committedOnly = false 
   for (const g of ORDER.slice(3)) {
     if (everything.length) gates.push(decide(g, true, `${everything[0]} reaches everything`));
     else if (g === "smoke") gates.push(decide(g, true, "always: it reads every page in about a minute"));
+    else if (g === "probes" && (money || files.some(f => f.startsWith("supabase/")))) gates.push(decide(g, true, "schema or money path changed"));
     else if (own(g)) gates.push(decide(g, true, "its own script changed"));
+    else if (g === "probes") gates.push(decide(g, false, "no schema or money path in reach"));
     else if (guards && ["api", "rls", "roles"].includes(g)) gates.push(decide(g, true, "access code is in reach"));
     else if (g === "api") gates.push(api.size ? decide(g, true, `${api.size} route(s) in reach`, { GATE_API: [...api] }) : decide(g, false, "no change reaches an API route"));
     else if (g === "rls") gates.push(decide(g, false, "no schema or access change in reach"));

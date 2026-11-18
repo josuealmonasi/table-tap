@@ -3562,3 +3562,16 @@ beside it but never turn it red, since anyone can send one; refusals are
 written at most once a minute per server. `readStripeEvent` records both in
 `webhook_heartbeats` (service-only); a failed record never stops the event.
 A failed health read shows "unavailable" instead of taking the console down.
+
+### Database behavior probes
+
+`pnpm probes` runs the development database behavior checks: the money and
+split cases (`probe-money-behavior`), held sales (`probe-held-resolve`) and that
+coverage reads never write (`probe-coverage-no-write`), 41 cases, each in a
+transaction that is rolled back. It refuses production. A probe that fails,
+cannot connect or never starts fails the gate, and the runner ends with one
+`PROBES PASSED` / `PROBES FAILED` line. It runs on GitHub in every gates run
+(it needs only the database) and locally when a change reaches `supabase/` or a
+money path. The journal race and RLS before/after equivalence probes stay
+separate: the first commits fixtures, the second needs a baseline from before
+the schema change.
