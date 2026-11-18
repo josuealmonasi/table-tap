@@ -1570,7 +1570,7 @@ foundingLeftBody: "Subscribe now and keep this subscription price for as long as
     requestsFailed: "Could not check for other phones waiting to join. We’ll check again in a few seconds.",
   },
   apiErr: {
-    splitOpenTip: "An earlier payment page has a {tip} tip. Enter that amount to return to it.",
+    splitOpenTip: "Another payment page for your share just opened. Try again in a moment.",
     splitExactTip: "Enter a tip amount or choose no tip to pay this share. If you don’t see a tip amount field, reload the page.",
     splitPageChanged: "Your share changed while an earlier payment page was still open. Reload the page and try again in a few minutes.",
     heldResolveManager: "Only an owner or manager can resolve this receipt.",
@@ -2676,6 +2676,9 @@ votes: "Votes",
   },
   /** A customer's statement: what their account owes, and how to pay it. */
   account: {
+    removeEmail: "Remove my email",
+    removeEmailConfirm: "Remove the email saved on your account?",
+    removeEmailDone: "Your email was removed from this account.",
     title: "{name}'s account",
     invalid: "That doesn't look like an account code.",
     notFound: "We couldn't find that account. Ask the restaurant to show you its code.",
@@ -2706,6 +2709,9 @@ votes: "Votes",
   },
   /** Customer accounts, as the staff keep them. */
   accounts: {
+    removeEmail: "Remove email",
+    removeEmailConfirm: "Remove the email saved on this account?",
+    removeEmailDone: "The email was removed from this account.",
     intro: "Trusted customers who take their order now and pay later, all at once. Every account has a limit, and every charge is recorded with who made it and for how much.",
     owedTotal: "In all you are owed {amount}.",
     openAction: "Open account",

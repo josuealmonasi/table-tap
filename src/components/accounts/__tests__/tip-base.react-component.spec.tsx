@@ -7,6 +7,7 @@ import AccountStatement from "../AccountStatement";
 import { translate } from "@/lib/i18n";
 import { en } from "@/lib/i18n/en";
 const t = (key: string, vars?: Record<string, string | number>) => translate(en, key, vars);
+vi.mock("@/components/ui/ConfirmDialog", () => ({ useConfirm: () => vi.fn() }));
 vi.mock("@/lib/i18n/context", () => ({ useLocale: () => ({ locale: "en" }), useT: () => t }));
 vi.mock("@/hooks/useStatementMail", () => ({ useStatementMail: () => vi.fn() }));
 

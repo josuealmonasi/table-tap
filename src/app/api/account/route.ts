@@ -49,6 +49,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
       currency: restaurant.currency,
     },
     name: account.name,
+    hasEmail: Boolean(account.email),
     status: account.status,
     owed: statement.owed,
     currency: statement.currency,

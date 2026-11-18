@@ -23,7 +23,9 @@ export function signupCases() {
         f.signupEmail = `${MARK}-signup-${Date.now()}@tabletap.dev`;
         f.signupName = `${MARK} signup ${Date.now()}`;
         return async () => {
+          const { data: restaurant } = await f.admin.from("restaurants").select("id").eq("name", f.signupName).maybeSingle();
           await f.admin.from("restaurants").delete().eq("name", f.signupName);
+          if (restaurant) await f.admin.from("restaurant_accounting_records").delete().eq("restaurant_id", restaurant.id);
           const user = await loginByEmail(f.admin, f.signupEmail);
           if (user) await f.admin.auth.admin.deleteUser(user.id).catch(() => {});
         };

@@ -2159,6 +2159,12 @@ confirmation. Closing orders also verifies that their live remainder is covered.
 
 ## Customer accounts
 
+Managers and owners can remove an account's saved email in its dialog. The
+statement code holder can also remove it after confirmation. Both use the same
+rate-limited route, scoped to the account's restaurant, and record the change
+in activity without retaining the address. A statement email is sent only to
+an address typed for that single message, independently of the saved address.
+
 A customer the restaurant trusts can take food now and pay later, all at once
 ("cuenta abierta", a tab). It is credit the restaurant extends, so the rules
 lean on who is trusted with what:
@@ -2462,8 +2468,10 @@ bill coverage read (`order_coverage`) runs it only when
 `payment_allocations_need_backfill` finds something for it to do: a receipt
 still at allocation version 0 or a retryable overlap receipt, or a cancelled
 order whose legacy money has no cancel record, an unreturned allocation, or a
-return still in historical review. Otherwise the read takes no lock and writes
-nothing, and returns the same numbers.
+return still in historical review. A historical card return records that it
+needs provider evidence, stays in the money review list and is not retried on
+every bill read. Otherwise the read takes no lock and writes nothing, and
+returns the same numbers.
 
 #### Schema-first deployment and enforcement switch
 
@@ -3080,6 +3088,15 @@ invocation, including unchanged sales, payment and stock records. Set
 setup follows [Vercel's authorization contract](https://vercel.com/docs/cron-jobs/manage-cron-jobs#securing-cron-jobs).
 
 ## Owner email verification and review fixes (9 Nov 2026)
+
+Owner terms acceptance records the restaurant, user, email, version, time,
+source and SHA-256 of the compact JSON encoding of the Spanish terms source.
+It does not record an IP address or browser. A repeat by the same user for the
+same version and hash within one minute shares the existing record. Only the
+service role reads the history; it cannot be edited or individually deleted.
+Restaurant deletion archives it with the accounting records for ten years.
+The acceptance previously stored on each restaurant is backfilled without
+guessing its user or text hash. Current acceptance fields remain on the restaurant.
 
 Self-serve signup creates an unconfirmed auth user and a restaurant with
 `owner_signup_pending = true`. The verification screen offers resend and sign-in;
