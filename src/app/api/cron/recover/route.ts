@@ -12,6 +12,7 @@ import { recoverSubscriptions } from "@/lib/recovery/subscriptions";
 import { recoverDisputes } from "@/lib/recovery/disputes";
 import { signedRecoveryAuthorized } from "@/lib/recovery/signed-auth";
 import { schedulerHealth } from "@/lib/recovery/health.mjs";
+import { purgeAccounting } from "@/lib/recovery/accounting-purge";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -45,6 +46,8 @@ async function recover(request: Request) {
   // claimed until the queue is empty or the budget runs out (Codex review of
   // #622). Never throws; it stops between groups and releases what it claimed.
   const tickets = drainTickets().catch(() => null);
+  // A sixth sequential budget would exceed the route limit.
+  const accounting = isolateJob("accounting", () => purgeAccounting(recoveryContext()));
   const jobs: Record<string, RecoveryJob> = { stock: recoverStock, refunds: recoverRefunds, fees: recoverFees, subscriptions: recoverSubscriptions, disputes: recoverDisputes };
   const results: Record<string, RecoveryResult> = {};
   for (const [name, job] of Object.entries(jobs)) {
@@ -52,6 +55,9 @@ async function recover(request: Request) {
     results[name] = await isolateJob(name, () => job(recoveryContext()));
     console.info("Scheduled recovery", { job: name, ...results[name] });
   }
+  // The purge counts toward a healthy run like every other job.
+  results.accounting = await accounting;
+  console.info("Scheduled recovery", { job: "accounting", ...results.accounting });
   const drained = await tickets;
   console.info("Scheduled recovery", { job: "tickets", ...drained });
   const ok = Object.values(results).every(r => r.failed === 0 && !r.observation_failed && r.pending !== null) &&

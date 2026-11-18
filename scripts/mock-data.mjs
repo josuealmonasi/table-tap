@@ -19,6 +19,7 @@
 // ============================================================================
 
 import { randomBytes, randomUUID } from "node:crypto";
+import { isLentAccount } from "./lent-stripe-account.mjs";
 import { createClient } from "@supabase/supabase-js";
 import { populateMenu } from "./menu-catalog.mjs";
 import { FEED_DEMO, PRICE_SCALE, menuPrice } from "./demo-prices.mjs";
@@ -81,7 +82,8 @@ export async function dropMock(pg, { keepLogins = false } = {}) {
     [DEMO_RESTAURANT],
   );
   for (const r of rows) {
-    if (r.stripe_account_id) {
+    // A real test account survives a reseed; a gate's lent fake never does.
+    if (r.stripe_account_id && !isLentAccount(r.stripe_account_id)) {
       keptStripe = {
         stripe_account_id: r.stripe_account_id,
         stripe_charges_enabled: r.stripe_charges_enabled,

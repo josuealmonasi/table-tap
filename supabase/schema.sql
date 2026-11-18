@@ -10232,6 +10232,36 @@ revoke all on restaurant_accounting_records from public, authenticated, service_
 -- under the privacy notice and removal of disposable API fixtures.
 grant select, delete on restaurant_accounting_records to service_role;
 
+-- Retention starts when the accounting copy is made in the deletion transaction.
+create index if not exists restaurant_accounting_records_retained_at_idx on restaurant_accounting_records (retained_at);
+
+create or replace function public.purge_expired_accounting_records()
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  v_deleted integer;
+  v_pending bigint;
+  v_oldest timestamptz;
+begin
+  -- Lock and remove only a small page, even when two cron calls overlap.
+  with expired as (
+    select r.restaurant_id, r.source_table, r.source_id from restaurant_accounting_records r
+    where r.retained_at < now() - interval '10 years'
+      and not exists (select 1 from restaurants x where x.id = r.restaurant_id)
+    order by r.retained_at, r.restaurant_id, r.source_table, r.source_id
+    limit 1000 for update skip locked
+  )
+  delete from restaurant_accounting_records r using expired e
+    where (r.restaurant_id, r.source_table, r.source_id) = (e.restaurant_id, e.source_table, e.source_id);
+  get diagnostics v_deleted = row_count;
+  select count(*), min(r.retained_at + interval '10 years') into v_pending, v_oldest from restaurant_accounting_records r
+    where r.retained_at < now() - interval '10 years'
+      and not exists (select 1 from restaurants x where x.id = r.restaurant_id);
+  return jsonb_build_object('deleted', v_deleted, 'pending', v_pending, 'oldest', v_oldest);
+end;
+$$;
+revoke all on function public.purge_expired_accounting_records() from public, anon, authenticated;
+grant execute on function public.purge_expired_accounting_records() to service_role;
+
 -- A missing fee row is not evidence of no fee. A saved checkout that asked
 -- for no application fee, or a fee returned in full, is. This also releases
 -- pre-field completed refunds without trusting today's menu or local rounding.

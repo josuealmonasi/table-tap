@@ -2493,6 +2493,21 @@ a.tt-btn {
   font-size: 22px;
   cursor: pointer;
 }
+/* The dish or combo name beside its price. The name is the elastic child: it
+   wraps inside the room the price leaves instead of running up against it. */
+.tt-detail-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+.tt-detail-head > h2 {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.tt-detail-head > .tt-price-lg {
+  flex: none;
+}
 .tt-price-lg {
   font-weight: 700;
   color: var(--tt-ink);
@@ -4294,6 +4309,18 @@ a.tt-btn {
   padding: 5px 8px;
   font-size: 13px;
 }
+/* How a restaurant pays, under its name in the admin list: one line, cut with
+   an ellipsis like the name above it, the whole text in its tooltip. */
+.tt-admin-billing {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--tt-muted);
+}
+.tt-admin-billing--warn { color: var(--tt-warning); }
+.tt-admin-billing--danger { color: var(--tt-danger); }
 .tt-admin-tr:first-of-type {
   border-top: none;
 }
@@ -7948,6 +7975,11 @@ a.tt-user-plan:hover {
   margin: 4px 0 0;
   padding: 0;
   font-size: 14px;
+  /* The gap lives here, on the parent: each line used to touch the next, and
+     an emoji line painted 1px into its neighbour. */
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
 }
 .tt-statement-lines li > span:first-child {
   min-width: 0;
@@ -8453,4 +8485,23 @@ a.tt-user-plan:hover {
 .tt-offline-till-refused {
   background: color-mix(in srgb, var(--tt-danger) 10%, transparent);
   color: var(--tt-danger);
+}
+
+/* Who the diner is paying, and the short notice under a field that takes personal data. */
+.tt-place-identity,
+.tt-privacy-hint {
+  margin: 8px 0 0;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--tt-muted);
+  overflow-wrap: anywhere;
+}
+.tt-place-identity {
+  padding: 16px 0 96px;
+  text-align: center;
+}
+.tt-place-identity a,
+.tt-privacy-hint a {
+  color: inherit;
+  text-decoration: underline;
 }

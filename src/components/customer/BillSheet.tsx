@@ -17,11 +17,15 @@ import type { Restaurant } from "@/lib/types";
 import { billAmounts } from "@/lib/bill-amounts";
 import { billActions, billHintKey } from "@/lib/payment-options";
 import SplitBillCard from "@/components/customer/SplitBillCard";
+import PlaceIdentity from "./PlaceIdentity";
+import type { PlaceIdentity as Identity } from "@/lib/place-identity";
 import { useSplit } from "@/hooks/useSplit";
 import { useBillPayment } from "@/hooks/useBillPayment";
 
 interface BillSheetProps {
   open: boolean;
+  /** Who the diner is paying. */
+  identity?: Identity | null;
   onClose: () => void;
   bill: TableBill;
   restaurant: Restaurant;
@@ -78,6 +82,7 @@ export default function BillSheet({
   onClose,
   bill: allBill,
   restaurant,
+  identity,
   sessionId = null,
   tableId,
   tableLabel,
@@ -307,6 +312,7 @@ export default function BillSheet({
             }
             onPayAtTable={payAtTable}
           />
+          <PlaceIdentity identity={identity} />
         </>
       )}
     </Modal>
