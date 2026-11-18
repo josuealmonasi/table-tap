@@ -328,4 +328,9 @@ describe("the server code runs beside the database", () => {
     const config = JSON.parse(read("vercel.json")) as { regions?: string[] };
     expect(config.regions, "vercel.json must pin the functions beside the database").toEqual(["pdx1"]);
   });
+
+  it("deploys main only: branch previews used up the plan's daily deployments and blocked a release", () => {
+    const config = JSON.parse(read("vercel.json")) as { git?: { deploymentEnabled?: Record<string, boolean> } };
+    expect(config.git?.deploymentEnabled).toEqual({ main: true, "*": false });
+  });
 });

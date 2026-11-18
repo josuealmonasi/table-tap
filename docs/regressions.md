@@ -8195,3 +8195,12 @@ one server page, records each visit first, and renders nothing that writes.
 Check: `admin-owner-view.spec.ts` (order of guard, record and read; no write,
 no control) and `pnpm roles` (the admin opens it from the console's link).
 
+## Branch previews used up the day's deployments (2026-11-18)
+
+Vercel's plan caps deployments per day, and every push to any branch built a
+preview nobody opened: the gates run on GitHub, and the ship train reads only
+the deployment of a merge to main. On a busy day the cap was reached and the
+merge of #688 was refused ("Deployment rate limited — retry in 24 hours"),
+leaving production on the previous release. `vercel.json` now deploys main only
+(`git.deploymentEnabled`). Check: `invariants/operations.spec.ts`.
+
