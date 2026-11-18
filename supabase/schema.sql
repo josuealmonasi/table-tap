@@ -15232,6 +15232,58 @@ end; $$;
 revoke all on function public.collect_split_slots_v1(uuid, uuid, int, int[], int, text, int, text, text, text, boolean) from public, anon, authenticated;
 grant execute on function public.collect_split_slots_v1(uuid, uuid, int, int[], int, text, int, text, text, text, boolean) to service_role;
 
+-- A change and its recipients must land together; otherwise an owner can
+-- miss the notice even though the new price has been scheduled.
+create table if not exists plan_price_changes (
+  id uuid primary key default gen_random_uuid(),
+  plan text not null references plan_limits(plan),
+  new_monthly_price numeric not null check (new_monthly_price > 0),
+  effective_at timestamptz not null,
+  created_by text not null,
+  created_at timestamptz not null default now()
+);
+create table if not exists plan_price_notices (
+  change_id uuid not null references plan_price_changes(id) on delete cascade,
+  restaurant_id uuid not null references restaurants(id) on delete cascade,
+  sent_at timestamptz,
+  attempts int not null default 0 check (attempts >= 0),
+  last_error text,
+  primary key (change_id, restaurant_id)
+);
+alter table plan_price_changes enable row level security;
+alter table plan_price_notices enable row level security;
+revoke all on plan_price_changes from anon, authenticated, public;
+revoke all on plan_price_notices from anon, authenticated, public;
+grant all on plan_price_changes, plan_price_notices to service_role;
+
+create or replace function public.schedule_plan_price_change(
+  p_plan text, p_price numeric, p_effective_at timestamptz, p_created_by text
+) returns uuid language plpgsql security definer set search_path = public as $$
+declare v_change uuid;
+begin
+  if p_plan is null or p_price is null or p_price <= 0 or p_price = 'NaN'::numeric
+    or p_effective_at is null or p_effective_at < now() + interval '30 days'
+    or p_created_by is null or p_created_by = '' then
+    raise exception 'Invalid price change';
+  end if;
+  insert into plan_price_changes (plan, new_monthly_price, effective_at, created_by)
+    values (p_plan, p_price, p_effective_at, p_created_by) returning id into v_change;
+  insert into plan_price_notices (change_id, restaurant_id)
+    select v_change, id from restaurants where plan = p_plan and founding_number is null;
+  return v_change;
+end;
+$$;
+revoke all on function public.schedule_plan_price_change(text, numeric, timestamptz, text) from public, anon, authenticated;
+grant execute on function public.schedule_plan_price_change(text, numeric, timestamptz, text) to service_role;
+
+alter table platform_admin_audit drop constraint if exists platform_admin_audit_target_type_check;
+alter table platform_admin_audit add constraint platform_admin_audit_target_type_check
+  check (target_type in ('restaurant', 'login', 'plan'));
+alter table platform_admin_audit drop constraint if exists platform_admin_audit_action_check;
+alter table platform_admin_audit add constraint platform_admin_audit_action_check
+  check (action in ('login.create', 'login.update', 'login.delete', 'restaurant.delete', 'restaurant.plan', 'plan.price'));
+
+revoke truncate, references, trigger on all tables in schema public from authenticated;
 -- Audit of #648: recovery every five minutes, scheduled by the database.
 -- GitHub's schedule ran 8 times in two days, hours apart, and Vercel Hobby
 -- allows one cron a day. pg_cron is part of Supabase and runs on time; pg_net
