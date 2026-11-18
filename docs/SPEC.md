@@ -3506,3 +3506,10 @@ tip; that is a known follow-up.
 ## Scheduled plan price notices
 
 A platform admin can schedule a positive plan price at least 30 full days ahead. The change and a notice queue for restaurants on that plan are saved together; founding-price restaurants are excluded. This records the schedule only: notice delivery and Stripe price changes are separate work.
+
+**Platform health** heads the admin panel: when the database scheduler last
+completed a recovery run (red after 15 minutes without one), ticket emails
+that ended failed or unconfigured in the last 7 days, price notices still
+unsent after a failed attempt, and restaurants that cannot take cards. Each
+of these failed silently once; the counts read existing records
+(`readPlatformHealth`).

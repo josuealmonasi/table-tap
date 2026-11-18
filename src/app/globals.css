@@ -4347,8 +4347,8 @@ a.tt-btn {
   font-size: 13px;
 }
 .tt-admin-health li strong { font-size: 16px; }
-.tt-admin-health--bad { border-color: var(--tt-danger); }
-.tt-admin-health--bad strong { color: var(--tt-danger); }
+.tt-admin-health li.tt-admin-health--bad { border-color: var(--tt-danger); }
+.tt-admin-health li.tt-admin-health--bad strong { color: var(--tt-danger); }
 .tt-admin-tr:first-of-type {
   border-top: none;
 }
