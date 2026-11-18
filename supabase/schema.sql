@@ -15333,3 +15333,14 @@ select cron.schedule('tabletap-recover', '*/5 * * * *', $job$
     timeout_milliseconds := 60000)
   from signed
 $job$);
+
+-- Auth does not expose a restaurant-scoped sign-in read. Fetch only its team;
+-- listing all platform logins or calling Auth once per person does not scale.
+create or replace function public.admin_restaurant_last_sign_in_v1(p_restaurant uuid)
+returns timestamptz language sql stable security definer set search_path = public as $$
+  select max(u.last_sign_in_at) from auth.users u
+  where u.id in (select user_id from public.staff where restaurant_id = p_restaurant
+    union select owner_id from public.restaurants where id = p_restaurant);
+$$;
+revoke all on function public.admin_restaurant_last_sign_in_v1(uuid) from public, anon, authenticated;
+grant execute on function public.admin_restaurant_last_sign_in_v1(uuid) to service_role;
