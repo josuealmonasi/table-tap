@@ -8,6 +8,7 @@ import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { DeleteIcon } from "@/components/ui/icons";
 import type { AdminRestaurantRow } from "./AdminPanel";
 import BillingLine from "./AdminBillingLine";
+import AdminUsageDialog from "./AdminUsageDialog";
 import AdminTierDialog, { type TierAssignment } from "./AdminTierDialog";
 
 interface AdminRestaurantsProps {
@@ -36,6 +37,7 @@ export default function AdminRestaurants({ restaurants, plans, busy, onMovePlan,
   const [shown, setShown] = useState<Record<string, string>>({});
 
   // The tier picked in a row, waiting for the admin to say how it is paid.
+  const [usage, setUsage] = useState<AdminRestaurantRow | null>(null);
   const [picking, setPicking] = useState<{ row: AdminRestaurantRow; plan: string } | null>(null);
 
   function pick(r: AdminRestaurantRow, plan: string): void {
@@ -77,6 +79,7 @@ export default function AdminRestaurants({ restaurants, plans, busy, onMovePlan,
             <span className="tt-staff-cell" title={r.name}>
               <strong>{r.name}</strong>
               <BillingLine billing={r.billing} />
+              <button type="button" className="tt-btn tt-btn-ghost tt-btn-sm" onClick={() => setUsage(r)}>{t("admin.usage")}</button>
             </span>
             <span className="tt-staff-cell tt-muted" title={r.owner_email}>
               {r.owner_email}
@@ -123,6 +126,7 @@ export default function AdminRestaurants({ restaurants, plans, busy, onMovePlan,
           </div>
         ))}
       </div>
+      {usage ? <AdminUsageDialog id={usage.id} name={usage.name} onClose={() => setUsage(null)} /> : null}
       {picking ? (
         <AdminTierDialog
           name={picking.row.name}

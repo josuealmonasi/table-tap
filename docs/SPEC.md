@@ -31,6 +31,17 @@ market is Mexico — prices in MXN, interface in Spanish with English alongside.
 Staff roles live in `staff`; `MANAGES(role)` in `src/lib/membership.ts` is the
 line between running the business and working a shift. A platform admin is a
 row in `platform_admins`, which no browser can read.
+The platform admin can open **Usage** on a restaurant row. The on-demand
+`GET /api/admin/restaurants/usage?id=...` checks `platform_admins` before
+reading only that restaurant. It shows the last 30 calendar days and this
+calendar month in Mexico City time: paid, non-cancelled orders by creation
+and sales and tips net of completed returns; payments by collection date split
+between cash and card; fees kept by settlement date and original checkout
+currency (or unverified currency); team count and the latest order or team or
+founding-owner sign-in. Amounts in different currencies are never combined.
+The service-only `admin_restaurant_last_sign_in_v1` reads the team's latest
+Auth sign-in without loading the platform's other logins.
+
 The platform admin can move any restaurant to another plan from its row in
 `/dashboard/admin` (`PATCH /api/admin/restaurants`, `assignTier` in
 `src/lib/admin-tier.ts`), and its whole team moves with it — a plan belongs to
