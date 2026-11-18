@@ -3158,6 +3158,7 @@ votes: "Votos",
     welcomeFree: "Tu restaurante tiene {plan} gratis hasta el {date}, sin tarjeta y sin cargos.",
     welcomeAfter: "Al terminar, pasas a Carta, el plan gratuito (solo una comisión por pedido), a menos que elijas un plan. Puedes compararlos cuando quieras en Plan.",
     start: "Empezar mi prueba",
+    rfcUsed: "Guardado. Este RFC ya usó su prueba gratis en otra cuenta, así que tu restaurante pasa a Carta, el plan gratuito. Puedes elegir un plan en Plan.",
   },
   authConfirm: {
     title: { signup: "Confirma tu correo", invite: "Únete a tu equipo", recovery: "Restablece tu contraseña", email_change: "Confirma tu nuevo correo" },

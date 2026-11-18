@@ -3175,6 +3175,7 @@ votes: "Votes",
     welcomeFree: "Your restaurant has {plan} free until {date}, with no card and no charges.",
     welcomeAfter: "When it ends you move to Carta, the free plan (just a fee per order), unless you choose a plan. Compare them any time under Plan.",
     start: "Start my trial",
+    rfcUsed: "Saved. This RFC already used its free trial on another account, so your restaurant moves to Carta, the free plan. You can choose a plan under Plan.",
   },
   authConfirm: {
     title: { signup: "Confirm your email", invite: "Join your team", recovery: "Reset your password", email_change: "Confirm your new email" },

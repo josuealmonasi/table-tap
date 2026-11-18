@@ -168,6 +168,9 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  // A saved RFC that already had a free trial elsewhere ends this one
+  // (`one_trial_per_rfc`); the owner is told rather than finding Carta later.
+  const trialBefore = "rfc" in update ? await planStatus(actor.restaurantId) : null;
   const { error } = await createAdminClient()
     .from("restaurants")
     .update(update)
@@ -216,5 +219,13 @@ export async function POST(req: NextRequest) {
     if (repriced === null) return await apiError("apiErr.serviceRepriceFailed", 500);
     return NextResponse.json({ ok: true, repriced });
   }
+  if (trialBefore === "trialing" && (await planStatus(actor.restaurantId)) !== "trialing") {
+    return NextResponse.json({ ok: true, trialEnded: true });
+  }
   return NextResponse.json({ ok: true });
+}
+
+async function planStatus(restaurantId: string): Promise<string | null> {
+  const { data } = await createAdminClient().from("restaurants").select("plan_status").eq("id", restaurantId).maybeSingle();
+  return (data?.plan_status as string | undefined) ?? null;
 }

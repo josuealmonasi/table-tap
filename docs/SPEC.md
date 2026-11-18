@@ -181,6 +181,15 @@ restaurant on that device), and a banner on every dashboard screen with the
 days left and a link to Plan, which takes the warning look in the last 7
 days (`trialNotice`). Staff see neither: only the owner can choose a plan.
 
+**One free trial per RFC.** Once a restaurant that had a trial saves an RFC,
+it is recorded in `trial_rfcs` (service-only, no FK: it outlives the
+restaurant). Saving an RFC another restaurant already used for its trial ends
+this restaurant's free trial and moves it to Carta (`one_trial_per_rfc`, a
+trigger on the column); the settings save answers `trialEnded` and the owner is
+told. A paying restaurant or an admin pay-by window is never touched. The RFC
+stays non-unique: one owner's second location keeps working, without a free
+month. The terms (2026-11-18) and the privacy notice say so.
+
 ## The two ways in
 
 - **A table QR** → `/r/<restaurantId>/t/<tableId>`. The order knows its table,

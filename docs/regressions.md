@@ -8274,3 +8274,10 @@ and every branch here is `claude/…` or `codex/…`, so every push still built 
 preview and the day's cap refused #692's production deploy. It is `"**"` now.
 Check: `invariants/operations.spec.ts`.
 
+## A new email was a new free month (2026-11-18)
+
+The trial was once per restaurant, and a restaurant is one email away, so the
+same business could take a free month again and again. A unique RFC would have
+blocked a legitimate second location; now a trial is once per RFC
+(`trial_rfcs`). Check: `one-trial-per-rfc.spec.ts`.
+

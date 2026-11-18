@@ -65,7 +65,7 @@ export function useSettings() {
         toast(data.error ?? t("dash.settingsSaveFailed"), "error");
         return false;
       }
-      toast(t(messageKey));
+      toast(t(data.trialEnded ? "trial.rfcUsed" : messageKey));
       router.refresh();
       return true;
     } catch {

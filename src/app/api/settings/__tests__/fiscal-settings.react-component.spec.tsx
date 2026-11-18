@@ -8,6 +8,7 @@ vi.mock("@/lib/api-guard", () => ({ actingManager: async () => ({ role: state.ro
 vi.mock("@/lib/plan-guard", () => ({ frozenBlocks: async () => null, planBlocks: async () => null }));
 vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({ from: () => ({
   update: (patch: unknown) => { state.written = patch; return { eq: state.eq }; },
+  select: () => ({ eq: () => ({ maybeSingle: async () => ({ data: { plan_status: "active" } }) }) }),
 }) }) }));
 vi.mock("@/lib/i18n/server", () => ({ getLocale: async () => state.locale }));
 vi.mock("@/lib/activity-log", () => ({ logEvent: state.log }));
