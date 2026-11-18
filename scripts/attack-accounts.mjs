@@ -33,7 +33,7 @@ async function accountCases({ admin, post, who, home, neighbour, ok, bad }) {
 
   const account = async (restaurantId, limit) => {
     const data = await checked(admin.from("customer_accounts").insert({
-      restaurant_id: restaurantId, name: MARK, code: newCode(), credit_limit: limit, opened_by: "attack@tabletap.dev",
+      restaurant_id: restaurantId, name: MARK, code: newCode(), credit_limit: limit, opened_by: "attack@tabletap.shop",
     }).select("id, journal_started_at").single());
     if (!data.journal_started_at) throw new Error("Attack fixture account must start its journal");
     return data.id;
@@ -51,7 +51,7 @@ async function accountCases({ admin, post, who, home, neighbour, ok, bad }) {
   const paymentsOf = async accountId =>
     (await admin.from("payments").select("amount, tip").eq("account_id", accountId)).data ?? [];
 
-  const charge = (restaurant, account, id, total) => chargeAccountFixture(admin, restaurant, account, [id], total, "attack@tabletap.dev");
+  const charge = (restaurant, account, id, total) => chargeAccountFixture(admin, restaurant, account, [id], total, "attack@tabletap.shop");
 
   await attackAccountCredit({ admin, post, who, home, neighbour, ok, bad, account, order, charge });
   const mine = await account(home.id, 1000);

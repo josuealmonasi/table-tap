@@ -5,7 +5,7 @@ import { MARK } from "./api-fixtures.mjs";
  * checks this proof; changing the production format must fail this probe. */
 function contextFor(f, currency) {
   const issuedAt = Date.parse(f.offlineAt);
-  const body = Buffer.from(JSON.stringify({ restaurantId: f.restaurant.id, collector: "demo-cashier@tabletap.dev",
+  const body = Buffer.from(JSON.stringify({ restaurantId: f.restaurant.id, collector: "demo-cashier@tabletap.shop",
     currency, issuedAt, until: issuedAt + 12 * 60 * 60_000 })).toString("base64url");
   return `${body}.${createHmac("sha256", process.env.SUPABASE_SECRET_KEY).update(`offline-collector-v1|${body}`).digest("base64url")}`;
 }
@@ -47,7 +47,7 @@ export function offlineCases(fx) {
           return `the order is ${JSON.stringify(o)}`;
         }
         return pays?.length === 1 && Number(pays[0].amount) === Number(o.total) && sameTime(pays[0].created_at)
-          && pays[0].method === "cash" && pays[0].actor_email === "demo-cashier@tabletap.dev" || `paid ${JSON.stringify(pays)}`;
+          && pays[0].method === "cash" && pays[0].actor_email === "demo-cashier@tabletap.shop" || `paid ${JSON.stringify(pays)}`;
       } },
     { name: "POST /api/pos/order (the same offline sale sent again)", as: "cashier", method: "POST",
       path: "/api/pos/order",
@@ -74,7 +74,7 @@ export function offlineCases(fx) {
           f.admin.from("offline_sale_queue").select("body, collector, approved_at").eq("pos_ref", d.orderId).single(),
           f.admin.from("orders").select("id").eq("id", d.orderId).maybeSingle(),
         ]);
-        return d.queued === true && q?.collector === "demo-cashier@tabletap.dev" && !q.approved_at && !o
+        return d.queued === true && q?.collector === "demo-cashier@tabletap.shop" && !q.approved_at && !o
           || `not queued for approval: ${JSON.stringify(d)}`;
       } },
     { name: "POST /api/pos/recover (manager preserves the actual collected amount)", as: "manager", method: "POST", path: "/api/pos/recover",
@@ -86,7 +86,7 @@ export function offlineCases(fx) {
           f.admin.from("offline_sale_queue").select("approved_at").eq("pos_ref", d.orderId).single(),
         ]);
         return d.settled === true && Number(o?.offline_drift) === 5 && Number(p?.amount) === Number(o.total) && p?.terminal_ref === "AUT 7"
-          && p.actor_email === "demo-cashier@tabletap.dev" && o.offline_approved_by === "demo-manager@tabletap.dev" && Boolean(q?.approved_at)
+          && p.actor_email === "demo-cashier@tabletap.shop" && o.offline_approved_by === "demo-manager@tabletap.shop" && Boolean(q?.approved_at)
           || `order ${JSON.stringify(o)}, payment ${JSON.stringify(p)}`;
       } },
     { name: "POST /api/pos/order (offline, on an account)", as: "cashier", method: "POST",
@@ -109,10 +109,10 @@ export function offlineCases(fx) {
       expect: [409] },
     { name: "POST /api/pos/recover (old legacy receipt with manager attestation)", as: "manager", method: "POST", path: "/api/pos/recover",
       body: f => ({ posRef: f.offlineLegacyRef, restaurantId: r, approval: { confirmed: true, reason: "Original receipt and drawer checked",
-        collector: "demo-cashier@tabletap.dev", currency: f.restaurant.currency } }), expect: [200],
+        collector: "demo-cashier@tabletap.shop", currency: f.restaurant.currency } }), expect: [200],
       check: async (d, f) => {
         const { data: p } = await f.admin.from("payments").select("actor_email, created_at").eq("order_id", d.orderId).single();
-        return d.settled === true && p?.actor_email === "demo-cashier@tabletap.dev" && Date.parse(p.created_at) < Date.now() - 39 * 86_400_000
+        return d.settled === true && p?.actor_email === "demo-cashier@tabletap.shop" && Date.parse(p.created_at) < Date.now() - 39 * 86_400_000
           || "legacy collection was not preserved";
       } },
     { name: "POST /api/pos/order (original foreign currency is received for review)", as: "cashier", method: "POST", path: "/api/pos/order",
@@ -130,7 +130,7 @@ export function offlineCases(fx) {
           f.admin.from("restaurants").select("currency").eq("id", r).single(),
         ]);
         return d.settled === true && p?.currency === f.offlineForeignCurrency && Number(p.amount) === f.offlineCharge.total
-          && p.actor_email === "demo-cashier@tabletap.dev" && place?.currency === f.restaurant.currency || "foreign money was relabelled";
+          && p.actor_email === "demo-cashier@tabletap.shop" && place?.currency === f.restaurant.currency || "foreign money was relabelled";
       } },
     { name: "POST /api/pos/order (offline, a waiter refused)", as: "waiter", method: "POST",
       path: "/api/pos/order",

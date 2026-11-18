@@ -26,7 +26,7 @@ await requireServer(BASE, prod);
 
 const { createClient } = await import("@supabase/supabase-js");
 
-const EMAIL = process.env.SMOKE_EMAIL ?? "demo@tabletap.dev";
+const EMAIL = process.env.SMOKE_EMAIL ?? "demo@tabletap.shop";
 const PASSWORD = loginSecret(process.env.SMOKE_PASSWORD !== undefined ? "SMOKE_PASSWORD" : "DEMO_PASSWORD");
 
 const auth = createClient(

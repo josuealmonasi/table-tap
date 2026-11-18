@@ -20,7 +20,7 @@ export function signupCases() {
     { name: "POST /api/signup (a restaurant opens an account)", as: "diner",
       method: "POST", path: "/api/signup",
       arrange: async f => {
-        f.signupEmail = `${MARK}-signup-${Date.now()}@tabletap.dev`;
+        f.signupEmail = `${MARK}-signup-${Date.now()}@tabletap.shop`;
         f.signupName = `${MARK} signup ${Date.now()}`;
         return async () => {
           const { data: restaurant } = await f.admin.from("restaurants").select("id").eq("name", f.signupName).maybeSingle();

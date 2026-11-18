@@ -122,10 +122,10 @@ if (!neighbour) {
 }
 
 const who = {
-  waiter: await cookieFor("demo-waiter@tabletap.dev"),
-  kitchen: await cookieFor("demo-kitchen@tabletap.dev"),
-  cashier: await cookieFor("demo-cashier@tabletap.dev"),
-  manager: await cookieFor("demo-manager@tabletap.dev"),
+  waiter: await cookieFor("demo-waiter@tabletap.shop"),
+  kitchen: await cookieFor("demo-kitchen@tabletap.shop"),
+  cashier: await cookieFor("demo-cashier@tabletap.shop"),
+  manager: await cookieFor("demo-manager@tabletap.shop"),
 };
 
 // A table of our own, made for this and nothing else. Borrowing a real one
@@ -726,7 +726,7 @@ try {
 
     // Each waiter's own tap, as the dialog sends it: the MX$200 they saw.
     const shots = await trackCollectionLogs(admin,
-      { restaurantId: home.id, actor: "demo-waiter@tabletap.dev", amount: 200 }, collectionLogs,
+      { restaurantId: home.id, actor: "demo-waiter@tabletap.shop", amount: 200 }, collectionLogs,
       () => Promise.all([...Array(5)].map(() =>
         post("/api/table-payment", { tableId: spare.id, settlement: "cash", expected: 200, currency: "MXN", ref: crypto.randomUUID() }, who.waiter))));
 
@@ -787,7 +787,7 @@ try {
     // The money taken twice: cash at the table, then the card payment arrives.
     const { data: twice } = await order(150, MARK);
     const cash = await trackCollectionLogs(admin,
-      { restaurantId: home.id, actor: "demo-waiter@tabletap.dev", amount: 150 }, collectionLogs,
+      { restaurantId: home.id, actor: "demo-waiter@tabletap.shop", amount: 150 }, collectionLogs,
       () => post("/api/table-payment", { tableId: spare.id, settlement: "cash", expected: 150, currency: "MXN", ref: crypto.randomUUID() }, who.waiter));
     await card([twice.id], 150, intentFor("twice"));
     await card([twice.id], 150, intentFor("twice")); // Stripe sends it again
@@ -821,7 +821,7 @@ try {
     // its sitting, and a closed sitting is refused at the door (the phone is a
     // stranger to it) before the waiter's bill is ever asked about.
     await admin.from("table_sessions")
-      .update({ opened_by: "demo-waiter@tabletap.dev", closed_at: null, close_reason: null }).eq("id", sitting.id);
+      .update({ opened_by: "demo-waiter@tabletap.shop", closed_at: null, close_reason: null }).eq("id", sitting.id);
     const { data: owed } = await admin
       .from("orders").select("id").eq("session_id", sitting.id).eq("paid", false);
     const before = await takings(home.id);

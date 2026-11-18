@@ -8,7 +8,7 @@
 import { supplyPrice } from "./demo-prices.mjs";
 
 const DAYS = 60;
-const CASHIERS = ["demo-cashier@tabletap.dev", "demo-manager@tabletap.dev"];
+const CASHIERS = ["demo-cashier@tabletap.shop", "demo-manager@tabletap.shop"];
 const pick = list => list[Math.floor(Math.random() * list.length)];
 
 /** One closed shift per day, 08:30 to 23:00 in the restaurant's zone, ending before the seeder's own two. */
@@ -78,7 +78,7 @@ async function seedDeliveries(pg, rid) {
       const days = Math.round(week * 7 + 6 + Math.random());
       await pg.query(
         `insert into ingredient_purchases (restaurant_id, ingredient_id, quantity, total, recorded_by, created_at)
-         values ($1, $2, $3, $4, 'demo-manager@tabletap.dev', now() - make_interval(days => $5))`,
+         values ($1, $2, $3, $4, 'demo-manager@tabletap.shop', now() - make_interval(days => $5))`,
         [rid, i.id, packs * Number(i.pack_size), Math.round(packs * Number(i.pack_price) * 100) / 100, days]);
       deliveries++;
     }
@@ -99,7 +99,7 @@ async function seedWaste(pg, rid) {
       `insert into waste_entries (restaurant_id, ingredient_id, name, quantity, reason, cost, recorded_by, created_at)
        values ($1, $2, $3, $4, $5, $6, $7, now() - make_interval(days => $8))`,
       [rid, i.id, i.name, quantity, pick(["spoiled", "spoiled", "mistake", "unsold", "staff"]), cost,
-        pick(["demo-kitchen@tabletap.dev", "demo-manager@tabletap.dev"]), back]);
+        pick(["demo-kitchen@tabletap.shop", "demo-manager@tabletap.shop"]), back]);
     entries++;
   }
   return entries;

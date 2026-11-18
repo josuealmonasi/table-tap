@@ -27,7 +27,7 @@ export function terminalDepositRace() {
         if (holder) { await holder.query("rollback").catch(() => {}); await holder.end(); }
         if (observer) await observer.end();
         await checked(f.admin.from("terminal_deposits").delete().eq("restaurant_id", r).eq("note", note));
-        await checked(f.admin.from("user_logs").delete().eq("restaurant_id", r).eq("entity", "terminal").eq("actor_email", "demo-manager@tabletap.dev").gte("created_at", started).like("detail", `%${day}%`));
+        await checked(f.admin.from("user_logs").delete().eq("restaurant_id", r).eq("entity", "terminal").eq("actor_email", "demo-manager@tabletap.shop").gte("created_at", started).like("detail", `%${day}%`));
         await checked(f.admin.from("payments").delete().is("account_id", null).eq("restaurant_id", r).in("id", receipts));
         await checked(f.admin.from("print_jobs").delete().in("order_id", orders));
         await checked(f.admin.from("orders").delete().eq("restaurant_id", r).in("id", orders));
@@ -41,7 +41,7 @@ export function terminalDepositRace() {
           status: "completed", paid: true, pay_method: "card", currency: f.restaurant.currency, note, created_at: at,
         }))));
         await checked(f.admin.from("payments").insert({ id: receipts[0], restaurant_id: r, order_id: orders[0],
-          amount: 100, method: "card", currency: f.restaurant.currency, actor_email: "demo-manager@tabletap.dev", created_at: at }));
+          amount: 100, method: "card", currency: f.restaurant.currency, actor_email: "demo-manager@tabletap.shop", created_at: at }));
         const options = { connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } };
         if (!options.connectionString) throw new Error("DATABASE_URL is required for the deposit race");
         holder = new pg.Client(options); observer = new pg.Client(options);
@@ -52,7 +52,7 @@ export function terminalDepositRace() {
         // The real backend behind the pooler: the client's processID is a stand-in.
         f.depositHolderPid = (await holder.query("select pg_backend_pid() pid")).rows[0].pid;
         await holder.query(`insert into payments(id, restaurant_id, order_id, amount, method, currency, actor_email, created_at)
-          values($1, $2, $3, 50, 'card', $4, 'demo-manager@tabletap.dev', $5)`, [receipts[1], r, orders[1], f.restaurant.currency, at]);
+          values($1, $2, $3, 50, 'card', $4, 'demo-manager@tabletap.shop', $5)`, [receipts[1], r, orders[1], f.restaurant.currency, at]);
         return clean;
       } catch (error) { await clean(); throw error; }
     },

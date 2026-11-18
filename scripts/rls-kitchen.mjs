@@ -19,7 +19,7 @@ export async function checkKitchenMoney({ admin, kitchen, home, ok, bad, base })
         extras: [{ name: "Milk", price: 2 }],
         components: [{ name: "Coffee", qty: 1, price: 10, extras: [{ name: "Milk", price: 2 }] }] }],
     });
-    await plant("payments", { order_id: order.id, amount: 12, method: "cash", actor_email: "rls-kitchen@tabletap.dev" });
+    await plant("payments", { order_id: order.id, amount: 12, method: "cash", actor_email: "rls-kitchen@tabletap.shop" });
     const sitting = await plant("table_sessions", { table_id: table.id, closed_at: new Date().toISOString(), close_reason: "expired" });
     const split = await plant("bill_splits", { session_id: sitting.id, shares: 2, amount: 12, status: "done", proposed_by: "rls-kitchen" });
     const claim = await admin.from("bill_split_claims").insert({ split_id: split.id, share_no: 0, diner: "rls-kitchen", amount: 6 });

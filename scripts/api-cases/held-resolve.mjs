@@ -25,7 +25,7 @@ async function arrange(fx) {
     if (error) throw error;
     const cookies = {};
     for (const role of ["manager", "waiter"]) {
-      const email = `apicheck-held-${role}-${restaurantId}@tabletap.dev`;
+      const email = `apicheck-held-${role}-${restaurantId}@tabletap.shop`;
       const { data, error: userError } = await fx.admin.auth.admin.createUser({ email, password, email_confirm: true });
       if (userError) throw userError;
       users.push(data.user.id);
@@ -36,7 +36,7 @@ async function arrange(fx) {
       if (loginError) throw loginError;
       cookies[role] = sessionCookieHeader(login.session, process.env.NEXT_PUBLIC_SUPABASE_URL);
     }
-    const collectedAt = new Date(Date.now() - 60_000).toISOString(), collector = "apicheck-cashier@tabletap.dev";
+    const collectedAt = new Date(Date.now() - 60_000).toISOString(), collector = "apicheck-cashier@tabletap.shop";
     const body = { restaurantId, posRef, method: "cash", items: [], offline: { at: collectedAt, subtotal: 10, total: 10, serviceFee: 0, discount: 0, tip: 0 } };
     const { error: queueError } = await fx.admin.from("offline_sale_queue").insert({ restaurant_id: restaurantId, pos_ref: posRef, body, collector, currency: "MXN", submitted_by: collector, reason: "apiErr.offlineApproval" });
     if (queueError) throw queueError;

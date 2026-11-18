@@ -30,14 +30,14 @@ export async function seedAccounts(pg, rid) {
     pg,
     "customer_accounts",
     ["restaurant_id", "name", "code", "credit_limit", "opened_by"],
-    [[rid, DEMO_ACCOUNT, code(), 2000, "demo@tabletap.dev"]],
+    [[rid, DEMO_ACCOUNT, code(), 2000, "demo@tabletap.shop"]],
     "id",
   );
   await bulkInsert(
     pg,
     "customer_accounts",
     ["restaurant_id", "name", "code", "credit_limit", "opened_by"],
-    [[rid, "Luis Ortega", code(), 1000, "demo-manager@tabletap.dev"]],
+    [[rid, "Luis Ortega", code(), 1000, "demo-manager@tabletap.shop"]],
   );
 
   const now = Date.now();
@@ -66,7 +66,7 @@ export async function seedAccounts(pg, rid) {
   // The writer creates account_movements for started accounts. db:mock then
   // activates dormant accounts through journal-activate.sql, including Luis.
   const { rows: [result] } = await pg.query(
-    "select account_charge_v2($1,$2,$3,$4,'demo-cashier@tabletap.dev') value",
+    "select account_charge_v2($1,$2,$3,$4,'demo-cashier@tabletap.shop') value",
     [rid, carmen.id, inserted.map(o => o.id), rows.reduce((sum, row) => sum + row[5], 0)],
   );
   if (result.value.outcome !== "charged") throw new Error(`Demo account charge: ${result.value.outcome}`);

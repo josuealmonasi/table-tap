@@ -29,7 +29,7 @@ export async function disposableAccountRestaurant(admin, env, name, roles = []) 
       terms_version: TERMS_VERSION, terms_accepted_at: new Date().toISOString(),
     }).select("*").single());
     for (const role of roles) {
-      const email = `${name}-${role}-${randomUUID()}@tabletap.dev`;
+      const email = `${name}-${role}-${randomUUID()}@tabletap.shop`;
       const { user } = await checked(admin.auth.admin.createUser({ email, password, email_confirm: true }));
       users.push(user.id);
       if (role === "owner") await checked(admin.from("restaurants").update({ owner_id: user.id }).eq("id", restaurant.id));

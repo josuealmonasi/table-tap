@@ -415,7 +415,7 @@ if (!signIn.error && theirs) {
     process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY,
   );
   const kSignIn = await kitchen.auth.signInWithPassword({
-    email: "demo-kitchen@tabletap.dev", password: demo,
+    email: "demo-kitchen@tabletap.shop", password: demo,
   });
   if (!kSignIn.error) {
     const kCookie = sessionCookieHeader(kSignIn.data.session, process.env.NEXT_PUBLIC_SUPABASE_URL);
@@ -486,7 +486,7 @@ if (!signIn.error && theirs) {
   const home = rs3.find(r => r.name === "Demo Bistro") ?? rs3[0];
   const away = rs3.find(r => r.id !== home.id);
   const kitchen = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY);
-  const kSignIn = await kitchen.auth.signInWithPassword({ email: "demo-kitchen@tabletap.dev", password: demo });
+  const kSignIn = await kitchen.auth.signInWithPassword({ email: "demo-kitchen@tabletap.shop", password: demo });
   const signInError = kSignIn.error?.message;
   const [{ data: myTable }, { data: theirTable }] = await Promise.all([
     admin.from("restaurant_tables").select("id, label").eq("restaurant_id", home.id).limit(1).maybeSingle(),
@@ -515,7 +515,7 @@ if (!signIn.error && theirs) {
       if (still.status === "open") ok("kitchen cannot write a service request directly");
       else bad(`kitchen wrote a service request directly (${still.status})`);
       const waiter = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY);
-      const { error: waiterError } = await waiter.auth.signInWithPassword({ email: "demo-waiter@tabletap.dev", password: demo });
+      const { error: waiterError } = await waiter.auth.signInWithPassword({ email: "demo-waiter@tabletap.shop", password: demo });
       if (waiterError) bad(`cannot sign in as the waiter — the control did not run: ${waiterError.message}`);
       else {
         await waiter.from("service_requests").update({ status: "done" }).eq("id", probe.id);
@@ -553,7 +553,7 @@ if (!signIn.error && theirs) {
   // anonymous key cannot read these columns either, so a failed sign-in
   // printed four oks about a staff account that never took part.
   const { error: staffErr } = await staff.auth.signInWithPassword({
-    email: "demo-kitchen@tabletap.dev", password: demo,
+    email: "demo-kitchen@tabletap.shop", password: demo,
   });
   if (staffErr) {
     bad(`cannot sign in as the kitchen — the staff column checks went unchecked (${staffErr.message})`);
@@ -587,7 +587,7 @@ if (!signIn.error && theirs) {
     process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY,
   );
   const { error: inErr } = await kitchen.auth.signInWithPassword({
-    email: "demo-kitchen@tabletap.dev",
+    email: "demo-kitchen@tabletap.shop",
     password: demo,
   });
   if (inErr) {
@@ -610,7 +610,7 @@ if (!signIn.error && theirs) {
       process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY,
     );
     const { error: floorErr } = await floor.auth.signInWithPassword({
-      email: "demo-cashier@tabletap.dev",
+      email: "demo-cashier@tabletap.shop",
       password: demo,
     });
     const paid = await floor.from("payments").select("id").limit(1);
@@ -651,9 +651,9 @@ if (!signIn.error && theirs) {
     "stripe_disputes", "stripe_dispute_movements", "stripe_dispute_events",
     "cash_shifts", "cash_movements", "ingredients", "ingredient_prices", "recipe_lines",
     "waste_entries", "ingredient_purchases", "ingredient_counts", "ingredient_consumption", "ingredient_movements", "terminal_deposits", "platform_fees"];
-  const TEAM = [["anon", null], ["owner", "demo@tabletap.dev"], ["manager", "demo-manager@tabletap.dev"],
-    ["waiter", "demo-waiter@tabletap.dev"], ["cashier", "demo-cashier@tabletap.dev"],
-    ["kitchen", "demo-kitchen@tabletap.dev"]];
+  const TEAM = [["anon", null], ["owner", "demo@tabletap.shop"], ["manager", "demo-manager@tabletap.shop"],
+    ["waiter", "demo-waiter@tabletap.shop"], ["cashier", "demo-cashier@tabletap.shop"],
+    ["kitchen", "demo-kitchen@tabletap.shop"]];
 
   if (others.length === 0) {
     bad("only one restaurant exists — cross-tenant checks cannot run");
@@ -787,7 +787,7 @@ if (!signIn.error && theirs) {
     process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY,
   );
   const { data: kitchenAuth, error: signInError } = await kitchen.auth.signInWithPassword({
-    email: "demo-kitchen@tabletap.dev",
+    email: "demo-kitchen@tabletap.shop",
     password: demo,
   });
   // The socket is a separate connection with its own idea of who is asking,

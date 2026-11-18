@@ -60,7 +60,7 @@ it("creates the demo owner with the target password before building its menu", a
   const query = vi.fn(async (sql: string) => ({ rows: sql.includes("from pg_extension") ? [{ nspname: "extensions" }] : [] }));
   await expect(seedMock({ query })).rejects.toThrow("fixture stops before menu creation");
   expect(createUser).toHaveBeenCalledExactlyOnceWith({
-    email: "demo@tabletap.dev", password: "demo-owner-from-env", email_confirm: true,
+    email: "demo@tabletap.shop", password: "demo-owner-from-env", email_confirm: true,
   });
 });
 
@@ -77,8 +77,8 @@ it("seeds all five test owners with TEST_PASSWORD", async () => {
 it("keeps the five demo logins and roles while signing in with the rotated environment value", async () => {
   vi.stubEnv("DEMO_PASSWORD", "rotated-demo-from-env");
   const crew = [
-    { role: "owner", email: "demo@tabletap.dev" },
-    ...["manager", "waiter", "cashier", "kitchen"].map(role => ({ role, email: `demo-${role}@tabletap.dev` })),
+    { role: "owner", email: "demo@tabletap.shop" },
+    ...["manager", "waiter", "cashier", "kitchen"].map(role => ({ role, email: `demo-${role}@tabletap.shop` })),
   ];
   const cookies = await crewCookies(crew, "http://localhost:3100", async (_: string, work: () => Promise<unknown>) => work());
   expect([...cookies.keys()]).toEqual(crew.map(who => who.role));
@@ -90,7 +90,7 @@ it("keeps the five demo logins and roles while signing in with the rotated envir
 
 it("does not attempt a browser sign-in when DEMO_PASSWORD is missing", async () => {
   vi.stubEnv("DEMO_PASSWORD", "");
-  await expect(crewCookies([{ role: "owner", email: "demo@tabletap.dev" }], "http://localhost:3100",
+  await expect(crewCookies([{ role: "owner", email: "demo@tabletap.shop" }], "http://localhost:3100",
     async (_: string, work: () => Promise<unknown>) => work())).rejects.toThrow(/DEMO_PASSWORD.*\.env\.development\.local/);
   expect(signInWithPassword).not.toHaveBeenCalled();
 });

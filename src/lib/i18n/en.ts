@@ -3188,6 +3188,12 @@ votes: "Votes",
     button: { signup: "Confirm my email", invite: "Accept invitation", recovery: "Choose a new password", email_change: "Confirm email" },
     broken: "This link is incomplete. Open the full link from the email or ask for a new one.",
   },
+  trialMail: {
+    subject: "Your free {plan} trial ends on {date}",
+    intro: "Your free {plan} trial on TableTap ends on {date}.",
+    after: "After that date your restaurant moves to Carta, the free plan: you keep your menu, tables and orders. To stay on {plan} or another plan, choose it before then.",
+    button: "Choose my plan",
+  },
 };
 
 export type Messages = typeof en;

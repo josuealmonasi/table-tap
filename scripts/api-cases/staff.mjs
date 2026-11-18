@@ -8,7 +8,7 @@ export function staffCases() {
     // CANNOT add their team: the demo team exists because the seed creates it
     // directly, not by invitation.
     { name: "POST /api/staff (invite)", as: "owner", method: "POST", path: "/api/staff",
-      body: { email: `${MARK}@tabletap.dev`, role: "waiter" }, expect: [200],
+      body: { email: `${MARK}@tabletap.shop`, role: "waiter" }, expect: [200],
       known: "Supabase has no SMTP: inviting by email does not work" },
     // These two decide who may do what, and neither had ever run: both looked
     // the member up by the email the INVITE case uses, inviting needs SMTP

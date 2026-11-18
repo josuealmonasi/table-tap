@@ -19,40 +19,40 @@ function client() {
 
 it("production reset replaces the identity while development keeps it", async () => {
   const pg = database({ id: "same", password_matches: true }), admin = client();
-  await expect(resetDemoUser(pg, admin, "demo@tabletap.dev", "Diego", "password", true)).resolves.toBe("new");
+  await expect(resetDemoUser(pg, admin, "demo@tabletap.shop", "Diego", "password", true)).resolves.toBe("new");
   expect(admin.auth.admin.deleteUser).toHaveBeenCalledWith("same");
   expect(admin.auth.admin.createUser).toHaveBeenCalledOnce();
   const dev = client();
-  await expect(resetDemoUser(pg, dev, "demo@tabletap.dev", "Diego", "password", false)).resolves.toBe("same");
+  await expect(resetDemoUser(pg, dev, "demo@tabletap.shop", "Diego", "password", false)).resolves.toBe("same");
   expect(dev.auth.admin.deleteUser).not.toHaveBeenCalled();
 });
 
 describe("restoring demo logins in place", () => {
   it.each(["public", "extensions"])("keeps a healthy identity and password with pgcrypto in %s", async namespace => {
     const pg = database({ id: "same", password_matches: true }, namespace), admin = client();
-    await expect(ensureDemoUser(pg, admin, "demo@tabletap.dev", "Diego Owner", "fixture-demo-password")).resolves.toBe("same");
+    await expect(ensureDemoUser(pg, admin, "demo@tabletap.shop", "Diego Owner", "fixture-demo-password")).resolves.toBe("same");
     expect(admin.auth.admin.createUser).not.toHaveBeenCalled();
     expect(admin.auth.admin.updateUserById).not.toHaveBeenCalled();
     expect(pg.query.mock.calls.find(([sql]) => sql.includes(`"${namespace}".crypt($2, encrypted_password)`))?.[1])
-      .toEqual(["demo@tabletap.dev", "fixture-demo-password"]);
+      .toEqual(["demo@tabletap.shop", "fixture-demo-password"]);
     expect(pg.query.mock.calls.find(([sql]) => sql.includes("insert into profiles"))?.[1])
       .toEqual(["same", "Diego Owner"]);
   });
   it("restores a changed password through GoTrue without recreating the user", async () => {
     const admin = client();
-    await expect(ensureDemoUser(database({ id: "same", password_matches: false }), admin, "demo@tabletap.dev", "Diego", "custom-password"))
+    await expect(ensureDemoUser(database({ id: "same", password_matches: false }), admin, "demo@tabletap.shop", "Diego", "custom-password"))
       .resolves.toBe("same");
     expect(admin.auth.admin.updateUserById).toHaveBeenCalledExactlyOnceWith("same", { password: "custom-password" });
     expect(admin.auth.admin.createUser).not.toHaveBeenCalled();
   });
   it("creates only a missing login and confirms it without sending mail", async () => {
     const admin = client();
-    await expect(ensureDemoUser(database(null), admin, "demo@tabletap.dev", "Diego", "custom-password")).resolves.toBe("new");
-    expect(admin.auth.admin.createUser).toHaveBeenCalledExactlyOnceWith({ email: "demo@tabletap.dev", password: "custom-password", email_confirm: true });
+    await expect(ensureDemoUser(database(null), admin, "demo@tabletap.shop", "Diego", "custom-password")).resolves.toBe("new");
+    expect(admin.auth.admin.createUser).toHaveBeenCalledExactlyOnceWith({ email: "demo@tabletap.shop", password: "custom-password", email_confirm: true });
   });
   it("resets metadata, confirmation, role and bans only when changed; leaves sessions and identities alone", async () => {
     const pg = database({ id: "same", password_matches: true });
-    await ensureDemoUser(pg, client(), "demo@tabletap.dev", "Diego", "fixture-demo-password");
+    await ensureDemoUser(pg, client(), "demo@tabletap.shop", "Diego", "fixture-demo-password");
     const reset = pg.query.mock.calls.find(([sql]) => sql.startsWith("update auth.users"))!;
     expect(reset[1]).toEqual(["same"]);
     expect(pg.query.mock.calls).toContainEqual(["delete from platform_admins where user_id = $1", ["same"]]);
@@ -63,7 +63,7 @@ describe("restoring demo logins in place", () => {
   it("stops when password restoration fails", async () => {
     const pg = database({ id: "same", password_matches: false }), admin = client();
     admin.auth.admin.updateUserById.mockResolvedValue({ error: { message: "refused" } });
-    await expect(ensureDemoUser(pg, admin, "demo@tabletap.dev", "Diego", "fixture-demo-password")).rejects.toThrow("demo@tabletap.dev: refused");
+    await expect(ensureDemoUser(pg, admin, "demo@tabletap.shop", "Diego", "fixture-demo-password")).rejects.toThrow("demo@tabletap.shop: refused");
     expect(pg.query.mock.calls.some(([sql]) => sql.startsWith("update auth.users"))).toBe(false);
   });
 });

@@ -55,7 +55,7 @@ export async function seedCosts(pg, rid) {
   for (const [name, unit, size, price, supplier] of ingredients) {
     const { rows: [row] } = await pg.query(
       `insert into ingredients (restaurant_id, name, unit, pack_size, pack_price, supplier, updated_by, created_at)
-       values ($1, $2, $3, $4, $5, $6, 'demo@tabletap.dev', now() - make_interval(days => $7)) returning id`,
+       values ($1, $2, $3, $4, $5, $6, 'demo@tabletap.shop', now() - make_interval(days => $7)) returning id`,
       [rid, name, unit, size, supplyPrice(price), supplier, since],
     );
     ids.set(name, row.id);
@@ -66,7 +66,7 @@ export async function seedCosts(pg, rid) {
     `update ingredient_prices set created_at = now() - make_interval(days => $2) where restaurant_id = $1`, [rid, since],
   );
   await pg.query(
-    `update ingredients set pack_price = $2, updated_by = 'demo-manager@tabletap.dev' where id = $1`,
+    `update ingredients set pack_price = $2, updated_by = 'demo-manager@tabletap.shop' where id = $1`,
     [ids.get("Whole milk"), supplyPrice(1.3)],
   );
   await pg.query(
@@ -115,13 +115,13 @@ async function seedStock(pg, rid, ids, products) {
       [row.id, expected],
     );
   };
-  await count("Whole milk", 12000, null, 10, "demo-manager@tabletap.dev");
-  await count("Whole milk", 6100, 6500, 3, "demo-manager@tabletap.dev");
-  await count("Coffee beans", 2400, null, 3, "demo@tabletap.dev");
+  await count("Whole milk", 12000, null, 10, "demo-manager@tabletap.shop");
+  await count("Whole milk", 6100, 6500, 3, "demo-manager@tabletap.shop");
+  await count("Coffee beans", 2400, null, 3, "demo@tabletap.shop");
 
   const buy = (name, quantity, total, days) => pg.query(
     `insert into ingredient_purchases (restaurant_id, ingredient_id, quantity, total, recorded_by, created_at)
-     values ($1, $2, $3, $4, 'demo-manager@tabletap.dev', ${at(days)})`,
+     values ($1, $2, $3, $4, 'demo-manager@tabletap.shop', ${at(days)})`,
     [rid, ids.get(name), quantity, total],
   );
   await buy("Whole milk", 12000, supplyPrice(15.6), 2);
@@ -132,11 +132,11 @@ async function seedStock(pg, rid, ids, products) {
     `select id from menu_items where restaurant_id = $1 and name = 'Apple Pie' limit 1`, [rid],
   );
   const waste = [
-    [ids.get("Whole milk"), null, "Whole milk", 500, "spoiled", supplyPrice(0.65), "demo-kitchen@tabletap.dev", 8],
-    [null, dish("Iced Latte"), "Iced Latte", 1, "mistake", supplyPrice(0.77), "demo-cashier@tabletap.dev", 2],
-    [null, dish("French Fries"), "French Fries", 2, "unsold", supplyPrice(0.62), "demo-kitchen@tabletap.dev", 1],
-    [ids.get("Lemon"), null, "Lemon", 3, "staff", supplyPrice(0.24), "demo-cashier@tabletap.dev", 4],
-    [null, pie?.id ?? null, "Apple Pie", 1, "unsold", null, "demo-kitchen@tabletap.dev", 1],
+    [ids.get("Whole milk"), null, "Whole milk", 500, "spoiled", supplyPrice(0.65), "demo-kitchen@tabletap.shop", 8],
+    [null, dish("Iced Latte"), "Iced Latte", 1, "mistake", supplyPrice(0.77), "demo-cashier@tabletap.shop", 2],
+    [null, dish("French Fries"), "French Fries", 2, "unsold", supplyPrice(0.62), "demo-kitchen@tabletap.shop", 1],
+    [ids.get("Lemon"), null, "Lemon", 3, "staff", supplyPrice(0.24), "demo-cashier@tabletap.shop", 4],
+    [null, pie?.id ?? null, "Apple Pie", 1, "unsold", null, "demo-kitchen@tabletap.shop", 1],
   ];
   for (const [ingredientId, itemId, name, quantity, reason, cost, who, days] of waste) {
     if (!ingredientId && !itemId) continue;

@@ -193,16 +193,16 @@ try {
 // re-seeding the demo data on production, which nothing noticed until someone
 // signed in and found no restaurant.
 const LOGINS = [
-  "demo@tabletap.dev",
-  "demo-manager@tabletap.dev",
-  "demo-waiter@tabletap.dev",
-  "demo-cashier@tabletap.dev",
-  "demo-kitchen@tabletap.dev",
-  "test1@tabletap.dev",
-  "test2@tabletap.dev",
-  "test3@tabletap.dev",
-  "test4@tabletap.dev",
-  "test5@tabletap.dev",
+  "demo@tabletap.shop",
+  "demo-manager@tabletap.shop",
+  "demo-waiter@tabletap.shop",
+  "demo-cashier@tabletap.shop",
+  "demo-kitchen@tabletap.shop",
+  "test1@tabletap.shop",
+  "test2@tabletap.shop",
+  "test3@tabletap.shop",
+  "test4@tabletap.shop",
+  "test5@tabletap.shop",
 ];
 
 async function checkLogins(label, envFile) {

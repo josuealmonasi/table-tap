@@ -118,7 +118,7 @@ export function adminOwnerCases(fx) {
       path: "/api/billing/cancel", body: {}, expect: [401, 403] },
     { name: "POST /api/admin/users (manager refused)", as: "manager", method: "POST",
       path: "/api/admin/users",
-      body: () => ({ email: "nobody@tabletap.dev", password: loginSecret("TEST_PASSWORD"), role: "admin" }),
+      body: () => ({ email: "nobody@tabletap.shop", password: loginSecret("TEST_PASSWORD"), role: "admin" }),
       expect: [401, 403] },
     { name: "GET /api/admin/restaurants/usage", as: "platformAdmin", method: "GET",
       path: `/api/admin/restaurants/usage?id=${r}`, expect: [200],
