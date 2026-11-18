@@ -1,3 +1,4 @@
+import { requestLocale } from "@/lib/i18n";
 import { auditedAdminAction, type AdminAuditContext } from "@/lib/admin-audit";
 import { NextRequest, NextResponse } from "next/server";
 import { apiError } from "@/lib/api-error";
@@ -70,6 +71,7 @@ async function createUser(req: NextRequest, audit: AdminAuditContext) {
     email,
     password,
     email_confirm: true,
+    user_metadata: { locale: requestLocale(req) },
   });
   if (userErr || !created.user) {
     if (userErr?.message) {

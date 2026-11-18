@@ -69,6 +69,10 @@ the restaurant. A dialog asks how the tier is paid (`billing`):
   lock after closing open Checkouts: `active`, trial and assignment id cleared,
   nothing charged; refused while a live subscription would write
   Stripe's plan back over it.
+- `test` — "Asignado sin cobro (cuenta de prueba)": `free`, for a tester the
+  owner lends the app to, and it gives back the restaurant's founding place if
+  it holds one and no subscription pays for it (a paying founder keeps its
+  number).
 Carta costs nothing, so it is only ever assigned free. Every assignment is
 written in the restaurant's activity log with its billing mode.
 
@@ -155,6 +159,18 @@ no control — and not an impersonation: the owner's own screens read under the
 signed-in login's RLS, which a platform admin is not part of, and widening that
 was refused. Every visit writes `restaurant.view` to `platform_admin_audit`
 before anything is read; if that write fails the view is not shown.
+
+## Auth emails
+
+Supabase sends the sign-up confirmation, staff invitation, password reset and
+email-change emails, from `no-reply@tabletap.shop` through Resend. Their
+templates live in `docs/auth-email-templates/` and are pasted into the
+Supabase dashboard. Each is written in Spanish and English, switched on
+`user_metadata.locale`, which signup, staff invites and admin-created logins
+save from the request's language cookie (`requestLocale`); without it,
+Spanish. Links go to `tabletap.shop/auth/confirm`, never to the Supabase host.
+That page only shows a button that POSTs the token to `/auth/callback`, so a
+mail scanner that opens the link cannot spend it.
 
 ## The free trial, told
 
@@ -422,7 +438,9 @@ dishes on a bill the restaurant has just cancelled.
   columns are removed; changing plans does not hide analytics or activity logs.
 - **Founding price**: the first restaurants on a paid tier keep the price they
   came in at. `claim_founding_price` serialises the assignment with an advisory
-  lock so two simultaneous subscribers cannot take the same place.
+  lock so two simultaneous subscribers cannot take the same place. The limit counts the
+  places held, not the highest number, so a place given back by a test account
+  is free again; numbers keep rising and still record arrival order.
 - **Coupons and promotions** are reserved and released like stock, for the same
   reason: a code with two uses left must not be spent three times.
 - **Discounts and write-offs** are requests a waiter raises and a manager

@@ -3,13 +3,20 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { apiError } from "@/lib/api-error";
 import { parsePlanLimit, planLimitText } from "@/lib/plan-error";
 import { planLabel } from "@/lib/plan";
+import { DEFAULT_LOCALE, type Locale } from "@/lib/i18n";
 
-export async function inviteStaff(restaurantId: string, email: string, role: string, origin: string): Promise<NextResponse | null> {
+/**
+ * `locale` is the inviter's language: the invitation email is written in it
+ * (the Supabase templates switch on `user_metadata.locale`).
+ */
+export async function inviteStaff(
+  restaurantId: string, email: string, role: string, origin: string, locale: Locale = DEFAULT_LOCALE,
+): Promise<NextResponse | null> {
   const admin = createAdminClient();
 
   // Create the password-less login without sending mail. The staff insert
   // reserves the seat before any link can reach somebody's inbox.
-  const { data: created, error: createErr } = await admin.auth.admin.createUser({ email, email_confirm: false });
+  const { data: created, error: createErr } = await admin.auth.admin.createUser({ email, email_confirm: false, user_metadata: { locale } });
   if (createErr || !created.user) return await inviteError(createErr);
 
   const { error: staffErr } = await admin.from("staff").insert({

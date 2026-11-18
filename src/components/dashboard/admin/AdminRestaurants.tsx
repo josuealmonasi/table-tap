@@ -77,7 +77,8 @@ export default function AdminRestaurants({ restaurants, plans, busy, onMovePlan,
     const { row: r, plan } = picking;
     setPicking(null);
     setShown(s => ({ ...s, [r.id]: plan }));
-    const done = choice.billing === "payment_link" ? "admin.tierLinkSent" : choice.billing === "next_bill" ? "admin.tierNextBillDone" : "admin.planMoved";
+    const done = choice.billing === "payment_link" ? "admin.tierLinkSent" : choice.billing === "next_bill" ? "admin.tierNextBillDone"
+      : choice.billing === "test" ? "admin.tierTestDone" : "admin.planMoved";
     const moved = await onMovePlan(r.id, plan, t(done, { name: r.name, plan: planLabel(plan) }), choice);
     if (!moved) setShown(s => ({ ...s, [r.id]: r.plan }));
   }
