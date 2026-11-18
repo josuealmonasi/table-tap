@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { getPlatformAdmin } from "@/lib/admin";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { allPlans } from "@/lib/plan-server";
+import { readPlatformHealth } from "@/lib/admin-health";
 import { ConfirmProvider } from "@/components/ui/ConfirmDialog";
 import AdminPanel, {
   type AdminRestaurantRow,
@@ -108,6 +109,7 @@ export default async function AdminPage() {
         users={userRows}
         restaurantOptions={restaurantOptions}
         plans={(await allPlans()).map(p => p.plan)}
+        health={await readPlatformHealth()}
       />
     </ConfirmProvider>
   );

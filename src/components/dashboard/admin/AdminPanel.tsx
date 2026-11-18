@@ -8,6 +8,8 @@ import Breadcrumb from "@/components/layout/Breadcrumb";
 import AdminCreateUser from "./AdminCreateUser";
 import AdminEditUser from "./AdminEditUser";
 import AdminRestaurants from "./AdminRestaurants";
+import AdminHealth from "./AdminHealth";
+import type { PlatformHealth } from "@/lib/admin-health-rules";
 import { planLabel } from "@/lib/plan";
 import { DeleteIcon, EditIcon } from "@/components/ui/icons";
 import { SEP } from "@/lib/separator";
@@ -45,6 +47,8 @@ interface AdminPanelProps {
   restaurantOptions: { id: string; name: string }[];
   /** Every plan in the catalog, cheapest first. */
   plans: string[];
+  /** Silent failures across the platform, counted. */
+  health: PlatformHealth;
 }
 
 const ROLE_META: Record<AdminUserRow["role"], { key: string }> = {
@@ -64,6 +68,7 @@ export default function AdminPanel({
   users,
   restaurantOptions,
   plans,
+  health,
 }: AdminPanelProps) {
   const t = useT();
   const { busy, deleteUser, deleteRestaurant, movePlan, suspend, liftSuspension, changeTrial } = useAdminActions();
@@ -80,6 +85,8 @@ export default function AdminPanel({
         <header className="tt-dash-head">
           <Breadcrumb trail={[{ labelKey: "admin.title" }]} />
         </header>
+
+        <AdminHealth health={health} />
 
         <AdminRestaurants
           restaurants={restaurants}

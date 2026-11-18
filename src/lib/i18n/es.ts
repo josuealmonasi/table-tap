@@ -3069,4 +3069,12 @@ votes: "Votos",
     extended: "La prueba de {name} se extendió.",
     ended: "La prueba de {name} terminó; ahora está en Carta.",
   },
+  adminHealth: {
+    title: "Salud de la plataforma",
+    scheduler: "Última recuperación automática",
+    never: "Nunca",
+    tickets: "Tickets por correo fallidos (7 días)",
+    notices: "Avisos de precio atorados",
+    noCards: "Restaurantes que no aceptan tarjeta",
+  },
 };

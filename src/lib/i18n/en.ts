@@ -3086,6 +3086,14 @@ votes: "Votes",
     extended: "{name}'s trial was extended.",
     ended: "{name}'s trial ended; it is now on Carta.",
   },
+  adminHealth: {
+    title: "Platform health",
+    scheduler: "Last automatic recovery",
+    never: "Never",
+    tickets: "Failed ticket emails (7 days)",
+    notices: "Stuck price notices",
+    noCards: "Restaurants not taking cards",
+  },
 };
 
 export type Messages = typeof en;
