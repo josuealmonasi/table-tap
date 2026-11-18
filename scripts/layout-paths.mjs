@@ -5,6 +5,8 @@
 // screen or a role is added, you touch this file and nothing else.
 // ============================================================================
 
+import { SEED_STOP_TOKEN } from "./seed-stop-token.mjs";
+
 /** The five demo team logins, with what each one actually reaches. */
 export const CREW = [
   {
@@ -92,6 +94,7 @@ export const PUBLIC = [
   "/privacidad",
   // The "stop emailing my tickets" page a ticket email links to.
   "/tickets/stop",
+  `/tickets/stop?t=${SEED_STOP_TOKEN}`,
   "/rewards",
 ];
 

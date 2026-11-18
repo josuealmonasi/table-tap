@@ -8,6 +8,12 @@ table owed MX$105 and the diner's screen said it owed nothing.
 So this is not a style guide. It is the list of things that have actually bitten
 us, and what now catches each one.
 
+## The ticket stop button stays in the layout gate
+
+The demo seed and the layout page list disagreed: the gate opened only the
+invalid link, so it never measured the stop button. The seed now gives one
+card a consented example address and a fixed link; the layout gate visits it
+and the bare link. `seed-stop-layout.spec.ts` checks both sides.
 ## Dish choices stay above the cart button
 
 The scrolling choices and the pinned cart button must keep their distance. A
@@ -101,6 +107,7 @@ and that a new party cannot see the previous party's waiting phones.
 | Scheduled plan prices keep their eligible notice queue | A scheduled price without its recipients could leave an owner without notice; the route and schema specs pin validation and the atomic queue |
 | One-click ticket unsubscribe retries return the same success | A cleared or unknown token returned 404 to mail providers; `ticket-stop-one-click.spec.ts` checks retries, invalid forms and the separate confirmation response |
 |---|---|
+| The demo stop link and layout paths agree | The gate measured only an invalid link and missed the button overflowing its card; `seed-stop-layout.spec.ts` checks the seed and both paths |
 | Dish choices and the pinned cart button keep their distance | The deal button wrapped beside a scrolling extra; `dish-footer-gap.spec.ts` and the dish detail layout case cover the structure and the rendered spacing |
 | Earlier acceptance rows and the backfill index agree | Relabeling every old row as a backfill could stop schema application; `acceptance-schema.spec.ts` pins the migration |
 | Terms evidence and the privacy notice agree | Acceptance saved request network details despite the notice; `acceptance-history.spec.ts` and `rate-limit-key.spec.ts` forbid collection |
