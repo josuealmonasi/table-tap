@@ -1,4 +1,5 @@
 import { publicMenuCacheEnabled } from "@/lib/public-menu-cache";
+import { asDinerSees } from "@/lib/restaurant-suspension";
 import { loadPublicOrderingData } from "@/lib/public-ordering-data";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -225,15 +226,17 @@ export async function loadOrderingData(
   if (restaurant) {
     // Unwrapped too: read as "no card reader", a blip took card payment off the
     // menu without a word, and paying is the one thing a menu must not hide.
-    const pay = unwrap<{ stripe_account_id: string | null; stripe_charges_enabled: boolean | null }>(
+    const pay = unwrap<{ stripe_account_id: string | null; stripe_charges_enabled: boolean | null; suspended_at: string | null }>(
       await createAdminClient()
         .from("restaurants")
-        .select("stripe_account_id, stripe_charges_enabled")
+        .select("stripe_account_id, stripe_charges_enabled, suspended_at")
         .eq("id", restaurantId)
         .maybeSingle(),
       "card readiness",
     );
     restaurant.cards_enabled = Boolean(pay?.stripe_account_id && pay?.stripe_charges_enabled);
+    // Suspended: shown as not taking orders, as the cached loader does.
+    restaurant.accepting_orders = asDinerSees(restaurant, pay?.suspended_at).accepting_orders;
   }
 
   // Taking the food before paying comes with the plan, so the restaurant's own
