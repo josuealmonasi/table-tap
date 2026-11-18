@@ -13,7 +13,7 @@ it("checks the platform admin, then records the visit, then reads", () => {
   expect(guard).toBeGreaterThan(0);
   expect(record).toBeGreaterThan(guard);
   expect(load).toBeGreaterThan(record);
-  expect(sql).toMatch(/'restaurant\.owner_reset',\s*'restaurant\.view'\)\);/);
+  expect(sql).toMatch(/'restaurant\.owner_transfer', 'restaurant\.view'\)\);/);
 });
 
 it("is read only: no write in the loader, no control on the screen", () => {

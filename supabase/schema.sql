@@ -10263,6 +10263,29 @@ revoke all on restaurant_admin_notes from anon, authenticated, public, service_r
 grant select, insert, delete on restaurant_admin_notes to service_role;
 
 
+-- A platform admin hands a restaurant to someone already on its team. One
+-- transaction under the restaurant's row lock: the new owner's staff row goes
+-- (a login belongs to one restaurant), the former owner stays on as a manager,
+-- and owner_id moves. Refused for anyone not on this team.
+create or replace function public.admin_transfer_ownership(p_restaurant uuid, p_new_owner uuid)
+returns text language plpgsql security definer set search_path = public as $$
+declare v_old uuid; v_email text;
+begin
+  select owner_id into v_old from restaurants where id = p_restaurant for update;
+  if not found then return 'not_found'; end if;
+  if v_old = p_new_owner then return 'already_owner'; end if;
+  if not exists (select 1 from staff where restaurant_id = p_restaurant and user_id = p_new_owner) then return 'not_on_team'; end if;
+  delete from staff where restaurant_id = p_restaurant and user_id = p_new_owner;
+  if v_old is not null then
+    select email into v_email from auth.users where id = v_old;
+    insert into staff (restaurant_id, user_id, email, role) values (p_restaurant, v_old, coalesce(v_email, ''), 'manager');
+  end if;
+  update restaurants set owner_id = p_new_owner where id = p_restaurant;
+  return 'transferred';
+end; $$;
+revoke all on function public.admin_transfer_ownership(uuid, uuid) from public, anon, authenticated;
+grant execute on function public.admin_transfer_ownership(uuid, uuid) to service_role;
+
 -- Even a service-side mistake must append a correction, never rewrite history.
 create or replace function public.keep_platform_admin_audit()
 returns trigger language plpgsql set search_path = public as $$
@@ -15351,7 +15374,8 @@ alter table platform_admin_audit drop constraint if exists platform_admin_audit_
 alter table platform_admin_audit add constraint platform_admin_audit_action_check
   check (action in ('login.create', 'login.update', 'login.delete', 'restaurant.delete', 'restaurant.plan', 'plan.price',
     'restaurant.suspend', 'restaurant.unsuspend', 'restaurant.trial', 'restaurant.owner_reset',
-    'restaurant.view'));
+    'restaurant.suspend', 'restaurant.unsuspend', 'restaurant.trial', 'restaurant.owner_reset',
+    'restaurant.owner_transfer', 'restaurant.view'));
 
 revoke truncate, references, trigger on all tables in schema public from authenticated;
 -- Audit of #648: recovery every five minutes, scheduled by the database.

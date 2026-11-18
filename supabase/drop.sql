@@ -40,6 +40,7 @@ drop function if exists public.complete_owner_signup_v1(uuid);
 drop function if exists public.delete_dietary_tag_v1(uuid, uuid);
 drop function if exists public.check_item_addon_restaurant() cascade;
 drop function if exists public.keep_platform_admin_audit();
+drop function if exists public.admin_transfer_ownership(uuid, uuid);
 drop function if exists public.admin_delete_restaurant(uuid, boolean);
 drop function if exists public.advance_refund_due_fee(uuid, uuid, jsonb, int, int, int, text);
 drop function if exists public.verify_refunded_platform_fee(uuid, text, int, int, text[]);

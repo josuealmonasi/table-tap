@@ -73,6 +73,7 @@ export default async function AdminPage() {
         role,
         founding: !!founded,
         restaurant_name: restaurant?.name,
+        restaurant_id: restaurant?.id,
         plan: restaurant?.plan as string | undefined,
       };
     })
