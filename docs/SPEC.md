@@ -53,6 +53,11 @@ the restaurant. A dialog asks how the tier is paid (`billing`):
   Stripe's plan back over it.
 Carta costs nothing, so it is only ever assigned free. Every assignment is
 written in the restaurant's activity log with its billing mode.
+Under each restaurant's name the list says how it pays (`billingSummary`):
+the Stripe price and renewal date, a cancellation's last day, overdue or
+locked, a trial or unpaid assignment with the day it drops to Carta, free, or
+assigned at no charge. It reads the columns the subscription sync writes, not
+Stripe, so it shows exactly what the app enforces.
 
 Permanent deletion is refused only while a refund, duplicate-payment return or
 provider operation is unfinished, or until 30 days after the latest successful Stripe refund evidence (operations, duplicate-payment returns and attempts); refusals return the unlock time. `admin_delete_restaurant` takes
