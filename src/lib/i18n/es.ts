@@ -3000,7 +3000,7 @@ votes: "Votos",
     subject: "Un cambio en el precio de tu plan",
     intro: "Tu precio mensual actual es {current}. El nuevo precio mensual será {next}.",
     introNoCurrent: "El nuevo precio mensual de tu plan será {next}.",
-    after: "El nuevo precio se aplicará a tu próxima factura a partir del {date}.",
+    after: "El nuevo precio se aplicará a tu primera factura a partir del {date}.",
     button: "Ver tu plan",
   },
   tierMail: {

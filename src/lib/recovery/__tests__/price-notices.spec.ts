@@ -71,7 +71,7 @@ it("writes both languages and escapes the plan link in HTML", async () => {
   const { priceNoticeMail } = await import("../price-notice-mail");
   const input = { current: 699, next: 900, effectiveAt: "2027-01-01T06:00:00Z", link: "https://tabletap.shop/dashboard/plan?a=1&b=2" };
   const es = priceNoticeMail(input); const en = priceNoticeMail(input, "en");
-  expect(es.text).toContain("próxima factura"); expect(en.text).toContain("next bill");
+  expect(es.text).toContain("primera factura"); expect(en.text).toContain("first bill");
   for (const mail of [es, en]) {
     expect(mail.text).toContain("699.00"); expect(mail.text).toContain("900.00");
     expect(mail.text).toContain(input.link); expect(mail.html).toContain("&amp;");
