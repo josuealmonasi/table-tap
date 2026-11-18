@@ -30,8 +30,9 @@ export default function AdminOwnerView({ view }: Props) {
         <section className="tt-section">
           <h3 className="tt-serif" style={{ margin: 0 }}>{r.name}</h3>
           <ul className="tt-admin-view-facts">
-            <li>{t("adminView.plan")}: <strong>{r.plan}</strong>{r.plan_status ? SEP + r.plan_status : ""}</li>
+            <li>{t("adminView.plan")}: <strong>{r.plan}</strong>{r.plan_status ? SEP + t(`adminView.status.${r.plan_status}`) : ""}</li>
             <li>{t("adminView.orders")}: <strong>{r.accepting_orders ? t("adminView.open_") : t("adminView.paused")}</strong></li>
+            <li>{t("adminView.tables")}: <strong>{view.tables}</strong></li>
             <li>{t("adminView.cards")}: <strong>{r.charges_enabled ? t("adminView.yes") : t("adminView.no")}</strong></li>
             {r.suspended_at ? <li><strong>{t("adminView.suspended", { date: when(r.suspended_at) })}</strong></li> : null}
           </ul>
@@ -50,7 +51,7 @@ export default function AdminOwnerView({ view }: Props) {
         </section>
 
         <section className="tt-section">
-          <h4 style={{ margin: 0 }}>{t("adminView.menus", { tables: view.tables })}</h4>
+          <h4 style={{ margin: 0 }}>{t("adminView.menus")}</h4>
           <ul className="tt-admin-view-list">
             {view.menus.length ? view.menus.map(m => (
               <li key={m.id}>
@@ -78,7 +79,7 @@ export default function AdminOwnerView({ view }: Props) {
           <ul className="tt-admin-view-list">
             {view.orders.length ? view.orders.map(o => (
               <li key={o.id}>
-                <span>{o.table_label ?? "—"}{SEP}{t(statusMeta(o.status).labelKey)}</span>
+                <span>{o.table_label ? t("dash.tableN", { label: o.table_label }) : t("adminView.noTable")}{SEP}{t(statusMeta(o.status).labelKey)}</span>
                 <span className="tt-muted">
                   {formatMoney(o.total, r.currency)}{o.paid ? SEP + t("adminView.paid") : ""}{SEP}{when(o.created_at)}
                 </span>
