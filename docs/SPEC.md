@@ -69,6 +69,10 @@ the restaurant. A dialog asks how the tier is paid (`billing`):
   lock after closing open Checkouts: `active`, trial and assignment id cleared,
   nothing charged; refused while a live subscription would write
   Stripe's plan back over it.
+- `test` — "Asignado sin cobro (cuenta de prueba)": `free`, for a tester the
+  owner lends the app to, and it gives back the restaurant's founding place if
+  it holds one and no subscription pays for it (a paying founder keeps its
+  number).
 Carta costs nothing, so it is only ever assigned free. Every assignment is
 written in the restaurant's activity log with its billing mode.
 
@@ -413,7 +417,9 @@ dishes on a bill the restaurant has just cancelled.
   columns are removed; changing plans does not hide analytics or activity logs.
 - **Founding price**: the first restaurants on a paid tier keep the price they
   came in at. `claim_founding_price` serialises the assignment with an advisory
-  lock so two simultaneous subscribers cannot take the same place.
+  lock so two simultaneous subscribers cannot take the same place. The limit counts the
+  places held, not the highest number, so a place given back by a test account
+  is free again; numbers keep rising and still record arrival order.
 - **Coupons and promotions** are reserved and released like stock, for the same
   reason: a code with two uses left must not be spent three times.
 - **Discounts and write-offs** are requests a waiter raises and a manager
