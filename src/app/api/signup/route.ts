@@ -8,6 +8,7 @@ import { clientKey, isRateLimited } from "@/lib/rate-limit";
 import { sendSignupConfirmation } from "@/lib/signup-confirmation";
 import { normalizeEmail, isValidEmail } from "@/lib/email";
 import { passwordTooShort } from "@/lib/password";
+import { requestLocale } from "@/lib/i18n";
 
 export const runtime = "nodejs";
 
@@ -63,6 +64,9 @@ export async function POST(req: NextRequest) {
     email,
     password,
     email_confirm: false,
+    // The language they signed up in: the confirmation, reset and later Auth
+    // emails switch on it (docs/auth-email-templates/).
+    user_metadata: { locale: requestLocale(req) },
   });
 
   if (userErr || !created?.user) {

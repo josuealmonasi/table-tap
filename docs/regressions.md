@@ -8243,3 +8243,15 @@ the route, the hook and their tests all handle. The probe was wrong, not the
 code. Run unchanged against an unreachable database, every probe errored and the
 runner exited 1. It now runs on GitHub in every gates run.
 
+## Auth emails went to spam, in English, with a link a scanner could spend (2026-11-18)
+
+Supabase's default templates were English only and linked to the project's
+`supabase.co` host from a `tabletap.shop` sender, a classic spam signal; the
+owner's confirmation and reset both landed in Hotmail's spam. And a link that
+verified on GET was spent by Outlook's link scanner before the person clicked.
+Now the templates are bilingual, link to `/auth/confirm` on our domain, and
+that page spends nothing until its button posts. While checking it, the reset
+form said "mínimo 6 caracteres" under a rule of 8. Check:
+`auth-email-templates.spec.ts` (links, languages, POST only, placeholders match
+`PASSWORD_MIN`).
+
