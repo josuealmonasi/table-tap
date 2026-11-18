@@ -5,11 +5,13 @@ import { useLocale, useT } from "@/lib/i18n/context";
 import { dateLocale } from "@/lib/format";
 import { planLabel } from "@/lib/plan";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
-import { DeleteIcon } from "@/components/ui/icons";
+import { DeleteIcon, ResumeIcon, ScheduleIcon, SuspendIcon } from "@/components/ui/icons";
 import type { AdminRestaurantRow } from "./AdminPanel";
 import BillingLine from "./AdminBillingLine";
 import AdminUsageDialog from "./AdminUsageDialog";
 import AdminTierDialog, { type TierAssignment } from "./AdminTierDialog";
+import AdminSuspendDialog, { type SuspendReason } from "./AdminSuspendDialog";
+import AdminTrialDialog from "./AdminTrialDialog";
 
 interface AdminRestaurantsProps {
   restaurants: AdminRestaurantRow[];
@@ -19,6 +21,9 @@ interface AdminRestaurantsProps {
   /** Resolves true when the move was made. */
   onMovePlan: (id: string, plan: string, doneMsg: string, choice: TierAssignment) => Promise<boolean>;
   onDelete: (id: string) => void;
+  onSuspend: (id: string, reason: SuspendReason, doneMsg: string) => Promise<boolean>;
+  onLift: (id: string, doneMsg: string) => Promise<boolean>;
+  onTrial: (id: string, endsAt: string | null, doneMsg: string) => Promise<boolean>;
 }
 
 /**
@@ -28,13 +33,34 @@ interface AdminRestaurantsProps {
  * not to any one login. Asked first, because what the team can use changes the
  * moment it is confirmed.
  */
-export default function AdminRestaurants({ restaurants, plans, busy, onMovePlan, onDelete }: AdminRestaurantsProps) {
+export default function AdminRestaurants({ restaurants, plans, busy, onMovePlan, onDelete, onSuspend, onLift, onTrial }: AdminRestaurantsProps) {
   const t = useT();
   const { locale } = useLocale();
   const confirm = useConfirm();
   // The plan chosen, shown at once rather than after the page reloads — and
   // put back if the move was refused.
   const [shown, setShown] = useState<Record<string, string>>({});
+
+  // The row whose trial the admin is changing.
+  const [trialRow, setTrialRow] = useState<AdminRestaurantRow | null>(null);
+
+  async function changeTrial(endsAt: string | null): Promise<void> {
+    if (!trialRow) return;
+    const r = trialRow;
+    setTrialRow(null);
+    await onTrial(r.id, endsAt, t(endsAt ? "adminTrial.extended" : "adminTrial.ended", { name: r.name }));
+  }
+
+  // The row whose suspension the admin is changing.
+  const [suspending, setSuspending] = useState<AdminRestaurantRow | null>(null);
+
+  async function changeSuspension(reason: SuspendReason | null): Promise<void> {
+    if (!suspending) return;
+    const r = suspending;
+    setSuspending(null);
+    if (reason) await onSuspend(r.id, reason, t("adminSuspend.done", { name: r.name }));
+    else await onLift(r.id, t("adminSuspend.lifted", { name: r.name }));
+  }
 
   // The tier picked in a row, waiting for the admin to say how it is paid.
   const [usage, setUsage] = useState<AdminRestaurantRow | null>(null);
@@ -104,6 +130,23 @@ export default function AdminRestaurants({ restaurants, plans, busy, onMovePlan,
                 month: "short",
               })}
             </span>
+            <span className="tt-admin-row-actions">
+            {r.billing.plan_status === "trialing" && !r.billing.stripe_subscription_id && (
+              <button type="button" className="tt-iconbtn" title={t("adminTrial.button")} aria-label={t("adminTrial.button")}
+                disabled={busy} onClick={() => setTrialRow(r)}>
+                <ScheduleIcon size={16} />
+              </button>
+            )}
+            <button
+              type="button"
+              className="tt-iconbtn"
+              title={r.billing.suspended_at ? t("adminSuspend.lift") : t("adminSuspend.suspend")}
+              aria-label={r.billing.suspended_at ? t("adminSuspend.lift") : t("adminSuspend.suspend")}
+              disabled={busy}
+              onClick={() => setSuspending(r)}
+            >
+              {r.billing.suspended_at ? <ResumeIcon size={16} /> : <SuspendIcon size={16} />}
+            </button>
             <button
               className="tt-iconbtn"
               title={t("admin.deleteRestaurant")}
@@ -123,10 +166,29 @@ export default function AdminRestaurants({ restaurants, plans, busy, onMovePlan,
             >
               <DeleteIcon size={16} />
             </button>
+            </span>
           </div>
         ))}
       </div>
       {usage ? <AdminUsageDialog id={usage.id} name={usage.name} onClose={() => setUsage(null)} /> : null}
+      {trialRow ? (
+        <AdminTrialDialog
+          name={trialRow.name}
+          endsAt={trialRow.billing.trial_ends_at}
+          busy={busy}
+          onClose={() => setTrialRow(null)}
+          onConfirm={endsAt => void changeTrial(endsAt)}
+        />
+      ) : null}
+      {suspending ? (
+        <AdminSuspendDialog
+          name={suspending.name}
+          suspended={Boolean(suspending.billing.suspended_at)}
+          busy={busy}
+          onClose={() => setSuspending(null)}
+          onConfirm={reason => void changeSuspension(reason)}
+        />
+      ) : null}
       {picking ? (
         <AdminTierDialog
           name={picking.row.name}

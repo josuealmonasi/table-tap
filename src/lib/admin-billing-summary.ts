@@ -13,6 +13,9 @@ export interface RestaurantBilling {
   plan_ends_at: string | null;
   /** The end of the period Stripe has been paid for: the next renewal. */
   plan_period_ends_at: string | null;
+  /** Set while a platform admin has the restaurant suspended (no new sales). */
+  suspended_at?: string | null;
+  suspended_reason?: string | null;
 }
 
 export type BillingTone = "ok" | "warn" | "danger" | "muted";
@@ -30,6 +33,10 @@ export function billingSummary(r: RestaurantBilling, t: T, locale: string): { te
   }).format(new Date(iso));
   const price = r.subscribed_price === null ? null : `${formatMoney(r.subscribed_price, "MXN")}`;
 
+  // A suspension outranks every billing state: nothing sells until it is lifted.
+  if (r.suspended_at) {
+    return { text: t("adminBilling.suspended", { reason: t(`adminSuspend.reason_${r.suspended_reason ?? "other"}`) }), tone: "danger" };
+  }
   if (r.plan_status === "locked") return { text: t("adminBilling.locked"), tone: "danger" };
   if (r.plan_status === "past_due") return { text: t("adminBilling.pastDue"), tone: "danger" };
   if (r.stripe_subscription_id) {

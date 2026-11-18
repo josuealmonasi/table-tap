@@ -5,6 +5,7 @@ import { getMembership } from "@/lib/membership";
 import { getPlatformAdmin } from "@/lib/admin";
 import Navbar from "@/components/layout/Navbar";
 import FrozenBanner from "@/components/dashboard/plan/FrozenBanner";
+import SuspendedBanner from "@/components/dashboard/SuspendedBanner";
 import { dashboardFrozen } from "@/lib/plan";
 import type { PlanStatus } from "@/lib/plan";
 import SectionNav from "@/components/layout/SectionNav";
@@ -112,6 +113,9 @@ export default async function RootLayout({ children }: { children: React.ReactNo
                 <meta name="apple-mobile-web-app-status-bar-style" content="default" />
               </>
             )}
+            {/* Suspended by the platform: no new sales anywhere, so the whole
+                team is told on every screen, not only the owner. */}
+            {membership?.restaurant.suspended_at && <SuspendedBanner reason={membership.restaurant.suspended_reason} />}
             {/* The panel is read-only while the subscription is paused, and
                 until now nothing on screen said so — the API answered 402 to
                 saves the dashboard had happily offered. */}

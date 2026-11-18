@@ -8131,3 +8131,11 @@ The deal hint and the add-to-cart price must describe the same selection. The
 hint looked for the next deal even when the chosen quantity already earned one.
 Both now use the selected line's price and saving, including other cart lines;
 `deal-callout.spec.tsx` renders quantities one through three in both languages.
+
+## The diner menu has two loaders that must agree (2026-11-18)
+
+A suspended restaurant first read as "not taking orders" only through the
+cached menu loader, which runs in production; dev and any uncached read use
+`loadOrderingData`'s own restaurant read, so the diner still saw add buttons
+there. Both now go through `asDinerSees`. Seen in the browser while checking
+the suspension, before it shipped.
