@@ -12,6 +12,8 @@ import CartScreen from "./CartScreen";
 
 type CartScreenProps = ComponentProps<typeof CartScreen>;
 
+import type { PlaceIdentity as Identity } from "@/lib/place-identity";
+
 interface CartOverlayProps
   extends Pick<
     CartScreenProps,
@@ -33,6 +35,7 @@ interface CartOverlayProps
   admissionBlocked?: boolean;
   admissionNotice?: React.ReactNode;
   restaurant: Restaurant;
+  identity?: Identity | null;
   table: RestaurantTable | null;
   cart: ReturnType<typeof useCart>;
   totals: ReturnType<typeof useCartTotals>;
@@ -49,6 +52,7 @@ interface CartOverlayProps
  */
 export default function CartOverlay({
   restaurant,
+  identity,
   table,
   cart,
   totals,
@@ -77,6 +81,7 @@ export default function CartOverlay({
       <CartScreen
         {...rest}
         restaurant={restaurant}
+        identity={identity}
         table={table}
         items={cart.items}
         soldOut={soldOut}

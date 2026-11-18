@@ -1,6 +1,6 @@
 import { createServerClient, type CookieOptions } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
-import { contentSecurityPolicy } from "@/lib/csp";
+import { contentSecurityPolicy, loopbackDatabase } from "@/lib/csp";
 
 type CookiesToSet = { name: string; value: string; options: CookieOptions }[];
 
@@ -22,6 +22,8 @@ export async function middleware(request: NextRequest) {
     // of the development allowances — only the toolbar this repo's previews
     // are commented on, which the policy would otherwise silently refuse.
     process.env.VERCEL_ENV === "preview",
+    // The GitHub gates' throwaway Supabase; "" for every deployed build.
+    loopbackDatabase(process.env.NEXT_PUBLIC_SUPABASE_URL),
   );
 
   // Built fresh each time rather than snapshotted: Supabase refreshes the

@@ -32,12 +32,32 @@ Staff roles live in `staff`; `MANAGES(role)` in `src/lib/membership.ts` is the
 line between running the business and working a shift. A platform admin is a
 row in `platform_admins`, which no browser can read.
 The platform admin can move any restaurant to another plan from its row in
-`/dashboard/admin` (`PATCH /api/admin/restaurants`, `moveRestaurantPlan`), and
-its whole team moves with it — a plan belongs to the restaurant. It is an
-assignment, not a sale: the restaurant comes out `active` with any trial
-cleared, nothing is charged, the move is written in the restaurant's activity
-log, and one still billed by a live Stripe subscription is refused, since the
-next billing event would write Stripe's plan back over it.
+`/dashboard/admin` (`PATCH /api/admin/restaurants`, `assignTier` in
+`src/lib/admin-tier.ts`), and its whole team moves with it — a plan belongs to
+the restaurant. A dialog asks how the tier is paid (`billing`):
+- `next_bill` — the restaurant pays through a live Stripe subscription. Its
+  single item moves to the new tier's Price with `proration_behavior: "none"`:
+  nothing is charged or credited today, the period already paid stays as paid,
+  and the next invoice is at the new price. The tier changes at once
+  (`applySubscription`). Refused for an overdue subscription (settle first)
+  and under the same billing lock as the owner's own checkout.
+- `payment_link` — no subscription. The tier starts now as the app's own trial
+  ending on a pay-by date (default 7 days, at most 60), so whatever ends trials
+  drops an unpaid one to Carta. The owner gets an email linking to
+  `GET /api/billing/assigned?plan=<tier>`, which opens Stripe Checkout only for
+  the tier the restaurant was given and has not paid (Grupo included, though it
+  is not self-serve); anything else lands on the Plan screen. Paying replaces
+  the trial with the subscription.
+- `free` — the original assignment (`moveRestaurantPlan`): `active`, trial
+  cleared, nothing charged; refused while a live subscription would write
+  Stripe's plan back over it.
+Carta costs nothing, so it is only ever assigned free. Every assignment is
+written in the restaurant's activity log with its billing mode.
+Under each restaurant's name the list says how it pays (`billingSummary`):
+the Stripe price and renewal date, a cancellation's last day, overdue or
+locked, a trial or unpaid assignment with the day it drops to Carta, free, or
+assigned at no charge. It reads the columns the subscription sync writes, not
+Stripe, so it shows exactly what the app enforces.
 
 Permanent deletion is refused only while a refund, duplicate-payment return or
 provider operation is unfinished, or until 30 days after the latest successful Stripe refund evidence (operations, duplicate-payment returns and attempts); refusals return the unlock time. `admin_delete_restaurant` takes
@@ -1448,6 +1468,12 @@ measure. Its amounts come from
   2.7.1.24): razón social, address (street and number, colonia and CP,
   municipio and estado), phone, RFC and régimen fiscal. These columns are
   optional, owner-only and never granted to anon (`ticket-place.ts`).
+- Diners see who they are paying: the menu, the cart and the table bill end
+  with a muted line holding the razón social (else the trade name), the
+  address as the ticket prints it, and a link to the privacy notice. It is read
+  server-side by `place-identity.ts` (secret key, only those two strings reach
+  the browser); the public restaurant columns are unchanged. The pickup-name
+  and receipt-email fields carry a one-line notice with the same link.
 - Body: date, folio (the order code), table, four columns (quantity, item,
   unit price, amount), the number of items, the receipt's rows, the total,
   the IVA it includes, and how it was paid.
@@ -2231,6 +2257,28 @@ questions directly. `next.config.ts` refuses that setting on Vercel, so a
 deployed build always subscribes. And `pnpm db:mock` writes the demo's ~300
 closed sittings in two statements rather than two per sitting.
 
+The third is to not spend it at all. On every pull request
+`.github/workflows/gates.yml` runs `api`, `money`, `attack`, `rls`, `roles`
+and `smoke` on GitHub's runners, one job each, and `layout`, `promises` and
+`dialogs` on the pages `scripts/gate-plan.mjs` says the change reaches (the
+core screens — orders, bills, POS, accounts, settings, the diner menu — when
+it reaches everything; `scripts/gate-scope-ci.mjs`). Each job starts its own
+throwaway Supabase with the CLI (`ci/supabase/config.toml`), builds it with
+`pnpm db:create`, `db:seed` and `db:mock` from `supabase/schema.sql`, and
+serves the run's one production build against it (built once by a `build` job
+and shared as an artifact; each job checks the build inlined its own stack's
+URL and key). `scripts/ci-env.mjs` writes the only env
+file the gates read, refuses to run off GitHub Actions or over an existing
+file, and refuses any API or database address that is not the runner's
+loopback, so CI cannot reach the dev or production projects. Login passwords
+are made per job. The CSP names that loopback origin only when the build
+points at one (`loopbackDatabase` in `src/lib/csp.ts`); a deployed build's
+policy is unchanged. Stripe is the one outside service: with the
+`STRIPE_TEST_SECRET` repository secret (a test key) it is used; without it,
+`GATE_NO_STRIPE=1` and the cases that need Stripe print
+`skipped: no STRIPE_TEST_SECRET` by name and are counted in the job summary —
+never passed.
+
 Every check plants what it needs rather than depending on what the demo data
 happens to hold, and removes it afterwards. A check that finds nothing to
 attack passes without asking anything — the RLS sweep did exactly that on twelve
@@ -2971,8 +3019,12 @@ response body to the public log, and fails when recovery cannot observe a queue.
 Overlapping scheduled runs are queued rather than cancelling a running writer.
 No additional production secret or paid scheduler is required.
 
-Five isolated jobs use the admin client and the existing locked writers:
+Six isolated jobs use the admin client and the existing locked writers:
 
+- Accounting deletes at most 1,000 archived records per run when the restaurant
+  was deleted more than ten years ago and no longer exists. The archive records
+  when the accounting copy was made in the deletion transaction. This job runs
+  alongside the other jobs within its own time budget.
 - Stock calls `recover_stock_reservations` across restaurants. SQL keeps its
   one-hour grace period, checks that no order owns the reservation, and releases
   at most one orphan per call, at most ten calls per invocation.

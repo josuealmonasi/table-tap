@@ -15,6 +15,8 @@ import CategoryTabs from "./CategoryTabs";
 import ComboCard from "./ComboCard";
 import MenuItemRow from "./MenuItemRow";
 import CartBar from "./CartBar";
+import PlaceIdentity from "./PlaceIdentity";
+import type { PlaceIdentity as Identity } from "@/lib/place-identity";
 import UsualCard from "./UsualCard";
 import MenuHeader from "./MenuHeader";
 import MenuSideNav from "./MenuSideNav";
@@ -43,6 +45,7 @@ export default function MenuScreen({
   notice,
   billDue = false,
   loyalty = null,
+  identity = null,
   usual = [],
   onAddUsual,
   onForgetUsual,
@@ -70,6 +73,8 @@ export default function MenuScreen({
   billDue?: boolean;
   /** The restaurant runs the visit card: the menu offers it, any time. */
   loyalty?: LoyaltyOfferInfo | null;
+  /** Who the diner is ordering from. */
+  identity?: Identity | null;
   /** What this phone usually orders here, as today's menu can still make it. */
   usual?: OrderLineItem[];
   onAddUsual?: () => void;
@@ -198,6 +203,8 @@ export default function MenuScreen({
           </div>
         </>
       )}
+
+      <PlaceIdentity identity={identity} />
 
       <CartBar
         count={cartCount}

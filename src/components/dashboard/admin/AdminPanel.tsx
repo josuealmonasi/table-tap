@@ -11,6 +11,7 @@ import AdminRestaurants from "./AdminRestaurants";
 import { planLabel } from "@/lib/plan";
 import { DeleteIcon, EditIcon } from "@/components/ui/icons";
 import { SEP } from "@/lib/separator";
+import type { RestaurantBilling } from "@/lib/admin-billing-summary";
 
 export interface AdminRestaurantRow {
   id: string;
@@ -21,6 +22,8 @@ export interface AdminRestaurantRow {
   /** The restaurant's plan, which every login there works under. */
   plan: string;
   billed_by_stripe: boolean;
+  /** How it pays, as the Stripe sync last wrote it. */
+  billing: RestaurantBilling;
 }
 
 export interface AdminUserRow {

@@ -1,4 +1,5 @@
 import { apiAccountFixtures } from "./api-account-fixtures.mjs";
+import { accountToRestore } from "./lent-stripe-account.mjs";
 // ============================================================================
 // The data and identities `pnpm api` needs.
 //
@@ -346,10 +347,7 @@ export async function setup(env, base) {
       .update({ stripe_account_id: "acct_api_check", stripe_charges_enabled: true })
       .eq("id", restaurant.id);
     return async () => {
-      await admin.from("restaurants").update({
-        stripe_account_id: was?.stripe_account_id ?? null,
-        stripe_charges_enabled: was?.stripe_charges_enabled ?? false,
-      }).eq("id", restaurant.id);
+      await admin.from("restaurants").update(accountToRestore(was)).eq("id", restaurant.id);
     };
   };
 
