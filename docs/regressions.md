@@ -8154,3 +8154,11 @@ The deal hint and the add-to-cart price must describe the same selection. The
 hint looked for the next deal even when the chosen quantity already earned one.
 Both now use the selected line's price and saving, including other cart lines;
 `deal-callout.spec.tsx` renders quantities one through three in both languages.
+
+## A price move must not depend on when the job runs (2026-11-18)
+
+A job that changed a subscription's price after the effective date could miss
+a renewal billed before it ran, charging the old price for another month, or,
+run early, prorate a charge nobody was told about. The move is a Stripe
+subscription schedule whose second phase starts at a renewal boundary at least
+30 days after the notice; Stripe bills it there. Check: `price-moves.spec.ts`.
