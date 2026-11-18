@@ -8047,3 +8047,13 @@ other; `review2-deferred-probes.spec.ts` keeps the original regression.
   keeps it, and only that exact link shape (`safeLoginNext`).
 
 Checks: `admin-tier.spec.ts`, `billing-assigned.spec.ts`.
+
+## Pay link bound to a day, and free moves outside the lock (review 1117b, findings 3 and 7)
+
+The pay link matched any trial on the same tier and pay-by day, so a replaced
+assignment recreated for the same tier and day reopened an old link; and a free
+assignment ran outside the billing lock, so a Checkout opened just before it
+could still be paid and its subscription wrote over the free tier. Each
+payment-link assignment now stores `restaurants.tier_assignment_id` and the link
+carries it (`a=`); a free move runs under the lock, closes open Checkouts and
+clears the id. Checks: `billing-assigned.spec.ts`, `admin-tier.spec.ts`.

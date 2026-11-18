@@ -21,14 +21,14 @@ export const runtime = "nodejs";
 export async function GET(req: NextRequest): Promise<NextResponse> {
   const origin = siteOrigin(req);
   const plan = readPlanName(req.nextUrl.searchParams.get("plan"));
-  const until = req.nextUrl.searchParams.get("until") ?? "";
+  const id = req.nextUrl.searchParams.get("a") ?? "";
   const toPlanScreen = NextResponse.redirect(`${origin}/dashboard/plan`, 303);
-  if (!plan || plan === "carta" || !/^\d{4}-\d{2}-\d{2}$/.test(until)) return toPlanScreen;
+  if (!plan || plan === "carta" || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(id)) return toPlanScreen;
   const actor = await actingOwner();
   // Signed out, sign-in brings them back here (`safeLoginNext`), not to the
   // dashboard: this link is what they were asked to pay (review finding 6).
   if (!actor) {
-    const self = `/api/billing/assigned?plan=${plan}&until=${until}`;
+    const self = `/api/billing/assigned?plan=${plan}&a=${id}`;
     return NextResponse.redirect(`${origin}/login?next=${encodeURIComponent(self)}`, 303);
   }
 
@@ -43,7 +43,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   const limits = (await allPlans()).find(p => p.plan === plan);
   if (!limits) return toPlanScreen;
   try {
-    const { url } = await startRestaurantBilling(db, actor, limits, await foundersTaken(), origin, { plan, until });
+    const { url } = await startRestaurantBilling(db, actor, limits, await foundersTaken(), origin, { plan, id });
     return NextResponse.redirect(url, 303);
   } catch (err) {
     if (!(err instanceof BillingError)) console.error("assigned tier checkout failed", err);

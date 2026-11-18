@@ -1,4 +1,5 @@
 import type Stripe from "stripe";
+import { randomUUID } from "node:crypto";
 import { stripe } from "@/lib/stripe";
 import type { createAdminClient } from "@/lib/supabase/admin";
 import { logEvent } from "@/lib/activity-log";
@@ -55,11 +56,11 @@ export function payByDate(value: unknown, now = Date.now()): string | null {
 
 /**
  * The link in the owner's email: it opens Checkout for the assigned tier once
- * they sign in. `until` binds it to this assignment (its pay-by day), so a
- * link from an earlier or a replaced assignment opens nothing.
+ * they sign in. `a` binds it to this assignment's id, so a link from an
+ * earlier or a replaced assignment opens nothing.
  */
-export function assignedPayLink(origin: string, plan: string, payBy: string): string {
-  return `${origin}/api/billing/assigned?plan=${encodeURIComponent(plan)}&until=${payBy.slice(0, 10)}`;
+export function assignedPayLink(origin: string, plan: string, assignmentId: string): string {
+  return `${origin}/api/billing/assigned?plan=${encodeURIComponent(plan)}&a=${assignmentId}`;
 }
 
 export async function assignTier(
@@ -69,8 +70,23 @@ export async function assignTier(
   client: Stripe = stripe,
 ): Promise<TierAnswer> {
   if (input.billing === "free") {
-    const moved = await moveRestaurantPlan(db, input.restaurantId, input.plan, adminEmail, client);
-    return moved.ok ? { ...moved, billing: "free" } : moved;
+    // Under the billing lock too, closing any open Checkout: a pay link opened
+    // just before this free move could otherwise still be paid, and its
+    // subscription would write over the tier given here (review finding 3).
+    try {
+      const moved = await withRestaurantBilling(db, input.restaurantId, async operation => {
+        const { sessions, snapshot, exists } = await restaurantBilling(db, input.restaurantId);
+        if (!exists) return { ok: false, error: "apiErr.restaurantNotFound", status: 404 } as const;
+        await operation.record(snapshot);
+        for (const session of sessions) await operation.write(() => client.checkout.sessions.expire(session.id));
+        return await moveRestaurantPlan(db, input.restaurantId, input.plan, adminEmail, client);
+      });
+      return moved.ok ? { ...moved, billing: "free" } : moved;
+    } catch (err) {
+      if (err instanceof BillingError) return { ok: false, error: err.key, status: err.status };
+      console.error("admin free tier move failed", err);
+      return { ok: false, error: "apiErr.billingUnavailable", status: 502 };
+    }
   }
   // Carta costs nothing: there is no bill to move and no link to pay.
   if (input.plan === "carta") return { ok: false, error: "apiErr.tierCartaIsFree", status: 400 };
@@ -171,14 +187,14 @@ async function assignWithLink(
     return await writeAssignment(db, input, payBy);
   });
   if (!assigned.ok) return assigned;
-  const { from, restaurant } = assigned;
+  const { from, restaurant, assignmentId } = assigned;
 
   invalidatePublicMenu(input.restaurantId);
 
   const emailed = await mailOwner(db, {
     ownerId: restaurant.owner_id, restaurant: restaurant.name,
-    plan: input.plan, payBy, link: assignedPayLink(input.origin, input.plan, payBy),
-    key: `admin-tier/${input.restaurantId}/${input.plan}/${payBy.slice(0, 10)}`,
+    plan: input.plan, payBy, link: assignedPayLink(input.origin, input.plan, assignmentId),
+    key: `admin-tier/${input.restaurantId}/${assignmentId}`,
   });
   await logEvent({
     restaurantId: input.restaurantId, actor: adminEmail, entity: "settings", action: "updated",
@@ -190,7 +206,8 @@ async function assignWithLink(
 /** The tier as the app's own trial until the pay-by date, over the sync revision it read. */
 async function writeAssignment(
   db: Db, input: { restaurantId: string; plan: string }, payBy: string,
-): Promise<{ ok: true; from: string; restaurant: { name: string; owner_id: string | null } } | { ok: false; error: string; status: number }> {
+): Promise<{ ok: true; from: string; assignmentId: string; restaurant: { name: string; owner_id: string | null } } | { ok: false; error: string; status: number }> {
+  const assignmentId = randomUUID();
   const { data: restaurant } = await db.from("restaurants")
     .select("name, plan, owner_id, subscription_sync_revision").eq("id", input.restaurantId).maybeSingle();
   if (!restaurant) return { ok: false, error: "apiErr.restaurantNotFound", status: 404 };
@@ -200,14 +217,14 @@ async function writeAssignment(
   // subscribed in between keeps the subscription they paid for.
   const { data: moved, error } = await db.from("restaurants").update({
     plan: input.plan, plan_status: "trialing", trial_ends_at: payBy, plan_ends_at: null,
-    stripe_subscription_id: null, subscription_sync_revision: revision + 1,
+    stripe_subscription_id: null, subscription_sync_revision: revision + 1, tier_assignment_id: assignmentId,
   }).eq("id", input.restaurantId).eq("subscription_sync_revision", revision).select("id");
   if (error) {
     console.error("admin tier assignment failed:", error.message);
     return { ok: false, error: "apiErr.generic", status: 500 };
   }
   if (!moved?.length) return { ok: false, error: "apiErr.planChangedMeanwhile", status: 409 };
-  return { ok: true, from, restaurant: { name: restaurant.name as string, owner_id: restaurant.owner_id as string | null } };
+  return { ok: true, from, assignmentId, restaurant: { name: restaurant.name as string, owner_id: restaurant.owner_id as string | null } };
 }
 
 /** The owner's email with the link. False when it could not be sent: the admin is told so. */
