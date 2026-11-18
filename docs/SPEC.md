@@ -71,6 +71,17 @@ the restaurant. A dialog asks how the tier is paid (`billing`):
   Stripe's plan back over it.
 Carta costs nothing, so it is only ever assigned free. Every assignment is
 written in the restaurant's activity log with its billing mode.
+
+A platform admin can **suspend** a restaurant (`POST /api/admin/restaurants/suspend
+{ id, reason }`, reasons: non_payment, abuse, owner_request, other; `DELETE`
+lifts it), audited and written in the restaurant's activity log. While
+suspended (`restaurants.suspended_at`) no new sale starts: diner checkout,
+table orders and POS sales answer `apiErr.restaurantSuspended`. Bills already
+open stay payable (a diner who ate can always pay) and refunds keep working.
+A POS sale the till already collected keeps its money: collected before the
+suspension it is recorded as usual; collected after it (the device was
+offline) it stays held on the device for a manager (`posSuspensionAnswer`).
+Banners for diners and staff come in part 2.
 Under each restaurant's name the list says how it pays (`billingSummary`):
 the Stripe price and renewal date, a cancellation's last day, overdue or
 locked, a trial or unpaid assignment with the day it drops to Carta, free, or

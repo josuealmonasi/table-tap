@@ -1891,6 +1891,9 @@ foundingLeftBody: "Quien contrata ahora conserva este precio de suscripción mie
     loyaltyVisitGone: "Esa visita ya no existe.",
     loyaltyVisitOld: "Solo se pueden quitar las visitas de hoy.",
     loyaltyVisitSpent: "Ya se canjeó una recompensa después de este sello, así que no se puede quitar.",
+    alreadySuspended: "Este restaurante ya está suspendido.",
+    notSuspended: "Este restaurante no está suspendido.",
+    restaurantSuspended: "Este restaurante no está tomando pedidos ni cobros por ahora. Lo que ya cobraste se conserva.",
     notAccepting:
       "El restaurante no está recibiendo pedidos en este momento. Inténtalo más tarde.",
     checkoutFailed: "El pago falló",

@@ -164,6 +164,26 @@ export function adminOwnerCases(fx) {
       path: "/api/billing/assigned?plan=grupo", expect: [200] },
     { name: "GET  /api/billing/assigned (not the owner)", as: "waiter", method: "GET",
       path: "/api/billing/assigned?plan=casa", expect: [200] },
+    // Suspension: the admin suspends and lifts; the demo is put back either way.
+    { name: "POST /api/admin/restaurants/suspend (suspend, then lifted)", as: "platformAdmin", method: "POST",
+      path: "/api/admin/restaurants/suspend",
+      arrange: async f => async () => {
+        await f.admin.from("restaurants").update({ suspended_at: null, suspended_reason: null, suspended_by: null }).eq("id", r);
+        await f.admin.from("user_logs").delete().eq("restaurant_id", r).eq("entity", "settings").like("detail", "suspended=%");
+      },
+      body: { id: r, reason: "owner_request" }, expect: [200],
+      check: async (_d, f) => {
+        const { data } = await f.admin.from("restaurants").select("suspended_at, suspended_reason").eq("id", r).single();
+        if (!data?.suspended_at || data.suspended_reason !== "owner_request") return "the restaurant was not suspended";
+        const res = await fetch(f.base + "/api/admin/restaurants/suspend", { method: "DELETE",
+          headers: { "Content-Type": "application/json", cookie: f.who.platformAdmin }, body: JSON.stringify({ id: r }) });
+        const { data: after } = await f.admin.from("restaurants").select("suspended_at").eq("id", r).single();
+        return (res.status === 200 && after?.suspended_at === null) || `lifting answered ${res.status}`;
+      } },
+    { name: "POST /api/admin/restaurants/suspend (an owner refused)", as: "owner", method: "POST",
+      path: "/api/admin/restaurants/suspend", body: { id: r, reason: "abuse" }, expect: [403] },
+    { name: "POST /api/admin/restaurants/suspend (unknown reason refused)", as: "platformAdmin", method: "POST",
+      path: "/api/admin/restaurants/suspend", body: { id: r, reason: "because" }, expect: [400] },
     // An owner cannot give themselves a plan — only the platform admin moves one.
     { name: "PATCH /api/admin/restaurants (an owner refused)", as: "owner", method: "PATCH",
       path: "/api/admin/restaurants",

@@ -1,3 +1,4 @@
+import { posSuspensionAnswer } from "@/lib/restaurant-suspension";
 import { after } from "next/server";
 import { drainTicketEmails } from "@/lib/ticket-email";
 import { saleCard } from "@/lib/loyalty/sale-card";
@@ -114,10 +115,14 @@ export async function POST(req: NextRequest) {
   // restaurant, which is what makes that safe.
   const { data: restaurant } = await db
     .from("restaurants")
-    .select("id, name, currency, tax_pct, service_pct, service_enabled, timezone, low_stock_threshold, low_stock_alerts_enabled")
+    .select("id, name, currency, tax_pct, service_pct, service_enabled, timezone, low_stock_threshold, low_stock_alerts_enabled, suspended_at")
     .eq("id", actor.restaurantId)
     .single();
   if (!restaurant) return await apiError("apiErr.forbidden", 403);
+  // Suspended: no new sale; money already collected is kept (posSuspensionAnswer).
+  const suspendedAnswer = await posSuspensionAnswer(restaurant.suspended_at,
+    body.collected === undefined ? null : offlineCharge(body.collected)?.at ?? null);
+  if (suspendedAnswer) return suspendedAnswer;
 
   // Only what the restaurant is actually serving right now: a cashier should
   // not be able to ring a dish from a menu that closed at lunch. The same

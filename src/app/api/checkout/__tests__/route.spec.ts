@@ -36,6 +36,7 @@ const soldOut = { itemId: "t1", name: "Taco", stock: 0, kind: "out_of_stock" as 
 
 const restaurant = {
   id: "r1", currency: "MXN", service_pct: 0, service_enabled: false, accepting_orders: true,
+  suspended_at: null as string | null,
   tax_pct: 16, stripe_account_id: "acct_1", stripe_charges_enabled: true, allow_pay_later: true,
   low_stock_alerts_enabled: true, low_stock_threshold: 2,
 };
@@ -151,6 +152,7 @@ const boom = () => {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  restaurant.suspended_at = null;
   step.counterFull.mockResolvedValue({ data: false, error: null });
   notices.length = 0;
   admissionStatus = "approved";
@@ -162,6 +164,16 @@ beforeEach(() => {
   step.openCard.mockImplementation(async () => ({ id: "cs_1", url: "https://stripe.test/cs_1" }));
   step.logCoupon.mockImplementation(async () => undefined);
   step.saveSession.mockImplementation(async () => ({ error: null }));
+});
+
+describe("a suspended restaurant", () => {
+  it("refuses a new checkout before claiming stock or creating an order", async () => {
+    restaurant.suspended_at = "2026-11-17T00:00:00Z";
+    const response = await checkout();
+    expect(response.status).toBe(409);
+    expect(step.reserveStock).not.toHaveBeenCalled();
+    expect(step.insertOrder).not.toHaveBeenCalled();
+  });
 });
 
 describe("M1: unpaid counter orders have a restaurant-wide ceiling", () => {

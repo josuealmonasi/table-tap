@@ -8,6 +8,12 @@ table owed MX$105 and the diner's screen said it owed nothing.
 So this is not a style guide. It is the list of things that have actually bitten
 us, and what now catches each one.
 
+## Suspended restaurants cannot start a diner checkout
+
+The suspension marker and checkout admission must agree. A new checkout now
+stops before stock and order writes; an existing checkout retry is resolved
+first so a payment already underway can finish. `checkout/route.spec.ts`
+checks the new-order refusal.
 ## Mail configuration and recovery health agree
 
 The outbox and scheduler disagreed when mail was unconfigured: tickets were
@@ -130,6 +136,7 @@ and that a new party cannot see the previous party's waiting phones.
 `src/lib/__tests__/invariants.spec.ts` enforces the rules that span files:
 
 | Rule | The bug it came from |
+| Suspended restaurants refuse new diner checkouts | Checkout ignored the suspension marker and could start a new order |
 | A held sale offers paper when its one-sale email may be lost | The first request carried the address but replay did not; `card-email-pos.spec.tsx` checks the warning and printable ticket |
 | Admin usage and returned tips agree | A returned tip must not be deducted from sales; `admin-usage-returns.spec.ts` checks partial pieces |
 | Admin usage and fee currency evidence agree | A fee cannot inherit today's restaurant currency; `admin-usage-read.spec.ts` checks other currencies and missing evidence |
@@ -8080,6 +8087,16 @@ other; `review2-deferred-probes.spec.ts` keeps the original regression.
 
 Checks: `admin-tier.spec.ts`, `billing-assigned.spec.ts`.
 
+## Suspending a restaurant without losing money already collected (2026-11-18)
+
+A suspension refuses new sales on checkout, table orders and POS through one
+shared answer. The POS case is two places that must agree: refusing every POS
+request would also have refused a sale the till had already collected offline,
+and the device would have discarded money that is in the drawer. A collected
+sale from before the suspension is recorded; one from after is kept on the
+device as held. Checks: `pos-atomic.spec.tsx` (both collected cases),
+`cart-quantity-routes.spec.ts` (all three routes refuse and write nothing; the
+table-order case fails without its check), `admin-suspend.spec.ts`.
 ## A held POS sale offers a ticket when email is uncertain
 
 The one-sale email and the held sale's replay disagreed: replay kept the card
