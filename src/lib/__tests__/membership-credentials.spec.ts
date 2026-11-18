@@ -27,7 +27,7 @@ import { actingStaff, actingFrontOfHouse, actingManager, actingOwner } from "@/l
 
 beforeEach(() => {
   owned = null; staff = null; lookupError = null; reads.length = 0;
-  currentUser.mockReset().mockResolvedValue({ id: "u1", email: "k@tabletap.dev" });
+  currentUser.mockReset().mockResolvedValue({ id: "u1", email: "k@tabletap.shop" });
 });
 
 // Pages pass `membership.restaurant` to client components, whose props reach
@@ -60,14 +60,14 @@ it("reuses one verified user for every guard while keeping role, tenant, failure
     owned = scenario === "owner-first" ? row : null;
     staff = scenario === "unaffiliated" ? null : { role: scenario === "no-email" ? "waiter" : scenario, restaurant: row };
     lookupError = scenario === "lookup-error" ? { message: "unavailable" } : null;
-    currentUser.mockClear().mockResolvedValue(scenario === "signed-out" ? null : { id: "u1", ...(scenario === "no-email" ? {} : { email: "k@tabletap.dev" }) });
+    currentUser.mockClear().mockResolvedValue(scenario === "signed-out" ? null : { id: "u1", ...(scenario === "no-email" ? {} : { email: "k@tabletap.shop" }) });
     reads.length = 0;
     let actor;
     try { actor = await guard(); } catch (error) { actor = (error as Error).message; }
     results.push({ index, scenario, actor, authReads: currentUser.mock.calls.length, scopes: [...reads] });
   }
   owned = row; staff = null; lookupError = null;
-  currentUser.mockResolvedValue({ id: "u1", email: "k@tabletap.dev" });
+  currentUser.mockResolvedValue({ id: "u1", email: "k@tabletap.shop" });
   const publicMembership = await getMembership();
   expect({ publicMembership, results }).toEqual({
     publicMembership: { restaurant: { id: "r1", name: "Demo Bistro", currency: "MXN" }, role: "owner" },
@@ -76,7 +76,7 @@ it("reuses one verified user for every guard while keeping role, tenant, failure
       return { index, scenario, authReads: 1,
         scopes: scenario === "signed-out" ? [] : [["restaurants", "owner_id", "u1"], ["staff", "user_id", "u1"]],
         actor: scenario === "lookup-error" ? "membership lookup failed: unavailable" : allowed[index].includes(role)
-          ? { restaurantId: "r1", role, email: scenario === "no-email" ? "staff" : "k@tabletap.dev" } : null,
+          ? { restaurantId: "r1", role, email: scenario === "no-email" ? "staff" : "k@tabletap.shop" } : null,
       };
     })),
   });

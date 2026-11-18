@@ -37,7 +37,7 @@ describe("searching by the name shown on the row", () => {
   });
 
   it("returns nothing when the text names no kind at all", () => {
-    expect(entitiesNamedBy("demo@tabletap.dev", es)).toEqual([]);
+    expect(entitiesNamedBy("demo@tabletap.shop", es)).toEqual([]);
     expect(entitiesNamedBy("   ", es)).toEqual([]);
   });
 });

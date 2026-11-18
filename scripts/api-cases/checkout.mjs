@@ -132,7 +132,7 @@ export function checkoutCounterCases(fx) {
           price: Number(dish.price), qty: 1, emoji: "🍽️", mods: {} })) },
       expect: [400] },
     { name: "POST /api/receipt", as: "diner", method: "POST", path: "/api/receipt",
-      body: { orderId: paidOrder, email: "nobody@tabletap.dev" }, expect: [200, 400, 409, 503] },
+      body: { orderId: paidOrder, email: "nobody@tabletap.shop" }, expect: [200, 400, 409, 503] },
   ];
 }
 

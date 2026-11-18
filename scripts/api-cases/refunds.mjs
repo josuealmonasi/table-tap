@@ -141,7 +141,7 @@ export function orderRefundCases(fx) {
       path: "/api/order-refunds", body: async f => ({ id: (await returnFor(f, f.cashPaidOrder))?.id, confirmReturned: true, drawer: "original" }), expect: [200],
       check: async (d, f) => {
         const back = await returnFor(f, f.cashPaidOrder);
-        return d.completed && back?.status === "succeeded" && back.confirmed_by === "demo@tabletap.dev" && back.payout_actor === "demo@tabletap.dev"
+        return d.completed && back?.status === "succeeded" && back.confirmed_by === "demo@tabletap.shop" && back.payout_actor === "demo@tabletap.shop"
           || "the return was not confirmed with its manager and payout drawer";
       } },
 

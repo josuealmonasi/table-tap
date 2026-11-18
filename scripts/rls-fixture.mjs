@@ -13,7 +13,7 @@
 
 /** The line every fixture order carries, and the name on its cash payment. */
 const MARK = "rls fixture";
-const ACTOR = "rls-fixture@tabletap.dev";
+const ACTOR = "rls-fixture@tabletap.shop";
 /** The fixture's loyalty card — a valid code nobody could be handed. */
 const CARD = "RSFXTEST0000";
 // The same alphabet as a card: customer_accounts.code refuses anything else.

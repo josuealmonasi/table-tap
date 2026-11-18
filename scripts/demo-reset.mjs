@@ -50,4 +50,4 @@ for (const [name, file] of targets) {
   }
 }
 
-console.log("\nDemo Bistro rebuilt. Login: demo@tabletap.dev; DEMO_PASSWORD is in each target's env file.\n");
+console.log("\nDemo Bistro rebuilt. Login: demo@tabletap.shop; DEMO_PASSWORD is in each target's env file.\n");

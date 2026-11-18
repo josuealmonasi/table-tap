@@ -40,12 +40,12 @@ export const DEMO_RESTAURANT = "Demo Bistro";
 // Read when the seeder runs, after its caller loaded the env file: production's
 // demo logins can carry a password of their own (feed-demo).
 export const demoPassword = () => loginSecret("DEMO_PASSWORD");
-export const DEMO_OWNER = { email: "demo@tabletap.dev", name: "Diego Owner" };
+export const DEMO_OWNER = { email: "demo@tabletap.shop", name: "Diego Owner" };
 export const DEMO_TEAM = [
-  { email: "demo-manager@tabletap.dev", role: "manager", name: "María Manager" },
-  { email: "demo-waiter@tabletap.dev", role: "waiter", name: "Walter Waiter" },
-  { email: "demo-cashier@tabletap.dev", role: "cashier", name: "Carmen Cashier" },
-  { email: "demo-kitchen@tabletap.dev", role: "kitchen", name: "Carlos Kitchen" },
+  { email: "demo-manager@tabletap.shop", role: "manager", name: "María Manager" },
+  { email: "demo-waiter@tabletap.shop", role: "waiter", name: "Walter Waiter" },
+  { email: "demo-cashier@tabletap.shop", role: "cashier", name: "Carmen Cashier" },
+  { email: "demo-kitchen@tabletap.shop", role: "kitchen", name: "Carlos Kitchen" },
 ];
 const DEMO_EMAILS = [DEMO_OWNER.email, ...DEMO_TEAM.map(t => t.email)];
 
@@ -634,7 +634,7 @@ async function seedDemo(pg, production) {
     );
     await pg.query(
       `insert into payments (restaurant_id, order_id, amount, method, actor_email, created_at)
-       values ($1, $2, $3, $5, 'demo-cashier@tabletap.dev', $4)`,
+       values ($1, $2, $3, $5, 'demo-cashier@tabletap.shop', $4)`,
       [rid, sale.id, subtotal, at, method],
     );
     if (method === "card") lateCard = { at, amount: subtotal };
@@ -642,7 +642,7 @@ async function seedDemo(pg, production) {
     // and `pnpm money` holds it to the ledger.
     await pg.query(
       `insert into user_logs (restaurant_id, actor_email, entity, action, detail, created_at)
-       values ($1, 'demo-cashier@tabletap.dev', 'bill', 'paid', $2, $3)`,
+       values ($1, 'demo-cashier@tabletap.shop', 'bill', 'paid', $2, $3)`,
       [rid, `code=ORD-${sale.id.replace(/-/g, "").slice(0, 4).toUpperCase()} amount=${subtotal.toFixed(2)} method=${method}`, at],
     );
   }
@@ -656,7 +656,7 @@ async function seedDemo(pg, production) {
     const lateNet = round2(lateCard.amount * (1 - 3.5 / 100));
     await pg.query(
       `insert into terminal_deposits (restaurant_id, sales_day, currency, expected, received, recorded_by, created_at)
-       values ($1, $2, 'MXN', $3, $4, 'demo-manager@tabletap.dev', $5)
+       values ($1, $2, 'MXN', $3, $4, 'demo-manager@tabletap.shop', $5)
        on conflict (restaurant_id, sales_day, currency) where currency is not null do nothing`,
       [rid, day, expected, round2(expected + lateNet), legacyTerminal.depositAt],
     );
@@ -1023,21 +1023,21 @@ async function seedDemo(pg, production) {
   const { rows: [closedShift] } = await pg.query(
     `insert into cash_shifts (restaurant_id, opened_by, opened_at, opening_amount, closed_by, closed_at,
                               counted_cash, expected_cash, difference, difference_note, explained_by)
-     values ($1, 'demo-cashier@tabletap.dev', now() - interval '50 minutes', 200,
-             'demo-cashier@tabletap.dev', now() - interval '40 minutes', 180, 200, -20,
-             'Di cambio de más a la mesa 4', 'demo-cashier@tabletap.dev') returning id`,
+     values ($1, 'demo-cashier@tabletap.shop', now() - interval '50 minutes', 200,
+             'demo-cashier@tabletap.shop', now() - interval '40 minutes', 180, 200, -20,
+             'Di cambio de más a la mesa 4', 'demo-cashier@tabletap.shop') returning id`,
     [rid],
   );
   const { rows: [openShift] } = await pg.query(
     `insert into cash_shifts (restaurant_id, opened_by, opened_at, opening_amount)
-     values ($1, 'demo-cashier@tabletap.dev', now() - interval '30 minutes', 250) returning id`,
+     values ($1, 'demo-cashier@tabletap.shop', now() - interval '30 minutes', 250) returning id`,
     [rid],
   );
   await bulkInsert(
     pg,
     "cash_movements",
     ["restaurant_id", "kind", "amount", "note", "actor_email", "shift_id"],
-    [[rid, "withdrawal", 120, "Pago al proveedor de verduras", "demo-cashier@tabletap.dev", openShift.id]],
+    [[rid, "withdrawal", 120, "Pago al proveedor de verduras", "demo-cashier@tabletap.shop", openShift.id]],
   );
 
   // A counter product and a kitchen printer with a ticket already through it,

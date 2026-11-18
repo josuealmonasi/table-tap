@@ -29,7 +29,7 @@ const LADDER = [
 ];
 const GOAL = LADDER[LADDER.length - 1].visits;
 const REWARD = LADDER[LADDER.length - 1].reward;
-const FLOOR = ["demo-waiter@tabletap.dev", "demo-cashier@tabletap.dev", "demo-manager@tabletap.dev"];
+const FLOOR = ["demo-waiter@tabletap.shop", "demo-cashier@tabletap.shop", "demo-manager@tabletap.shop"];
 
 // The demo restaurant's own calendar, the one a stamp is dated by. The first
 // version dated visits in UTC: after six in the evening in Mexico City, "one

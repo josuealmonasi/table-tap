@@ -128,16 +128,16 @@ pnpm dev
 
   | login | plan | what it is for |
   | --- | --- | --- |
-  | `test1@tabletap.dev` | **Carta** (free) | The gates. Table QRs fall back to the counter menu, coupons and promotions are refused, the dish ceiling bites. It keeps the tables and dishes the seed built, which is what a real downgrade looks like. |
-  | `test2@tabletap.dev` | **Servicio** | The entry paid tier with tables: open bills, promotions, the visit card, customer accounts. No coupons, no menu schedules. |
-  | `test3@tabletap.dev` | **Casa** | Everything that is buyable — coupons, menu schedules, staff discounts, a year of analytics. |
-  | `test4@tabletap.dev` | **Grupo** | What the top tier unlocks, before the tier itself is finished. |
-  | `test5@tabletap.dev` | **Servicio, trial expired yesterday** | A lapsed trial without waiting thirty days for one: the app settles it to Carta on the first request, exactly as it would in life. |
+  | `test1@tabletap.shop` | **Carta** (free) | The gates. Table QRs fall back to the counter menu, coupons and promotions are refused, the dish ceiling bites. It keeps the tables and dishes the seed built, which is what a real downgrade looks like. |
+  | `test2@tabletap.shop` | **Servicio** | The entry paid tier with tables: open bills, promotions, the visit card, customer accounts. No coupons, no menu schedules. |
+  | `test3@tabletap.shop` | **Casa** | Everything that is buyable — coupons, menu schedules, staff discounts, a year of analytics. |
+  | `test4@tabletap.shop` | **Grupo** | What the top tier unlocks, before the tier itself is finished. |
+  | `test5@tabletap.shop` | **Servicio, trial expired yesterday** | A lapsed trial without waiting thirty days for one: the app settles it to Carta on the first request, exactly as it would in life. |
 - Customer menu: `http://localhost:3000/r/<restaurantId>/t/<tableId>` — `pnpm db:reset`
   prints a ready-to-open demo URL.
 - **Presentation data:** `pnpm db:mock` builds "Demo Bistro" — a fully populated
   restaurant to demo every feature (orders board, analytics, service requests,
-  staff). Logins: `demo@tabletap.dev` (owner), `demo-manager@`, `demo-waiter@`,
+  staff). Logins: `demo@tabletap.shop` (owner), `demo-manager@`, `demo-waiter@`,
   `demo-cashier@`, `demo-kitchen@`, using `DEMO_PASSWORD` from `.env.development.local`.
   Run `pnpm db:dropmock` to remove it again.
 

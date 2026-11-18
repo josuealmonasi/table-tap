@@ -149,7 +149,7 @@ export function loyaltyCases(fx) {
         const { data: card } = await f.admin.from("loyalty_cards")
           .insert({ restaurant_id: rid, code: "PAVSEDXTEST0", goal: 2 }).select("id").single();
         await f.admin.from("loyalty_visits").insert(["2025-01-01", "2025-01-02"].map(visit_day => ({
-          card_id: card.id, restaurant_id: rid, visit_day, actor_email: "api@tabletap.dev",
+          card_id: card.id, restaurant_id: rid, visit_day, actor_email: "api@tabletap.shop",
         })));
         f.pausedCard = card.id;
         const restoreProgram = await f.withLoyaltyOff();
@@ -237,13 +237,13 @@ export function loyaltyCases(fx) {
         await f.admin.from("loyalty_cards").delete().eq("code", "SPNTXTEST000");
         const { data: card } = await f.admin.from("loyalty_cards")
           .insert({ restaurant_id: rid, code: "SPNTXTEST000", goal: 2 }).select("id").single();
-        await f.admin.from("loyalty_visits").insert({ card_id: card.id, restaurant_id: rid, visit_day: "2025-01-01", actor_email: "api@tabletap.dev" });
+        await f.admin.from("loyalty_visits").insert({ card_id: card.id, restaurant_id: rid, visit_day: "2025-01-01", actor_email: "api@tabletap.shop" });
         const { data: visit } = await f.admin.from("loyalty_visits").insert({
-          card_id: card.id, restaurant_id: rid, visit_day: today, actor_email: "api@tabletap.dev",
+          card_id: card.id, restaurant_id: rid, visit_day: today, actor_email: "api@tabletap.shop",
           created_at: new Date(Date.now() - 60_000).toISOString(),
         }).select("id").single();
         await f.admin.from("loyalty_redemptions").insert({
-          card_id: card.id, restaurant_id: rid, visits_used: 2, reward: "api", actor_email: "api@tabletap.dev",
+          card_id: card.id, restaurant_id: rid, visits_used: 2, reward: "api", actor_email: "api@tabletap.shop",
         });
         f.spentVisit = visit.id;
         return () => f.admin.from("loyalty_cards").delete().eq("id", card.id);

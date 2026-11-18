@@ -20,7 +20,7 @@ export function inventoryCases(fx) {
       check: async (d, f) => {
         const { data } = await f.admin.from("ingredient_counts").select("counted, expected, counted_by").eq("ingredient_id", f.flour);
         return d.results?.[0]?.expected === null && data?.length === 1 && Number(data[0].counted) === 5000
-          && data[0].expected === null && data[0].counted_by === "demo-manager@tabletap.dev" || `stored ${JSON.stringify(data)}`;
+          && data[0].expected === null && data[0].counted_by === "demo-manager@tabletap.shop" || `stored ${JSON.stringify(data)}`;
       } },
     { name: "POST /api/costs/purchases (two packs at a new price)", as: "owner", method: "POST",
       path: "/api/costs/purchases", body: (_f, saved) => ({ ingredientId: saved.flour, packs: "2", total: "50", packSize: 1000 }),
@@ -42,7 +42,7 @@ export function inventoryCases(fx) {
         const { data } = await f.admin.from("waste_entries").select("quantity, reason, cost, recorded_by").eq("id", d.id).single();
         if (Object.hasOwn(d, "cost")) return "the kitchen received a private waste cost";
         return Number(data.quantity) === 500 && data.reason === "spoiled" && Number(data.cost) === 12.5
-          && data.recorded_by === "demo-kitchen@tabletap.dev" || `stored ${JSON.stringify(data)}`;
+          && data.recorded_by === "demo-kitchen@tabletap.shop" || `stored ${JSON.stringify(data)}`;
       } },
     { name: "POST /api/costs/counts (compared with the count, the delivery and the waste)", as: "owner", method: "POST",
       path: "/api/costs/counts", body: (_f, saved) => ({ counts: [{ ingredientId: saved.flour, counted: "6400" }] }),

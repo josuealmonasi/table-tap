@@ -19,7 +19,7 @@ export function cashCases(fx) {
       path: "/api/cash-shift", body: { action: "open", amount: "1,250.50" }, expect: [200],
       check: async (d, f) => {
         const { data } = await f.admin.from("cash_shifts").select("opening_amount, opened_by, closed_at").eq("id", d.id).maybeSingle();
-        return Number(data?.opening_amount) === 1250.5 && data?.opened_by === "demo-cashier@tabletap.dev" && data?.closed_at === null
+        return Number(data?.opening_amount) === 1250.5 && data?.opened_by === "demo-cashier@tabletap.shop" && data?.closed_at === null
           || `stored ${JSON.stringify(data)}`;
       } },
     { name: "POST /api/cash-shift (a second one while it is open)", as: "manager", method: "POST",
@@ -80,7 +80,7 @@ export function cashCases(fx) {
           .select("closed_by, counted_cash, expected_cash, difference").eq("id", d.id).maybeSingle();
         if (Number(d.expected) !== 1250.5) return `expected ${d.expected}, not 1250.50`;
         if (Number(d.difference) !== -250.5) return `a difference of ${d.difference}, not -250.50`;
-        return data?.closed_by === "demo-cashier@tabletap.dev" && Number(data.counted_cash) === 1000
+        return data?.closed_by === "demo-cashier@tabletap.shop" && Number(data.counted_cash) === 1000
           && Number(data.expected_cash) === 1250.5 && Number(data.difference) === -250.5
           || `stored ${JSON.stringify(data)}`;
       } },
@@ -93,7 +93,7 @@ export function cashCases(fx) {
       check: async (_d, f) => {
         const { data } = await f.admin.from("cash_shifts").select("difference_note, explained_by")
           .eq("restaurant_id", r).eq("difference_note", `${MARK} change`).maybeSingle();
-        return data?.explained_by === "demo-cashier@tabletap.dev" || `stored ${JSON.stringify(data)}`;
+        return data?.explained_by === "demo-cashier@tabletap.shop" || `stored ${JSON.stringify(data)}`;
       } },
     { name: "POST /api/cash-shift (an explanation is given once)", as: "manager", method: "POST",
       path: "/api/cash-shift", body: (_f, saved) => ({ action: "explain", id: saved.cashShift, note: "rewritten" }),

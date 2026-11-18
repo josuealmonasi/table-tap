@@ -22,12 +22,12 @@ import { loginSecret } from "./login-secrets.mjs";
  * demo restaurant with a short menu.
  */
 export const TEST_USERS = [
-  { email: "test1@tabletap.dev", restaurantName: "Test Restaurant 1", plan: "carta" },
-  { email: "test2@tabletap.dev", restaurantName: "Test Restaurant 2", plan: "servicio" },
-  { email: "test3@tabletap.dev", restaurantName: "Test Restaurant 3", plan: "casa" },
-  { email: "test4@tabletap.dev", restaurantName: "Test Restaurant 4", plan: "grupo" },
+  { email: "test1@tabletap.shop", restaurantName: "Test Restaurant 1", plan: "carta" },
+  { email: "test2@tabletap.shop", restaurantName: "Test Restaurant 2", plan: "servicio" },
+  { email: "test3@tabletap.shop", restaurantName: "Test Restaurant 3", plan: "casa" },
+  { email: "test4@tabletap.shop", restaurantName: "Test Restaurant 4", plan: "grupo" },
   {
-    email: "test5@tabletap.dev",
+    email: "test5@tabletap.shop",
     restaurantName: "Test Restaurant 5",
     plan: "servicio",
     // Its trial ran out yesterday: the account for showing what a lapsed
@@ -38,14 +38,14 @@ export const TEST_USERS = [
 
 // Team logins, re-linked to their restaurants idempotently on every seed.
 export const TEAM_LOGINS = [
-  { email: "manager1@tabletap.dev", role: "manager", restaurant: "Test Restaurant 1" },
-  { email: "kitchen1@tabletap.dev", role: "kitchen", restaurant: "Test Restaurant 1" },
+  { email: "manager1@tabletap.shop", role: "manager", restaurant: "Test Restaurant 1" },
+  { email: "kitchen1@tabletap.shop", role: "kitchen", restaurant: "Test Restaurant 1" },
   // A second owner, on Casa: Carta's two-person team limit is already taken by
   // manager1 and kitchen1 above, and the staff ceiling refused a third, which
   // failed every `pnpm db:reset` before the platform admin was linked.
-  { email: "owner2@tabletap.dev", role: "owner", restaurant: "Test Restaurant 3" },
-  { email: "manager2@tabletap.dev", role: "manager", restaurant: "Test Restaurant 2" },
-  { email: "kitchen2@tabletap.dev", role: "kitchen", restaurant: "Test Restaurant 2" },
+  { email: "owner2@tabletap.shop", role: "owner", restaurant: "Test Restaurant 3" },
+  { email: "manager2@tabletap.shop", role: "manager", restaurant: "Test Restaurant 2" },
+  { email: "kitchen2@tabletap.shop", role: "kitchen", restaurant: "Test Restaurant 2" },
 ];
 
 /**
