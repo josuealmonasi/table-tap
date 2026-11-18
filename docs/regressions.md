@@ -8267,4 +8267,10 @@ Signing up started a free month of Servicio and, at its end, a quiet fall back
 to Carta. The only trace was a line on the Plan page, so the owner read the
 trial as being put on a plan without asking. The owner now gets a welcome once
 and a days-left banner everywhere. Check: `trial-notice.spec.ts`.
+## "*" did not match a branch with a slash (2026-11-18)
+
+#691 turned previews off with `"*": false`, but minimatch's `*` stops at `/`
+and every branch here is `claude/…` or `codex/…`, so every push still built a
+preview and the day's cap refused #692's production deploy. It is `"**"` now.
+Check: `invariants/operations.spec.ts`.
 
