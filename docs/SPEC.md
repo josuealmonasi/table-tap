@@ -3550,9 +3550,13 @@ still told, and still gets its 30 days.
 
 ### Database behavior probes
 
-The probes gate runs development database behavior checks for money and held
-sales in rolled-back transactions, and checks that complete coverage reads do
-not write. It fails if a probe fails or cannot run. Schema and money-path
-changes select it in the gate planner. The journal race and RLS before/after
-equivalence probes remain separate until their fixture and baseline needs can
-be met safely.
+`pnpm probes` runs the development database behavior checks: the money and
+split cases (`probe-money-behavior`), held sales (`probe-held-resolve`) and that
+coverage reads never write (`probe-coverage-no-write`), 41 cases, each in a
+transaction that is rolled back. It refuses production. A probe that fails,
+cannot connect or never starts fails the gate, and the runner ends with one
+`PROBES PASSED` / `PROBES FAILED` line. It runs on GitHub in every gates run
+(it needs only the database) and locally when a change reaches `supabase/` or a
+money path. The journal race and RLS before/after equivalence probes stay
+separate: the first commits fixtures, the second needs a baseline from before
+the schema change.

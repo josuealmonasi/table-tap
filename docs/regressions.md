@@ -8225,3 +8225,13 @@ rolled-back money and held-sale cases and the coverage read check. A failed or
 unstartable probe fails the gate. The journal race probe commits fixtures and
 still needs separate fixture isolation; the RLS equivalence probe needs a
 baseline from before a schema change, so neither belongs in this runner yet.
+
+## The first real run of the probes found a stale expectation (2026-11-18)
+
+The probes gate was written without ever running against PostgreSQL. Its first
+run passed 40 of 41: N5 still expected `forbidden` when a restaurant has turned
+splitting off, but audit #648 made the database answer `split_disabled`, which
+the route, the hook and their tests all handle. The probe was wrong, not the
+code. Run unchanged against an unreachable database, every probe errored and the
+runner exited 1. It now runs on GitHub in every gates run.
+

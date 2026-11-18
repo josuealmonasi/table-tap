@@ -15,17 +15,20 @@ function run(name) {
 
 export async function runProbes(probes = PROBES, execute = run) {
   if (!probes.length) return false;
-  let passed = true;
+  const failed = [];
   for (const probe of probes) {
     try {
       const result = await execute(probe);
-      if (result.code !== 0) passed = false;
+      if (result.code !== 0) failed.push(`${probe} (exit ${result.code})`);
     } catch (error) {
       console.error(`FAIL ${probe}: ${error.message}`);
-      passed = false;
+      failed.push(`${probe} (did not start)`);
     }
   }
-  return passed;
+  // One line a reader cannot miss: a probe that died before printing anything
+  // otherwise leaves only a stack trace, and no PASS line to notice is absent.
+  console.log(failed.length ? `PROBES FAILED: ${failed.join(", ")}` : `PROBES PASSED: ${probes.length} of ${probes.length}`);
+  return failed.length === 0;
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

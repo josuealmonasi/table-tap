@@ -6,7 +6,8 @@ export default async function cases(c, check) {
     await db.query('update restaurants set split_enabled=false where id=$1', [restaurant]);
     assert.equal((await start(f, 100, ref)).outcome, 'repeat');
     const fresh = await table();
-    assert.equal((await start(fresh, 100)).outcome, 'forbidden');
+    // audit #648: a disabled restaurant answers its own refusal, not 'forbidden'.
+    assert.equal((await start(fresh, 100)).outcome, 'split_disabled');
     assert.equal((await slot(opened.split, [0], 5000, id(), false)).outcome, 'collected');
     assert.equal((await slot(opened.split, [1], 5000, id(), false)).outcome, 'collected');
     assert.equal((await state(f.orderId)).paid, true);
