@@ -13,3 +13,10 @@ it("keeps a price change and every eligible notice in one service-only transacti
   expect(sql).toContain("revoke all on function public.schedule_plan_price_change(text, numeric, timestamptz, text) from public, anon, authenticated");
   expect(sql).toContain("grant execute on function public.schedule_plan_price_change(text, numeric, timestamptz, text) to service_role");
 });
+
+it("adds the retry snapshot and queue age without widening access", () => {
+  const sql = readFileSync("supabase/schema.sql", "utf8");
+  expect(sql).toContain("alter table plan_price_notices add column if not exists mail_body jsonb;");
+  expect(sql).toContain("alter table plan_price_notices add column if not exists created_at timestamptz not null default now();");
+  expect(sql).toContain("revoke all on plan_price_notices from anon, authenticated, public;");
+});

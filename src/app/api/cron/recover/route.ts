@@ -10,6 +10,8 @@ import { recoverFees } from "@/lib/recovery/fees";
 import { recoverRefunds } from "@/lib/recovery/refunds";
 import { recoverSubscriptions } from "@/lib/recovery/subscriptions";
 import { recoverDisputes } from "@/lib/recovery/disputes";
+import { recoverPriceNotices } from "@/lib/recovery/price-notices";
+import { recoverPriceMoves, recoverPriceCatalogue } from "@/lib/recovery/price-moves";
 import { signedRecoveryAuthorized } from "@/lib/recovery/signed-auth";
 import { schedulerHealth } from "@/lib/recovery/health.mjs";
 import { purgeAccounting } from "@/lib/recovery/accounting-purge";
@@ -46,7 +48,12 @@ async function recover(request: Request) {
   // claimed until the queue is empty or the budget runs out (Codex review of
   // #622). Never throws; it stops between groups and releases what it claimed.
   const tickets = drainTickets().catch(() => null);
-  // A sixth sequential budget would exceed the route limit.
+  // More sequential budgets would exceed the route limit.
+  const priceNotices = isolateJob("price_notices", () => recoverPriceNotices(recoveryContext()));
+  // Moves run after notices are sent (they only touch notified subscribers),
+  // and the catalogue change once its effective date has arrived.
+  const priceMoves = priceNotices.then(() => isolateJob("price_moves", () => recoverPriceMoves(recoveryContext())));
+  const priceCatalogue = isolateJob("price_catalogue", () => recoverPriceCatalogue(recoveryContext()));
   const accounting = isolateJob("accounting", () => purgeAccounting(recoveryContext()));
   const jobs: Record<string, RecoveryJob> = { stock: recoverStock, refunds: recoverRefunds, fees: recoverFees, subscriptions: recoverSubscriptions, disputes: recoverDisputes };
   const results: Record<string, RecoveryResult> = {};
@@ -55,6 +62,12 @@ async function recover(request: Request) {
     results[name] = await isolateJob(name, () => job(recoveryContext()));
     console.info("Scheduled recovery", { job: name, ...results[name] });
   }
+  results.price_notices = await priceNotices;
+  console.info("Scheduled recovery", { job: "price_notices", ...results.price_notices });
+  results.price_moves = await priceMoves;
+  console.info("Scheduled recovery", { job: "price_moves", ...results.price_moves });
+  results.price_catalogue = await priceCatalogue;
+  console.info("Scheduled recovery", { job: "price_catalogue", ...results.price_catalogue });
   // The purge counts toward a healthy run like every other job.
   results.accounting = await accounting;
   console.info("Scheduled recovery", { job: "accounting", ...results.accounting });

@@ -3021,6 +3021,13 @@ votes: "Votos",
     blocked: "Permite las ventanas emergentes para imprimir o guardar tu recibo.",
     failed: "No pudimos abrir tu recibo. Intenta de nuevo.",
   },
+  priceNoticeMail: {
+    subject: "Un cambio en el precio de tu plan",
+    intro: "Tu precio mensual actual es {current}. El nuevo precio mensual será {next}.",
+    introNoCurrent: "El nuevo precio mensual de tu plan será {next}.",
+    after: "El nuevo precio se aplicará a tu primera factura a partir del {date}.",
+    button: "Ver tu plan",
+  },
   tierMail: {
     subject: "{restaurant}: tu plan {plan} está listo para pagar",
     intro: "Activamos el plan {plan} para {restaurant}. Tu equipo ya puede usarlo. Para conservarlo, págalo antes del {date}.",
