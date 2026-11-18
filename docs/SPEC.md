@@ -2246,6 +2246,28 @@ questions directly. `next.config.ts` refuses that setting on Vercel, so a
 deployed build always subscribes. And `pnpm db:mock` writes the demo's ~300
 closed sittings in two statements rather than two per sitting.
 
+The third is to not spend it at all. On every pull request
+`.github/workflows/gates.yml` runs `api`, `money`, `attack`, `rls`, `roles`
+and `smoke` on GitHub's runners, one job each, and `layout`, `promises` and
+`dialogs` on the pages `scripts/gate-plan.mjs` says the change reaches (the
+core screens — orders, bills, POS, accounts, settings, the diner menu — when
+it reaches everything; `scripts/gate-scope-ci.mjs`). Each job starts its own
+throwaway Supabase with the CLI (`ci/supabase/config.toml`), builds it with
+`pnpm db:create`, `db:seed` and `db:mock` from `supabase/schema.sql`, and
+serves the run's one production build against it (built once by a `build` job
+and shared as an artifact; each job checks the build inlined its own stack's
+URL and key). `scripts/ci-env.mjs` writes the only env
+file the gates read, refuses to run off GitHub Actions or over an existing
+file, and refuses any API or database address that is not the runner's
+loopback, so CI cannot reach the dev or production projects. Login passwords
+are made per job. The CSP names that loopback origin only when the build
+points at one (`loopbackDatabase` in `src/lib/csp.ts`); a deployed build's
+policy is unchanged. Stripe is the one outside service: with the
+`STRIPE_TEST_SECRET` repository secret (a test key) it is used; without it,
+`GATE_NO_STRIPE=1` and the cases that need Stripe print
+`skipped: no STRIPE_TEST_SECRET` by name and are counted in the job summary —
+never passed.
+
 Every check plants what it needs rather than depending on what the demo data
 happens to hold, and removes it afterwards. A check that finds nothing to
 attack passes without asking anything — the RLS sweep did exactly that on twelve

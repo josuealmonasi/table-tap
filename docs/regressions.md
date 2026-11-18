@@ -7718,3 +7718,32 @@ The scheduler checks the accounting result. The purge uses the existing
 `retained_at`, excludes live restaurants from both deletion and pending counts,
 and reports the age since the retention deadline. The SQL contract test reads
 the function itself; the database probe must exercise the actual predicate.
+## Rate limits that capped the answer, not the cost (security review 2026-11-17)
+
+Three limits each guarded one side of something that had to agree:
+- The floor's membership poll started the session check and two membership
+  reads before awaiting its limiter, to save a round trip. A caller over the
+  limit got 429 but still cost auth plus two reads per request. The limiter is
+  now awaited first.
+- Diner card-email changes were counted per network address, removals included.
+  One diner on the restaurant's Wi-Fi could spend the shared allowance and
+  leave everyone there unable to remove their own address for an hour. Removal
+  probes nothing and withdraws consent, so it is no longer counted; linking is.
+- Dispute history paged through the restaurant's whole dispute book and
+  checked each case's ownership for any request, including one with no order.
+  An empty request now answers `{}` without reading, and reads are capped at 30
+  a minute per manager.
+
+Check: `src/lib/__tests__/secreview-1117-limits.spec.ts` (fails on the old code
+for the first two; the third asserts no dispute read happens).
+## Android layout — separators stay with the word before them
+
+The GitHub layout gate renders text like Linux/Android Chrome, which wraps
+where macOS did not. A " · " joint could start a line (check payment, divided
+bill, part receipt), the dish or combo name ran up against its price (3px), and
+the account statement's order lines painted 1px into each other. Every inline
+" · " now joins with no-break spaces on both sides of the dot (a line can neither start nor end with one); the dish/combo head is
+`.tt-detail-head` (elastic name with `min-width: 0` and `overflow-wrap`, fixed
+price); `.tt-statement-lines` spaces its lines with a parent `gap`.
+
+The i18n strings (`es.ts`, `en.ts`) join with the same no-break spaces around the dot.
