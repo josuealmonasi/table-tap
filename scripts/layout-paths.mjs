@@ -190,7 +190,7 @@ export const DINER = [
   {
     name: "dish detail",
     expect: { es: "Agregar al carrito", en: "Add to cart" },
-    steps: [{ click: { es: "[aria-label^='Abrir ']", en: "[aria-label^='Open ']" } }],
+    steps: [{ dishDetail: true }],
     escape: 0,
   },
   {

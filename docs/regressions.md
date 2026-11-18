@@ -8,6 +8,14 @@ table owed MX$105 and the diner's screen said it owed nothing.
 So this is not a style guide. It is the list of things that have actually bitten
 us, and what now catches each one.
 
+## Dish choices stay above the cart button
+
+The scrolling choices and the pinned cart button must keep their distance. A
+quantity deal made the button wrap and an extra could sit within 4px of it. The
+dish clips its scrolling content above the footer, whose padding keeps the
+controls apart. `dish-footer-gap.spec.ts` pins the structure; the layout case
+chooses the promoted dish with the most extras and checks both languages.
+
 ## Recovery requests carry one-use proof
 
 The database queue and recovery route must agree on a signature, timestamp and
@@ -83,6 +91,7 @@ and that a new party cannot see the previous party's waiting phones.
 | Rule | The bug it came from |
 | One-click ticket unsubscribe retries return the same success | A cleared or unknown token returned 404 to mail providers; `ticket-stop-one-click.spec.ts` checks retries, invalid forms and the separate confirmation response |
 |---|---|
+| Dish choices and the pinned cart button keep their distance | The deal button wrapped beside a scrolling extra; `dish-footer-gap.spec.ts` and the dish detail layout case cover the structure and the rendered spacing |
 | Earlier acceptance rows and the backfill index agree | Relabeling every old row as a backfill could stop schema application; `acceptance-schema.spec.ts` pins the migration |
 | Terms evidence and the privacy notice agree | Acceptance saved request network details despite the notice; `acceptance-history.spec.ts` and `rate-limit-key.spec.ts` forbid collection |
 | Terms history access and kitchen denial agree | A table grant allowed authenticated reads to reach RLS; `acceptance-schema.spec.ts` pins service-only access |
