@@ -186,7 +186,7 @@ export function menuSettingsCases(fx) {
               items: [{ itemId: dish.id, qty: 1 }] },
       expect: [400], expectError: /y un precio|and a price/i },
     { name: "POST /api/legal/accept", as: "owner", method: "POST", path: "/api/legal/accept",
-      body: {}, expect: [200] },
+      fixture: fx.accountFixture, body: {}, expect: [200] },
     { name: "GET  /api/connect/status", as: "owner", method: "GET", path: "/api/connect/status",
       expect: [200] },
   ];

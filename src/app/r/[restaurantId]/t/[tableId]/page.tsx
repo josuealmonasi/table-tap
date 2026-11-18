@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { createAdminClient } from "@/lib/supabase/admin";
 import OrderingApp from "@/components/customer/OrderingApp";
 import MenuSkeleton from "@/components/customer/MenuSkeleton";
+import { loadPlaceIdentity } from "@/lib/place-identity";
 import { menuShowsLoyalty, loadCoverState, loadOrderingData, unwrap } from "@/lib/ordering-data";
 import { can } from "@/lib/plan";
 import { getPlan } from "@/lib/plan-server";
@@ -24,7 +25,7 @@ async function Menu({
   // readable with the publishable key on purpose — listable table ids would let
   // anyone see any table's bill, or charge an order to it — so the QR code the
   // diner scanned names the table; only approved membership opens its bill.
-  const [data, tableRes, plan] = await Promise.all([
+  const [data, tableRes, plan, identity] = await Promise.all([
     loadOrderingData(restaurantId),
     createAdminClient()
       .from("restaurant_tables")
@@ -33,6 +34,7 @@ async function Menu({
       .eq("restaurant_id", restaurantId)
       .single(),
     getPlan(restaurantId),
+    loadPlaceIdentity(restaurantId),
   ]);
 
   // An unknown table id is fine — the menu still works, the order just isn't
@@ -77,6 +79,7 @@ async function Menu({
       receipts={data.receipts}
       loyalty={seatedAt && data.loyalty ? (sitting ? { ...data.loyalty, pass: "" } : offerAt(data.loyalty, { table: seatedAt.id })) : data.loyalty}
       dietaryTags={data.dietaryTags}
+      identity={identity}
     />
   );
 }

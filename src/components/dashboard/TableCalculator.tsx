@@ -100,9 +100,9 @@ export default function TableCalculator({
 
   const { receipts, rememberReceipt } = useStaffSlotReceipts(`${open}:${tableId}`);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (signal?: AbortSignal) => {
     try {
-      const res = await fetch(`/api/table-bill?tableId=${tableId}`);
+      const res = await fetch(`/api/table-bill?tableId=${tableId}`, { signal });
       const data = res.ok ? await res.json() : null;
       setBill(data?.outstanding ?? null);
       setSplits(data?.splits ?? []);
@@ -229,7 +229,7 @@ export default function TableCalculator({
       <SlotReceiptPrints receipts={receipts} />
 
       {lost ? (
-        <><p className="tt-muted">{t("settle.failed")}</p><button type="button" className="tt-btn tt-btn-ghost" onClick={load}>{t("settle.retry")}</button></>
+        <><p className="tt-muted">{t("settle.failed")}</p><button type="button" className="tt-btn tt-btn-ghost" onClick={() => void load()}>{t("settle.retry")}</button></>
       ) : !bill ? (
         <p className="tt-muted">{t("common.loading")}</p>
       ) : owed <= 0 ? (

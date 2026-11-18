@@ -36,14 +36,10 @@ export default function CardEmail({ code, diner = false, initialEmail, disabled 
       });
       const answer = await res.json();
       if (!res.ok) {
-        setError(res.status === 409 && answer.outcome === "taken" && typeof answer.suffix === "string"
-          ? t(diner ? "cardEmail.takenDiner" : "cardEmail.taken", { suffix: answer.suffix })
-          : t(res.status === 400 ? "cardEmail.invalid" : "cardEmail.failed"));
+        setError(t(res.status === 400 ? "cardEmail.invalid" : "cardEmail.failed"));
         return;
       }
-      // A diner is answered "submitted" whether the address was linked or is
-      // already on another card here, so the answer cannot be used to probe
-      // addresses (review access2); the note says what that means.
+      // A successful answer belongs to this card, regardless of other cards.
       if (!["removed", "saved", "submitted"].includes(answer.outcome)) throw new Error("Missing save outcome");
       const next = answer.outcome === "removed" ? null : answer.email;
       if (next !== null && typeof next !== "string") throw new Error("Missing saved email");

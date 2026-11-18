@@ -12,7 +12,7 @@ const need = definition("payment_allocations_need_backfill");
 describe("complete seed backfill is read-only", () => {
   it("skips historical reviews without new evidence before entering the backfill", () => {
     expect(need).not.toMatch(/for update|lock_restaurant_money|set_config|\b(?:insert|update|delete)\b/i);
-    expect(need.replace(/\s+/g, " ")).toContain("f.historical_review and f.status = 'review' and exists (select 1 from user_logs l");
+    expect(need.replace(/\s+/g, " ")).toContain("f.historical_review and f.status = 'review' and f.historical_import_reason is null and exists (select 1 from user_logs l");
     expect(definition("order_coverage")).toContain("if public.payment_allocations_need_backfill(p_restaurant) then");
   });
   it("keeps the receipt repair predicate identical to both backfill loops", () => {

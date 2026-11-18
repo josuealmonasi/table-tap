@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 export function loyaltyCases(fx) {
   const { restaurant, paidOrder } = fx;
   const r = restaurant.id;
+  const sharedCode = randomUUID().replaceAll("-", "").slice(0, 12).toUpperCase().replaceAll("0", "2").replaceAll("1", "3");
   return [
     // Tickets by email to the card's address (2026-11-11). An example.invalid
     // address: nothing these cases link can ever be delivered. The last case
@@ -20,6 +21,25 @@ export function loyaltyCases(fx) {
         // A boolean: the harness reads any string as the failure message.
         return (data?.email === "api-gate@example.invalid" && Boolean(data.email_consent_at && data.email_notice_version && data.email_unsubscribe))
           || `card holds ${JSON.stringify(data)}`;
+      } },
+    // The first card above already has this address. The disposable second
+    // card must save it too; cleanup runs even when the request fails.
+    { name: "POST /api/loyalty/card-email (two cards share an address)", as: "waiter", method: "POST",
+      path: "/api/loyalty/card-email", body: { code: sharedCode, email: "api-gate@example.invalid", consent: true }, expect: [200],
+      arrange: async f => {
+        const { data, error } = await f.admin.from("loyalty_cards")
+          .insert({ restaurant_id: r, code: sharedCode, goal: 8 }).select("id").single();
+        if (error) throw new Error(error.message);
+        return async () => {
+          const { error: cleanupError } = await f.admin.from("loyalty_cards").delete().eq("id", data.id);
+          if (cleanupError) throw new Error(cleanupError.message);
+        };
+      },
+      effect: async f => {
+        const { data, error } = await f.admin.from("loyalty_cards").select("code, email, email_unsubscribe")
+          .in("code", [sharedCode, fx.stampableCode]);
+        return (!error && data?.length === 2 && data.every(card => card.email === "api-gate@example.invalid" && card.email_unsubscribe)
+          && data[0].email_unsubscribe !== data[1].email_unsubscribe) || "both cards did not keep independent links";
       } },
     { name: "GET /api/loyalty/card-email (cashier: masked)", as: "cashier", method: "GET",
       path: `/api/loyalty/card-email?code=${fx.stampableCode ?? ""}`, expect: [200],

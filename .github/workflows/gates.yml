@@ -1,0 +1,209 @@
+name: Gates
+
+# The gates, on GitHub's runners instead of the shared dev project. Every job
+# starts its own throwaway Supabase in Docker, builds the schema and the demo
+# seed with the repo's own db scripts, serves a production build against it,
+# and runs one gate. Nothing in this workflow can reach the dev or production
+# databases: scripts/ci-env.mjs writes the only env file the gates read, and
+# refuses any address that is not this runner's loopback.
+#
+# Passwords are made up per job. The only outside secret is optional:
+# STRIPE_TEST_SECRET, a Stripe test key. Without it the cases that reach
+# Stripe are skipped by name ("skipped: no STRIPE_TEST_SECRET"), never passed.
+on:
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      browser:
+        description: "Browser gates: 'plan' follows the diff; 'core' runs them on the core screens regardless"
+        type: choice
+        options: [plan, core]
+        default: plan
+
+concurrency:
+  group: gates-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  # One production build for every gate job. Nine jobs each building at once
+  # also asked Google Fonts nine times at once (next/font fetches at build
+  # time), which broke builds here and in ci.yml's verify job.
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ./.github/actions/gate-stack
+        with:
+          build-only: "true"
+
+      - name: Cache the Next build
+        uses: actions/cache@v4
+        with:
+          path: .next/cache
+          key: next-gates-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-${{ github.sha }}
+          restore-keys: next-gates-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-
+
+      - name: Build
+        env:
+          NODE_OPTIONS: --max-old-space-size=6144
+        # next/font sometimes cannot parse Google Fonts' answer ("Cannot read
+        # properties of null (reading '1')"); a rerun gets a good one.
+        run: |
+          for attempt in 1 2 3; do
+            pnpm build > build.log 2>&1 && { tail -60 build.log; break; }
+            if [ "$attempt" = 3 ] || ! grep -q "An error occurred in \`next/font\`" build.log; then cat build.log; exit 1; fi
+            echo "::warning::next/font could not read Google Fonts' answer (attempt $attempt); building again"
+            sleep $((attempt * 20))
+          done
+          # What the build inlined, so each gate job can prove its own stack matches.
+          printf '%s\n%s' "$NEXT_PUBLIC_SUPABASE_URL" "$NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY" | sha256sum | cut -c1-64 > .next/gate-build-env
+
+      - name: Share the build
+        uses: actions/upload-artifact@v4
+        with:
+          name: next-build
+          path: |
+            .next
+            !.next/cache
+          include-hidden-files: true
+          retention-days: 1
+
+  # Stage 1: the gates that talk to the server and the database, unscoped.
+  gate:
+    name: ${{ matrix.gate }}
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        gate: [api, money, attack, rls, roles, smoke]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ./.github/actions/gate-stack
+        with:
+          stripe-test-secret: ${{ secrets.STRIPE_TEST_SECRET }}
+
+      - name: Run ${{ matrix.gate }}
+        timeout-minutes: 40
+        env:
+          GATE: ${{ matrix.gate }}
+        run: |
+          mkdir -p gate-output
+          set +e
+          pnpm "$GATE" 2>&1 | tee "gate-output/$GATE.txt"
+          code=${PIPESTATUS[0]}
+          set -e
+          skipped=$(grep -c "— skipped: no STRIPE_TEST_SECRET" "gate-output/$GATE.txt" || true)
+          {
+            echo "### $GATE: $([ "$code" = 0 ] && echo passed || echo "FAILED (exit $code)")"
+            [ "$skipped" -gt 0 ] && echo "$skipped case(s) skipped: no STRIPE_TEST_SECRET"
+            grep -E "^\s*(BAD|GAP|FAIL)" "gate-output/$GATE.txt" | head -30 | sed 's/^/    /'
+          } >> "$GITHUB_STEP_SUMMARY"
+          [ "$skipped" -gt 0 ] && echo "::warning title=$GATE::$skipped case(s) skipped: no STRIPE_TEST_SECRET"
+          exit "$code"
+
+      - name: Keep the output
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gate-${{ matrix.gate }}
+          path: |
+            gate-output/
+            server.log
+          if-no-files-found: ignore
+
+  # Stage 2: the browser gates, on the pages this change reaches
+  # (scripts/gate-plan.mjs). A change that reaches every screen runs them on
+  # the core screens instead — the gate budget the owner set on 2026-11-14.
+  browser:
+    name: ${{ matrix.gate }}
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    strategy:
+      fail-fast: false
+      matrix:
+        gate: [layout, promises, dialogs]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # The plan reads the import graph with TypeScript, so it needs the
+      # dependencies; the stack's own install below is then a no-op.
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11.9.0
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Scope from the plan
+        id: scope
+        env:
+          GATE: ${{ matrix.gate }}
+          BASE: origin/${{ github.base_ref || 'main' }}
+          MODE: ${{ inputs.browser || 'plan' }}
+        run: |
+          node scripts/gate-scope-ci.mjs "$GATE" "$BASE" "$MODE" | tee -a "$GITHUB_OUTPUT"
+
+      - name: Not needed by this change
+        if: steps.scope.outputs.run != 'true'
+        env:
+          GATE: ${{ matrix.gate }}
+          WHY: ${{ steps.scope.outputs.why }}
+        run: |
+          echo "skipped: $WHY"
+          echo "### $GATE: not run — $WHY" >> "$GITHUB_STEP_SUMMARY"
+
+      - if: steps.scope.outputs.run == 'true'
+        uses: ./.github/actions/gate-stack
+        with:
+          stripe-test-secret: ${{ secrets.STRIPE_TEST_SECRET }}
+          playwright: "true"
+
+      - name: Run ${{ matrix.gate }}
+        if: steps.scope.outputs.run == 'true'
+        timeout-minutes: 60
+        env:
+          GATE: ${{ matrix.gate }}
+          GATE_PAGES: ${{ steps.scope.outputs.pages }}
+          GATE_BROWSER_CONCURRENCY: "2"
+          WHY: ${{ steps.scope.outputs.why }}
+        run: |
+          mkdir -p gate-output
+          echo "Pages: $GATE_PAGES ($WHY)"
+          set +e
+          pnpm "$GATE" 2>&1 | tee "gate-output/$GATE.txt"
+          code=${PIPESTATUS[0]}
+          set -e
+          {
+            echo "### $GATE: $([ "$code" = 0 ] && echo passed || echo "FAILED (exit $code)") — $WHY"
+            grep -E "scope: " "gate-output/$GATE.txt" | head -5
+            grep -E "^\s*(BAD|GAP|FAIL)" "gate-output/$GATE.txt" | head -30 | sed 's/^/    /'
+          } >> "$GITHUB_STEP_SUMMARY"
+          exit "$code"
+
+      - name: Keep the output
+        if: always() && steps.scope.outputs.run == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: gate-${{ matrix.gate }}
+          path: |
+            gate-output/
+            server.log
+          if-no-files-found: ignore

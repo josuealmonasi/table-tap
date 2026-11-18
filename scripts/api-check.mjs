@@ -20,6 +20,7 @@ import { join } from "node:path";
 import { checkPaymentAllocations } from "./allocations-check.mjs";
 import { setup, teardown } from "./api-fixtures.mjs";
 import { cases } from "./api-cases.mjs";
+import { beginSharedCase, inheritedChange, settleSharedCase } from "./run-fixtures.mjs";
 import { refuseProduction, requireServer, retryFetch } from "./preflight.mjs";
 import { DEV_URL } from "./dev-url.mjs";
 import { apiInScope, reportScope } from "./gate-scope.mjs";
@@ -31,8 +32,10 @@ const BASE = DEV_URL;
 await requireServer(BASE);
 
 let failed = 0;
+let skippedForStripe = 0;
 const ok = m => console.log(`    ok       ${m}`);
-const bad = m => { failed++; console.log(`    BAD      ${m}`); };
+// A failure on a shared fixture also names the first case that changed it.
+const bad = m => { failed++; console.log(`    BAD      ${m}${inheritedChange()}`); };
 
 console.log("\nRequests — development\n");
 
@@ -58,6 +61,15 @@ try {
   for (const c of all) {
     if (!(chained(c) ? chainInScope : inScope.get(c))) continue;
 
+    // A case that only means something against Stripe's test mode, on a run
+    // that has no Stripe key (GitHub without STRIPE_TEST_SECRET). Skipped by
+    // name and counted, never passed: a check that cannot run is not a pass.
+    if (c.needsStripe && process.env.GATE_NO_STRIPE === "1") {
+      skippedForStripe++;
+      console.log(`    skip     ${c.name} — skipped: no STRIPE_TEST_SECRET`);
+      continue;
+    }
+
     // Some refusals only exist on the far side of a switch. `/api/split/pay`
     // turns everybody away when the restaurant has no card reader, and no
     // seeded restaurant has one — so its case for "no such split" was being
@@ -72,6 +84,7 @@ try {
     // the whole run: it used to crash the gate on case nine, and every case
     // after it went unchecked while the output read like one broken route.
     const caseFx = c.fixture ?? fx;
+    beginSharedCase();
     let restore = null;
     if (c.arrange) {
       try {
@@ -188,6 +201,8 @@ try {
     ok(`${c.name}${c.expect.length > 1 ? ` (${res.status})` : ""}`);
     } finally {
       if (restore) await restore();
+      // After the undo: a shared row this case left different is its doing.
+      await settleSharedCase(c.name);
     }
   }
 } finally {
@@ -195,5 +210,6 @@ try {
 }
 
 reportScope("api");
+if (skippedForStripe) console.log(`\n  ${skippedForStripe} case(s) skipped: no STRIPE_TEST_SECRET — they did not run, so they did not pass.`);
 console.log(failed === 0 ? "\nEvery request answers.\n" : `\n${failed} PROBLEM(S).\n`);
 process.exit(failed === 0 ? 0 : 1);

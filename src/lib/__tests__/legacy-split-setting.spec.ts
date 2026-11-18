@@ -9,7 +9,7 @@ vi.mock("@/lib/bill-data", () => ({ fetchTableBill: async () => [] }));
 vi.mock("@/lib/table-bill", () => ({ tableBill: () => ({ total: 100 }) }));
 vi.mock("@/lib/split-service", () => ({ currentSplit: async () => ({ id: "split" }) }));
 vi.mock("@/lib/rate-limit", () => ({ isRoomLimited: async () => false, isTableLimited: async () => false }));
-vi.mock("@/lib/api-error", () => ({ apiError: async (error: string, status: number) => Response.json({ error }, { status }) }));
+vi.mock("@/lib/api-error", () => ({ apiError: async (error: string, status: number, _vars?: unknown, extra?: object) => Response.json({ error, ...extra }, { status }) }));
 vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({
   rpc: async () => ({ error: null }),
   from: (table: string) => {
@@ -30,7 +30,10 @@ beforeEach(() => { s.enabled = true; s.readError = false; s.inserts = 0; });
 
 it("N5: the legacy proposal route also respects the owner's split switch", async () => {
   s.enabled = false;
-  expect((await post()).status).toBe(403); expect(s.inserts).toBe(0);
+  const res = await post();
+  expect(res.status).toBe(403); expect(s.inserts).toBe(0);
+  // Audit of #648: said as what it is, never "no permission".
+  expect(await res.json()).toEqual({ error: "apiErr.splitDisabled", code: "split_disabled" });
 });
 it("N5: an unread split switch cannot create a legacy proposal", async () => {
   s.readError = true;

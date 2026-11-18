@@ -2,7 +2,6 @@ import type Stripe from "stripe";
 import type { NextResponse } from "next/server";
 import { apiError } from "@/lib/api-error";
 import { resumeDinerAttempt } from "@/lib/diner-attempt";
-import { formatMoney } from "@/lib/format";
 import { round2 } from "@/lib/money";
 
 /** How an open page for an old share compares with what this request quotes. */
@@ -22,17 +21,17 @@ export function legacySplitQuote(session: Stripe.Checkout.Session, payable: numb
  * The diner's answer for a page that is not this quote. Every key here is
  * diner copy: `apiErr.billChanged` speaks to a waiter collecting a bill.
  */
-export async function legacySplitRefusal(quote: LegacySplitQuote, session: Stripe.Checkout.Session): Promise<NextResponse | null> {
+export async function legacySplitRefusal(quote: LegacySplitQuote): Promise<NextResponse | null> {
   if (quote === "unverified") return await apiError("apiErr.verifyOrders", 503);
-  if (quote === "tip") return await apiError("apiErr.splitOpenTip", 409,
-    { tip: formatMoney(Number(session.metadata?.settle_tip), session.currency?.toUpperCase() ?? "MXN") });
+  if (quote === "tip") return await apiError("apiErr.splitOpenTip", 409);
   if (quote === "total") return await apiError("apiErr.splitPageChanged", 409);
   return null;
 }
 
 /**
- * Close an open page whose total this share no longer owes: the diner ordered
- * more, or a waiter collected part of a later order. Before this, every Pay
+ * Close an open page with a different tip or a total this share no longer
+ * owes: the diner ordered more, or a waiter collected part of a later order.
+ * Before this, every Pay
  * was refused until Stripe's own 30-minute expiry. Stripe expires the page
  * first, so it can no longer charge; resuming the attempt then reads it back
  * as expired and closes it through `finish_diner_checkout`, which gives back

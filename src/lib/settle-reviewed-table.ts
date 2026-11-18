@@ -15,8 +15,11 @@ export async function settleReviewedTable(actor: Actor, tableId: string, body: {
   }
   // A prior receipt may have landed while closing failed. Retry only the
   // close; its coverage guard refuses a new round without taking more money.
+  // A free bill needs this choice (audit of #648, server F1): "don't send"
+  // on a comped table queued it anyway. SQL keeps the collector's choice if
+  // a receipt already covered the bill before this retry.
   if (body.expected === 0) {
-    const settled = await closeBill(actor, tableId, method, body.currency);
+    const settled = await closeBill(actor, tableId, method, body.currency, body.skipTicketEmail === true);
     return settled ? NextResponse.json({ ok: true, settled, amount: 0, tip: 0, currency: body.currency }) : await apiError("apiErr.billChanged", 409);
   }
   const result = await recordReviewed(actor, { tableId, expected: Number(body.expected), currency: body.currency, skipTicketEmail: body.skipTicketEmail === true }, Number(body.expected), 0, method, body.ref);

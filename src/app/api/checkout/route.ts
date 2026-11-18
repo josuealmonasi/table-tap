@@ -1,3 +1,4 @@
+import { suspensionRefusal } from "@/lib/restaurant-suspension";
 import { orderRequestScope } from "@/lib/order-request";
 import { NextRequest, NextResponse } from "next/server";
 import { apiError } from "@/lib/api-error";
@@ -83,7 +84,7 @@ export async function POST(req: NextRequest) {
     const { data: restaurant, error: rErr } = await supabase
       .from("restaurants")
       .select(
-        "id, currency, service_pct, service_enabled, accepting_orders, tax_pct, stripe_account_id, stripe_charges_enabled, allow_pay_later, low_stock_alerts_enabled, low_stock_threshold",
+        "id, currency, service_pct, service_enabled, accepting_orders, suspended_at, tax_pct, stripe_account_id, stripe_charges_enabled, allow_pay_later, low_stock_alerts_enabled, low_stock_threshold",
       )
       .eq("id", restaurantId)
       .single();
@@ -100,7 +101,9 @@ export async function POST(req: NextRequest) {
       if (previous) return previous;
     }
 
-    // Kill switch: the owner paused orders (maybe after this page loaded).
+    // A pause or suspension may have started after the diner opened the menu.
+    const suspended = await suspensionRefusal(restaurant.suspended_at);
+    if (suspended) return suspended;
     if (!restaurant.accepting_orders) {
       return await apiError("apiErr.notAccepting", 409);
     }

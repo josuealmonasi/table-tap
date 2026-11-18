@@ -31,13 +31,77 @@ market is Mexico — prices in MXN, interface in Spanish with English alongside.
 Staff roles live in `staff`; `MANAGES(role)` in `src/lib/membership.ts` is the
 line between running the business and working a shift. A platform admin is a
 row in `platform_admins`, which no browser can read.
+The platform admin can open **Usage** on a restaurant row. The on-demand
+`GET /api/admin/restaurants/usage?id=...` checks `platform_admins` before
+reading only that restaurant. It shows the last 30 calendar days and this
+calendar month in Mexico City time: paid, non-cancelled orders by creation
+and sales and tips net of completed returns; payments by collection date split
+between cash and card; fees kept by settlement date and original checkout
+currency (or unverified currency); team count and the latest order or team or
+founding-owner sign-in. Amounts in different currencies are never combined.
+The service-only `admin_restaurant_last_sign_in_v1` reads the team's latest
+Auth sign-in without loading the platform's other logins.
+
 The platform admin can move any restaurant to another plan from its row in
-`/dashboard/admin` (`PATCH /api/admin/restaurants`, `moveRestaurantPlan`), and
-its whole team moves with it — a plan belongs to the restaurant. It is an
-assignment, not a sale: the restaurant comes out `active` with any trial
-cleared, nothing is charged, the move is written in the restaurant's activity
-log, and one still billed by a live Stripe subscription is refused, since the
-next billing event would write Stripe's plan back over it.
+`/dashboard/admin` (`PATCH /api/admin/restaurants`, `assignTier` in
+`src/lib/admin-tier.ts`), and its whole team moves with it — a plan belongs to
+the restaurant. A dialog asks how the tier is paid (`billing`):
+- `next_bill` — the restaurant pays through a live Stripe subscription. Its
+  single item moves to the new tier's Price with `proration_behavior: "none"`:
+  nothing is charged or credited today, the period already paid stays as paid,
+  and the next invoice is at the new price. The tier changes at once
+  (`applySubscription`). Refused for an overdue subscription (settle first),
+  one already set to end (there is no next bill), and a non-monthly one
+  (Stripe would bill at once); under the same billing lock as the owner's own
+  checkout.
+- `payment_link` — no subscription. The tier starts now as the app's own trial
+  ending on a pay-by date (default 7 days, at most 60), so whatever ends trials
+  drops an unpaid one to Carta. Assigning runs under the billing lock and
+  closes any Checkout the owner left open. The owner gets an email linking to
+  `GET /api/billing/assigned?plan=<tier>&a=<assignment id>`, which opens
+  Stripe Checkout only for that exact assignment, checked again inside the
+  billing lock (`assertStillAssigned`): same tier and `tier_assignment_id`,
+  unpaid, not expired, nothing live (Grupo included, though it is not self-serve); anything
+  else lands on the Plan screen. Signed out, sign-in returns to the link
+  (`/login?next=`, that link shape only). Paying replaces the trial with the
+  subscription.
+- `free` — the original assignment (`moveRestaurantPlan`), under the billing
+  lock after closing open Checkouts: `active`, trial and assignment id cleared,
+  nothing charged; refused while a live subscription would write
+  Stripe's plan back over it.
+Carta costs nothing, so it is only ever assigned free. Every assignment is
+written in the restaurant's activity log with its billing mode.
+
+A platform admin can **suspend** a restaurant (`POST /api/admin/restaurants/suspend
+{ id, reason }`, reasons: non_payment, abuse, owner_request, other; `DELETE`
+lifts it), audited and written in the restaurant's activity log. While
+suspended (`restaurants.suspended_at`) no new sale starts: diner checkout,
+table orders and POS sales answer `apiErr.restaurantSuspended`. Bills already
+open stay payable (a diner who ate can always pay) and refunds keep working.
+A POS sale the till already collected keeps its money: collected before the
+suspension it is recorded as usual; collected after it (the device was
+offline) it stays held on the device for a manager (`posSuspensionAnswer`).
+Every staff screen shows a suspended banner with the reason; diners see the
+restaurant as not taking orders (`asDinerSees`, used by both menu loaders). In
+the admin list each row has suspend/reactivate (reason dialog) and the billing
+line reads "Suspendido · <reason>".
+
+A platform admin can also **extend or end a trial** (`PATCH
+/api/admin/restaurants/trial { id, endsAt | null }`): extend to a date at most
+90 days out, or end it now, which drops to Carta exactly as an expired trial
+does. Refused for a restaurant paying through Stripe or not on a trial.
+
+**Support tools** live in each restaurant's usage dialog: private notes by the
+platform team (`restaurant_admin_notes`, author and time, never shown to the
+restaurant; `GET/POST /api/admin/restaurants/notes`), and a button that emails
+the owner the standard password-reset link (`POST
+/api/admin/restaurants/owner-reset`, audited `restaurant.owner_reset`). The admin
+never sees or sets a password.
+Under each restaurant's name the list says how it pays (`billingSummary`):
+the Stripe price and renewal date, a cancellation's last day, overdue or
+locked, a trial or unpaid assignment with the day it drops to Carta, free, or
+assigned at no charge. It reads the columns the subscription sync writes, not
+Stripe, so it shows exactly what the app enforces.
 
 Permanent deletion is refused only while a refund, duplicate-payment return or
 provider operation is unfinished, or until 30 days after the latest successful Stripe refund evidence (operations, duplicate-payment returns and attempts); refusals return the unlock time. `admin_delete_restaurant` takes
@@ -74,6 +138,22 @@ RLS denies clients and only the service can insert/read; mutation and truncation
 are refused. `GET /api/admin/audit` checks platform membership and returns
 uncached keyset pages of 100. The API checks intentionally retain their genuine
 admin audit events after removing disposable business fixtures.
+
+**Owner transfer.** From a team member's edit dialog, a platform admin can make
+that login the restaurant's owner (`POST /api/admin/restaurants/owner`,
+`admin_transfer_ownership`). Only someone already on that restaurant's team
+qualifies; the row is locked, their staff row is removed (an owner's role comes
+from `restaurants.owner_id`), and the former owner stays on as a manager. It is
+audited as `restaurant.owner_transfer` and written in the restaurant's log.
+
+**View as owner.** "Ver como dueño" on a restaurant in the console opens
+`/dashboard/admin/restaurants/[id]`: plan and status, setup steps, menus with
+dish counts, tables, team and the last 15 orders, read with the service key
+(`readOwnerView`). It is read only — the loader never writes and the screen has
+no control — and not an impersonation: the owner's own screens read under the
+signed-in login's RLS, which a platform admin is not part of, and widening that
+was refused. Every visit writes `restaurant.view` to `platform_admin_audit`
+before anything is read; if that write fails the view is not shown.
 
 ## The two ways in
 
@@ -378,10 +458,12 @@ dishes on a bill the restaurant has just cancelled.
   switch on. `restaurants.split_enabled` defaults to true and either the owner
   or a manager can turn it off from Settings — a bar running one tab, a set
   menu, anywhere the floor would rather do the arithmetic itself. It gates the
-  *offer* and nothing else: `/api/split` never reads it, which is a deliberate
-  exception to this document's own rule that a screen hiding a button is not a
-  guard. Nothing is at risk if somebody posts past it, because what a share
-  costs is summed from the orders either way.
+  offer and the writers that start a new split: `start_bill_split_v2` and the
+  legacy `/api/split` both refuse with `split_disabled` ("El restaurante
+  desactivó dividir la cuenta."), never "no permission", and existing parts
+  stay payable. The menu carries the flag once, so a bill sheet opened before
+  the owner turned it off still offers to divide; on that refusal the sheet
+  stops offering it and says why.
 - **Only between the people who are actually eating.** The ceiling is the
   number of DEVICES that have ordered on this sitting — `orders.diner`, counted by
   `diningOn` — never the number of chairs, and never more than 20, which is
@@ -845,7 +927,13 @@ Assume the browser is hostile; it holds the publishable key and nothing else.
   a diner's screen polls (`/api/order-status`, `/api/split`, `/api/bill`) are
   sized for `PHONES_PER_ADDRESS` (30) phones, from the same intervals the
   screens poll at (`src/lib/poll.ts`). An invariant keeps the poll and the limit
-  on one number. What a diner *writes* for a table — checkout, paying the bill,
+  on one number. Every hand-written poll uses `pollAfterSettle`
+  (`src/lib/poll-after-settle.ts`): the next read waits for the last one to
+  settle, and a read that has not answered after `max(2 × interval, 15 s)` is
+  aborted and counts as failed, so a half-open connection cannot freeze it.
+  `invariants/polls.spec.ts` fails any `setInterval` that reaches the network,
+  including through `router.refresh()` or a state setter that re-runs a
+  fetching effect (a clock tick such as `setNow(Date.now())` is allowed). What a diner *writes* for a table — checkout, paying the bill,
   dividing it and paying a share, calling the waiter, a receipt — is counted
   twice: per table behind the address, at what one phone used to be allowed,
   and for the whole address at `TABLES_PER_ADDRESS` (10) times that
@@ -1448,6 +1536,12 @@ measure. Its amounts come from
   2.7.1.24): razón social, address (street and number, colonia and CP,
   municipio and estado), phone, RFC and régimen fiscal. These columns are
   optional, owner-only and never granted to anon (`ticket-place.ts`).
+- Diners see who they are paying: the menu, the cart and the table bill end
+  with a muted line holding the razón social (else the trade name), the
+  address as the ticket prints it, and a link to the privacy notice. It is read
+  server-side by `place-identity.ts` (secret key, only those two strings reach
+  the browser); the public restaurant columns are unchanged. The pickup-name
+  and receipt-email fields carry a one-line notice with the same link.
 - Body: date, folio (the order code), table, four columns (quantity, item,
   unit price, amount), the number of items, the receipt's rows, the total,
   the IVA it includes, and how it was paid.
@@ -1485,23 +1579,34 @@ measure. Its amounts come from
 
 ### Tickets by email to the visit card's address (2026-11-11)
 
+The same address may be saved on more than one card, each with its own consent
+and stop token. Each card sends its own eligible tickets. Stopping one card
+leaves the others sending; replacing an address invalidates that card's old
+link. A card's save and rewards read never disclose another card's address.
+
+
 Paperless without typing an address at every sale. A diner may link an email
 to their visit card — making the card, at a stamp, or when paying — by
 themselves (holding the card's code) or through staff (`/api/loyalty/card-email`),
 always with an explicit consent tick; `loyalty_cards.email` keeps the address
 with when consent was given, under which notice version, by whom, and a
-"stop" secret replaced on every change. One card per address per restaurant.
+"stop" secret replaced on every change. An address may belong to several cards.
 Waiters and cashiers see it masked (`a***@dominio`); owner and manager see it
 whole. The address is used for tickets only.
 
 When a sale carrying that card becomes paid, `queue_ticket_email` puts it in
 `ticket_email_outbox` (no address stored there) unless the cashier chose "No
 enviar esta vez" (`orders.ticket_email_skip`, from the till, from table
-collection, and from a divided bill's part, where `/api/split/collect` marks
+collection including a table its parts already paid and that closes at MX$0
+(the six-argument `settle_orders_v2`), and from a divided bill's part, where `/api/split/collect` marks
 only that split's frozen orders inside the payment transaction; refused or
 duplicate collections never change the winning collection's choice). Every route that takes a payment drains the outbox with `after()`
-once it has answered (`src/lib/ticket-email.ts`), and the independent recovery schedule runs about every five minutes to
-catch the rest; a ticket a day old expires unsent. A failed send waits 1
+once it has answered (`src/lib/ticket-email.ts`), and the recovery schedule
+catches the rest: the database's pg_cron job every five minutes, plus Vercel's
+daily cron (see "Scheduled recovery"); a ticket a day old expires unsent. The
+recovery response reports the drain (`tickets`: claimed, sent, retrying,
+failed, released, errors, expired) and the GitHub backup job fails on any
+failed, expired or unattempted ticket. A failed send waits 1
 minute, then 10, then an hour before it is claimed again, and the fourth
 failure, or a refusal no retry changes, finishes it as `failed` with
 `failure_reason`; fresh tickets are claimed before retries. The email is
@@ -1510,7 +1615,7 @@ so a retry resends the identical body under the same idempotency key. A sale
 closed by forgiving a walkout queues no ticket and stamps no visit (owner's
 decision, 2026-11-12). Orders of one card
 and one sitting claimed together are one email: the receipt, the 80 mm PDF
-attached, and the "Dejar de recibir mis tickets por correo" link
+attached, and the "Dejar de recibir los tickets de esta tarjeta por correo" link
 (`/tickets/stop`, a button that POSTs — mail scanners open links — plus the
 List-Unsubscribe header). Nothing is sent without a mail provider configured
 (`RESEND_API_KEY`, `RECEIPT_FROM_EMAIL`): those rows finish as `unconfigured`.
@@ -2127,6 +2232,12 @@ confirmation. Closing orders also verifies that their live remainder is covered.
 
 ## Customer accounts
 
+Managers and owners can remove an account's saved email in its dialog. The
+statement code holder can also remove it after confirmation. Both use the same
+rate-limited route, scoped to the account's restaurant, and record the change
+in activity without retaining the address. A statement email is sent only to
+an address typed for that single message, independently of the saved address.
+
 A customer the restaurant trusts can take food now and pay later, all at once
 ("cuenta abierta", a tab). It is credit the restaurant extends, so the rules
 lean on who is trusted with what:
@@ -2230,6 +2341,28 @@ no browser gate waits for a live update, and `pnpm rls` asks the socket its
 questions directly. `next.config.ts` refuses that setting on Vercel, so a
 deployed build always subscribes. And `pnpm db:mock` writes the demo's ~300
 closed sittings in two statements rather than two per sitting.
+
+The third is to not spend it at all. On every pull request
+`.github/workflows/gates.yml` runs `api`, `money`, `attack`, `rls`, `roles`
+and `smoke` on GitHub's runners, one job each, and `layout`, `promises` and
+`dialogs` on the pages `scripts/gate-plan.mjs` says the change reaches (the
+core screens — orders, bills, POS, accounts, settings, the diner menu — when
+it reaches everything; `scripts/gate-scope-ci.mjs`). Each job starts its own
+throwaway Supabase with the CLI (`ci/supabase/config.toml`), builds it with
+`pnpm db:create`, `db:seed` and `db:mock` from `supabase/schema.sql`, and
+serves the run's one production build against it (built once by a `build` job
+and shared as an artifact; each job checks the build inlined its own stack's
+URL and key). `scripts/ci-env.mjs` writes the only env
+file the gates read, refuses to run off GitHub Actions or over an existing
+file, and refuses any API or database address that is not the runner's
+loopback, so CI cannot reach the dev or production projects. Login passwords
+are made per job. The CSP names that loopback origin only when the build
+points at one (`loopbackDatabase` in `src/lib/csp.ts`); a deployed build's
+policy is unchanged. Stripe is the one outside service: with the
+`STRIPE_TEST_SECRET` repository secret (a test key) it is used; without it,
+`GATE_NO_STRIPE=1` and the cases that need Stripe print
+`skipped: no STRIPE_TEST_SECRET` by name and are counted in the job summary —
+never passed.
 
 Every check plants what it needs rather than depending on what the demo data
 happens to hold, and removes it afterwards. A check that finds nothing to
@@ -2408,8 +2541,10 @@ bill coverage read (`order_coverage`) runs it only when
 `payment_allocations_need_backfill` finds something for it to do: a receipt
 still at allocation version 0 or a retryable overlap receipt, or a cancelled
 order whose legacy money has no cancel record, an unreturned allocation, or a
-return still in historical review. Otherwise the read takes no lock and writes
-nothing, and returns the same numbers.
+return still in historical review. A historical card return records that it
+needs provider evidence, stays in the money review list and is not retried on
+every bill read. Otherwise the read takes no lock and writes nothing, and
+returns the same numbers.
 
 #### Schema-first deployment and enforcement switch
 
@@ -2947,16 +3082,33 @@ and reference form the Resend idempotency key (provider retention: 24 hours).
 The existing IP, account and restaurant mail rate limits also apply to retries.
 ## Scheduled recovery
 
-`GET /api/cron/recover` runs in production about every five minutes through
-`.github/workflows/recovery.yml`, independently of customer traffic. GitHub may
-delay scheduled jobs; the workflow avoids the busiest minute of each hour.
-Vercel Cron also runs it once a day (09:00 UTC, 03:00 in Mexico City) as a
-fallback: the schedule every plan accepts, since a schedule the plan refuses
-fails the deploy. The jobs are bounded per run either way. Configure a random
-`CRON_SECRET` in Vercel production before deploying;
-Vercel sends it as a Bearer authorization header. Missing, empty and incorrect
-credentials return 401 before any recovery client is created. The route compares
-fixed-size hashes in constant time and never needs a signed-in user.
+`/api/cron/recover` (GET or POST) runs independently of customer traffic, from
+three schedulers:
+
+- **The database, every five minutes.** `supabase/schema.sql` installs
+  `pg_cron` and `pg_net` and schedules the job `tabletap-recover`
+  (`*/5 * * * *`), which `net.http_post`s to
+  `https://tabletap.shop/api/cron/recover` with a timestamp, random nonce and
+  HMAC-SHA256 signature made using Vault's `recovery_signing_secret`. The
+  reusable secret never enters the request queue. A project without that Vault
+  secret (development) makes no call at all. The route accepts a signature for
+  five minutes either side of its timestamp and consumes its nonce once.
+- **Vercel Cron, once a day** (09:00 UTC, 03:00 in Mexico City): the schedule
+  the Hobby plan accepts, since a schedule the plan refuses fails the deploy.
+- **GitHub Actions, best effort** (`.github/workflows/recovery.yml`). It asks
+  for every five minutes, but GitHub drops most scheduled runs: 8 ran in the
+  two days after it shipped, 3.5 to 10 hours apart. It is a backup, and
+  nothing relies on its cadence.
+
+The ticket-email model (`ticket-email-schedule.spec.ts`, N10) counts only the
+daily Vercel cron and the pg_cron job. The jobs are bounded per run whichever
+scheduler calls. Vercel uses `CRON_SECRET` as a Bearer authorization header;
+the database uses the separate `RECOVERY_SIGNING_SECRET` configured in the
+route and Vault. Missing, empty and incorrect credentials return 401. Signature
+comparisons are constant-time, and a unique nonce insert rejects replay.
+Successful database runs are recorded separately from fallback runs; the route
+and `prod-check` report failure when the latest is 15 minutes old or missing.
+Development shows `skipped: no scheduler on dev`. `drop.sql` unschedules the job.
 
 The GitHub job uses a signed, short-lived OpenID Connect identity instead of
 copying that production secret. Only production accepts it. The server checks
@@ -2964,13 +3116,18 @@ GitHub's public signing key, issuer, exact endpoint audience, five-minute age,
 expiry and not-before time, immutable repository and owner IDs, the recovery
 workflow on `main`, and a scheduled or manually dispatched GitHub-hosted job.
 Forks, pull requests, other branches and other workflows cannot start recovery.
-The job checks out a pinned action with credentials disabled, sends no token or
-response body to the public log, and fails when recovery cannot observe a queue.
-Overlapping scheduled runs are queued rather than cancelling a running writer.
-No additional production secret or paid scheduler is required.
+The job checks out a pinned action with credentials disabled, runs Node 22 from
+a SHA-pinned `actions/setup-node`, sends no token or response body to the
+public log, and fails when recovery cannot observe a queue or the ticket drain
+reports a failed, expired or unattempted ticket. Overlapping scheduled runs are
+queued rather than cancelling a running writer. No paid scheduler is required.
 
-Five isolated jobs use the admin client and the existing locked writers:
+Six isolated jobs use the admin client and the existing locked writers:
 
+- Accounting deletes at most 1,000 archived records per run when the restaurant
+  was deleted more than ten years ago and no longer exists. The archive records
+  when the accounting copy was made in the deletion transaction. This job runs
+  alongside the other jobs within its own time budget.
 - Stock calls `recover_stock_reservations` across restaurants. SQL keeps its
   one-hour grace period, checks that no order owns the reservation, and releases
   at most one orphan per call, at most ten calls per invocation.
@@ -3022,6 +3179,15 @@ invocation, including unchanged sales, payment and stock records. Set
 setup follows [Vercel's authorization contract](https://vercel.com/docs/cron-jobs/manage-cron-jobs#securing-cron-jobs).
 
 ## Owner email verification and review fixes (9 Nov 2026)
+
+Owner terms acceptance records the restaurant, user, email, version, time,
+source and SHA-256 of the compact JSON encoding of the Spanish terms source.
+It does not record an IP address or browser. A repeat by the same user for the
+same version and hash within one minute shares the existing record. Only the
+service role reads the history; it cannot be edited or individually deleted.
+Restaurant deletion archives it with the accounting records for ten years.
+The acceptance previously stored on each restaurant is backfilled without
+guessing its user or text hash. Current acceptance fields remain on the restaurant.
 
 Self-serve signup creates an unconfirmed auth user and a restaurant with
 `owner_signup_pending = true`. The verification screen offers resend and sign-in;
@@ -3266,8 +3432,8 @@ to the privacy notice. There is no confirmation-link step. The diner's own
 card read supplies their full `email`; the staff-only card-email read supplies
 the server's role-filtered address (masked for waiter/cashier, full for
 owner/manager). Staff can change or remove it after scanning, stamping,
-looking up or attaching a card. A duplicate address explains which card
-already has it by its last four characters; a suffix alone cannot select it.
+looking up or attaching a card. The same address can be saved on several cards
+without identifying any other card.
 A bill need not expose the full bearer code: staff can scan the card to edit.
 
 An attached card's email makes tickets automatic. The till and whole-table
@@ -3284,8 +3450,9 @@ Divided-slot collections use their separate `/api/split/collect` contract;
 the skip control here is limited to the two table-payment routes.
 
 The public `/tickets/stop?t=<uuid>` page asks before posting the token to
-`/api/tickets/stop`. Page loads do nothing, so mail scanners cannot unsubscribe
-a diner by opening a link. Missing links and failed requests have distinct
+`/api/tickets/stop`. Mail providers can also POST the RFC 8058 one-click form
+to that public link; it removes the same saved address and consent. Page loads do
+nothing, so mail scanners cannot unsubscribe a diner by opening a link. Missing links and failed requests have distinct
 messages. All new copy is available in Spanish and English.
 
 These client screens consume the card-email server contract implemented in
@@ -3359,6 +3526,27 @@ split frozen at zero or with no amount keeps percentages on both sides. The
 modern v1 paths (with a principal) still reopen an earlier page whatever its
 tip; that is a known follow-up.
 
+## Scheduled plan price notices
+
+A platform admin can schedule a positive plan price at least 30 full days ahead. The change and a notice queue for restaurants on that plan are saved together; founding-price restaurants are excluded. Recovery sends queued notices to owner email addresses in Spanish, using the current Stripe subscription price and a saved message for retries. Restaurants without a subscription receive the new price without a current-price comparison. Notices with an unreadable subscription price remain pending. Moving Stripe prices is separate work.
+
+**Price changes, end to end.** The recovery job `price_notices` emails each
+queued owner (Spanish; current price, new price, the date), saving the exact
+message before sending so a retry sends the same one. `price_moves` then moves
+each notified subscriber through a Stripe **subscription schedule**: today's
+price until the first renewal on or after the later of the effective date and
+30 days after the notice was sent, then the new price with no proration.
+Stripe bills it at that renewal, whenever the job runs; nobody pays a new
+price without a month's notice. Subscriptions set to end, non-monthly, or
+already on a schedule are skipped with the reason recorded; overdue ones are
+retried later. Founding-price restaurants are never queued, so never moved.
+`price_catalogue` changes the plan's catalogue price for new subscriptions
+once, at the effective date. The admin panel's "Precios de los planes" section lists each paid plan's
+price and any scheduled change (with owners told of queued), and schedules a
+change at least 31 days out. `price_recipients` runs first every time: for each pending change it adds a
+notice row for every live Stripe subscription whose Price maps to the plan
+(except founders), so a subscriber whose local plan had not synced yet is
+still told, and still gets its 30 days.
 
 ### Database behavior probes
 

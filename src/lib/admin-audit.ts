@@ -6,7 +6,10 @@ import { jsonBody } from "@/lib/json-body";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 type Facts = Record<string, string | boolean | number | null>;
-type Action = "login.create" | "login.update" | "login.delete" | "restaurant.delete" | "restaurant.plan";
+type Action = "login.create" | "login.update" | "login.delete" | "restaurant.delete" | "restaurant.plan" | "plan.price"
+  | "restaurant.suspend" | "restaurant.unsuspend" | "restaurant.trial"
+  | "restaurant.owner_transfer"
+  | "restaurant.owner_reset";
 export interface AdminAuditContext { targetId?: string }
 type Handler = (req: NextRequest, audit: AdminAuditContext) => Promise<Response>;
 type Db = ReturnType<typeof createAdminClient>;
@@ -20,12 +23,16 @@ function requestedFacts(body: Record<string, unknown>, action: Action): Facts {
   }
   if (typeof body.fullName === "string") facts.full_name = body.fullName.trim();
   if (typeof body.password === "string") facts[action === "login.create" ? "password_set" : "password_reset"] = true;
+  if (action === "plan.price") {
+    if (typeof body.newPrice === "number") facts.new_price = body.newPrice;
+    if (typeof body.effectiveAt === "string") facts.effective_at = body.effectiveAt;
+  }
   return facts;
 }
 
 async function beforeFacts(db: Db, action: Action, id?: string): Promise<Facts> {
   // Invalid targets still reach the route's validation, never a uuid cast.
-  if (!id || !/^[0-9a-f-]{36}$/i.test(id)) return {};
+  if (action === "plan.price" || !id || !/^[0-9a-f-]{36}$/i.test(id)) return {};
   if (action.startsWith("restaurant.")) {
     const { data, error } = await db.from("restaurants").select("name, plan, plan_status").eq("id", id).maybeSingle();
     if (error) throw error;
@@ -58,7 +65,7 @@ export function auditedAdminAction(action: Action, handler: Handler) {
     const append = async (outcome: string, after: Facts) => {
       const { error } = await db.from("platform_admin_audit").insert({
         attempt_id: attempt, actor_id: admin.userId, actor_email: admin.email,
-        target_type: action.startsWith("restaurant.") ? "restaurant" : "login",
+        target_type: action === "plan.price" ? "plan" : action.startsWith("restaurant.") ? "restaurant" : "login",
         target_id: context.targetId ?? null, action, outcome,
         before_facts: before, after_facts: after,
       });

@@ -1,10 +1,11 @@
 import type { Metadata } from "next";
-import { Archivo } from "next/font/google";
+import localFont from "next/font/local";
 import "./globals.css";
 import { getMembership } from "@/lib/membership";
 import { getPlatformAdmin } from "@/lib/admin";
 import Navbar from "@/components/layout/Navbar";
 import FrozenBanner from "@/components/dashboard/plan/FrozenBanner";
+import SuspendedBanner from "@/components/dashboard/SuspendedBanner";
 import { dashboardFrozen } from "@/lib/plan";
 import type { PlanStatus } from "@/lib/plan";
 import SectionNav from "@/components/layout/SectionNav";
@@ -23,11 +24,16 @@ import { currentUser } from "@/lib/current-user";
 import { privateCacheIdentity } from "@/lib/private-cache-identity";
 import DashboardCache from "@/components/layout/DashboardCache.react-component";
 
-// One family, weight carries the hierarchy. next/font self-hosts the files at
-// build time, so there's no request to a font CDN at runtime and no swap flash.
-const archivo = Archivo({
-  subsets: ["latin"],
-  weight: ["400", "500", "600", "700", "800"],
+// One family, weight carries the hierarchy. The file lives in the repo
+// (Archivo, SIL OFL 1.1 — src/app/fonts/Archivo-OFL.txt): next/font/google
+// fetched it from Google at every build, and a bad answer from Google failed
+// a Vercel deploy and a CI build on 2026-11-17 ("Cannot read properties of null
+// (reading '1')" in its loader) with no code at fault. Google's latin subset of
+// the variable font, weights 400–800: Spanish accents, ñ, ×, · and — included.
+const archivo = localFont({
+  src: "./fonts/archivo-latin.woff2",
+  weight: "400 800",
+  style: "normal",
   variable: "--tt-font",
   display: "swap",
 });
@@ -107,6 +113,9 @@ export default async function RootLayout({ children }: { children: React.ReactNo
                 <meta name="apple-mobile-web-app-status-bar-style" content="default" />
               </>
             )}
+            {/* Suspended by the platform: no new sales anywhere, so the whole
+                team is told on every screen, not only the owner. */}
+            {membership?.restaurant.suspended_at && <SuspendedBanner reason={membership.restaurant.suspended_reason} />}
             {/* The panel is read-only while the subscription is paused, and
                 until now nothing on screen said so — the API answered 402 to
                 saves the dashboard had happily offered. */}

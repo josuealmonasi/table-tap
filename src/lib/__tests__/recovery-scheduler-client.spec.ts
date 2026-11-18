@@ -3,12 +3,13 @@ import { recoverProduction, RECOVERY_URL } from "../../../scripts/recover-produc
 
 const env = { ACTIONS_ID_TOKEN_REQUEST_TOKEN: "fixture-request-token",
   ACTIONS_ID_TOKEN_REQUEST_URL: "https://pipelines.actions.githubusercontent.com/fixture?api-version=2" };
-const jobs = Object.fromEntries(["stock", "refunds", "fees", "subscriptions", "disputes"]
+const jobs = Object.fromEntries(["stock", "refunds", "fees", "subscriptions", "disputes", "accounting", "price_notices"]
   .map(name => [name, { failed: 0, pending: 0 }]));
+const tickets = { claimed: 2, sent: 1, retrying: 1, failed: 0, released: 0, errors: 0, expired: 0 };
 const response = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status });
 
 it("requests an exact-audience identity then calls only the protected production endpoint", async () => {
-  const send = vi.fn().mockResolvedValueOnce(response({ value: "fixture-identity" })).mockResolvedValueOnce(response({ jobs }));
+  const send = vi.fn().mockResolvedValueOnce(response({ value: "fixture-identity" })).mockResolvedValueOnce(response({ jobs, tickets }));
   await recoverProduction(env, send);
   expect(send).toHaveBeenCalledTimes(2);
   const [url, identity] = send.mock.calls[0];
@@ -37,9 +38,29 @@ it.each([response({}, 503), response({ value: "" }), new Response("not json")])(
   },
 );
 
-it.each([response({}, 401), response({}, 503), response({}), response({ jobs: { ...jobs, fees: { failed: 1, pending: null } } })])(
+it.each([response({}, 401), response({}, 503), response({}), response({ jobs: { ...jobs, fees: { failed: 1, pending: null } }, tickets }),
+  // Audit of #648: the ticket drain is part of the answer, and its failures fail the job.
+  response({ jobs }), response({ jobs, tickets: null }), response({ jobs, tickets: { ...tickets, failed: 1 } }),
+  response({ jobs, tickets: { ...tickets, expired: 1 } }), response({ jobs, tickets: { ...tickets, errors: 1 } }),
+  response({ jobs, tickets: { ...tickets, sent: "2" } })])(
   "fails visibly when recovery is refused or a queue cannot be observed", async result => {
     const send = vi.fn().mockResolvedValueOnce(response({ value: "fixture-identity" })).mockResolvedValueOnce(result);
     await expect(recoverProduction(env, send)).rejects.toThrow();
   },
 );
+
+it("fails when the accounting purge fails or is missing", async () => {
+  for (const accounting of [{ failed: 1, pending: 0 }, undefined]) {
+    const send = vi.fn().mockResolvedValueOnce(response({ value: "fixture-identity" }))
+      .mockResolvedValueOnce(response({ jobs: { ...jobs, accounting } }));
+    await expect(recoverProduction(env, send)).rejects.toThrow("unfinished checks");
+  }
+});
+
+it("fails when price notices fail or are missing", async () => {
+  for (const price_notices of [{ failed: 1, pending: 0 }, undefined]) {
+    const send = vi.fn().mockResolvedValueOnce(response({ value: "fixture-identity" }))
+      .mockResolvedValueOnce(response({ jobs: { ...jobs, price_notices } }));
+    await expect(recoverProduction(env, send)).rejects.toThrow("unfinished checks");
+  }
+});

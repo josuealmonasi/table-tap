@@ -69,3 +69,13 @@ it("retires the start reference when a fresh read finds no live split", async ()
   const bodies = vi.mocked(fetch).mock.calls.filter(([url]) => url === "/api/split/start").map(([, init]) => JSON.parse(init!.body as string));
   expect(bodies[1].ref).not.toBe(bodies[0].ref);
 });
+
+it("audit #648: a split_disabled refusal marks splitting off and keeps its message", async () => {
+  vi.mocked(fetch).mockImplementation(async (_url, init) => (init?.method
+    ? { ok: false, json: async () => ({ error: "apiErr.splitDisabled", code: "split_disabled" }) }
+    : { ok: true, json: async () => ({ diner: "member", split: null }) }) as Response);
+  expect(hook.disabled).toBe(false);
+  await act(async () => hook.propose(2));
+  expect(hook.disabled).toBe(true);
+  expect(hook.error).toBe("apiErr.splitDisabled");
+});

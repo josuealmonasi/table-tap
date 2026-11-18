@@ -20,11 +20,18 @@ export async function recoverProduction(env = process.env, send = fetch) {
     redirect: "error", signal: AbortSignal.timeout(75_000) });
   if (!response.ok) throw new Error(`Production recovery returned HTTP ${response.status}.`);
   const answer = await response.json().catch(() => null);
-  for (const name of ["stock", "refunds", "fees", "subscriptions", "disputes"]) {
+  for (const name of ["stock", "refunds", "fees", "subscriptions", "disputes", "accounting", "price_notices"]) {
     const job = answer?.jobs?.[name];
     if (!job || job.failed !== 0 || job.observation_failed || !Number.isInteger(job.pending) || job.pending < 0) {
       throw new Error("Production recovery reported unfinished checks; inspect the protected recovery logs.");
     }
+  }
+  // The ticket-email drain runs in the same request: a ticket that failed for
+  // good, expired unsent, or could not be attempted fails the job too.
+  const tickets = answer?.tickets;
+  const counts = ["claimed", "sent", "failed", "expired", "errors"].map(name => tickets?.[name]);
+  if (!counts.every(n => Number.isInteger(n) && n >= 0) || tickets.failed > 0 || tickets.expired > 0 || tickets.errors > 0) {
+    throw new Error("Production recovery reported ticket emails that failed or expired; inspect the protected recovery logs.");
   }
 }
 

@@ -69,7 +69,7 @@ try {
   if (others.length) {
     throw new Error(`refusing: ${others.length} restaurant(s) named "${DEMO_RESTAURANT}" belong to someone else (${others.map(o => o.id).join(", ")})`);
   }
-  const summary = await seedMock(client);
+  const summary = await seedMock(client, { production: isProd });
   const history = await seedHistory(client, summary.restaurantId);
   const { rows: [counts] } = await client.query(
     `select (select count(*) from orders where restaurant_id = $1) orders,

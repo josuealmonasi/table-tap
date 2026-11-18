@@ -1,8 +1,26 @@
+drop table if exists restaurant_admin_notes cascade;
+-- The database's five-minute recovery call (audit of #648). The extensions
+-- stay: other projects' jobs may use them.
+do $$ begin
+  if exists (select 1 from pg_namespace where nspname = 'cron') then
+    if exists (select 1 from cron.job where jobname = 'tabletap-recover') then
+      perform cron.unschedule('tabletap-recover');
+    end if;
+  end if;
+end $$;
+drop table if exists terms_acceptances cascade;
+drop function if exists public.capture_legacy_terms_v1() cascade;
+drop function if exists public.keep_terms_acceptance_v1();
+drop function if exists public.accept_terms_v1(uuid, uuid, text, text, text);
+drop function if exists public.accept_terms_v1(uuid, uuid, text, text, text, text, text);
+drop function if exists public.signup_restaurant_with_terms_v1(text, uuid, text, text, text, text, timestamptz);
+drop function if exists public.signup_restaurant_with_terms_v1(text, uuid, text, text, text, text, text, text, timestamptz);
 drop table if exists account_movements cascade;
 -- Required-parameter review overloads; drop before their legacy callees.
 drop function if exists public.collect_split_slots_v1(uuid, uuid, int, int[], int, text, int, text, text, text, boolean);
 drop function if exists public.collect_table_reviewed_v1(uuid, uuid, numeric, text, numeric, numeric, text, text, text, boolean);
 drop function if exists public.settle_orders_v2(uuid, uuid[], text, text, jsonb, numeric, text, boolean);
+drop function if exists public.settle_orders_v2(uuid, uuid[], text, text, jsonb, boolean);
 drop function if exists public.account_journal_backfill_v1(uuid, timestamptz);
 drop function if exists public.guard_account_movement();
 drop function if exists public.check_account_movement_source();
@@ -14,6 +32,7 @@ drop function if exists public.account_journal_expected_v1(uuid);
 drop function if exists public.assert_account_journal_v1(uuid);
 drop function if exists public.check_account_journal_v1() cascade;
 drop function if exists public.forget_account_journal_check_v1() cascade;
+drop function if exists public.purge_expired_accounting_records();
 drop table if exists restaurant_accounting_records cascade;
 drop table if exists platform_admin_audit cascade;
 drop function if exists public.account_credit_v1(uuid, uuid, numeric, numeric, text, text, text, uuid);
@@ -21,6 +40,7 @@ drop function if exists public.complete_owner_signup_v1(uuid);
 drop function if exists public.delete_dietary_tag_v1(uuid, uuid);
 drop function if exists public.check_item_addon_restaurant() cascade;
 drop function if exists public.keep_platform_admin_audit();
+drop function if exists public.admin_transfer_ownership(uuid, uuid);
 drop function if exists public.admin_delete_restaurant(uuid, boolean);
 drop function if exists public.advance_refund_due_fee(uuid, uuid, jsonb, int, int, int, text);
 drop function if exists public.verify_refunded_platform_fee(uuid, text, int, int, text[]);
@@ -113,7 +133,10 @@ drop table if exists account_checkouts   cascade;
 drop table if exists customer_accounts   cascade;
 drop table if exists loyalty_redemptions cascade;
 drop table if exists loyalty_visits      cascade;
+drop table if exists recovery_nonces cascade;
+drop table if exists recovery_runs cascade;
 drop table if exists ticket_email_outbox cascade;
+-- Dropping the cards also drops their per-card stop-token index.
 drop table if exists loyalty_cards       cascade;
 drop table if exists loyalty_programs    cascade;
 drop table if exists print_jobs          cascade;
@@ -406,6 +429,11 @@ drop function if exists public.settled_by_write_off(uuid, uuid);
 drop function if exists public.fix_loyalty_card_on_payment() cascade;
 drop function if exists public.queue_ticket_email() cascade;
 drop function if exists public.claim_ticket_emails(int);
+drop function if exists public.set_card_email(uuid, text, text, text, text);
 drop function if exists public.attach_loyalty_card_v1(uuid, text, uuid, uuid, text);
 drop function if exists public.attach_loyalty_card_v2(uuid, text, uuid, uuid, text, boolean, text);
 drop function if exists public.loyalty_open(uuid);
+drop function if exists public.schedule_plan_price_change(text, numeric, timestamptz, text);
+drop table if exists plan_price_notices cascade;
+drop table if exists plan_price_changes cascade;
+drop function if exists public.admin_restaurant_last_sign_in_v1(uuid);

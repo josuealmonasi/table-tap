@@ -1,9 +1,11 @@
 import { everyRow } from "@/lib/paged";
+import type { RestaurantBilling } from "@/lib/admin-billing-summary";
 import { everyLogin } from "@/lib/logins";
 import { redirect } from "next/navigation";
 import { getPlatformAdmin } from "@/lib/admin";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { allPlans } from "@/lib/plan-server";
+import { adminPlanPrices } from "@/lib/admin-prices";
 import { ConfirmProvider } from "@/components/ui/ConfirmDialog";
 import AdminPanel, {
   type AdminRestaurantRow,
@@ -25,9 +27,9 @@ export default async function AdminPage() {
   // here showed no restaurants and no logins on the one page that manages
   // logins — and the error screen offers a retry instead.
   const [restaurants, staff, admins, profiles, logins] = await Promise.all([
-    everyRow<{ id: string; name: string; logo: string | null; owner_id: string | null; created_at: string; plan: string; stripe_subscription_id: string | null }>(
+    everyRow<{ id: string; name: string; logo: string | null; owner_id: string | null; created_at: string } & RestaurantBilling>(
       (a, b) => db.from("restaurants")
-        .select("id, name, logo, owner_id, created_at, plan, stripe_subscription_id")
+        .select("id, name, logo, owner_id, created_at, plan, plan_status, stripe_subscription_id, subscribed_price, trial_ends_at, plan_ends_at, plan_period_ends_at, suspended_at, suspended_reason")
         .order("created_at").order("id").range(a, b),
       "the restaurants",
     ),
@@ -72,6 +74,7 @@ export default async function AdminPage() {
         role,
         founding: !!founded,
         restaurant_name: restaurant?.name,
+        restaurant_id: restaurant?.id,
         plan: restaurant?.plan as string | undefined,
       };
     })
@@ -88,6 +91,12 @@ export default async function AdminPage() {
     team_count: staffCounts.get(r.id) ?? 0,
     plan: r.plan as string,
     billed_by_stripe: Boolean(r.stripe_subscription_id),
+    billing: {
+      plan: r.plan, plan_status: r.plan_status, stripe_subscription_id: r.stripe_subscription_id,
+      subscribed_price: r.subscribed_price === null ? null : Number(r.subscribed_price),
+      trial_ends_at: r.trial_ends_at, plan_ends_at: r.plan_ends_at, plan_period_ends_at: r.plan_period_ends_at,
+      suspended_at: r.suspended_at, suspended_reason: r.suspended_reason,
+    },
     created_at: r.created_at,
   }));
 
@@ -101,6 +110,7 @@ export default async function AdminPage() {
         users={userRows}
         restaurantOptions={restaurantOptions}
         plans={(await allPlans()).map(p => p.plan)}
+        prices={await adminPlanPrices()}
       />
     </ConfirmProvider>
   );

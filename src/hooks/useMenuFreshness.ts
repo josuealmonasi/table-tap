@@ -2,6 +2,7 @@
 
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { pollAfterSettle } from "@/lib/poll-after-settle";
 
 /** How often an open menu re-checks the kitchen, while the tab is visible. */
 const EVERY_MS = 45_000;
@@ -34,18 +35,12 @@ export function useMenuFreshness(): void {
   const router = useRouter();
 
   useEffect(() => {
-    const refresh = () => {
-      if (document.visibilityState === "visible") router.refresh();
-    };
-
-    const timer = setInterval(refresh, EVERY_MS);
-    document.addEventListener("visibilitychange", refresh);
-    window.addEventListener("focus", refresh);
-
-    return () => {
-      clearInterval(timer);
-      document.removeEventListener("visibilitychange", refresh);
-      window.removeEventListener("focus", refresh);
-    };
+    // A server render is a network read like any other, so it shares the
+    // poll every other reader uses rather than a fixed setInterval (audit of
+    // #648). Hidden tabs skip their turn; coming back refreshes at once.
+    const poll = pollAfterSettle(async () => router.refresh(), EVERY_MS, {
+      immediate: false, pauseWhenHidden: true, refreshOnVisible: true, refreshOnFocus: true,
+    });
+    return () => poll.stop();
   }, [router]);
 }

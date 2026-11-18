@@ -97,14 +97,12 @@ export async function POST(req: NextRequest) {
     if (!error) {
       const face = cardFace(restaurant, { code, progress: 0, ladder: program.steps }, req.nextUrl.origin);
       // An address given with the new card, for its tickets (paperless): only
-      // with the consent tick. One already on another card is not linked here;
-      // the card is still made and the answer says so.
+      // with the consent tick. Each card keeps its own address and stop link.
       let emailLinked: SetEmailResult["outcome"] | undefined;
       const email = normalizeEmail(body?.email);
       if (email && body?.consent === true) emailLinked = (await setCardEmail(restaurantId, code, email, "diner").catch(() => null))?.outcome;
-      // Linked or already on another card here answer alike, or this would
-      // say whether an address has a card at this restaurant (review access2).
-      const emailAnswer = emailLinked === "saved" || emailLinked === "taken" ? "submitted" : emailLinked;
+      // The answer describes this card only, never another card.
+      const emailAnswer = emailLinked === "saved" ? "submitted" : emailLinked;
       return NextResponse.json({ code, face, qr: qrGrid(face.qrPayload), ...(emailAnswer ? { email: emailAnswer } : {}) });
     }
     if (error.code !== "23505") {

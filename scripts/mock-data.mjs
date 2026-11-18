@@ -19,6 +19,7 @@
 // ============================================================================
 
 import { randomBytes, randomUUID } from "node:crypto";
+import { isLentAccount } from "./lent-stripe-account.mjs";
 import { createClient } from "@supabase/supabase-js";
 import { populateMenu } from "./menu-catalog.mjs";
 import { FEED_DEMO, PRICE_SCALE, menuPrice } from "./demo-prices.mjs";
@@ -33,7 +34,7 @@ import { legacyTerminalTimes } from "./mock-terminal-times.mjs";
 import { finalizeMockCashShift } from "./mock-cash-shift.mjs";
 import { bulkInsert, randInt, sample } from "./menu-catalog.mjs";
 import { loginSecret } from "./login-secrets.mjs";
-import { ensureDemoUser } from "./mock-logins.mjs";
+import { resetDemoUser } from "./mock-logins.mjs";
 
 export const DEMO_RESTAURANT = "Demo Bistro";
 // Read when the seeder runs, after its caller loaded the env file: production's
@@ -56,9 +57,10 @@ function adminClient() {
   );
 }
 
-/** Reuse an existing auth user (surviving a drop) or create one. */
-async function ensureUser(pg, admin, email, name) {
-  return ensureDemoUser(pg, admin, email, name, demoPassword());
+/** Development keeps sessions for the gates; production replaces the user
+ * so an old access token cannot regain the rebuilt demo (review of #651). */
+async function ensureUser(pg, admin, email, name, production) {
+  return resetDemoUser(pg, admin, email, name, demoPassword(), production);
 }
 
 /**
@@ -80,13 +82,16 @@ export async function dropMock(pg, { keepLogins = false } = {}) {
     [DEMO_RESTAURANT],
   );
   for (const r of rows) {
-    if (r.stripe_account_id) {
+    // A real test account survives a reseed; a gate's lent fake never does.
+    if (r.stripe_account_id && !isLentAccount(r.stripe_account_id)) {
       keptStripe = {
         stripe_account_id: r.stripe_account_id,
         stripe_charges_enabled: r.stripe_charges_enabled,
       };
     }
     await pg.query("delete from restaurants where id = $1", [r.id]);
+    // Demo consent is fixture data, not a real contract to retain on reseed.
+    await pg.query("delete from restaurant_accounting_records where restaurant_id = $1 and source_table = 'terms_acceptances'", [r.id]);
   }
   if (keepLogins) return rows.length;
   const admin = adminClient();
@@ -170,16 +175,31 @@ function pickTip(subtotal) {
   return sample([10, 20, 25, 30, 50], 1)[0]; // a round custom amount
 }
 
-export async function seedMock(pg) {
+/**
+ * Rebuilds Demo Bistro. `production` replaces demo logins so old tokens
+ * cannot regain access; pass it on every production target.
+ */
+export async function seedMock(pg, { production = false } = {}) {
   demoPassword(); // Refuse missing credentials before deleting the demo.
-  await pg.query("select set_config('tabletap.allocation_origin', 'fixture_history', false)");
   if (!process.env.SUPABASE_SECRET_KEY) {
     throw new Error("SUPABASE_SECRET_KEY missing — needed to create demo logins.");
   }
-  await dropMock(pg, { keepLogins: true }); // clean slate → repeatable; logins keep their sessions
+  // Historical receipts are written as the backfill writes them. The setting
+  // lives on this connection, so it is cleared however the seed ends: a
+  // caller reusing the client must never write real sales as history.
+  await pg.query("select set_config('tabletap.allocation_origin', 'fixture_history', false)");
+  try {
+    return await seedDemo(pg, production);
+  } finally {
+    await pg.query("select set_config('tabletap.allocation_origin', '', false)");
+  }
+}
+
+async function seedDemo(pg, production) {
+  await dropMock(pg, { keepLogins: true }); // Development keeps sessions; production replaces logins below.
 
   const admin = adminClient();
-  const ownerId = await ensureUser(pg, admin, DEMO_OWNER.email, DEMO_OWNER.name);
+  const ownerId = await ensureUser(pg, admin, DEMO_OWNER.email, DEMO_OWNER.name, production);
 
   // ── Restaurant + tables ──
   const {
@@ -296,7 +316,7 @@ export async function seedMock(pg) {
   // ── Team (manager + kitchen) with names, plus an activity log ──
   const logs = [];
   for (const member of DEMO_TEAM) {
-    const uid = await ensureUser(pg, admin, member.email, member.name);
+    const uid = await ensureUser(pg, admin, member.email, member.name, production);
     await pg.query(
       `insert into staff (restaurant_id, user_id, email, role) values ($1, $2, $3, $4)
        on conflict (user_id) do update set restaurant_id = $1, role = $4`,
