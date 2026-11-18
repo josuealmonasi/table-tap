@@ -259,6 +259,17 @@ if (pageInScope("/dashboard/admin")) {
       const html = res.status === 200 ? await res.text() : "";
       if (html.includes(PAGES["/dashboard/admin"].marker)) ok("opens /dashboard/admin, and sees its marker");
       else bad("/dashboard/admin: the platform admin does not see «" + PAGES["/dashboard/admin"].marker + "» — every bounce above proves nothing");
+      // The read-only owner view, opened from the console's first restaurant.
+      // Each visit writes an audit row, so this check leaves one behind on
+      // purpose: that row is the feature.
+      const view = html.match(/\/dashboard\/admin\/restaurants\/[0-9a-f-]{36}/)?.[0];
+      if (!view) bad("/dashboard/admin offers no «Ver como dueño» link");
+      else {
+        const page = await retryFetch(BASE + view, { headers: { cookie, "accept-language": "es-MX" } }, BASE);
+        const body = page.status === 200 ? await page.text() : "";
+        if (body.includes("Vista de solo lectura")) ok("opens the read-only owner view");
+        else bad(`${view}: the platform admin does not see the read-only owner view (${page.status})`);
+      }
     }
   }
   console.log("");

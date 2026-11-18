@@ -8186,6 +8186,14 @@ that was both owner and staff, or an owner with no way back in.
 `admin_transfer_ownership` does all three under the restaurant's row lock.
 Check: `admin-owner-transfer.spec.ts` and the api case that transfers and checks
 the former owner is a manager.
+## A support view that cannot write (2026-11-18)
+
+The platform team needed to see what an owner sees. Signing in as the owner,
+or letting admins through RLS, would have made every support look a possible
+change to somebody's restaurant. The owner view reads with the service key on
+one server page, records each visit first, and renders nothing that writes.
+Check: `admin-owner-view.spec.ts` (order of guard, record and read; no write,
+no control) and `pnpm roles` (the admin opens it from the console's link).
 
 ## Branch previews used up the day's deployments (2026-11-18)
 

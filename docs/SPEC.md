@@ -146,6 +146,15 @@ qualifies; the row is locked, their staff row is removed (an owner's role comes
 from `restaurants.owner_id`), and the former owner stays on as a manager. It is
 audited as `restaurant.owner_transfer` and written in the restaurant's log.
 
+**View as owner.** "Ver como dueño" on a restaurant in the console opens
+`/dashboard/admin/restaurants/[id]`: plan and status, setup steps, menus with
+dish counts, tables, team and the last 15 orders, read with the service key
+(`readOwnerView`). It is read only — the loader never writes and the screen has
+no control — and not an impersonation: the owner's own screens read under the
+signed-in login's RLS, which a platform admin is not part of, and widening that
+was refused. Every visit writes `restaurant.view` to `platform_admin_audit`
+before anything is read; if that write fails the view is not shown.
+
 ## The two ways in
 
 - **A table QR** → `/r/<restaurantId>/t/<tableId>`. The order knows its table,
