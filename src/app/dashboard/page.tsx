@@ -9,6 +9,8 @@ import { currentUser } from "@/lib/current-user";
 import { allPlans, getPlan } from "@/lib/plan-server";
 import { can, cheapestWith } from "@/lib/plan";
 import { restaurantSetup } from "@/lib/setup-steps-server";
+import TrialWelcome from "@/components/dashboard/plan/TrialWelcome";
+import { trialNotice } from "@/lib/trial-notice";
 
 export const dynamic = "force-dynamic";
 
@@ -44,8 +46,10 @@ export default async function DashboardPage() {
     isOwner: membership.role === "owner",
   };
 
+  const trial = membership.role === "owner" ? trialNotice(membership.restaurant) : null;
   return (
     <ConfirmProvider>
+      {trial && <TrialWelcome restaurantId={membership.restaurant.id} notice={trial} />}
       <DashboardHome
         restaurant={membership.restaurant}
         role={membership.role}

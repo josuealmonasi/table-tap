@@ -3150,6 +3150,15 @@ votes: "Votos",
     confirm: "Programar cambio",
     scheduled: "Cambio de precio de {plan} programado. Los dueños recibirán el aviso.",
   },
+  trial: {
+    banner: "Prueba gratis de {plan}: te quedan {days} días. Después pasas a Carta, el plan gratuito, salvo que elijas un plan.",
+    bannerUrgent: "Tu prueba gratis de {plan} termina en {days} días. Elige un plan para conservar todo, o pasarás a Carta, el plan gratuito.",
+    seePlans: "Ver planes",
+    welcomeTitle: "Bienvenido a TableTap: tienes {plan} gratis",
+    welcomeFree: "Tu restaurante tiene {plan} gratis hasta el {date}, sin tarjeta y sin cargos.",
+    welcomeAfter: "Al terminar, pasas a Carta, el plan gratuito (solo una comisión por pedido), a menos que elijas un plan. Puedes compararlos cuando quieras en Plan.",
+    start: "Empezar mi prueba",
+  },
   authConfirm: {
     title: { signup: "Confirma tu correo", invite: "Únete a tu equipo", recovery: "Restablece tu contraseña", email_change: "Confirma tu nuevo correo" },
     body: {

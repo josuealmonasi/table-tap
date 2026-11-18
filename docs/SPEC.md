@@ -172,6 +172,15 @@ Spanish. Links go to `tabletap.shop/auth/confirm`, never to the Supabase host.
 That page only shows a button that POSTs the token to `/auth/callback`, so a
 mail scanner that opens the link cannot spend it.
 
+## The free trial, told
+
+A new restaurant gets 30 days of Servicio free with no card; it then falls
+back to Carta (`effective_restaurant_plan`). The owner is told both things:
+a welcome dialog the first time they reach the dashboard (remembered per
+restaurant on that device), and a banner on every dashboard screen with the
+days left and a link to Plan, which takes the warning look in the last 7
+days (`trialNotice`). Staff see neither: only the owner can choose a plan.
+
 ## The two ways in
 
 - **A table QR** → `/r/<restaurantId>/t/<tableId>`. The order knows its table,

@@ -1431,6 +1431,13 @@ a.tt-btn {
   background: color-mix(in srgb, var(--tt-warning) 14%, var(--tt-surface));
   border-color: color-mix(in srgb, var(--tt-warning) 40%, transparent);
 }
+/* A free trial with time left is news, not a warning: the accent, calm. It
+   takes the warning look only in its last week (tt-frozen-banner-warn). */
+.tt-trial-banner:not(.tt-frozen-banner-warn) {
+  background: color-mix(in srgb, var(--tt-accent) 8%, var(--tt-surface));
+  border-color: color-mix(in srgb, var(--tt-accent) 25%, transparent);
+  color: var(--tt-ink);
+}
 .tt-frozen-text {
   display: flex;
   align-items: center;

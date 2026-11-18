@@ -163,6 +163,10 @@ export type Restaurant = {
   plan?: string | null;
   /** Where the subscription stands. `locked` makes the dashboard read-only. */
   plan_status?: string | null;
+  /** When a free trial with no card ends; it then falls back to Carta. */
+  trial_ends_at?: string | null;
+  /** Set once Stripe bills this restaurant. */
+  stripe_subscription_id?: string | null;
 };
 
 export type RestaurantTable = {
