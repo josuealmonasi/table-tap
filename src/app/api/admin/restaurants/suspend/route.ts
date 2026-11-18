@@ -1,0 +1,34 @@
+import { NextRequest, NextResponse } from "next/server";
+import { auditedAdminAction } from "@/lib/admin-audit";
+import { apiError } from "@/lib/api-error";
+import { jsonBody } from "@/lib/json-body";
+import { getPlatformAdmin } from "@/lib/admin";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { setSuspension, SUSPENSION_REASONS, type SuspensionReason } from "@/lib/admin-suspend";
+
+export const runtime = "nodejs";
+
+// POST /api/admin/restaurants/suspend { id, reason } — no new sales until lifted.
+async function suspend(req: NextRequest) {
+  const admin = await getPlatformAdmin();
+  if (!admin) return await apiError("apiErr.forbidden", 403);
+  const body = await jsonBody<{ id?: unknown; reason?: unknown }>(req);
+  if (!body || typeof body.id !== "string" || !SUSPENSION_REASONS.includes(body.reason as SuspensionReason)) {
+    return await apiError("apiErr.invalidRequest", 400);
+  }
+  const answer = await setSuspension(createAdminClient(), body.id, { reason: body.reason as SuspensionReason }, admin.email);
+  return answer.ok ? NextResponse.json({ ok: true }) : await apiError(answer.error, answer.status);
+}
+
+// DELETE /api/admin/restaurants/suspend { id } — lifts it.
+async function lift(req: NextRequest) {
+  const admin = await getPlatformAdmin();
+  if (!admin) return await apiError("apiErr.forbidden", 403);
+  const body = await jsonBody<{ id?: unknown }>(req);
+  if (!body || typeof body.id !== "string") return await apiError("apiErr.invalidRequest", 400);
+  const answer = await setSuspension(createAdminClient(), body.id, null, admin.email);
+  return answer.ok ? NextResponse.json({ ok: true }) : await apiError(answer.error, answer.status);
+}
+
+export const POST = auditedAdminAction("restaurant.suspend", suspend);
+export const DELETE = auditedAdminAction("restaurant.unsuspend", lift);

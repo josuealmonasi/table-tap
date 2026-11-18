@@ -76,6 +76,8 @@ export async function moveRestaurantPlan(
       plan_ends_at: null,
       stripe_subscription_id: null,
       subscription_sync_revision: revision + 1,
+      // A free move ends any emailed pay link for an earlier assignment.
+      tier_assignment_id: null,
     })
     .eq("id", restaurantId)
     .eq("subscription_sync_revision", revision)
