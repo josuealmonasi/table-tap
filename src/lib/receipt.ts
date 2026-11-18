@@ -217,9 +217,9 @@ export function buildReceipt(
   ]);
 
   const html = `
-<div style="font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;max-width:480px;margin:0 auto;padding:24px;color:#16211C">
+<div style="font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;max-width:480px;margin:0 auto;padding:24px;color:#111113">
   <h1 style="font-size:20px;margin:0">${esc(place.name)}</h1>
-  <p style="margin:4px 0 0;color:#6E7A74;font-size:13px">
+  <p style="margin:4px 0 0;color:#70707a;font-size:13px">
     ${esc(t("receipt.heading", { code }))}${order.table_label ? ` · ${esc(t("receipt.table", { label: order.table_label }))}` : ""}<br>${esc(when)}
   </p>
   <table style="width:100%;border-collapse:collapse;margin-top:20px;font-size:14px">
@@ -232,18 +232,18 @@ export function buildReceipt(
     ${rows
       .map(
         ([label, amount]) =>
-          `<tr><td style="padding:4px 0;color:#6E7A74;border-top:1px solid #E3E2DC">${esc(label)}</td>
-        <td style="padding:4px 0;text-align:right;color:#6E7A74;border-top:1px solid #E3E2DC">${esc(amount)}</td></tr>`,
+          `<tr><td style="padding:4px 0;color:#70707a;border-top:1px solid #e6e6e9">${esc(label)}</td>
+        <td style="padding:4px 0;text-align:right;color:#70707a;border-top:1px solid #e6e6e9">${esc(amount)}</td></tr>`,
       )
       .join("")}
     <tr>
-      <td style="padding:10px 0 0;font-weight:700;border-top:2px solid #16211C">${esc(totalLabel)}</td>
-      <td style="padding:10px 0 0;text-align:right;font-weight:700;border-top:2px solid #16211C">${esc(formatMoney(paid, cur))}</td>
+      <td style="padding:10px 0 0;font-weight:700;border-top:2px solid #111113">${esc(totalLabel)}</td>
+      <td style="padding:10px 0 0;text-align:right;font-weight:700;border-top:2px solid #111113">${esc(formatMoney(paid, cur))}</td>
     </tr>
   </table>
   ${loyaltyLines.map(line => `<p style="overflow-wrap:anywhere;font-size:13px">${esc(line)}</p>`).join("")}
-  <p style="margin-top:24px;color:#6E7A74;font-size:12px">${esc(t("receipt.footer"))}</p>
-  <p style="margin-top:8px;color:#6E7A74;font-size:12px">${esc(t("receipt.notFiscal"))}</p>
+  <p style="margin-top:24px;color:#70707a;font-size:12px">${esc(t("receipt.footer"))}</p>
+  <p style="margin-top:8px;color:#70707a;font-size:12px">${esc(t("receipt.notFiscal"))}</p>
 </div>`.trim();
 
   return { subject: t("receipt.subject", { restaurant: place.name, code }), text, html };

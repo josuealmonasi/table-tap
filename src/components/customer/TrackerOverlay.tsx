@@ -64,9 +64,9 @@ export default function TrackerOverlay({
   useEffect(() => {
     let active = true;
 
-    async function read(): Promise<TrackedOrder | null> {
+    async function read(signal?: AbortSignal): Promise<TrackedOrder | null> {
       try {
-        const res = await fetch(`/api/order-status?id=${orderId}`);
+        const res = await fetch(`/api/order-status?id=${orderId}`, { signal });
         if (!res.ok) return null;
         const next = (await res.json()) as TrackedOrder;
         if (active) setOrder(next);

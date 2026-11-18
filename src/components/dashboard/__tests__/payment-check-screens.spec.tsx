@@ -36,7 +36,7 @@ beforeEach(() => {
   host = document.createElement("div"); root = createRoot(host);
   vi.stubGlobal("fetch", vi.fn().mockImplementation(async (url, init) => {
     if (url === "/api/checkout/check") return Response.json({ outcome: "closed" });
-    if (init) return Response.json({ error: "Unconfirmed", checkoutCode: "checkout_unresolved" }, { status: 409 });
+    if (init?.method) return Response.json({ error: "Unconfirmed", checkoutCode: "checkout_unresolved" }, { status: 409 });
     return Response.json({ orders: [order], splits: [], outstanding: { owed: 100, ordered: 100, collected: 0, tips: 0, currency: "MXN" } });
   }));
 });

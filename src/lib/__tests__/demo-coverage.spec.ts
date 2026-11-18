@@ -34,6 +34,8 @@ const NOT_DEMO_DATA = new Set([
   "terms_acceptances", // the seeded restaurant acceptance fills this through its trigger
   "profiles", // created with the logins
   "rate_limits", // throttling counters
+  "recovery_nonces", // replay protection for real scheduled calls
+  "recovery_runs", // health of the real scheduler, never seeded
   "menus",
   "categories",
   "menu_items",

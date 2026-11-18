@@ -1,10 +1,10 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { pollAfterSettle } from "@/lib/poll-after-settle";
+import { pollAfterSettle, readTimeoutMs } from "@/lib/poll-after-settle";
 
 let poll: ReturnType<typeof pollAfterSettle>;
 let visibility: "visible" | "hidden";
-const read = vi.fn<() => Promise<unknown>>();
+const read = vi.fn<(signal?: AbortSignal) => Promise<unknown>>();
 const advance = (ms: number) => vi.advanceTimersByTimeAsync(ms);
 beforeEach(() => {
   vi.useFakeTimers(); visibility = "visible";
@@ -78,4 +78,21 @@ it("does not start a queued read after immediate teardown", async () => {
   poll = pollAfterSettle(read, 1_000);
   poll.stop(); await advance(0);
   expect(read).not.toHaveBeenCalled(); expect(vi.getTimerCount()).toBe(0);
+});
+
+it("audit #648: a read that never answers fails after max(2 x interval, 15 s) and the poll goes on", async () => {
+  const signals: AbortSignal[] = [];
+  read.mockImplementationOnce(signal => { signals.push(signal as AbortSignal); return new Promise(() => {}); });
+  poll = pollAfterSettle(read, 1_000);
+  await advance(0); expect(read).toHaveBeenCalledOnce();
+  await advance(14_999); expect(read).toHaveBeenCalledOnce(); expect(signals[0].aborted).toBe(false);
+  await advance(1); expect(signals[0].aborted).toBe(true);
+  await advance(1_000); expect(read).toHaveBeenCalledTimes(2);
+  await advance(1_000); expect(read).toHaveBeenCalledTimes(3);
+});
+
+it("audit #648: a slow interval gets twice its length before a read is abandoned", () => {
+  expect(readTimeoutMs(1_000)).toBe(15_000);
+  expect(readTimeoutMs(null)).toBe(15_000);
+  expect(readTimeoutMs(30_000)).toBe(60_000);
 });

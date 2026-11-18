@@ -3,7 +3,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, expect, it, vi } from "vitest";
 import { tableBill } from "@/lib/table-bill";
 import type { Order, Restaurant } from "@/lib/types";
-const state = vi.hoisted(() => ({ ready: false, split: null as object | null }));
+const state = vi.hoisted(() => ({ ready: false, split: null as object | null, disabled: false }));
 vi.mock("@/lib/i18n/context", () => ({ useT: () => (key: string) => key }));
 vi.mock("@/components/ui/Toast", () => ({ useToast: () => vi.fn() }));
 vi.mock("@/components/ui/Modal", () => ({ Modal: ({ children }: { children: React.ReactNode }) => <div>{children}</div> }));
@@ -16,7 +16,7 @@ function render(splitEnabled = true, mixed = false) {
     restaurant={{ id: "restaurant", currency: "MXN", cards_enabled: true, split_enabled: splitEnabled } as Restaurant}
     tableId="table" sessionId="session" tableLabel="1" photoOf={() => null} />);
 }
-beforeEach(() => { vi.stubGlobal("React", React); state.ready = false; state.split = null; });
+beforeEach(() => { vi.stubGlobal("React", React); state.ready = false; state.split = null; state.disabled = false; });
 it("keeps the waiter while checking parts and offers no whole-bill card button", () => {
   const html = render(); expect(html).toContain("bill.payAtTable"); expect(html).not.toContain("bill.payNow");
 });
@@ -45,5 +45,13 @@ it("N5: disabling splitting hides new offers while keeping ordinary payment", ()
   const html = render(false);
   expect(html).not.toContain("split.ask");
   expect(html).not.toContain('data-split-model="2"');
+  expect(html).toContain("bill.payAtTable");
+});
+
+it("audit #648: a split_disabled refusal hides the offer the menu's stale flag still allowed", () => {
+  state.ready = true;
+  state.disabled = true;
+  const html = render(true);
+  expect(html).not.toContain("split.ask");
   expect(html).toContain("bill.payAtTable");
 });

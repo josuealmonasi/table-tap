@@ -26,22 +26,19 @@ const post = () => POST(new NextRequest("https://test/api/loyalty/card-email", {
   body: JSON.stringify({ code: "K7QM-3XW9-K7P2", email: "Ana@Example.invalid", consent: true }) }));
 beforeEach(() => { f.actor = null; f.limited.clear(); f.buckets = []; });
 
-it("answers a diner the same whether the address was linked or is on another card", async () => {
+it("answers a diner with the submitted address", async () => {
   f.outcome = { outcome: "saved", email: "ana@example.invalid" };
-  const saved = await post();
-  f.outcome = { outcome: "taken", suffix: "ABCD" };
-  const taken = await post();
-  expect(taken.status).toBe(saved.status);
-  expect(saved.status).toBe(200);
-  expect(await taken.json()).toEqual(await saved.json());
+  const res = await post();
+  expect(res.status).toBe(200);
+  expect(await res.json()).toEqual({ outcome: "submitted", email: "ana@example.invalid" });
 });
 
-it("still tells staff which card holds the address", async () => {
+it("shows staff the saved address in their permitted form", async () => {
   f.actor = { restaurantId: "r1", email: "staff@test", role: "waiter" };
-  f.outcome = { outcome: "taken", suffix: "ABCD" };
+  f.outcome = { outcome: "saved", email: "ana@example.invalid" };
   const res = await post();
-  expect(res.status).toBe(409);
-  expect(await res.json()).toEqual({ outcome: "taken", suffix: "ABCD" });
+  expect(res.status).toBe(200);
+  expect(await res.json()).toEqual({ outcome: "saved", email: "a***@example.invalid" });
 });
 
 it("limits a diner per card and per network address", async () => {

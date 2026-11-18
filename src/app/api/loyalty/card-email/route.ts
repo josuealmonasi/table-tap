@@ -51,10 +51,8 @@ export async function POST(req: NextRequest) {
       restaurantId = data?.restaurant_id as string | undefined;
     }
     if (!restaurantId) return await apiError("apiErr.loyaltyNotHere", 404);
-    // A diner may change their card's address a few times a day, not probe
-    // addresses with it: each "taken" answers whether an address is in use here.
-    // Counted per card and per address: one caller holding many cards had five
-    // probes an hour for each of them (review access2).
+    // Limit changes per card and per network so one caller cannot use many
+    // cards to send an unlimited number of tickets to an address.
     //
     // Only linking is counted. Removing an address probes nothing, and taking
     // consent back must never wait: one diner spending the restaurant Wi-Fi's
@@ -67,13 +65,10 @@ export async function POST(req: NextRequest) {
     const result = await setCardEmail(restaurantId, code, email, actor?.email ?? "diner");
     if (result.outcome === "unknown") return await apiError("apiErr.loyaltyNotHere", 404);
     if (actor) {
-      if (result.outcome === "taken") return NextResponse.json(result, { status: 409 });
       if (result.outcome === "saved") return NextResponse.json({ outcome: "saved", email: emailForRole(result.email, MANAGES(actor.role)) });
       return NextResponse.json(result);
     }
-    // A diner gets one answer whether the address was linked or is already on
-    // another card here: a "taken" told anyone with a card whether an address
-    // has a card at this restaurant (review access2). Only staff learn which card.
+    // Every card saves independently, so this answer reveals no other card.
     if (result.outcome === "removed") return NextResponse.json(result);
     return NextResponse.json({ outcome: "submitted", email });
   } catch {

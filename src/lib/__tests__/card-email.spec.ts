@@ -4,6 +4,7 @@ type Row = Record<string, unknown> & { id: string };
 const state = vi.hoisted(() => ({
   claimed: [] as Row[], updates: [] as unknown[], sent: [] as unknown[], steps: [] as string[], claims: 0, cardError: false,
   mail: "sent" as "sent" | "failed", result: null as unknown, renders: 0, sendMs: 0, crashAfterSend: false, batches: [] as Row[][],
+  finishError: false, loseFinish: false,
   card: { email: "ana@example.invalid", email_unsubscribe: "11111111-1111-4111-8111-111111111111" } as unknown,
 }));
 vi.mock("@/lib/supabase/admin", () => ({
@@ -42,7 +43,12 @@ vi.mock("@/lib/supabase/admin", () => ({
           })();
           return {
             then: (ok: (v: unknown) => unknown, fail: (e: unknown) => unknown) => run().then(() => ({ error: null })).then(ok, fail),
-            select: async () => ({ data: (await run()).map(id => ({ id })), error: null }),
+            select: async () => {
+              const finishing = !("batch_key" in patch) && !("mail_body" in patch && !("finished_at" in patch));
+              if (finishing && state.finishError) return { data: null, error: { message: "write failed" } };
+              if (finishing && state.loseFinish) return { data: [], error: null };
+              return { data: (await run()).map(id => ({ id })), error: null };
+            },
           };
         };
         return w;
@@ -75,10 +81,31 @@ const drain = async () => { vi.advanceTimersByTime(5000); await drainTicketEmail
 
 beforeEach(() => {
   vi.useFakeTimers({ toFake: ["Date"] });
-  Object.assign(state, { claimed: [], updates: [], sent: [], steps: [], claims: 0, cardError: false, mail: "sent", result: null, renders: 0, sendMs: 0, crashAfterSend: false, batches: [] });
+  Object.assign(state, { claimed: [], updates: [], sent: [], steps: [], claims: 0, cardError: false, mail: "sent", result: null, renders: 0, sendMs: 0, crashAfterSend: false, batches: [], finishError: false, loseFinish: false });
 });
 const keys = () => (state.sent as { idempotencyKey: string }[]).map(m => m.idempotencyKey);
 const finished = () => (state.updates as { patch: Record<string, unknown>; ids: string[] }[]).filter(u => "finished_at" in u.patch);
+
+it("reports an outbox transition error instead of counting the ticket as sent", async () => {
+  state.claimed = [row("1", "o1", "s")];
+  state.finishError = true;
+  const result = await drainTicketEmailQueue(1);
+  expect(result).toMatchObject({ sent: 0, errors: 1 });
+  expect(finished()).toHaveLength(0);
+});
+
+it("reports a lost outbox claim instead of counting the ticket as sent", async () => {
+  state.claimed = [row("1", "o1", "s")];
+  state.loseFinish = true;
+  expect(await drainTicketEmailQueue(1)).toMatchObject({ sent: 0, errors: 1 });
+});
+
+it("reports a failed release instead of counting it as released", async () => {
+  state.claimed = [row("1", "o1", null), row("2", "o2", null)];
+  state.sendMs = 10;
+  state.finishError = true;
+  expect(await drainTicketEmailQueue(1, 2, Date.now() + 5)).toMatchObject({ sent: 0, released: 0, errors: 2 });
+});
 
 it("normalizes and masks the card's address", () => {
   expect(normalizeEmail("  Ana@Example.Invalid ")).toBe("ana@example.invalid");
@@ -94,9 +121,10 @@ it("sends a table's orders paid together as one email, with the PDF and the stop
   expect(state.sent).toHaveLength(1);
   const mail = state.sent[0] as { to: string; attachments: { filename: string }[]; headers: Record<string, string>; html: string; text: string };
   expect(mail.to).toBe("ana@example.invalid");
-  expect(mail.text.split("\n").slice(-2)).toEqual(["Dejar de recibir mis tickets por correo:",
+  expect(mail.text.split("\n").slice(-2)).toEqual(["Dejar de recibir los tickets de esta tarjeta por correo:",
     `http://localhost:3000/tickets/stop?t=${KEY}`]);
   expect(mail.attachments[0].filename).toBe("ticket-ORD-1.pdf");
+  expect(mail.headers["List-Unsubscribe-Post"]).toBe("List-Unsubscribe=One-Click");
   expect(mail.headers["List-Unsubscribe"]).toContain("/tickets/stop?t=11111111-1111-4111-8111-111111111111");
   expect(finished()).toEqual([{ patch: expect.objectContaining({ outcome: "sent" }), ids: ["1", "2"] }]);
 });

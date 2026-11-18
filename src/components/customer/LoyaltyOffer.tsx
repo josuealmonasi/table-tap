@@ -56,8 +56,7 @@ export default function LoyaltyOffer({ offer, asked = false }: LoyaltyOfferProps
       });
       const data = await res.json();
       if (!res.ok) {
-        setError(res.status === 409 && data.outcome === "taken" && typeof data.suffix === "string"
-          ? t("cardEmail.takenDiner", { suffix: data.suffix }) : data.error ?? t("apiErr.generic"));
+        setError(data.error ?? t("apiErr.generic"));
         return;
       }
       rememberCard(offer.restaurantId, data.code);
