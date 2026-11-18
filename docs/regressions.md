@@ -8203,4 +8203,12 @@ and the only trace was a log line, so a Connect endpoint that was never set up
 looked exactly like no diner paying by card. Each endpoint now records its last
 accepted and last refused event, and the admin health shows it red until it
 accepts one. Check: `admin-health.spec.ts` (`webhookBad`).
+## Branch previews used up the day's deployments (2026-11-18)
+
+Vercel's plan caps deployments per day, and every push to any branch built a
+preview nobody opened: the gates run on GitHub, and the ship train reads only
+the deployment of a merge to main. On a busy day the cap was reached and the
+merge of #688 was refused ("Deployment rate limited — retry in 24 hours"),
+leaving production on the previous release. `vercel.json` now deploys main only
+(`git.deploymentEnabled`). Check: `invariants/operations.spec.ts`.
 
