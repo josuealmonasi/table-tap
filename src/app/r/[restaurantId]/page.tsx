@@ -2,13 +2,14 @@ import { Suspense } from "react";
 import { notFound } from "next/navigation";
 import OrderingApp from "@/components/customer/OrderingApp";
 import MenuSkeleton from "@/components/customer/MenuSkeleton";
+import { loadPlaceIdentity } from "@/lib/place-identity";
 import { menuShowsLoyalty, loadCoverState, loadOrderingData } from "@/lib/ordering-data";
 
 export const dynamic = "force-dynamic";
 
 /** The menu itself. Split out so the shell can render while this loads. */
 async function Menu({ restaurantId }: { restaurantId: string }) {
-  const data = await loadOrderingData(restaurantId);
+  const [data, identity] = await Promise.all([loadOrderingData(restaurantId), loadPlaceIdentity(restaurantId)]);
   if (!data.restaurant) notFound();
 
   return (
@@ -27,6 +28,7 @@ async function Menu({ restaurantId }: { restaurantId: string }) {
       receipts={data.receipts}
       loyalty={data.loyalty}
       dietaryTags={data.dietaryTags}
+      identity={identity}
     />
   );
 }
