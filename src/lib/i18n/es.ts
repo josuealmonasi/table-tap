@@ -2661,6 +2661,9 @@ votes: "Votos",
   },
   /** A customer's statement: what their account owes, and how to pay it. */
   account: {
+    removeEmail: "Quitar mi correo",
+    removeEmailConfirm: "¿Quieres quitar el correo guardado en tu cuenta?",
+    removeEmailDone: "Quitamos tu correo de esta cuenta.",
     title: "Cuenta de {name}",
     invalid: "Eso no parece el código de una cuenta.",
     notFound: "No encontramos esa cuenta. Pide al restaurante que te muestre su código.",
@@ -2691,6 +2694,9 @@ votes: "Votos",
   },
   /** Customer accounts, as the staff keep them. */
   accounts: {
+    removeEmail: "Quitar correo",
+    removeEmailConfirm: "¿Quieres quitar el correo guardado en esta cuenta?",
+    removeEmailDone: "Quitamos el correo de esta cuenta.",
     intro: "Clientes de confianza que se llevan su pedido ahora y pagan después, todo junto. Cada cuenta tiene un límite, y cada cargo queda registrado con quién lo hizo y por cuánto.",
     owedTotal: "En total te deben {amount}.",
     openAction: "Abrir cuenta",
