@@ -3164,6 +3164,17 @@ votes: "Votes",
     confirm: "Schedule change",
     scheduled: "{plan} price change scheduled. Owners will be told.",
   },
+  authConfirm: {
+    title: { signup: "Confirm your email", invite: "Join your team", recovery: "Reset your password", email_change: "Confirm your new email" },
+    body: {
+      signup: "One more step: confirm this email is yours to start using TableTap.",
+      invite: "You were invited to TableTap. Accept to choose your password.",
+      recovery: "Press the button to choose a new password.",
+      email_change: "Press the button to start using this email on TableTap.",
+    },
+    button: { signup: "Confirm my email", invite: "Accept invitation", recovery: "Choose a new password", email_change: "Confirm email" },
+    broken: "This link is incomplete. Open the full link from the email or ask for a new one.",
+  },
 };
 
 export type Messages = typeof en;
