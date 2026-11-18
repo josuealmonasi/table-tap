@@ -95,6 +95,7 @@ const NOT_BOOKS: Record<string, string> = {
   ingredients: "inventory catalogue", ingredient_prices: "inventory catalogue", recipe_lines: "inventory catalogue",
   ingredient_counts: "stock counts", ingredient_movements: "stock movements", ingredient_consumption: "stock use",
   waste_entries: "stock written off, not money collected or owed",
+  restaurant_admin_notes: "the platform team's support notes, not money collected or owed",
 };
 
 it("bg8: archives every cascading table that is not named as outside the books", () => {
