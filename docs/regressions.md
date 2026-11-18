@@ -55,6 +55,15 @@ checks the shared rule, and the rolled-back development probe checks both reads.
 
 ## What runs on its own
 
+### Scheduled prices keep their notice queue
+
+The scheduled price and its recipients must be written together, and the queue
+must exclude founding prices. `plan-price-change-route.spec.ts` checks the
+admin, date, plan and price refusals and the single RPC call;
+`plan-price-change-schema.spec.ts` pins the transaction and service-only grant.
+The API case checks real recipients and removes its fixture. Sending notices and
+changing Stripe prices are later work.
+
 ### Login passwords stay outside the repository
 
 Seeds and the checks signing into those accounts have to agree on the target's
@@ -89,6 +98,7 @@ and that a new party cannot see the previous party's waiting phones.
 `src/lib/__tests__/invariants.spec.ts` enforces the rules that span files:
 
 | Rule | The bug it came from |
+| Scheduled plan prices keep their eligible notice queue | A scheduled price without its recipients could leave an owner without notice; the route and schema specs pin validation and the atomic queue |
 | One-click ticket unsubscribe retries return the same success | A cleared or unknown token returned 404 to mail providers; `ticket-stop-one-click.spec.ts` checks retries, invalid forms and the separate confirmation response |
 |---|---|
 | Dish choices and the pinned cart button keep their distance | The deal button wrapped beside a scrolling extra; `dish-footer-gap.spec.ts` and the dish detail layout case cover the structure and the rendered spacing |
@@ -8012,3 +8022,21 @@ read exposed whether another card had that address. Each card now saves its own
 address and consent, with a separate stop token. `shared-address.spec.ts` checks
 both starting states, the schema, and stopping one card without touching the
 other; `review2-deferred-probes.spec.ts` keeps the original regression.
+
+## Admin tier billing: five gaps from the 2026-11-17 review of #660
+
+- The emailed pay link checked the assignment before the billing lock; an owner
+  who subscribed to something else in between had that subscription moved to
+  the emailed tier and invoiced at once. It now checks inside the lock
+  (`assertStillAssigned`), bound to the assignment by its pay-by day (`until`),
+  and refuses once anything is live.
+- A payment-link assignment left the owner's older open Checkout payable, whose
+  subscription would then replace the assigned tier. It now runs under the
+  billing lock and closes every open Checkout first.
+- "From the next bill" accepted a subscription already set to end, promising a
+  bill that never comes; and a non-monthly one, where Stripe charges at once
+  whatever the proration. Both are refused with their own message.
+- A signed-out owner opening the pay link lost it at sign-in. `/login?next=`
+  keeps it, and only that exact link shape (`safeLoginNext`).
+
+Checks: `admin-tier.spec.ts`, `billing-assigned.spec.ts`.

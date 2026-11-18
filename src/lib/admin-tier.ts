@@ -53,9 +53,13 @@ export function payByDate(value: unknown, now = Date.now()): string | null {
   return new Date(at).toISOString();
 }
 
-/** The link in the owner's email: it opens Checkout for the assigned tier once they sign in. */
-export function assignedPayLink(origin: string, plan: string): string {
-  return `${origin}/api/billing/assigned?plan=${encodeURIComponent(plan)}`;
+/**
+ * The link in the owner's email: it opens Checkout for the assigned tier once
+ * they sign in. `until` binds it to this assignment (its pay-by day), so a
+ * link from an earlier or a replaced assignment opens nothing.
+ */
+export function assignedPayLink(origin: string, plan: string, payBy: string): string {
+  return `${origin}/api/billing/assigned?plan=${encodeURIComponent(plan)}&until=${payBy.slice(0, 10)}`;
 }
 
 export async function assignTier(
@@ -75,7 +79,7 @@ export async function assignTier(
   try {
     return input.billing === "next_bill"
       ? await rebill(db, input.restaurantId, limits, adminEmail, client)
-      : await assignWithLink(db, input, adminEmail);
+      : await assignWithLink(db, input, adminEmail, client);
   } catch (err) {
     if (err instanceof BillingError) return { ok: false, error: err.key, status: err.status };
     if ((err as { statusCode?: number })?.statusCode === 402) return { ok: false, error: "apiErr.billingPaymentFailed", status: 402 };
@@ -109,6 +113,15 @@ async function rebill(
       throw new BillingError("apiErr.billingConflict");
     }
     if (!["active", "trialing"].includes(subscription.status)) throw new BillingError("apiErr.tierSettleFirst");
+    // An owner who scheduled the end of their subscription is not billed
+    // again: promising "the next bill is at the new tier" would be false, and
+    // moving it must not quietly undo their cancellation (review finding 4).
+    if (subscription.cancel_at_period_end || subscription.cancel_at) throw new BillingError("apiErr.tierCancelScheduled");
+    // Only a monthly contract moves to a monthly price with nothing charged
+    // today; Stripe resets the cycle and bills at once when the interval
+    // changes, whatever the proration setting (review finding 5).
+    const recurring = item.price.recurring;
+    if (recurring?.interval !== "month" || recurring.interval_count !== 1) throw new BillingError("apiErr.tierIntervalUnsupported");
     const from = await subscriptionPlan(subscription);
     if (from === limits.plan) return { ok: true, from, to: limits.plan, billing: "next_bill" } as const;
 
@@ -141,13 +154,43 @@ async function rebill(
  */
 async function assignWithLink(
   db: Db, input: { restaurantId: string; plan: string; payBy?: unknown; origin: string }, adminEmail: string,
+  client: Stripe,
 ): Promise<TierAnswer> {
   const payBy = payByDate(input.payBy);
   if (!payBy) return { ok: false, error: "apiErr.tierPayByInvalid", status: 400 };
-  const { live, exists } = await restaurantBilling(db, input.restaurantId);
-  if (!exists) return { ok: false, error: "apiErr.restaurantNotFound", status: 404 };
-  if (live.length) return { ok: false, error: "apiErr.planHasSubscription", status: 409 };
+  // Under the same billing lock as checkout: a Checkout page the owner left
+  // open for another tier could otherwise be paid after this assignment and
+  // its subscription would replace the tier (review 2026-11-17, finding 3).
+  const assigned = await withRestaurantBilling(db, input.restaurantId, async operation => {
+    const { live, sessions, snapshot, exists } = await restaurantBilling(db, input.restaurantId);
+    if (!exists) return { ok: false, error: "apiErr.restaurantNotFound", status: 404 } as const;
+    await operation.record(snapshot);
+    if (live.length) return { ok: false, error: "apiErr.planHasSubscription", status: 409 } as const;
+    // Close every open Checkout first. A failure throws (the move does not happen).
+    for (const session of sessions) await operation.write(() => client.checkout.sessions.expire(session.id));
+    return await writeAssignment(db, input, payBy);
+  });
+  if (!assigned.ok) return assigned;
+  const { from, restaurant } = assigned;
 
+  invalidatePublicMenu(input.restaurantId);
+
+  const emailed = await mailOwner(db, {
+    ownerId: restaurant.owner_id, restaurant: restaurant.name,
+    plan: input.plan, payBy, link: assignedPayLink(input.origin, input.plan, payBy),
+    key: `admin-tier/${input.restaurantId}/${input.plan}/${payBy.slice(0, 10)}`,
+  });
+  await logEvent({
+    restaurantId: input.restaurantId, actor: adminEmail, entity: "settings", action: "updated",
+    detail: logDetail({ plan: `${from}→${input.plan}`, by: "platform_admin", billing: "payment_link", pay_by: payBy.slice(0, 10) }),
+  });
+  return { ok: true, from, to: input.plan, billing: "payment_link", payBy, emailed };
+}
+
+/** The tier as the app's own trial until the pay-by date, over the sync revision it read. */
+async function writeAssignment(
+  db: Db, input: { restaurantId: string; plan: string }, payBy: string,
+): Promise<{ ok: true; from: string; restaurant: { name: string; owner_id: string | null } } | { ok: false; error: string; status: number }> {
   const { data: restaurant } = await db.from("restaurants")
     .select("name, plan, owner_id, subscription_sync_revision").eq("id", input.restaurantId).maybeSingle();
   if (!restaurant) return { ok: false, error: "apiErr.restaurantNotFound", status: 404 };
@@ -164,18 +207,7 @@ async function assignWithLink(
     return { ok: false, error: "apiErr.generic", status: 500 };
   }
   if (!moved?.length) return { ok: false, error: "apiErr.planChangedMeanwhile", status: 409 };
-  invalidatePublicMenu(input.restaurantId);
-
-  const emailed = await mailOwner(db, {
-    ownerId: restaurant.owner_id as string | null, restaurant: restaurant.name as string,
-    plan: input.plan, payBy, link: assignedPayLink(input.origin, input.plan),
-    key: `admin-tier/${input.restaurantId}/${input.plan}/${payBy.slice(0, 10)}`,
-  });
-  await logEvent({
-    restaurantId: input.restaurantId, actor: adminEmail, entity: "settings", action: "updated",
-    detail: logDetail({ plan: `${from}→${input.plan}`, by: "platform_admin", billing: "payment_link", pay_by: payBy.slice(0, 10) }),
-  });
-  return { ok: true, from, to: input.plan, billing: "payment_link", payBy, emailed };
+  return { ok: true, from, restaurant: { name: restaurant.name as string, owner_id: restaurant.owner_id as string | null } };
 }
 
 /** The owner's email with the link. False when it could not be sent: the admin is told so. */

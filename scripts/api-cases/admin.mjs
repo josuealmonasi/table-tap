@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { adminCases } from "../api-admin-cases.mjs";
 import { loginSecret } from "../login-secrets.mjs";
 import { frozenOfferCases } from "../api-frozen-offers.mjs";
@@ -6,6 +7,40 @@ export function adminOpeningCases() {
   return [
     ...adminCases(),
     ...frozenOfferCases(),
+    { name: "POST /api/admin/plan-price-changes", as: "platformAdmin", method: "POST",
+      path: "/api/admin/plan-price-changes", expect: [200],
+      arrange: async f => {
+        const regular = randomUUID(), founding = randomUUID(), other = randomUUID();
+        const effectiveAt = new Date(Date.now() + 40 * 86400000).toISOString();
+        const price = Math.floor(100000000 + Math.random() * 900000000);
+        f.priceNoticeProbe = { regular, founding, other, effectiveAt, price };
+        const cleanup = async () => {
+          const changes = await f.admin.from("plan_price_changes").delete()
+            .eq("new_monthly_price", price).eq("effective_at", effectiveAt);
+          if (changes.error) throw new Error(`Price change cleanup: ${changes.error.message}`);
+          const restaurants = await f.admin.from("restaurants").delete().in("id", [regular, founding, other]);
+          if (restaurants.error) throw new Error(`Price fixture cleanup: ${restaurants.error.message}`);
+        };
+        try {
+          // A negative founding number cannot collide with the normal positive sequence.
+          const { error } = await f.admin.from("restaurants").insert([
+            { id: regular, name: "Price notice regular", plan: "casa", plan_status: "active" },
+            { id: founding, name: "Price notice founding", plan: "casa", plan_status: "active", founding_number: -price },
+            { id: other, name: "Price notice other plan", plan: "carta", plan_status: "active" },
+          ]);
+          if (error) throw new Error(`Price fixture: ${error.message}`);
+          return cleanup;
+        } catch (error) { await cleanup(); throw error; }
+      },
+      body: f => ({ plan: "casa", newPrice: f.priceNoticeProbe.price, effectiveAt: f.priceNoticeProbe.effectiveAt }),
+      check: async (data, f) => {
+        const { regular, founding, other } = f.priceNoticeProbe;
+        if (!data.id) return "no price change id";
+        const { data: notices, error } = await f.admin.from("plan_price_notices")
+          .select("restaurant_id, sent_at, attempts").eq("change_id", data.id).in("restaurant_id", [regular, founding, other]);
+        return !error && notices.length === 1 && notices[0].restaurant_id === regular
+          && notices[0].sent_at === null && notices[0].attempts === 0 || "wrong notice recipients";
+      } },
   ];
 }
 
