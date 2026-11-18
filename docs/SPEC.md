@@ -1511,12 +1511,18 @@ measure. Its amounts come from
 
 ### Tickets by email to the visit card's address (2026-11-11)
 
+The same address may be saved on more than one card, each with its own consent
+and stop token. Each card sends its own eligible tickets. Stopping one card
+leaves the others sending; replacing an address invalidates that card's old
+link. A card's save and rewards read never disclose another card's address.
+
+
 Paperless without typing an address at every sale. A diner may link an email
 to their visit card — making the card, at a stamp, or when paying — by
 themselves (holding the card's code) or through staff (`/api/loyalty/card-email`),
 always with an explicit consent tick; `loyalty_cards.email` keeps the address
 with when consent was given, under which notice version, by whom, and a
-"stop" secret replaced on every change. One card per address per restaurant.
+"stop" secret replaced on every change. An address may belong to several cards.
 Waiters and cashiers see it masked (`a***@dominio`); owner and manager see it
 whole. The address is used for tickets only.
 
@@ -1536,7 +1542,7 @@ so a retry resends the identical body under the same idempotency key. A sale
 closed by forgiving a walkout queues no ticket and stamps no visit (owner's
 decision, 2026-11-12). Orders of one card
 and one sitting claimed together are one email: the receipt, the 80 mm PDF
-attached, and the "Dejar de recibir mis tickets por correo" link
+attached, and the "Dejar de recibir los tickets de esta tarjeta por correo" link
 (`/tickets/stop`, a button that POSTs — mail scanners open links — plus the
 List-Unsubscribe header). Nothing is sent without a mail provider configured
 (`RESEND_API_KEY`, `RECEIPT_FROM_EMAIL`): those rows finish as `unconfigured`.
@@ -3318,8 +3324,8 @@ to the privacy notice. There is no confirmation-link step. The diner's own
 card read supplies their full `email`; the staff-only card-email read supplies
 the server's role-filtered address (masked for waiter/cashier, full for
 owner/manager). Staff can change or remove it after scanning, stamping,
-looking up or attaching a card. A duplicate address explains which card
-already has it by its last four characters; a suffix alone cannot select it.
+looking up or attaching a card. The same address can be saved on several cards
+without identifying any other card.
 A bill need not expose the full bearer code: staff can scan the card to edit.
 
 An attached card's email makes tickets automatic. The till and whole-table

@@ -3840,8 +3840,8 @@ alter table loyalty_cards add column if not exists email_unsubscribe uuid;
 alter table loyalty_cards drop constraint if exists loyalty_cards_email_consented;
 alter table loyalty_cards add constraint loyalty_cards_email_consented check (email is null
   or (email_consent_at is not null and email_notice_version is not null and email_unsubscribe is not null));
--- One card per address in a restaurant: the address finds the card.
-create unique index if not exists loyalty_cards_email_once on loyalty_cards(restaurant_id, email) where email is not null;
+-- Each card keeps its own address; uniqueness exposed another card through rewards.
+drop index if exists loyalty_cards_email_once;
 create unique index if not exists loyalty_cards_email_unsubscribe on loyalty_cards(email_unsubscribe) where email_unsubscribe is not null;
 
 -- The cashier's choice not to email one sale's ticket, written with it.

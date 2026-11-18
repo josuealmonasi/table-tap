@@ -7,7 +7,6 @@ vi.mock("@/lib/api-error", () => ({ apiError: async (error: string, status: numb
 vi.mock("@/lib/rate-limit", () => ({ clientKey: () => "ip", isRoomLimited: async () => false, isRateLimited: async () => false }));
 vi.mock("@/lib/loyalty/card-email", async original => ({ ...await original<typeof import("@/lib/loyalty/card-email")>(),
   setCardEmail: async () => {
-    if (f.taken) return { outcome: "taken" };
     f.email = "ana@example.invalid";
     return { outcome: "saved", email: f.email };
   },
@@ -26,9 +25,8 @@ vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({ from: (tabl
 import { POST } from "@/app/api/loyalty/card-email/route";
 import { GET } from "@/app/api/rewards/route";
 beforeEach(() => { f.taken = false; f.email = null; });
-// Known P3: hiding the POST outcome cannot hide the later association read.
-// Ownership verification changes the linking flow and is deferred from this fix.
-it.fails("N12: subsequent rewards reads must not reveal whether the submitted address is taken", async () => {
+// Every card saves independently, so the later read cannot disclose another card.
+it("N12: subsequent rewards reads must not reveal whether the submitted address is taken", async () => {
   const answers = [];
   for (const taken of [false, true]) {
     f.taken = taken; f.email = null;

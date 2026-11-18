@@ -59,6 +59,7 @@ and that a new party cannot see the previous party's waiting phones.
 | Staff discounts preserve existing gratuities (review N2) | Both pricing and SQL discounted tips below the order total; `staff-discount-tip.spec.ts` and `staff-discount-tip-route.spec.ts` check direct and approved principal-only discounts |
 | Each subscription source has time to run (review N8) | Persistently unpaid reads starved cancellation recovery; `subscriptions.spec.ts` advances the clock across all three sources |
 | Overdue refunds remind each restaurant (review N9) | Only the globally oldest case got a reminder; `refunds.spec.ts` keeps two tenants pending and checks both bells |
+| A shared card email saves independently | The generic save answer and rewards read disagreed when another card used the address; `shared-address.spec.ts` compares both paths and stops each card independently |
 | Ticket retries run before tickets expire (review N10) | Daily recovery missed the backoff window; `ticket-email-schedule.spec.ts` models recovery without payment traffic |
 | A table payment check names the actual table relation (review N3) | `payment-check-route.spec.ts` rejects unknown relations and checks the tenant and table before Stripe |
 | Held approval keeps the kitchen's saved instructions (review N4) | `offline-sale.spec.ts` keeps notes and component extras without duplicating flattened extras |
@@ -7760,3 +7761,13 @@ failed at Stripe (500/502) and the attack gate refused its admission case, on
 every branch, looking like a bug in whatever PR was being gated (#653).
 `scripts/lent-stripe-account.mjs` names the fakes once; restores and reseeds
 never keep one. Check: `src/lib/__tests__/lent-stripe-account.spec.ts`.
+
+
+## Shared card email and the rewards read
+
+The save response and the later rewards read must agree. A unique email index
+refused a second card while the diner saw the same save answer, so the later
+read exposed whether another card had that address. Each card now saves its own
+address and consent, with a separate stop token. `shared-address.spec.ts` checks
+both starting states, the schema, and stopping one card without touching the
+other; `review2-deferred-probes.spec.ts` keeps the original regression.

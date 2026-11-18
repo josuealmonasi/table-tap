@@ -115,6 +115,7 @@ drop table if exists customer_accounts   cascade;
 drop table if exists loyalty_redemptions cascade;
 drop table if exists loyalty_visits      cascade;
 drop table if exists ticket_email_outbox cascade;
+-- Dropping the cards also drops their per-card stop-token index.
 drop table if exists loyalty_cards       cascade;
 drop table if exists loyalty_programs    cascade;
 drop table if exists print_jobs          cascade;

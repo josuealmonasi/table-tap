@@ -94,7 +94,7 @@ it("sends a table's orders paid together as one email, with the PDF and the stop
   expect(state.sent).toHaveLength(1);
   const mail = state.sent[0] as { to: string; attachments: { filename: string }[]; headers: Record<string, string>; html: string; text: string };
   expect(mail.to).toBe("ana@example.invalid");
-  expect(mail.text.split("\n").slice(-2)).toEqual(["Dejar de recibir mis tickets por correo:",
+  expect(mail.text.split("\n").slice(-2)).toEqual(["Dejar de recibir los tickets de esta tarjeta por correo:",
     `http://localhost:3000/tickets/stop?t=${KEY}`]);
   expect(mail.attachments[0].filename).toBe("ticket-ORD-1.pdf");
   expect(mail.headers["List-Unsubscribe"]).toContain("/tickets/stop?t=11111111-1111-4111-8111-111111111111");
