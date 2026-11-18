@@ -3101,6 +3101,8 @@ votes: "Votes",
     tickets: "Failed ticket emails (7 days)",
     notices: "Stuck price notices",
     noCards: "Restaurants not taking cards",
+    webhook: { platform: "Last Stripe webhook (account)", connect: "Last Stripe webhook (restaurants)" },
+    webhookRefused: "Refused {when}",
   },
   adminSupport: {
     title: "Support",

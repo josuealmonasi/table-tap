@@ -3535,3 +3535,7 @@ that ended failed or unconfigured in the last 7 days, price notices still
 unsent after a failed attempt, and restaurants that cannot take cards. Each
 of these failed silently once; the counts read existing records
 (`readPlatformHealth`).
+Each Stripe webhook endpoint (platform and connect) also has a tile: when it
+last accepted a signed event, red if it never has or if its latest was refused
+for a missing or wrong signing secret. `readStripeEvent` records both in
+`webhook_heartbeats` (service-only); a failed record never stops the event.

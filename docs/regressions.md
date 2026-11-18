@@ -8169,3 +8169,12 @@ cached menu loader, which runs in production; dev and any uncached read use
 `loadOrderingData`'s own restaurant read, so the diner still saw add buttons
 there. Both now go through `asDinerSees`. Seen in the browser while checking
 the suspension, before it shipped.
+
+## A webhook nobody configured looks like a quiet day (2026-11-18)
+
+Both Stripe endpoints refuse an event with a missing or wrong signing secret,
+and the only trace was a log line, so a Connect endpoint that was never set up
+looked exactly like no diner paying by card. Each endpoint now records its last
+accepted and last refused event, and the admin health shows it red until it
+accepts one. Check: `admin-health.spec.ts` (`webhookBad`).
+

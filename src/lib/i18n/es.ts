@@ -3084,6 +3084,8 @@ votes: "Votos",
     tickets: "Tickets por correo fallidos (7 días)",
     notices: "Avisos de precio atorados",
     noCards: "Restaurantes que no aceptan tarjeta",
+    webhook: { platform: "Último webhook de Stripe (cuenta)", connect: "Último webhook de Stripe (restaurantes)" },
+    webhookRefused: "Rechazado {when}",
   },
   adminSupport: {
     title: "Soporte",

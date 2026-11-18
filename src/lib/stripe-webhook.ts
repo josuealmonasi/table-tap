@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { stripe } from "@/lib/stripe";
 import type Stripe from "stripe";
+import { createAdminClient } from "@/lib/supabase/admin";
 
 /**
  * Reading a Stripe webhook, for exactly one event stream.
@@ -41,17 +42,36 @@ export async function readStripeEvent(
 
   if (!signature || !secret) {
     console.error(`stripe webhook (${stream}): no signature or no secret configured`);
+    // Only a missing secret is ours to show: an unsigned request is anyone's.
+    if (signature) await beat(stream, { last_refused_at: new Date().toISOString(), last_refusal: "no_secret" });
     return { refusal: NextResponse.json({ error: "Missing signature" }, { status: 400 }) };
   }
 
   const body = await req.text(); // the raw body is what the signature covers
 
   try {
-    return { event: stripe.webhooks.constructEvent(body, signature, secret) };
+    const event = stripe.webhooks.constructEvent(body, signature, secret);
+    await beat(stream, { last_ok_at: new Date().toISOString(), last_type: event.type });
+    return { event };
   } catch (err) {
     // Nearly always the wrong secret for this endpoint: the two are easy to
     // swap, and swapped they fail silently apart from this line.
     console.error(`stripe webhook (${stream}): signature verification failed`, err);
+    await beat(stream, { last_refused_at: new Date().toISOString(), last_refusal: "bad_signature" });
     return { refusal: NextResponse.json({ error: "Invalid signature" }, { status: 400 }) };
+  }
+}
+
+/**
+ * Records that an endpoint accepted or refused an event, for the admin panel's
+ * health. Never in the way of the event: a failed write is logged and the
+ * webhook carries on.
+ */
+async function beat(stream: "platform" | "connect", fields: Record<string, string>): Promise<void> {
+  try {
+    const { error } = await createAdminClient().from("webhook_heartbeats").upsert({ stream, ...fields }, { onConflict: "stream" });
+    if (error) console.error(`stripe webhook (${stream}): heartbeat not recorded`, error.message);
+  } catch (err) {
+    console.error(`stripe webhook (${stream}): heartbeat not recorded`, err);
   }
 }
