@@ -10252,6 +10252,22 @@ alter table platform_admin_audit enable row level security;
 revoke all on platform_admin_audit from anon, authenticated, public, service_role;
 grant select, insert on platform_admin_audit to service_role;
 
+-- A free trial's end, told by email three days before. `trial_reminded_for`
+-- is the end date that was reminded: a trial extended by the admin gets a new
+-- date and so a new reminder; one already told is not told twice.
+alter table restaurants add column if not exists trial_reminded_for timestamptz;
+-- Who is due, for the recovery job. Its `created_at` is when the reminder fell
+-- due, so the job's age metric says how late a reminder is, not how old the
+-- restaurant is. Service-only, like every recovery queue.
+create or replace view trial_reminders_due with (security_invoker = true) as
+  select id as restaurant_id, owner_id, trial_ends_at, trial_ends_at - interval '3 days' as created_at
+    from restaurants
+   where plan_status = 'trialing' and stripe_subscription_id is null and tier_assignment_id is null
+     and trial_ends_at > now() and trial_ends_at <= now() + interval '3 days'
+     and trial_reminded_for is distinct from trial_ends_at;
+revoke all on trial_reminders_due from anon, authenticated, public, service_role;
+grant select on trial_reminders_due to service_role;
+
 -- One free trial per RFC. A restaurant's RFC is recorded here once it has had
 -- a trial (no FK: it outlives the restaurant, which is the point). Saving an
 -- RFC that another restaurant already used for a trial ends this one's trial

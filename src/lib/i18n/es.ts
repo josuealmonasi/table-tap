@@ -3171,4 +3171,10 @@ votes: "Votos",
     button: { signup: "Confirmar mi correo", invite: "Aceptar invitación", recovery: "Elegir contraseña nueva", email_change: "Confirmar correo" },
     broken: "Este enlace está incompleto. Abre el enlace completo del correo o pide uno nuevo.",
   },
+  trialMail: {
+    subject: "Tu prueba gratis de {plan} termina el {date}",
+    intro: "Tu prueba gratis de {plan} en TableTap termina el {date}.",
+    after: "Después de esa fecha tu restaurante pasa a Carta, el plan gratuito: no pierdes tu menú, tus mesas ni tus pedidos. Si quieres seguir con {plan} u otro plan, elígelo antes.",
+    button: "Elegir mi plan",
+  },
 };

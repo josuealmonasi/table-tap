@@ -8289,3 +8289,10 @@ paying, as consumer law expects. Two places that had to agree, and the legal one
 was the promise. It now names the two fields shown and why (terms 2026-11-18.2).
 Check: `invariants/place-identity.spec.ts`.
 
+## A trial ended with no email (2026-11-18)
+
+The only warning that a free month was ending was a banner inside a dashboard
+the owner might not open that week, so Carta arrived unannounced. The recovery
+job `trial_reminders` now emails the owner three days before, once per trial
+end. Check: `recovery/__tests__/trial-reminders.spec.ts`.
+
