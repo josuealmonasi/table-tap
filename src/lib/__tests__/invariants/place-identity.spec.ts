@@ -42,3 +42,12 @@ describe("diner legal identity", () => {
     expect(read("src/components/customer/CartScreen.tsx")).toContain('<PrivacyHint field="name" />');
   });
 });
+
+it("the privacy notice says which fiscal data diners see, and the identity shows no more", async () => {
+  const { readFileSync } = await import("node:fs");
+  const notice = readFileSync("src/lib/legal/privacy-es.json", "utf8");
+  expect(notice).not.toContain("y no se muestran en el menú.");
+  expect(notice).toContain("solo la razón social y el domicilio se muestran a los clientes");
+  const loader = readFileSync("src/lib/place-identity.ts", "utf8");
+  expect(loader).not.toMatch(/\brfc\b|tax_regime|ticket_phone/);
+});

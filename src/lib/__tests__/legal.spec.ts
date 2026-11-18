@@ -42,6 +42,9 @@ describe("the text and the version cannot drift apart", () => {
       .digest("hex")
       .slice(0, 16);
 
+  // 2026-11-18.2: the privacy notice promised the fiscal data is "not shown on
+  // the menu", but the menu and checkout show the legal name and address
+  // (PlaceIdentity). It now says exactly which two are shown and why.
   // 2026-11-18, bumped from 2026-11-12: the free trial is once per RFC, not
   // only per restaurant, and the privacy notice keeps a trial's RFC after the
   // account closes for that one purpose, a new retention, so every restaurant
@@ -72,15 +75,15 @@ describe("the text and the version cannot drift apart", () => {
   // kept the version as a clarification.)
   it("has terms that match the version in force", () => {
     expect({ version: TERMS_VERSION, text: fingerprint("terms-es") }).toEqual({
-      version: "2026-11-18",
+      version: "2026-11-18.2",
       text: "8cce805f4850523f",
     });
   });
 
   it("has a privacy notice that matches the version in force", () => {
     expect({ version: TERMS_VERSION, text: fingerprint("privacy-es") }).toEqual({
-      version: "2026-11-18",
-      text: "fe3fb6f35a812460",
+      version: "2026-11-18.2",
+      text: "9f3d8fc2a2344491",
     });
   });
 });

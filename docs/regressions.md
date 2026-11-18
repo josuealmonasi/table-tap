@@ -8293,4 +8293,11 @@ visit saves a full-page screenshot plus the offending boxes and their scroll
 container under `gate-output/evidence`. Checked on dev: the same seed twice gave
 the same 67 dishes, extras, modifiers and promotions. Check:
 `layout-evidence.spec.ts`.
+## The privacy notice said the menu shows no fiscal data; it shows two (2026-11-18)
+
+The notice promised the restaurant's fiscal data "no se muestran en el menú",
+while `PlaceIdentity` shows the legal name and address on the menu and before
+paying, as consumer law expects. Two places that had to agree, and the legal one
+was the promise. It now names the two fields shown and why (terms 2026-11-18.2).
+Check: `invariants/place-identity.spec.ts`.
 
