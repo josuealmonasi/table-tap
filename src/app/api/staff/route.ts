@@ -1,3 +1,4 @@
+import { requestLocale } from "@/lib/i18n";
 import { NextRequest, NextResponse } from "next/server";
 import { apiError } from "@/lib/api-error";
 import { jsonBody } from "@/lib/json-body";
@@ -81,7 +82,7 @@ export async function POST(req: NextRequest) {
     return await apiError("apiErr.ownerCap", 409, { n: MAX_OWNERS });
   }
 
-  const refused = await inviteStaff(actor.restaurantId, email, role, siteOrigin(req));
+  const refused = await inviteStaff(actor.restaurantId, email, role, siteOrigin(req), requestLocale(req));
   if (refused) return refused;
 
   await logUserChange(actor.restaurantId, actor.email, "created", role, email);

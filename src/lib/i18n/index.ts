@@ -59,3 +59,14 @@ export function translate(
     raw,
   );
 }
+
+/**
+ * The locale a request was made in: the saved choice, else Spanish. The same
+ * rule as `getLocale()`, read from the request so a route can use it without
+ * `next/headers` (and unit tests can call it).
+ */
+export function requestLocale(req: { cookies: { get(name: string): { value: string } | undefined } }): Locale {
+  const value = req.cookies.get(LOCALE_COOKIE)?.value;
+  return isLocale(value) ? value : DEFAULT_LOCALE;
+}
+
