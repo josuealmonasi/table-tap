@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useToast } from "@/components/ui/Toast";
 import { useT } from "@/lib/i18n/context";
+import type { TierAssignment } from "@/components/dashboard/admin/AdminTierDialog";
 
 export interface NewUserInput {
   email: string;
@@ -64,7 +65,7 @@ export function useAdminActions() {
       call("/api/admin/users", "DELETE", { userId }, t("admin.loginDeleted")),
     deleteRestaurant: (id: string) =>
       call("/api/admin/restaurants", "DELETE", { id }, t("admin.restaurantDeleted")),
-    movePlan: (id: string, plan: string, doneMsg: string) =>
-      call("/api/admin/restaurants", "PATCH", { id, plan }, doneMsg),
+    movePlan: (id: string, plan: string, doneMsg: string, choice: TierAssignment) =>
+      call("/api/admin/restaurants", "PATCH", { id, plan, ...choice }, doneMsg),
   };
 }
