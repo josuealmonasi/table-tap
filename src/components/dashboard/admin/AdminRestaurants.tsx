@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
 import { useLocale, useT } from "@/lib/i18n/context";
 import { dateLocale } from "@/lib/format";
@@ -106,6 +107,7 @@ export default function AdminRestaurants({ restaurants, plans, busy, onMovePlan,
               <strong>{r.name}</strong>
               <BillingLine billing={r.billing} />
               <button type="button" className="tt-btn tt-btn-ghost tt-btn-sm" onClick={() => setUsage(r)}>{t("admin.usage")}</button>
+              <Link className="tt-btn tt-btn-ghost tt-btn-sm" href={`/dashboard/admin/restaurants/${r.id}`}>{t("adminView.open")}</Link>
             </span>
             <span className="tt-staff-cell tt-muted" title={r.owner_email}>
               {r.owner_email}

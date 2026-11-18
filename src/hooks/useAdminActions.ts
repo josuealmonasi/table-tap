@@ -61,6 +61,8 @@ export function useAdminActions() {
       password?: string;
       role?: string;
     }) => call("/api/admin/users", "PATCH", input, t("admin.loginUpdated")),
+    transferOwner: (restaurantId: string, userId: string, doneMsg: string) =>
+      call("/api/admin/restaurants/owner", "POST", { id: restaurantId, userId }, doneMsg),
     deleteUser: (userId: string) =>
       call("/api/admin/users", "DELETE", { userId }, t("admin.loginDeleted")),
     deleteRestaurant: (id: string) =>

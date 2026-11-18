@@ -184,6 +184,36 @@ export function adminOwnerCases(fx) {
       path: "/api/admin/restaurants/suspend", body: { id: r, reason: "abuse" }, expect: [403] },
     { name: "POST /api/admin/restaurants/suspend (unknown reason refused)", as: "platformAdmin", method: "POST",
       path: "/api/admin/restaurants/suspend", body: { id: r, reason: "because" }, expect: [400] },
+    // Owner transfer: a kitchen login becomes the owner and the owner stays on
+    // as a manager; the demo's owner and team are put back exactly.
+    { name: "POST /api/admin/restaurants/owner (transferred, then put back)", as: "platformAdmin", method: "POST",
+      path: "/api/admin/restaurants/owner",
+      arrange: async f => {
+        const { data: rest } = await f.admin.from("restaurants").select("owner_id").eq("id", r).single();
+        const { data: member } = await f.admin.from("staff").select("*").eq("restaurant_id", r).eq("role", "kitchen")
+          .order("id").limit(1).single();
+        f.transfer = { owner: rest?.owner_id, member };
+        return async () => {
+          await f.admin.from("restaurants").update({ owner_id: rest.owner_id }).eq("id", r);
+          await f.admin.from("staff").delete().eq("restaurant_id", r).in("user_id", [rest.owner_id, member.user_id]);
+          await f.admin.from("staff").insert(member);
+          await f.admin.from("user_logs").delete().eq("restaurant_id", r).eq("entity", "settings").like("detail", "owner=%");
+        };
+      },
+      body: f => ({ id: r, userId: f.transfer.member.user_id }), expect: [200],
+      check: async (_d, f) => {
+        const { owner, member } = f.transfer;
+        const { data: rest } = await f.admin.from("restaurants").select("owner_id").eq("id", r).single();
+        const { data: team } = await f.admin.from("staff").select("user_id, role").eq("restaurant_id", r).in("user_id", [owner, member.user_id]);
+        if (rest?.owner_id !== member.user_id) return "the restaurant did not change owner";
+        if (team?.some(t => t.user_id === member.user_id)) return "the new owner still has a staff row";
+        return team?.some(t => t.user_id === owner && t.role === "manager") || "the former owner did not stay on as a manager";
+      } },
+    { name: "POST /api/admin/restaurants/owner (someone off the team refused)", as: "platformAdmin", method: "POST",
+      path: "/api/admin/restaurants/owner", body: { id: r, userId: randomUUID() }, expect: [409],
+      expectError: /equipo|team/i },
+    { name: "POST /api/admin/restaurants/owner (an owner refused)", as: "owner", method: "POST",
+      path: "/api/admin/restaurants/owner", body: { id: r, userId: randomUUID() }, expect: [403] },
     // Trial control: the demo is not on a trial, so ending one is the right refusal.
     { name: "PATCH /api/admin/restaurants/trial (not on a trial refused)", as: "platformAdmin", method: "PATCH",
       path: "/api/admin/restaurants/trial", body: { id: r, endsAt: null }, expect: [409],

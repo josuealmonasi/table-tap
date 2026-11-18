@@ -8575,3 +8575,38 @@ a.tt-user-plan:hover {
   color: inherit;
   text-decoration: underline;
 }
+
+/* The platform team's read-only view of a restaurant. */
+.tt-admin-view-note {
+  margin: 0 0 16px;
+  padding: 10px 12px;
+  border: 1px solid var(--tt-cream);
+  border-radius: var(--tt-radius-sm);
+  font-size: 13px;
+}
+.tt-admin-view-facts {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 20px;
+  font-size: 14px;
+}
+.tt-admin-view-list {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+}
+.tt-admin-view-list li {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 4px 12px;
+  padding: 8px 0;
+  border-top: 1px solid var(--tt-cream);
+  font-size: 14px;
+}
+.tt-admin-view-list li:first-child { border-top: none; }
+.tt-admin-view-wrap { min-width: 0; overflow-wrap: anywhere; }
+

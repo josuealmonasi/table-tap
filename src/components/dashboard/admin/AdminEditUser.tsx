@@ -26,7 +26,8 @@ function roleEditable(role: AdminUserRow["role"]): boolean {
 /** Edit a login: name, email, an optional password reset, and (staff) role. */
 export default function AdminEditUser({ user, onClose }: AdminEditUserProps) {
   const t = useT();
-  const { busy, updateUser } = useAdminActions();
+  const { busy, updateUser, transferOwner } = useAdminActions();
+  const [confirmTransfer, setConfirmTransfer] = useState(false);
   const [name, setName] = useState(user?.full_name ?? "");
   const [email, setEmail] = useState(user?.email ?? "");
   const [password, setPassword] = useState("");
@@ -140,6 +141,26 @@ export default function AdminEditUser({ user, onClose }: AdminEditUserProps) {
           </button>
         </div>
       </form>
+      {/* Only someone already on a team, never the founding owner themself. */}
+      {!user.founding && user.restaurant_id && ["manager", "waiter", "cashier", "kitchen"].includes(user.role) && (
+        <div className="tt-prodform-actions" style={{ justifyContent: "flex-start", marginTop: 12 }}>
+          {confirmTransfer ? (
+            <>
+              <span className="tt-muted" style={{ fontSize: 13 }}>{t("adminOwner.confirm", { email: user.email, name: user.restaurant_name ?? "" })}</span>
+              <button type="button" className="tt-btn tt-btn-ghost tt-btn-sm" onClick={() => setConfirmTransfer(false)}>{t("common.cancel")}</button>
+              <button type="button" className="tt-btn tt-btn-primary tt-btn-sm" disabled={busy}
+                onClick={async () => {
+                  const ok = await transferOwner(user.restaurant_id as string, user.user_id, t("adminOwner.done", { email: user.email }));
+                  if (ok) onClose(); else setConfirmTransfer(false);
+                }}>
+                {t("adminOwner.transfer")}
+              </button>
+            </>
+          ) : (
+            <button type="button" className="tt-btn tt-btn-ghost tt-btn-sm" onClick={() => setConfirmTransfer(true)}>{t("adminOwner.button")}</button>
+          )}
+        </div>
+      )}
     </Modal>
   );
 }

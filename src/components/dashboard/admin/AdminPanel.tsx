@@ -36,6 +36,8 @@ export interface AdminUserRow {
   /** Founding owners' role is fixed (it comes from restaurants.owner_id). */
   founding?: boolean;
   restaurant_name?: string;
+  /** Their restaurant, for actions on it (transfer ownership). */
+  restaurant_id?: string;
   /** Their restaurant's plan: a login moves when its restaurant does. */
   plan?: string;
 }

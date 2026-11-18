@@ -8170,6 +8170,24 @@ cached menu loader, which runs in production; dev and any uncached read use
 there. Both now go through `asDinerSees`. Seen in the browser while checking
 the suspension, before it shipped.
 
+## Ownership moves in one place (2026-11-18)
+
+An owner is `restaurants.owner_id`, a manager is a `staff` row. Moving ownership
+by hand meant three writes that had to agree, and a half-done one left a login
+that was both owner and staff, or an owner with no way back in.
+`admin_transfer_ownership` does all three under the restaurant's row lock.
+Check: `admin-owner-transfer.spec.ts` and the api case that transfers and checks
+the former owner is a manager.
+
+## A support view that cannot write (2026-11-18)
+
+The platform team needed to see what an owner sees. Signing in as the owner,
+or letting admins through RLS, would have made every support look a possible
+change to somebody's restaurant. The owner view reads with the service key on
+one server page, records each visit first, and renders nothing that writes.
+Check: `admin-owner-view.spec.ts` (order of guard, record and read; no write,
+no control) and `pnpm roles` (the admin opens it from the console's link).
+
 ## A webhook nobody configured looks like a quiet day (2026-11-18)
 
 Both Stripe endpoints refuse an event with a missing or wrong signing secret,
