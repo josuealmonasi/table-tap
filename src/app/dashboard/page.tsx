@@ -49,7 +49,7 @@ export default async function DashboardPage() {
   const trial = membership.role === "owner" ? trialNotice(membership.restaurant) : null;
   return (
     <ConfirmProvider>
-      {trial && <TrialWelcome restaurantId={membership.restaurant.id} notice={trial} />}
+      {trial && !trial.assignment && <TrialWelcome restaurantId={membership.restaurant.id} notice={trial} />}
       <DashboardHome
         restaurant={membership.restaurant}
         role={membership.role}

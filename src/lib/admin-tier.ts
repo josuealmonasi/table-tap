@@ -1,5 +1,6 @@
 import type Stripe from "stripe";
 import { randomUUID } from "node:crypto";
+import { assignedPayPath } from "@/lib/assigned-pay-path";
 import { stripe } from "@/lib/stripe";
 import type { createAdminClient } from "@/lib/supabase/admin";
 import { logEvent } from "@/lib/activity-log";
@@ -63,7 +64,7 @@ export function payByDate(value: unknown, now = Date.now()): string | null {
  * earlier or a replaced assignment opens nothing.
  */
 export function assignedPayLink(origin: string, plan: string, assignmentId: string): string {
-  return `${origin}/api/billing/assigned?plan=${encodeURIComponent(plan)}&a=${assignmentId}`;
+  return `${origin}${assignedPayPath(plan, assignmentId)}`;
 }
 
 export async function assignTier(

@@ -167,6 +167,8 @@ export type Restaurant = {
   trial_ends_at?: string | null;
   /** Set once Stripe bills this restaurant. */
   stripe_subscription_id?: string | null;
+  /** An admin-assigned tier awaiting payment by `trial_ends_at` (admin-tier.ts). */
+  tier_assignment_id?: string | null;
 };
 
 export type RestaurantTable = {
