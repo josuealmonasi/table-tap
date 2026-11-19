@@ -8317,3 +8317,12 @@ the owner might not open that week, so Carta arrived unannounced. The recovery
 job `trial_reminders` now emails the owner three days before, once per trial
 end. Check: `recovery/__tests__/trial-reminders.spec.ts`.
 
+## Another site could sign a visitor into its own account (2026-11-19)
+
+`/auth/callback` accepted a POST from anywhere, so a page elsewhere could
+auto-submit its own account's token and leave a visitor signed into the
+attacker's restaurant, where they might type real details (login CSRF). The
+POST now needs `Sec-Fetch-Site: same-origin` (or our Origin). Checked in a real
+browser: our confirm page still signs in; a cross-site form lands on /login with
+no session. Check: `same-site-post.spec.ts`.
+
