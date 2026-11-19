@@ -257,6 +257,14 @@ if (pageInScope("/dashboard/admin")) {
       const cookie = sessionCookieHeader(data.session, process.env.NEXT_PUBLIC_SUPABASE_URL);
       const res = await retryFetch(BASE + "/dashboard/admin", { headers: { cookie, "accept-language": "es-MX" } }, BASE);
       const html = res.status === 200 ? await res.text() : "";
+      // With two-step verification on, a password-only sign-in must be asked
+      // for the code — and refused by the admin API — instead of the console.
+      if (html.includes("Escribe tu código")) {
+        ok("the platform admin is asked for the two-step code before the console");
+        const api = await retryFetch(BASE + "/api/admin/audit", { headers: { cookie } }, BASE);
+        if (api.status === 403) ok("the admin API refuses a password-only session (403)");
+        else bad(`/api/admin/audit answered ${api.status} to a password-only session; expected 403`);
+      } else {
       if (html.includes(PAGES["/dashboard/admin"].marker)) ok("opens /dashboard/admin, and sees its marker");
       else bad("/dashboard/admin: the platform admin does not see «" + PAGES["/dashboard/admin"].marker + "» — every bounce above proves nothing");
       // The read-only owner view, opened from the console's first restaurant.
@@ -269,6 +277,7 @@ if (pageInScope("/dashboard/admin")) {
         const body = page.status === 200 ? await page.text() : "";
         if (body.includes("Vista de solo lectura")) ok("opens the read-only owner view");
         else bad(`${view}: the platform admin does not see the read-only owner view (${page.status})`);
+      }
       }
     }
   }

@@ -2,7 +2,8 @@ import { everyRow } from "@/lib/paged";
 import type { RestaurantBilling } from "@/lib/admin-billing-summary";
 import { everyLogin } from "@/lib/logins";
 import { redirect } from "next/navigation";
-import { getPlatformAdmin } from "@/lib/admin";
+import { getPlatformAdmin, pendingPlatformAdmin, platformAdminMfa } from "@/lib/admin";
+import AdminMfaNudge from "@/components/dashboard/admin/AdminMfaNudge";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { allPlans } from "@/lib/plan-server";
 import { readPlatformHealth } from "@/lib/admin-health";
@@ -19,7 +20,8 @@ export const dynamic = "force-dynamic";
 // Guarded by platform_admins (server-only table); everyone else bounces.
 export default async function AdminPage() {
   const admin = await getPlatformAdmin();
-  if (!admin) redirect("/dashboard");
+  if (!admin) redirect((await pendingPlatformAdmin()) ? "/dashboard/admin/mfa" : "/dashboard");
+  const mfaOn = (await platformAdminMfa()) === "verified";
 
   const db = createAdminClient();
   // Every row of each, paged: these grow with the platform, and a read that
@@ -105,6 +107,7 @@ export default async function AdminPage() {
 
   return (
     <ConfirmProvider>
+      {!mfaOn && <AdminMfaNudge />}
       <AdminPanel
         adminUserId={admin.userId}
         restaurants={restaurantRows}
