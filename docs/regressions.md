@@ -8351,3 +8351,11 @@ The banner now says the plan is assigned and when to pay, with "Pagar ahora" on
 the same link the email sends (`assignedPayPath`), and the welcome is skipped.
 Check: `trial-notice.spec.ts`.
 
+## A new page merged without the browser gates ever opening it (2026-11-19)
+
+#703 added the admin's two-step page and also edited a gate script, so the
+browser gates were capped to the core screens and never opened the new page;
+it merged, and the next PR (#704) failed layout and dialogs on it. A capped
+run now always adds every page file the change adds or edits
+(`pagePattern`). Check: `ci-env.spec.ts`.
+
