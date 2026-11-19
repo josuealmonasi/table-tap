@@ -3153,6 +3153,8 @@ votes: "Votos",
   trial: {
     banner: "Prueba gratis de {plan}: te quedan {days} días. Después pasas a Carta, el plan gratuito, salvo que elijas un plan.",
     bannerUrgent: "Tu prueba gratis de {plan} termina en {days} días. Elige un plan para conservar todo, o pasarás a Carta, el plan gratuito.",
+    assignedBanner: "Tienes {plan} asignado: págalo antes del {date} para conservarlo. Si no, pasarás a Carta, el plan gratuito.",
+    payNow: "Pagar ahora",
     seePlans: "Ver planes",
     welcomeTitle: "Bienvenido a TableTap: tienes {plan} gratis",
     welcomeFree: "Tu restaurante tiene {plan} gratis hasta el {date}, sin tarjeta y sin cargos.",

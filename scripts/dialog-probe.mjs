@@ -63,7 +63,11 @@ export async function typingFaults(tab, scope = "[role=dialog]", most = 4) {
     const field = fields.nth(i);
     if (!(await field.isVisible())) continue;
     const name = await field.evaluate(e => e.getAttribute("aria-label") || e.getAttribute("placeholder") || e.name || e.type);
-    const chars = (await field.getAttribute("type")) === "number" ? "12" : "ab";
+    // A field that says it takes digits (a number, or inputmode numeric/decimal
+    // such as the admin's 6-digit code) rightly drops letters: type digits.
+    const numeric = (await field.getAttribute("type")) === "number"
+      || ["numeric", "decimal"].includes((await field.getAttribute("inputmode")) ?? "");
+    const chars = numeric ? "12" : "ab";
     try {
       await field.click({ timeout: 3000 });
       await tab.keyboard.type(chars, { delay: 40 });

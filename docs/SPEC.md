@@ -189,6 +189,9 @@ a welcome dialog the first time they reach the dashboard (remembered per
 restaurant on that device), and a banner on every dashboard screen with the
 days left and a link to Plan, which takes the warning look in the last 7
 days (`trialNotice`). Staff see neither: only the owner can choose a plan.
+An admin-assigned tier awaiting payment (`tier_assignment_id`) is not a free
+trial: its banner says when to pay, with "Pagar ahora" on the same link the
+assignment email carries, and no welcome is shown.
 Three days before the end, the recovery job `trial_reminders` emails the owner
 once (Spanish or English by `user_metadata.locale`): the date, that they then
 move to Carta keeping their menu, tables and orders, and a link to Plan. It
