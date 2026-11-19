@@ -8334,4 +8334,11 @@ verification; after that a password-only session reaches no admin page or
 action until it enters the authenticator code. Checked on dev end to end:
 enrol, password-only → code page and API 403, code → console, sign-out from
 the code page. Check: `failed-lookup.spec.ts`.
+## Half the production log was one harmless warning (2026-11-19)
+
+The layout read `session.user` to label the offline cache, and Supabase logs a
+warning every time that unverified object is touched on the server: 85 of 157
+production log lines in half an hour, burying anything real. The label now
+takes the user id from the token's own `sub` and is refused unless it matches
+the user `getUser()` verified. Check: `service-worker-registrar.spec.tsx`.
 

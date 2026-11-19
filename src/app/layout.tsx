@@ -58,9 +58,10 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   const locale = await getLocale();
   const user = membership ? await currentUser() : null;
   const session = membership ? (await (await createClient()).auth.getSession()).data.session : null;
-  // Membership was checked with getUser. A cookie alone cannot label a private page.
-  const cacheIdentity = membership && user?.id === session?.user.id
-    ? privateCacheIdentity(session, membership.restaurant.id, membership.role)
+  // Membership was checked with getUser. A cookie alone cannot label a private
+  // page: the label is refused unless the token is that verified user's.
+  const cacheIdentity = membership && user
+    ? privateCacheIdentity(session, membership.restaurant.id, membership.role, user.id)
     : null;
 
   // Which areas this tier includes at all. Read once here so the drawer, the
