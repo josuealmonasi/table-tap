@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import type { EmailOtpType } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
+import { sameSitePost } from "@/lib/same-site-post";
 
 export const runtime = "nodejs";
 
@@ -49,7 +50,9 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  const origin = new URL(req.url).origin;
+  if (!sameSitePost(req, origin)) return NextResponse.redirect(`${origin}/login`, 303);
   const form = await req.formData().catch(() => null);
   const get = (name: string) => { const v = form?.get(name); return typeof v === "string" ? v : null; };
-  return await confirm(new URL(req.url).origin, { get });
+  return await confirm(origin, { get });
 }
