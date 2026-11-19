@@ -8326,3 +8326,12 @@ POST now needs `Sec-Fetch-Site: same-origin` (or our Origin). Checked in a real
 browser: our confirm page still signs in; a cross-site form lands on /login with
 no session. Check: `same-site-post.spec.ts`.
 
+## The account that controls every restaurant had only a password (2026-11-19)
+
+The platform admin could sign in with a password alone, and that password had
+been `admin123` until the day before. The admin can now turn on two-step
+verification; after that a password-only session reaches no admin page or
+action until it enters the authenticator code. Checked on dev end to end:
+enrol, password-only → code page and API 403, code → console, sign-out from
+the code page. Check: `failed-lookup.spec.ts`.
+

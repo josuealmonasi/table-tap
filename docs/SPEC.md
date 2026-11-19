@@ -143,6 +143,14 @@ are refused. `GET /api/admin/audit` checks platform membership and returns
 uncached keyset pages of 100. The API checks intentionally retain their genuine
 admin audit events after removing disposable business fixtures.
 
+**Two-step verification for the platform admin.** `/dashboard/admin/mfa`
+enrols an authenticator app (TOTP, Supabase MFA) and later asks for its code.
+Once enrolled, `getPlatformAdmin()` answers null for a session that has not
+entered the code (token `aal` below `aal2`), so every admin page sends it to the
+code and every admin API answers 403; the page offers sign-out, never a dead
+end. Until enrolled nothing changes except a banner on the console. `pnpm roles`
+accepts "asked for the code" as the console's guard and checks the API refuses.
+
 **Owner transfer.** From a team member's edit dialog, a platform admin can make
 that login the restaurant's owner (`POST /api/admin/restaurants/owner`,
 `admin_transfer_ownership`). Only someone already on that restaurant's team
