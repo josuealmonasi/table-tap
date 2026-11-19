@@ -18,8 +18,10 @@ vi.mock("react", async original => ({ ...(await original<typeof import("react")>
 const auth = { user: null as { id: string; email: string } | null, error: null as unknown, aal: "aal1", next: "aal1" };
 vi.mock("@/lib/supabase/server", () => ({
   createClient: async () => ({
-    auth: { getUser: async () => ({ data: { user: auth.user }, error: auth.error }),
-      mfa: { getAuthenticatorAssuranceLevel: async () => ({ data: { currentLevel: auth.aal, nextLevel: auth.next }, error: null }) } },
+    // Enrolment rides on the verified user; the level on the token's `aal`.
+    auth: { getUser: async () => ({ data: { user: auth.user && { ...auth.user,
+        factors: auth.next === "aal2" ? [{ status: "verified", factor_type: "totp" }] : [] } }, error: auth.error }),
+      getSession: async () => ({ data: { session: { access_token: `h.${Buffer.from(JSON.stringify({ aal: auth.aal })).toString("base64url")}.s` } } }) },
   }),
 }));
 

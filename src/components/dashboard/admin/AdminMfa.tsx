@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { useT } from "@/lib/i18n/context";
+import { useSignOut } from "@/hooks/useSignOut";
 
 interface Props { mode: "enroll" | "verify" }
 
@@ -15,6 +16,7 @@ interface Props { mode: "enroll" | "verify" }
 export default function AdminMfa({ mode }: Props) {
   const t = useT();
   const router = useRouter();
+  const signOut = useSignOut("admin");
   const [factorId, setFactorId] = useState<string | null>(null);
   const [qr, setQr] = useState<string | null>(null);
   const [secret, setSecret] = useState<string | null>(null);
@@ -83,5 +85,9 @@ export default function AdminMfa({ mode }: Props) {
       </button>
     </form>
     {error && <p className="tt-field-error" role="alert">{error}</p>}
+    {/* Never a dead end: without the phone, the way out is to sign out. */}
+    <p className="tt-muted" style={{ fontSize: 13, marginTop: 20 }}>
+      <button type="button" className="tt-btn tt-btn-ghost tt-btn-sm" onClick={signOut}>{t("nav.signOut")}</button>
+    </p>
   </div></div></div>;
 }

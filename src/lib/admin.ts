@@ -33,15 +33,23 @@ const platformAdminRow = cache(async (): Promise<PlatformAdmin | null> => {
 });
 
 /**
- * Whether this session passed the admin's authenticator code. The levels come
- * from the access token that `currentUser()` (getUser) already verified with
- * the auth server, so they are as trustworthy as the identity itself.
+ * Whether this session passed the admin's authenticator code. Enrolment comes
+ * from the user `currentUser()` (getUser) verified with the auth server, and
+ * the level from that same access token's `aal` claim. Not the library's
+ * getAuthenticatorAssuranceLevel(): it reads `session.user`, which logs the
+ * unverified-user warning on every admin request.
  */
 export const platformAdminMfa = cache(async (): Promise<AdminMfa> => {
-  const { data, error } = await (await createClient()).auth.mfa.getAuthenticatorAssuranceLevel();
-  if (error || !data) throw new Error(`assurance level unavailable: ${error?.message ?? "no data"}`);
-  if (data.nextLevel !== "aal2") return "not-enrolled";
-  return data.currentLevel === "aal2" ? "verified" : "needs-code";
+  const user = await currentUser();
+  const enrolled = (user?.factors ?? []).some(f => f.status === "verified" && f.factor_type === "totp");
+  if (!enrolled) return "not-enrolled";
+  const { data } = await (await createClient()).auth.getSession();
+  const token = data.session?.access_token ?? "";
+  let aal: unknown = null;
+  try {
+    aal = JSON.parse(Buffer.from(token.split(".")[1] ?? "", "base64url").toString("utf8")).aal;
+  } catch { aal = null; }
+  return aal === "aal2" ? "verified" : "needs-code";
 });
 
 /**
