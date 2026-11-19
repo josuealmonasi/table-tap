@@ -72,7 +72,9 @@ export const CREW = [
     role: "admin",
     email: "admin@tabletap.shop",
     passwordEnv: "PLATFORM_ADMIN_PASSWORD",
-    pages: ["/dashboard/admin"],
+    // The two-step page: enrol while it is off (the admin's normal state in
+    // the gates), the code once it is on.
+    pages: ["/dashboard/admin", "/dashboard/admin/mfa"],
   },
 ];
 

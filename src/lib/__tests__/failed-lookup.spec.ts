@@ -15,10 +15,11 @@ import { AuthRetryableFetchError, AuthSessionMissingError } from "@supabase/supa
 
 vi.mock("react", async original => ({ ...(await original<typeof import("react")>()), cache: <T>(fn: T) => fn }));
 
-const auth = { user: null as { id: string; email: string } | null, error: null as unknown };
+const auth = { user: null as { id: string; email: string } | null, error: null as unknown, aal: "aal1", next: "aal1" };
 vi.mock("@/lib/supabase/server", () => ({
   createClient: async () => ({
-    auth: { getUser: async () => ({ data: { user: auth.user }, error: auth.error }) },
+    auth: { getUser: async () => ({ data: { user: auth.user }, error: auth.error }),
+      mfa: { getAuthenticatorAssuranceLevel: async () => ({ data: { currentLevel: auth.aal, nextLevel: auth.next }, error: null }) } },
   }),
 }));
 
@@ -40,7 +41,7 @@ vi.mock("@/lib/supabase/admin", () => ({
 
 const { currentUser } = await import("@/lib/current-user");
 const { getMembership } = await import("@/lib/membership");
-const { getPlatformAdmin } = await import("@/lib/admin");
+const { getPlatformAdmin, pendingPlatformAdmin } = await import("@/lib/admin");
 const { getPlan } = await import("@/lib/plan-server");
 
 const OWNER = { id: "u1", email: "owner@example.com" };
@@ -104,6 +105,17 @@ describe("the platform admin", () => {
   it("throws when the admin row cannot be read", async () => {
     answers.platform_admins = down;
     await expect(getPlatformAdmin()).rejects.toThrow("platform admin lookup failed");
+  });
+
+  it("is NOT the admin with the password alone once two-step verification is on", async () => {
+    answers.platform_admins = { data: { user_id: "u1", email: OWNER.email }, error: null };
+    Object.assign(auth, { aal: "aal1", next: "aal2" });
+    await expect(getPlatformAdmin()).resolves.toBeNull();
+    await expect(pendingPlatformAdmin()).resolves.toBe(true);
+    Object.assign(auth, { aal: "aal2", next: "aal2" });
+    await expect(getPlatformAdmin()).resolves.toEqual({ userId: "u1", email: OWNER.email });
+    await expect(pendingPlatformAdmin()).resolves.toBe(false);
+    Object.assign(auth, { aal: "aal1", next: "aal1" });
   });
 });
 
