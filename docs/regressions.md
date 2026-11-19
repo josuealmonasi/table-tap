@@ -8334,3 +8334,12 @@ production log lines in half an hour, burying anything real. The label now
 takes the user id from the token's own `sub` and is refused unless it matches
 the user `getUser()` verified. Check: `service-worker-registrar.spec.tsx`.
 
+## An owner who owed a payment was told "free trial" (2026-11-19)
+
+The admin's pay-by window is stored as `trialing`, so the trial banner (#694)
+told an owner who had been assigned Casa and owed it "Prueba gratis de Casa",
+while the trial email (#699) rightly skipped them: two places with two answers.
+The banner now says the plan is assigned and when to pay, with "Pagar ahora" on
+the same link the email sends (`assignedPayPath`), and the welcome is skipped.
+Check: `trial-notice.spec.ts`.
+
