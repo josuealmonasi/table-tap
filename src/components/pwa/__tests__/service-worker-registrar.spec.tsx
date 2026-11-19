@@ -10,7 +10,7 @@ import { privateCacheIdentity } from "@/lib/private-cache-identity";
 
 const session = (user = "alice", sessionId = "session-a", expires = Math.floor(Date.now() / 1000) + 3600) => ({
   user: { id: user }, expires_at: expires,
-  access_token: `header.${btoa(JSON.stringify({ session_id: sessionId, exp: expires }))}.signature`,
+  access_token: `header.${btoa(JSON.stringify({ sub: user, session_id: sessionId, exp: expires }))}.signature`,
 }) as Session;
 let authChange: (event: string, value: Session | null) => void;
 let controlChange: () => void;
@@ -97,6 +97,9 @@ describe("auth and the worker agree about the private render", () => {
     expect(privateCacheIdentity(session("alice", "session-a", 1), "restaurant-a", "owner")).toBeNull();
     expect(privateCacheIdentity({ ...session(), access_token: "broken" }, "restaurant-a", "owner")).toBeNull();
     expect(privateCacheIdentity(session(), "restaurant-a\" bad", "owner")).toBeNull();
+    // On the server the token must belong to the user getUser() verified.
+    expect(privateCacheIdentity(session("alice"), "restaurant-a", "owner", "bob")).toBeNull();
+    expect(privateCacheIdentity(session("alice"), "restaurant-a", "owner", "alice")).toMatch(/^alice:session-a:restaurant-a:owner:/);
   });
 
   it("clears an expired token without retiring an auth session that may refresh", () => {

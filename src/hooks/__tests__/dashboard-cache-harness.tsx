@@ -50,7 +50,7 @@ export async function advance(ms: number): Promise<void> {
 export async function emit(event: AuthChangeEvent, user = "user", session = "session"): Promise<void> {
   const value = event === "SIGNED_OUT" ? null : {
     user: { id: user }, expires_at: Math.floor(Date.now() / 1000) + 3600,
-    access_token: `header.${btoa(JSON.stringify({ session_id: session, exp: Math.floor(Date.now() / 1000) + 3600 }))}.signature`,
+    access_token: `header.${btoa(JSON.stringify({ sub: user, session_id: session, exp: Math.floor(Date.now() / 1000) + 3600 }))}.signature`,
   } as Session;
   await act(async () => auth.callback!(event, value));
 }
