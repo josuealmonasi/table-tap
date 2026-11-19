@@ -8326,3 +8326,11 @@ POST now needs `Sec-Fetch-Site: same-origin` (or our Origin). Checked in a real
 browser: our confirm page still signs in; a cross-site form lands on /login with
 no session. Check: `same-site-post.spec.ts`.
 
+## Half the production log was one harmless warning (2026-11-19)
+
+The layout read `session.user` to label the offline cache, and Supabase logs a
+warning every time that unverified object is touched on the server: 85 of 157
+production log lines in half an hour, burying anything real. The label now
+takes the user id from the token's own `sub` and is refused unless it matches
+the user `getUser()` verified. Check: `service-worker-registrar.spec.tsx`.
+
