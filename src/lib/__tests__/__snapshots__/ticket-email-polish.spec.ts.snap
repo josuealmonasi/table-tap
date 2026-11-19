@@ -1,0 +1,47 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`ticket email HTML in en > keeps the card footer inside the receipt without an empty paragraph and uses Counter colors 1`] = `
+"<div style="font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;max-width:480px;margin:0 auto;padding:24px;color:#111113">
+  <h1 style="font-size:20px;margin:0">Demo</h1>
+  <p style="margin:4px 0 0;color:#70707a;font-size:13px">
+    Receipt ORD-1960<br>November 10, 2026, 06:13 PM
+  </p>
+  <table style="width:100%;border-collapse:collapse;margin-top:20px;font-size:14px">
+    <tr><td style="padding:6px 0">1× Tea</td>
+        <td style="padding:6px 0;text-align:right">MX$10.00</td></tr>
+    <tr><td style="padding:4px 0;color:#70707a;border-top:1px solid #e6e6e9">Tip</td>
+        <td style="padding:4px 0;text-align:right;color:#70707a;border-top:1px solid #e6e6e9">MX$2.00</td></tr>
+    <tr>
+      <td style="padding:10px 0 0;font-weight:700;border-top:2px solid #111113">Total</td>
+      <td style="padding:10px 0 0;text-align:right;font-weight:700;border-top:2px solid #111113">MX$12.00</td>
+    </tr>
+  </table>
+  
+  
+  <p style="margin-top:8px;color:#70707a;font-size:12px">This receipt is not a tax invoice (CFDI). If you need one, ask the restaurant.</p>
+<p style="margin-top:24px;color:#70707a;font-size:12px">You get this ticket because you linked this email to your Demo visit card. It is only used to send you your tickets. <a style="color:#0e6e6e" href="https://example.com/tickets/stop?t=token">Stop emailing me tickets for this card</a></p>
+</div>"
+`;
+
+exports[`ticket email HTML in es > keeps the card footer inside the receipt without an empty paragraph and uses Counter colors 1`] = `
+"<div style="font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;max-width:480px;margin:0 auto;padding:24px;color:#111113">
+  <h1 style="font-size:20px;margin:0">Demo</h1>
+  <p style="margin:4px 0 0;color:#70707a;font-size:13px">
+    Recibo ORD-1960<br>10 de noviembre de 2026, 18:13
+  </p>
+  <table style="width:100%;border-collapse:collapse;margin-top:20px;font-size:14px">
+    <tr><td style="padding:6px 0">1× Tea</td>
+        <td style="padding:6px 0;text-align:right">MX$10.00</td></tr>
+    <tr><td style="padding:4px 0;color:#70707a;border-top:1px solid #e6e6e9">Propina</td>
+        <td style="padding:4px 0;text-align:right;color:#70707a;border-top:1px solid #e6e6e9">MX$2.00</td></tr>
+    <tr>
+      <td style="padding:10px 0 0;font-weight:700;border-top:2px solid #111113">Total</td>
+      <td style="padding:10px 0 0;text-align:right;font-weight:700;border-top:2px solid #111113">MX$12.00</td>
+    </tr>
+  </table>
+  
+  
+  <p style="margin-top:8px;color:#70707a;font-size:12px">Este recibo no es un comprobante fiscal (CFDI). Si necesitas factura, pídesela al restaurante.</p>
+<p style="margin-top:24px;color:#70707a;font-size:12px">Recibes este ticket porque vinculaste este correo a tu tarjeta de visitas de Demo. Solo se usa para enviarte tus tickets. <a style="color:#0e6e6e" href="https://example.com/tickets/stop?t=token">Dejar de recibir los tickets de esta tarjeta por correo</a></p>
+</div>"
+`;

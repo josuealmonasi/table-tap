@@ -1,3 +1,5 @@
+import { readDisputeReport } from "@/lib/disputes/read";
+import type { DisputeReport } from "@/lib/disputes/types";
 import { withSavedCosts } from "./saved-costs";
 import { readContributionReturns } from "./returns";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -7,6 +9,7 @@ import { everyRow } from "@/lib/paged";
 import type { Modifier } from "@/lib/types";
 import { recipeBook, unitCosts, type Ingredient, type RecipeLine } from "./recipe-cost";
 import { withProcessingFees } from "./processing-fees";
+import { readTerminalFees } from "./terminal-fees";
 import { feeRate, type FeePayment, type FeeRate } from "./fees";
 import { periodContribution, unitMargins, type CostedItem, type PeriodContribution, type SoldOrder, type UnitMargin } from "./margins";
 import { priceRises, type PriceChange, type PriceRise } from "./price-rises";
@@ -19,6 +22,7 @@ export interface CostedProduct extends CostedItem {
 }
 
 export interface CostsView {
+  disputes: DisputeReport;
   ingredients: Ingredient[];
   recipes: RecipeLine[];
   products: CostedProduct[];
@@ -43,7 +47,7 @@ export async function readCosts(restaurantId: string, now = new Date()): Promise
 
   // Recovered foreign-currency receipts remain in their own books. Adding
   // them to current menu margins would treat pesos and dollars as equal.
-  const restaurant = await db.from("restaurants").select("currency, tax_pct, terminal_fee_pct").eq("id", restaurantId).single();
+  const restaurant = await db.from("restaurants").select("currency, tax_pct, terminal_fee_pct, timezone").eq("id", restaurantId).single();
   if (restaurant.error || !restaurant.data) throw new Error(`Could not read the restaurant: ${restaurant.error?.message}`);
   const [ingredients, recipes, items, menus, changes, orders, payments] = await Promise.all([
     everyRow<Ingredient>((a, b) => db.from("ingredients")
@@ -86,10 +90,13 @@ export async function readCosts(restaurantId: string, now = new Date()): Promise
   // What we kept, from the same ledger the month's ceiling reads: net of
   // whatever a refund gave back, on payments settled in the window.
   const platformFees = await feesKeptSince(restaurantId, since, restaurant.data.currency);
-  const fees = feeRate(await withProcessingFees(payments), platformFees.kept, terminalFeePct);
+  const terminalFees = await readTerminalFees(db, restaurantId, restaurant.data.currency, since, now.toISOString(),
+    restaurant.data.timezone ?? "America/Mexico_City", terminalFeePct);
+  const fees = feeRate(await withProcessingFees(payments), platformFees.kept, terminalFeePct, terminalFees);
   const returns = await readContributionReturns(db, restaurantId, restaurant.data.currency, since, now.toISOString());
 
   return {
+    disputes: await readDisputeReport(restaurantId, since, now.toISOString()),
     ingredients: typed.sort((a, b) => a.name.localeCompare(b.name)),
     recipes: lines,
     products,

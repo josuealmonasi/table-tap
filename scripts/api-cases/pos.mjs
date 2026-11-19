@@ -39,7 +39,7 @@ export function posSaleCases(fx) {
     // No kitchen board and no tables, so no login for a cook: refused with the
     // tier that has one, before any invite is sent.
     { name: "POST /api/staff (a cook on Caja)", as: "owner", method: "POST", path: "/api/staff",
-      arrange: f => f.onCaja(), body: { email: "demo-waiter@tabletap.dev", role: "kitchen" },
+      arrange: f => f.onCaja(), body: { email: "demo-waiter@tabletap.shop", role: "kitchen" },
       expect: [403], expectError: /cocina y meseros|kitchen and waiter/i },
     // Served where it is paid: with no board to wait on, the sale is finished
     // the moment it is rung.
@@ -72,7 +72,7 @@ export function posSaleCases(fx) {
           .eq("restaurant_id", f.restaurant.id).eq("note", `${MARK} terminal`);
         const ids = (sales ?? []).map(o => o.id);
         if (ids.length) {
-          await f.admin.from("payments").delete().in("order_id", ids);
+          await f.admin.from("payments").delete().is("account_id", null).in("order_id", ids);
           await f.admin.from("orders").delete().in("id", ids);
         }
       },
@@ -107,14 +107,14 @@ export function posSaleCases(fx) {
         const { data } = await f.admin.from("terminal_deposits").select("expected, received, recorded_by")
           .eq("restaurant_id", r).eq("sales_day", f.depositDay).eq("currency", f.restaurant.currency).single();
         return Number(data.received) === 100 && Number(data.expected) === Number(d.expected) && Number(d.expected) > 0
-          && data.recorded_by === "demo-manager@tabletap.dev" || `stored ${JSON.stringify(data)}, answered ${JSON.stringify(d)}`;
+          && data.recorded_by === "demo-manager@tabletap.shop" || `stored ${JSON.stringify(data)}, answered ${JSON.stringify(d)}`;
       } },
     { name: "POST /api/terminal/deposits (the same day twice)", as: "owner", method: "POST",
       path: "/api/terminal/deposits", body: f => ({ day: f.depositDay, currency: f.restaurant.currency, received: "1" }),
       expect: [409], expectError: /ya está marcado|already marked/i },
     { name: "POST /api/terminal/deposits (a day with no terminal sales)", as: "owner", method: "POST",
       path: "/api/terminal/deposits", body: f => ({ day: "2001-01-01", currency: f.restaurant.currency, received: "1" }),
-      expect: [404], expectError: /no hubo cobros|no card payments/i },
+      expect: [404], expectError: /no tiene cobros ni devoluciones|no terminal sales or returns/i },
     { name: "POST /api/terminal/deposits (a cashier refused)", as: "cashier", method: "POST",
       path: "/api/terminal/deposits", body: f => ({ day: f.depositDay, currency: f.restaurant.currency, received: "1" }), expect: [403] },
     { name: "DELETE /api/terminal/deposits (taken back)", as: "manager", method: "DELETE",

@@ -18,6 +18,8 @@ export interface PosTicket {
   answered?: boolean;
   /** The ticket the till did not print (paperless), for a customer who asks for it. */
   receiptHtml?: string;
+  /** A one-sale email may have been lost; offer its printable ticket. */
+  emailRequested?: boolean;
 }
 
 interface PosTicketModalProps {
@@ -72,6 +74,7 @@ export default function PosTicketModal({
           <p className="tt-muted tt-pos-ticket-hint">
             {ticket.offline ? t(ticket.answered ? "pos.heldAnswered" : "pos.offlineHeld") : ticket.handedOver ? t("pos.handedOver") : t("pos.calledOut")}
           </p>
+          {ticket.emailRequested && <p className="tt-muted">{t("pos.heldEmailPrint")}</p>}
           {ticket.receiptHtml && (
             <button type="button" className="tt-btn tt-btn-ghost" onClick={() => printTicket(ticket.receiptHtml!)}>
               {t("orders.printReceipt")}

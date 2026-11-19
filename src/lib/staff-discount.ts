@@ -44,9 +44,9 @@ export function discountableOrders(orders: Order[]): Order[] {
   );
 }
 
-/** What the bill comes to before the discount. */
+/** Eligible principal before the discount; gratuities stay owed in full. */
 export function billTotal(orders: Order[]): number {
-  return round2(orders.reduce((sum, o) => sum + Number(o.total), 0));
+  return round2(orders.reduce((sum, o) => sum + Math.max(0, Number(o.total) - Number(o.tip ?? 0)), 0));
 }
 
 /**
@@ -63,7 +63,7 @@ export function spreadDiscount(orders: Order[], amount: number): DiscountShare[]
 
   const capped = Math.min(round2(amount), total);
   const shares = orders.map(o => {
-    const own = Number(o.total);
+    const own = Math.max(0, Number(o.total) - Number(o.tip ?? 0));
     return {
       orderId: o.id,
       amount: round2((capped * own) / total),
@@ -80,7 +80,7 @@ export function spreadDiscount(orders: Order[], amount: number): DiscountShare[]
 
   return shares.map((share, i) => {
     const own = Number(orders[i].total);
-    const amount = Math.min(share.amount, own);
+    const amount = Math.min(share.amount, Math.max(0, own - Number(orders[i].tip ?? 0)));
     return { orderId: share.orderId, amount, total: round2(own - amount) };
   });
 }

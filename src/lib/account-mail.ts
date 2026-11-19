@@ -1,3 +1,4 @@
+import { mailText } from "@/lib/mail-text";
 import { formatMoney, dateLocale } from "@/lib/format";
 import { balancesLabel } from "@/lib/currency-balances";
 import type { Statement } from "@/lib/accounts-server";
@@ -30,7 +31,7 @@ export function statementMail(
   const lines: string[] = [t("account.mailIntro", { name: opts.name, restaurant: opts.restaurant }), ""];
   let html = `<p>${esc(t("account.mailIntro", { name: opts.name, restaurant: opts.restaurant }))}</p>`;
   for (const d of statement.days) {
-    lines.push(`${day(d.day)} — ${formatMoney(d.total, d.currency ?? opts.currency)}`);
+    lines.push("", `${day(d.day)} — ${formatMoney(d.total, d.currency ?? opts.currency)}`);
     html += `<h3 style="margin:16px 0 4px">${esc(day(d.day))} — ${esc(formatMoney(d.total, d.currency ?? opts.currency))}</h3><ul style="padding-left:18px;margin:0">`;
     for (const c of d.charges) {
       for (const l of c.lines) {
@@ -60,7 +61,7 @@ export function statementMail(
   const balances = statement.balances ?? [{ currency: statement.currency ?? opts.currency, amount: statement.owed }];
   // Paying the last charge leaves an empty list, not an empty amount on paper.
   const owed = t("account.mailOwed", { amount: balancesLabel(balances) || formatMoney(0, statement.currency ?? opts.currency) });
-  lines.push("", owed, t("account.mailPay", { link: opts.link }));
+  lines.push("", owed, "", t("account.mailPay", { link: `\n${opts.link}` }));
   html += `<p style="font-size:18px;font-weight:700">${esc(owed)}</p><p><a href="${esc(opts.link)}">${esc(t("account.mailPayLink"))}</a></p>`;
-  return { subject, text: lines.join("\n"), html };
+  return { subject, text: mailText(lines), html };
 }

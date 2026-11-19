@@ -33,8 +33,8 @@ export default function BillTotals({ amounts: a, restaurant, tipPct, tipCustom }
       tipPct={tipCustom !== null || a.priorTip > 0 ? 0 : tipPct}
       total={a.total}
       servicePct={a.servicePct}
-      taxPct={Number(restaurant.tax_pct) || 0}
-      taxBreakdown={Boolean(restaurant.tax_show_breakdown)}
+      taxPct={a.taxPct ?? 0}
+      taxBreakdown={Boolean(restaurant.tax_show_breakdown) && a.taxPct !== null}
       currency={restaurant.currency}
     />
   );

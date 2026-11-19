@@ -1,5 +1,6 @@
 "use client";
 
+import { pollAfterSettle } from "@/lib/poll-after-settle";
 import { useEffect, useRef, useState } from "react";
 import type { LoyaltyOfferInfo } from "@/lib/loyalty/offer";
 import type { OrderStatus } from "@/lib/types";
@@ -63,9 +64,9 @@ export default function TrackerOverlay({
   useEffect(() => {
     let active = true;
 
-    async function read(): Promise<TrackedOrder | null> {
+    async function read(signal?: AbortSignal): Promise<TrackedOrder | null> {
       try {
-        const res = await fetch(`/api/order-status?id=${orderId}`);
+        const res = await fetch(`/api/order-status?id=${orderId}`, { signal });
         if (!res.ok) return null;
         const next = (await res.json()) as TrackedOrder;
         if (active) setOrder(next);
@@ -75,14 +76,12 @@ export default function TrackerOverlay({
       }
     }
 
-    if (!order) void read();
-    const timer = setInterval(() => {
-      if (!order || !over(order)) void read();
-    }, TRACKER_POLL_MS);
+    if (order && over(order)) return;
+    const poll = pollAfterSettle(read, TRACKER_POLL_MS, { immediate: !order });
 
     return () => {
       active = false;
-      clearInterval(timer);
+      poll.stop();
     };
   }, [orderId, order]);
 

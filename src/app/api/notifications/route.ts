@@ -24,18 +24,17 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   const cursor = notificationCursor(req.nextUrl.searchParams.get("before") ?? null);
   if (!cursor) return await apiError("apiErr.invalidRequest", 400);
   const db = createAdminClient();
-  const [listed, unread] = await Promise.all([
+  const [listed, unread, { data: restaurant, error: restaurantError }] = await Promise.all([
     notificationPage(actor.restaurantId, cursor),
     db
       .from("notifications")
       .select("id", { count: "exact", head: true })
       .eq("restaurant_id", actor.restaurantId)
       .is("read_at", null),
+    db.from("restaurants").select("timezone").eq("id", actor.restaurantId).maybeSingle(),
   ]);
   if (listed.error || unread.error) return await apiError("apiErr.generic", 503);
 
-  const { data: restaurant, error: restaurantError } = await db.from("restaurants")
-    .select("timezone").eq("id", actor.restaurantId).maybeSingle();
   if (restaurantError || !restaurant) return await apiError("apiErr.generic", 503);
   return NextResponse.json({
     timeZone: restaurant.timezone ?? DEFAULT_TIME_ZONE,

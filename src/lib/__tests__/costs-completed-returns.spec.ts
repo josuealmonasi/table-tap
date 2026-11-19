@@ -18,6 +18,7 @@ beforeEach(() => {
     ? { select: () => ({ eq: () => ({ single: async () => ({ data: { currency: "MXN", tax_pct: 0, terminal_fee_pct: 0 }, error: null }) }) }) }
     : f.from(table));
   db.rpc.mockImplementation((name, args) => name === "order_return_events_v1" ? eventQuery(f, args)
+    : name === "terminal_deposit_ledger_v1" ? f.from("terminal_ledger")
     : Promise.resolve({ data: { outstanding_cents: 0 }, error: null }));
   f.tables.orders = [{ id: "sale", restaurant_id: "r1", currency: "MXN", total: 50, service_fee: 0, tip: 0,
     tax_pct: 0, subtotal: 100, paid: true, status: "completed", created_at: "2026-11-01T12:00:00Z",
@@ -77,7 +78,7 @@ it("F2 excludes returned service, tip and IVA from product contribution", async 
 });
 
 it("F2 fails the report when dated return evidence cannot be read", async () => {
-  db.rpc.mockImplementation(() => ({ gte: () => ({ lt: () => ({ eq: () => ({ order: () => ({
+  db.rpc.mockImplementation(name => name === "terminal_deposit_ledger_v1" ? f.from("terminal_ledger") : ({ gte: () => ({ lt: () => ({ eq: () => ({ order: () => ({
     range: async () => ({ data: null, error: { message: "return evidence unavailable" } }),
   }) }) }) }) }));
   await expect(readCosts("r1", now)).rejects.toThrow("return evidence unavailable");

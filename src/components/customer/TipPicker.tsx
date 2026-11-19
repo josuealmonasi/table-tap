@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { formatMoney } from "@/lib/format";
-import { tipFor } from "@/lib/pricing";
+import { tipFromPercent } from "@/lib/tip-base";
 import { useT } from "@/lib/i18n/context";
 import { Modal } from "@/components/ui/Modal";
 
@@ -19,6 +19,10 @@ interface TipPickerProps {
    * total quietly used MX$1,416.20.
    */
   maxTip: number;
+  /** Percentage base may exclude service while exact tips keep their existing cap. */
+  tipBase?: number;
+  /** Old split snapshots cannot safely supply a percentage base. */
+  exactOnly?: boolean;
   onPresetTip: (pct: number) => void;
   onCustomTip: (amount: number | null) => void;
 }
@@ -29,6 +33,8 @@ export default function TipPicker({
   tipPct,
   tipCustom,
   maxTip,
+  tipBase = maxTip,
+  exactOnly = false,
   onPresetTip,
   onCustomTip,
 }: TipPickerProps) {
@@ -55,7 +61,7 @@ export default function TipPicker({
     <div style={{ marginBottom: 20 }}>
       <div className="tt-mod-label">{t("tip.prompt")}</div>
       <div className="tt-tip-row">
-        {[0, 10, 15, 20].map(pct => (
+        {(exactOnly ? [0] : [0, 10, 15, 20]).map(pct => (
           <button
             key={pct}
             type="button"
@@ -69,9 +75,9 @@ export default function TipPicker({
                 function that charges it, on the same base, so the chip and
                 the total can never disagree. Nothing to print on a cart worth
                 nothing, and 0% of anything is not news. */}
-            {pct > 0 && maxTip > 0 && (
+            {pct > 0 && tipBase > 0 && (
               <span className="tt-tip-amount">
-                {formatMoney(tipFor(maxTip, pct), currency)}
+                {formatMoney(tipFromPercent(tipBase, pct), currency)}
               </span>
             )}
           </button>

@@ -5,11 +5,13 @@
 // screen or a role is added, you touch this file and nothing else.
 // ============================================================================
 
+import { SEED_STOP_TOKEN } from "./seed-stop-token.mjs";
+
 /** The five demo team logins, with what each one actually reaches. */
 export const CREW = [
   {
     role: "owner",
-    email: "demo@tabletap.dev",
+    email: "demo@tabletap.shop",
     pages: [
       "/dashboard",
       "/dashboard/main-menu",
@@ -38,7 +40,7 @@ export const CREW = [
   },
   {
     role: "manager",
-    email: "demo-manager@tabletap.dev",
+    email: "demo-manager@tabletap.shop",
     // No staff or plan: they bounce, and a page you bounce off is another page,
     // already checked with its owner.
     pages: [
@@ -59,16 +61,16 @@ export const CREW = [
       "/dashboard/profile",
     ],
   },
-  { role: "waiter", email: "demo-waiter@tabletap.dev", pages: ["/dashboard/orders", "/dashboard/table-order", "/dashboard/bills", "/dashboard/accounts", "/dashboard/waste", "/dashboard/profile"] },
-  { role: "cashier", email: "demo-cashier@tabletap.dev", pages: ["/dashboard/orders", "/dashboard/bills", "/dashboard/pos", "/dashboard/accounts", "/dashboard/waste", "/dashboard/profile"] },
-  { role: "kitchen", email: "demo-kitchen@tabletap.dev", pages: ["/dashboard/orders", "/dashboard/waste", "/dashboard/profile"] },
+  { role: "waiter", email: "demo-waiter@tabletap.shop", pages: ["/dashboard/orders", "/dashboard/table-order", "/dashboard/bills", "/dashboard/accounts", "/dashboard/waste", "/dashboard/profile"] },
+  { role: "cashier", email: "demo-cashier@tabletap.shop", pages: ["/dashboard/orders", "/dashboard/bills", "/dashboard/pos", "/dashboard/accounts", "/dashboard/waste", "/dashboard/profile"] },
+  { role: "kitchen", email: "demo-kitchen@tabletap.shop", pages: ["/dashboard/orders", "/dashboard/waste", "/dashboard/profile"] },
   // The platform admin runs the whole business from one screen and was in no
   // check at all: at 390px its five columns gave the name 31px, so every
   // restaurant came out one letter per line and the headers overlapped.
   // Its password is its own, not the demo one.
   {
     role: "admin",
-    email: "admin@tabletap.dev",
+    email: "admin@tabletap.shop",
     passwordEnv: "PLATFORM_ADMIN_PASSWORD",
     pages: ["/dashboard/admin"],
   },
@@ -92,7 +94,12 @@ export const PUBLIC = [
   "/privacidad",
   // The "stop emailing my tickets" page a ticket email links to.
   "/tickets/stop",
+  `/tickets/stop?t=${SEED_STOP_TOKEN}`,
   "/rewards",
+  // Where the auth emails land: one button that posts the token. Opening it
+  // spends nothing, so a made-up token shows the real screen.
+  "/auth/confirm",
+  "/auth/confirm?token_hash=layout-preview-token&type=email",
 ];
 
 /**
@@ -190,7 +197,7 @@ export const DINER = [
   {
     name: "dish detail",
     expect: { es: "Agregar al carrito", en: "Add to cart" },
-    steps: [{ click: { es: "[aria-label^='Abrir ']", en: "[aria-label^='Open ']" } }],
+    steps: [{ dishDetail: true }],
     escape: 0,
   },
   {

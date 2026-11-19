@@ -13,9 +13,11 @@ import { requireServer, retryFetch } from "./preflight.mjs";
 import { DEV_URL } from "./dev-url.mjs";
 import { apiInScope, pageInScope, reportScope } from "./gate-scope.mjs";
 import { sessionCookieHeader } from "./session-cookie.mjs";
+import { loginSecret } from "./login-secrets.mjs";
 
 const prod = process.argv.includes("--prod");
 process.loadEnvFile(join(process.cwd(), prod ? ".env.production.local" : ".env.development.local"));
+const password = loginSecret("DEMO_PASSWORD");
 const BASE = prod
   ? (process.env.PROD_SITE_URL ?? "https://table-tap-star.vercel.app")
   : DEV_URL;
@@ -26,11 +28,11 @@ const { createClient } = await import("@supabase/supabase-js");
 const admin = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.SUPABASE_SECRET_KEY);
 
 const ROLES = [
-  { email: "demo@tabletap.dev", password: "demo123", role: "owner" },
-  { email: "demo-manager@tabletap.dev", password: "demo123", role: "manager" },
-  { email: "demo-waiter@tabletap.dev", password: "demo123", role: "waiter" },
-  { email: "demo-cashier@tabletap.dev", password: "demo123", role: "cashier" },
-  { email: "demo-kitchen@tabletap.dev", password: "demo123", role: "kitchen" },
+  { email: "demo@tabletap.shop", password, role: "owner" },
+  { email: "demo-manager@tabletap.shop", password, role: "manager" },
+  { email: "demo-waiter@tabletap.shop", password, role: "waiter" },
+  { email: "demo-cashier@tabletap.shop", password, role: "cashier" },
+  { email: "demo-kitchen@tabletap.shop", password, role: "kitchen" },
 ];
 
 // Page → who should be able to open it, and text ONLY that page prints.
@@ -243,7 +245,7 @@ reportScope("roles");
 // The console's marker, seen by the one person who may open it. Without this
 // every bounce above would pass on a page that had stopped printing it.
 if (pageInScope("/dashboard/admin")) {
-  const email = process.env.PLATFORM_ADMIN_EMAIL ?? "admin@tabletap.dev";
+  const email = process.env.PLATFORM_ADMIN_EMAIL ?? "admin@tabletap.shop";
   const password = process.env.PLATFORM_ADMIN_PASSWORD;
   console.log(`  platform admin (${email})`);
   if (!password) bad("could not check the console's marker: PLATFORM_ADMIN_PASSWORD is not set");
@@ -257,6 +259,17 @@ if (pageInScope("/dashboard/admin")) {
       const html = res.status === 200 ? await res.text() : "";
       if (html.includes(PAGES["/dashboard/admin"].marker)) ok("opens /dashboard/admin, and sees its marker");
       else bad("/dashboard/admin: the platform admin does not see «" + PAGES["/dashboard/admin"].marker + "» — every bounce above proves nothing");
+      // The read-only owner view, opened from the console's first restaurant.
+      // Each visit writes an audit row, so this check leaves one behind on
+      // purpose: that row is the feature.
+      const view = html.match(/\/dashboard\/admin\/restaurants\/[0-9a-f-]{36}/)?.[0];
+      if (!view) bad("/dashboard/admin offers no «Ver como dueño» link");
+      else {
+        const page = await retryFetch(BASE + view, { headers: { cookie, "accept-language": "es-MX" } }, BASE);
+        const body = page.status === 200 ? await page.text() : "";
+        if (body.includes("Vista de solo lectura")) ok("opens the read-only owner view");
+        else bad(`${view}: the platform admin does not see the read-only owner view (${page.status})`);
+      }
     }
   }
   console.log("");

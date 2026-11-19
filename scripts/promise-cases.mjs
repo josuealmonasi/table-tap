@@ -411,10 +411,12 @@ export const STATES = [
   },
   {
     // And on a table's bill, beside cash and card.
+    // Own an unsplit bill: the first Collect can belong to a divided bill,
+    // whose remaining parts correctly cannot be moved to a customer account.
     name: "a table's bill · put it on an account",
     as: "owner",
     path: "/dashboard/bills",
-    open: /^\s*(Cobrar|Collect)\s*$/i,
+    unsplitBill: true,
     says: /cuenta|bill/i,
     keeps: /cargar a una cuenta de cliente|put it on a customer account/i,
   },

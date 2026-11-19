@@ -1,3 +1,4 @@
+import { readDisputeReport } from "@/lib/disputes/read";
 import { reportDiscounts } from "@/lib/report-discounts";
 import { withReturnComponents } from "@/lib/return-components";
 import { createClient } from "@/lib/supabase/server";
@@ -217,6 +218,7 @@ export default async function AnalyticsPage({
     <ConfirmProvider>
     <AnalyticsView
       data={data}
+      disputes={await readDisputeReport(membership.restaurant.id, start.toISOString(), end.toISOString())}
       returnSummary={returnSummary}
       period={period}
       currency={membership.restaurant.currency}

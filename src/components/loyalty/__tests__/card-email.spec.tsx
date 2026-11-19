@@ -42,17 +42,34 @@ it("diner reads their full address from rewards without calling the staff-only G
   expect(JSON.parse(vi.mocked(fetch).mock.calls[0][1]!.body as string)).toEqual({ code, email: null, consent: false });
   expect(host.textContent).toContain("Sin correo");
 });
-it("says which card already has the address without silently moving it", async () => {
-  await render(); await act(async () => button("Agregar/cambiar correo").click()); await type("taken@example.com");
+it("reports a failed save without changing the displayed card", async () => {
+  await render(); await act(async () => button("Agregar/cambiar correo").click()); await type("ana@example.com");
   await act(async () => host.querySelector<HTMLInputElement>('input[type="checkbox"]')!.click());
-  vi.mocked(fetch).mockResolvedValueOnce(Response.json({ outcome: "taken", suffix: "ABCD" }, { status: 409 }));
+  vi.mocked(fetch).mockResolvedValueOnce(Response.json({}, { status: 503 }));
   await act(async () => button("Guardar correo").click());
-  expect(host.querySelector('[role="alert"]')?.textContent).toContain("···· ABCD");
+  expect(host.querySelector('[role="alert"]')?.textContent).toBe(translate(messagesFor("es"), "cardEmail.failed"));
   expect(host.textContent).toContain("j***@hotmail.com");
 });
 it("read failures stay distinct from a card without email and allow retry", async () => {
   vi.mocked(fetch).mockResolvedValue(Response.json({}, { status: 503 }));
   await render(); expect(host.querySelector('[role="alert"]')).not.toBeNull(); expect(host.textContent).not.toContain("Sin correo");
+});
+it("screens5: a failed read is said once, not as a placeholder and an alert", async () => {
+  vi.mocked(fetch).mockResolvedValue(Response.json({}, { status: 503 }));
+  await render();
+  const said = translate(messagesFor("es"), "cardEmail.readFailed");
+  expect(host.textContent!.split(said)).toHaveLength(2);
+  expect(host.querySelector('[role="alert"]')?.textContent).toBe(said);
+});
+it("access2: a diner's submitted address is saved for this card", async () => {
+  await render({ diner: true, initialEmail: null });
+  await act(async () => button("Agregar/cambiar correo").click()); await type("ana@example.com");
+  await act(async () => host.querySelector<HTMLInputElement>('input[type="checkbox"]')!.click());
+  vi.mocked(fetch).mockResolvedValueOnce(Response.json({ outcome: "submitted", email: "ana@example.com" }));
+  await act(async () => button("Guardar correo").click());
+  expect(host.textContent).toContain("ana@example.com");
+  expect(host.querySelector('[role="status"]')?.textContent).toBe(translate(messagesFor("es"), "cardEmail.submittedDiner"));
+  expect(host.querySelector('[role="alert"]')).toBeNull();
 });
 it("a new staff reader never flashes a previous reader's full email from a shared cache", async () => {
   vi.mocked(fetch).mockResolvedValueOnce(Response.json({ email: "owner-visible@example.com" }));

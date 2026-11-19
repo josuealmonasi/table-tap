@@ -28,9 +28,17 @@ const NOT_DEMO_DATA = new Set([
   "restaurant_subscription_prices", // historical Price-to-tier map, shared by everyone
   "platform_admins", // not a restaurant's data
   "platform_admin_audit", // real platform actions only; never fabricate audit history
+  "plan_price_changes", // real admin schedules only; demo data must not change prices
+  "plan_price_notices", // a fake queue must never send a real notice
+  "restaurant_admin_notes", // the platform team's own notes, never a restaurant's data
+  "trial_rfcs", // written only when an owner saves an RFC after a trial; seeding one would fake a used trial
+  "webhook_heartbeats", // written only by Stripe's signed calls; a seeded one would show health as fine
   "restaurant_accounting_records", // only real deletions retain books; the demo stays live
+  "terms_acceptances", // the seeded restaurant acceptance fills this through its trigger
   "profiles", // created with the logins
   "rate_limits", // throttling counters
+  "recovery_nonces", // replay protection for real scheduled calls
+  "recovery_runs", // health of the real scheduler, never seeded
   "menus",
   "categories",
   "menu_items",
@@ -38,6 +46,9 @@ const NOT_DEMO_DATA = new Set([
   "stock_reservations", // internal checkout recovery records, not a demo feature
   "table_session_members", // server-issued credentials; demo bills must never seed usable phone access
   "diner_checkouts", // genuine Stripe session provenance; demo rows must never authorize money
+  "stripe_disputes", // genuine chargeback evidence; a fabricated one would teach the owner one happened
+  "stripe_dispute_movements", // Stripe balance transactions, recorded only from Stripe
+  "stripe_dispute_events", // the webhook inbox
   "kitchen_tickets", // filled by the trigger on the seeder's orders
   "kitchen_requests", // filled by the trigger on the seeder's service requests
   "account_checkouts", // an online payment in progress; only the pay route opens one
@@ -85,4 +96,10 @@ describe("the demo shows the whole app", () => {
       `the demo seeder never fills: ${missing.join(", ")} — add them to scripts/mock-data.mjs`,
     ).toEqual([]);
   });
+});
+
+it("seeds the account journal once journal PR 2 starts writing it", () => {
+  // PR 2 installs the journal check that every writer then has to satisfy.
+  const started = fs.readFileSync("supabase/schema.sql", "utf8").includes("public.check_account_journal_v1()");
+  if (started) expect(NOT_DEMO_DATA.has("account_movements"), "journal is live: seed account_movements and drop the PR 1 exclusion").toBe(false);
 });

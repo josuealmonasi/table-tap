@@ -57,5 +57,18 @@ it("pays several free parts as one selection", async () => {
   });
   const button = [...el.querySelectorAll("button")].find(b => /Pay/.test(b.textContent ?? ""))!;
   await act(async () => button.click());
-  expect(pay).toHaveBeenCalledWith([0, 1], 0);
+  expect(pay).toHaveBeenCalledWith([0, 1], undefined, 0);
+});
+
+it("F6 slot chips and the pay button tip only frozen dishes and send the percentage", async () => {
+  await render({ ...slotSplit, shares: 2, amount: 120, tipPrincipal: 100,
+    slots: [0, 1].map(shareNo => ({ shareNo, amountCents: 6000, feeCents: 0, paid: false, paying: false })) } as typeof slotSplit);
+  await act(async () => el.querySelectorAll<HTMLInputElement>("input[type=checkbox]")[0].click());
+  const chip = [...el.querySelectorAll<HTMLButtonElement>("button")].find(b => b.textContent?.startsWith("15%"))!;
+  expect(chip.textContent).toContain("7.50");
+  await act(async () => chip.click());
+  const button = [...el.querySelectorAll<HTMLButtonElement>("button")].find(b => b.textContent?.startsWith("Pay"))!;
+  expect(button.textContent).toContain("67.50");
+  await act(async () => button.click());
+  expect(pay).toHaveBeenCalledWith([0], undefined, 15);
 });

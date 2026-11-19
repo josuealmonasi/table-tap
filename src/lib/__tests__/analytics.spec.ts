@@ -105,10 +105,10 @@ describe("computeAnalytics", () => {
       "today",
       MX,
     );
-    expect(a.revenue).toBe(150);
+    expect(a.revenue).toBe(135);
     expect(a.tips).toBe(15);
     expect(a.orderCount).toBe(2);
-    expect(a.avgTicket).toBe(75);
+    expect(a.avgTicket).toBe(67.5);
   });
 
   it("coerces string totals (Postgres numeric comes back as text)", () => {
@@ -117,7 +117,7 @@ describe("computeAnalytics", () => {
       "today",
       MX,
     );
-    expect(a.revenue).toBe(20.5);
+    expect(a.revenue).toBe(19);
     expect(a.tips).toBe(1.5);
   });
 

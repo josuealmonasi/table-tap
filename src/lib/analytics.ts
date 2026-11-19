@@ -1,4 +1,4 @@
-import { lineRevenues, type RevenueOrder } from "@/lib/report-revenue";
+import { lineRevenues, salesRevenue, type RevenueOrder } from "@/lib/report-revenue";
 import {
   localDayKey,
   localHour,
@@ -81,7 +81,7 @@ export function computeAnalytics(
   /** The reader's language: the day labels are words, and "Tue" on a Spanish page is not one. */
   locale: string = "es",
 ): Analytics {
-  const revenue = orders.reduce((s, o) => s + (Number(o.total) + Number(o.return_components?.total ?? 0)), 0);
+  const revenue = orders.reduce((s, o) => s + salesRevenue(o), 0);
   const tips = orders.reduce((s, o) => s + (Number(o.tip) + Number(o.return_components?.tip ?? 0)), 0);
   const orderCount = orders.length;
   const avgTicket = orderCount ? revenue / orderCount : 0;
@@ -111,7 +111,7 @@ export function computeAnalytics(
   for (const o of orders) {
     const when = new Date(o.created_at);
     const di = dayIndex.get(localDayKey(when, timeZone));
-    if (di !== undefined) days[di].revenue += (Number(o.total) + Number(o.return_components?.total ?? 0));
+    if (di !== undefined) days[di].revenue += salesRevenue(o);
     byHour[localHour(when, timeZone)].count += 1;
 
     const revenues = lineRevenues(o);

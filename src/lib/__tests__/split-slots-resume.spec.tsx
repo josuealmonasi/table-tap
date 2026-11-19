@@ -12,6 +12,7 @@ const s = vi.hoisted(() => ({
   creates: [] as unknown[][], retrieves: 0, fees: 0, locale: "es" as "es" | "en",
 }));
 vi.mock("@/lib/i18n/context", () => ({ useT: () => (key: string, vars?: Record<string, string | number>) => translate(messagesFor(s.locale), key, vars) }));
+vi.mock("@/lib/diner-checkout-orders", () => ({ dinerCheckoutOrders: async () => [{ id: "o", total: 150, tip: 0, service_fee: 0 }] }));
 vi.mock("@/lib/bill-data", () => ({ fetchTableBill: async () => [] }));
 vi.mock("@/lib/plan-server", () => ({ getPlan: async () => ({ limits: {} }) }));
 vi.mock("@/lib/site-origin", () => ({ siteOrigin: () => "http://localhost" }));
@@ -22,8 +23,8 @@ vi.mock("@/lib/diner-checkout", () => ({ stripeLiveMode: () => false, requireVer
   recordDinerCheckout: async () => { s.attempt!.stripe_session_id = "cs"; } }));
 vi.mock("stripe", () => ({ default: class {
   checkout = { sessions: {
-    create: async (...args: unknown[]) => { s.creates.push(args); return { id: "cs", status: "open", url: "original-page" }; },
-    retrieve: async () => { s.retrieves++; return { id: "cs", status: "open", url: "original-page" }; }, expire: vi.fn(),
+    create: async (...args: unknown[]) => { s.creates.push(args); return { id: "cs", status: "open", url: "original-page", metadata: { settle_tip: "7.25" }, amount_total: 10725 }; },
+    retrieve: async () => { s.retrieves++; return { id: "cs", status: "open", url: "original-page", metadata: { settle_tip: "7.25" }, amount_total: 10725 }; }, expire: vi.fn(),
   } };
 } }));
 vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({

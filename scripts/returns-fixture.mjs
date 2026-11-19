@@ -17,7 +17,7 @@ export async function returnsFixture(admin, restaurantId, method = "cash") {
     // refused the cleanup (#575's api gate). The order's cascade then removes
     // its own immutable return plan; deleting an adjustment directly would
     // weaken the same guard the case is testing.
-    await checked(admin.from("payments").delete().eq("id", paymentId).eq("restaurant_id", restaurantId));
+    await checked(admin.from("payments").delete().is("account_id", null).eq("id", paymentId).eq("restaurant_id", restaurantId));
     await checked(admin.from("orders").delete().eq("id", orderId).eq("restaurant_id", restaurantId));
   };
   try {

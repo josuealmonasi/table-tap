@@ -15,6 +15,8 @@ interface PosCashDrawerProps {
   shiftId?: string;
   /** Sales this device rang offline and has not sent yet. */
   heldSales?: number;
+  /** Cash sales from any till waiting for a manager's review; the close refuses while any wait. */
+  heldCash?: number;
 }
 
 /**
@@ -24,7 +26,7 @@ interface PosCashDrawerProps {
  * should hold until they have counted it — the register close, which they do
  * not open, is where that sum lives.
  */
-export default function PosCashDrawer({ shiftOpen, currency, shiftCurrency = currency, shiftId, heldSales = 0 }: PosCashDrawerProps) {
+export default function PosCashDrawer({ shiftOpen, currency, shiftCurrency = currency, shiftId, heldSales = 0, heldCash = 0 }: PosCashDrawerProps) {
   const t = useT();
   const toast = useToast();
   const router = useRouter();
@@ -42,10 +44,13 @@ export default function PosCashDrawer({ shiftOpen, currency, shiftCurrency = cur
           {/* A shift closed with sales still on this device closes on a count
               the server cannot explain: their cash is in the drawer and not
               yet in its books. They are sent first. */}
-          <button type="button" className="tt-btn tt-btn-ghost tt-btn-sm"
+          {/* Held cash from any till is reviewed by a manager before the
+              drawer is signed. Said before the blind count, not after it. */}
+          <button type="button" className="tt-btn tt-btn-ghost tt-btn-sm" disabled={heldCash > 0}
             onClick={() => (heldSales > 0 ? toast(t("pos.offlineCloseBlocked", { n: heldSales }), "error") : setDialog("close"))}>
             {t("shift.close")}
           </button>
+          {heldCash > 0 && <p className="tt-muted" role="status">{t("pos.heldCashCloseBlocked", { n: heldCash })}</p>}
         </>
       ) : (
         <button type="button" className="tt-btn tt-btn-ghost tt-btn-sm" onClick={() => setDialog("opening")}>

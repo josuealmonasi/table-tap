@@ -26,7 +26,7 @@ it("the kitchen's published rows have an explicit money-free structure", () => {
   expect(schema).toContain("alter table kitchen_tickets enable row level security");
   expect(schema).toContain("grant select on kitchen_tickets to authenticated");
   expect(schema).toContain("alter publication supabase_realtime add table kitchen_tickets");
-  expect(policy("kitchen_tickets")).toContain("works_at(restaurant_id)");
+  expect(policy("kitchen_tickets")).toMatch(/using \(restaurant_id = any \(array\(\s*select r.id from public\.restaurants r where public\.works_at\(r.id\)\s*\)\)\);/);
   const project = schema.split("create or replace function public.kitchen_items(")[1]?.split("$$;")[0];
   expect(project).toBeDefined();
   expect(project).toContain("kitchen_items(line->'extras')");

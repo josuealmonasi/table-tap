@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { pathToFileURL } from "node:url";
 import { chromium } from "playwright";
 import { AUDIT } from "./layout-audit.mjs";
+import { LISTBOX_FIXTURES } from "./layout-audit-listbox-fixtures.mjs";
 
 // Static pages only: no app, database, fixture writes or network required.
 export async function layoutAuditSelftest(browser) {
@@ -202,6 +203,10 @@ export async function layoutAuditSelftest(browser) {
     const ranked = await check('overflow survives report cap', 'overflowing', crowded + '<div style="width:500px">Overflow</div>');
     assert.equal(ranked[0].kind, 'overflowing');
     assert.equal(ranked.length, 12);
+    for (const { name, kind, html, expected } of LISTBOX_FIXTURES) {
+      const faults = await check(name, kind, html, expected);
+      if (!expected) assert.deepEqual(faults, [], `${name}: no faults`);
+    }
     console.log(`  Audit self-test passed (${count} fixtures).`);
   } finally { await page.close(); }
 }

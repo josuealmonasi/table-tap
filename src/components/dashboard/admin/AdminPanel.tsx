@@ -8,9 +8,14 @@ import Breadcrumb from "@/components/layout/Breadcrumb";
 import AdminCreateUser from "./AdminCreateUser";
 import AdminEditUser from "./AdminEditUser";
 import AdminRestaurants from "./AdminRestaurants";
+import AdminHealth from "./AdminHealth";
+import type { PlatformHealth } from "@/lib/admin-health-rules";
+import AdminPrices from "./AdminPrices";
+import type { AdminPlanPrice } from "@/lib/admin-prices";
 import { planLabel } from "@/lib/plan";
 import { DeleteIcon, EditIcon } from "@/components/ui/icons";
 import { SEP } from "@/lib/separator";
+import type { RestaurantBilling } from "@/lib/admin-billing-summary";
 
 export interface AdminRestaurantRow {
   id: string;
@@ -21,6 +26,8 @@ export interface AdminRestaurantRow {
   /** The restaurant's plan, which every login there works under. */
   plan: string;
   billed_by_stripe: boolean;
+  /** How it pays, as the Stripe sync last wrote it. */
+  billing: RestaurantBilling;
 }
 
 export interface AdminUserRow {
@@ -31,6 +38,8 @@ export interface AdminUserRow {
   /** Founding owners' role is fixed (it comes from restaurants.owner_id). */
   founding?: boolean;
   restaurant_name?: string;
+  /** Their restaurant, for actions on it (transfer ownership). */
+  restaurant_id?: string;
   /** Their restaurant's plan: a login moves when its restaurant does. */
   plan?: string;
 }
@@ -42,6 +51,10 @@ interface AdminPanelProps {
   restaurantOptions: { id: string; name: string }[];
   /** Every plan in the catalog, cheapest first. */
   plans: string[];
+  /** Silent failures across the platform, counted. */
+  health: PlatformHealth | null;
+  /** Paid plans' prices and scheduled changes. */
+  prices: AdminPlanPrice[];
 }
 
 const ROLE_META: Record<AdminUserRow["role"], { key: string }> = {
@@ -61,9 +74,11 @@ export default function AdminPanel({
   users,
   restaurantOptions,
   plans,
+  health,
+  prices,
 }: AdminPanelProps) {
   const t = useT();
-  const { busy, deleteUser, deleteRestaurant, movePlan } = useAdminActions();
+  const { busy, deleteUser, deleteRestaurant, movePlan, schedulePrice, suspend, liftSuspension, changeTrial } = useAdminActions();
   const confirm = useConfirm();
   const [editing, setEditing] = useState<AdminUserRow | null>(null);
   const roleLabel = (role: AdminUserRow["role"]): string => {
@@ -78,13 +93,20 @@ export default function AdminPanel({
           <Breadcrumb trail={[{ labelKey: "admin.title" }]} />
         </header>
 
+        <AdminHealth health={health} />
+
         <AdminRestaurants
           restaurants={restaurants}
           plans={plans}
           busy={busy}
           onMovePlan={movePlan}
           onDelete={deleteRestaurant}
+          onSuspend={suspend}
+          onLift={liftSuspension}
+          onTrial={changeTrial}
         />
+
+        <AdminPrices prices={prices} busy={busy} onSchedule={schedulePrice} />
 
         <div className="tt-section">
           <div className="tt-section-head">

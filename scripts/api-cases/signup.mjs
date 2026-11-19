@@ -1,5 +1,6 @@
 import { MARK } from "../api-fixtures.mjs";
 import { loginByEmail } from "../logins.mjs";
+import { loginSecret } from "../login-secrets.mjs";
 
 export function signupCases() {
   return [
@@ -19,17 +20,19 @@ export function signupCases() {
     { name: "POST /api/signup (a restaurant opens an account)", as: "diner",
       method: "POST", path: "/api/signup",
       arrange: async f => {
-        f.signupEmail = `${MARK}-signup-${Date.now()}@tabletap.dev`;
+        f.signupEmail = `${MARK}-signup-${Date.now()}@tabletap.shop`;
         f.signupName = `${MARK} signup ${Date.now()}`;
         return async () => {
+          const { data: restaurant } = await f.admin.from("restaurants").select("id").eq("name", f.signupName).maybeSingle();
           await f.admin.from("restaurants").delete().eq("name", f.signupName);
+          if (restaurant) await f.admin.from("restaurant_accounting_records").delete().eq("restaurant_id", restaurant.id);
           const user = await loginByEmail(f.admin, f.signupEmail);
           if (user) await f.admin.auth.admin.deleteUser(user.id).catch(() => {});
         };
       },
       body: async f => ({
         restaurantName: f.signupName, email: f.signupEmail,
-        password: "longenough1", acceptedTerms: true,
+        password: loginSecret("TEST_PASSWORD"), acceptedTerms: true,
       }),
       expect: [200],
       known: "five signups a minute is the ceiling; this run spent it",

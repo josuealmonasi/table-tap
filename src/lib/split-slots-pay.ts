@@ -1,3 +1,6 @@
+import { legacySplitQuote, legacySplitRefusal, retireStaleLegacyPage } from "@/lib/legacy-split-checkout";
+import { dinerCheckoutOrders } from "@/lib/diner-checkout-orders";
+import { frozenTipPrincipal, splitTipBase, tipFromPercent } from "@/lib/tip-base";
 import { resolveSelectedSplitPages } from "@/lib/split-page-recovery";
 import Stripe from "stripe";
 import { type NextRequest, NextResponse } from "next/server";
@@ -20,7 +23,8 @@ export interface SlotPayBody extends SplitScope {
 }
 export async function paySplitSlots(req: NextRequest, body: SlotPayBody, member: TableMember): Promise<NextResponse> {
   if (!splitRevision(body.revision) || !splitSelection(body.slots) || !splitCents(body.expectedCents)
-    || (body.tipCents !== undefined && !splitCents(body.tipCents)) || body.couponCode || body.tipAmount !== undefined || body.tipPct !== undefined) {
+    || (body.tipCents !== undefined && !splitCents(body.tipCents)) || body.couponCode || body.tipAmount !== undefined
+    || (body.tipPct !== undefined && (typeof body.tipPct !== "number" || !Number.isFinite(body.tipPct) || body.tipCents !== undefined))) {
     return await apiError("apiErr.invalidRequest", 400);
   }
   try {
@@ -32,31 +36,49 @@ export async function paySplitSlots(req: NextRequest, body: SlotPayBody, member:
     if (error) throw new Error("Could not read card availability");
     if (!restaurant?.stripe_account_id || !restaurant.stripe_charges_enabled) return await apiError("apiErr.noCardPayments", 409);
     const slots = [...body.slots].sort((a, b) => a - b);
-    // A phone can reopen only its own grouped checkout. Its original tip and
-    // fee stay frozen even if the next tap sends different values.
+    // A phone can reopen only its own grouped checkout. Compare its quote
+    // before returning it, so a changed tip cannot charge the old amount.
     const scopeKey = `split2:${split.id}:${body.revision}:${member.id}:${slots.join(",")}`;
     const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
     const prior = await resumeDinerAttempt(stripe, body.restaurantId, scopeKey);
-    if (prior) return NextResponse.json({ url: prior.url });
     if (split.revision !== body.revision) return await splitResponse({ outcome: "stale", revision: split.revision }, []);
     const readSelected = () => db.from("bill_split_slots")
       .select("share_no, amount_cents, fee_slice_cents, payment_id, reserved_checkout_id")
       .eq("restaurant_id", body.restaurantId).eq("split_id", split.id).in("share_no", slots);
     let { data: selected, error: slotsError } = await readSelected();
-    if (!slotsError && selected?.some(s => s.reserved_checkout_id)
+    if (!prior && !slotsError && selected?.some(s => s.reserved_checkout_id)
       && await resolveSelectedSplitPages(body.restaurantId, split.id, slots) === "closed") {
       ({ data: selected, error: slotsError } = await readSelected());
     }
     if (slotsError || selected?.length !== slots.length) throw new Error("Could not read split slots");
     if (selected.some(s => s.payment_id)) return await splitResponse({ outcome: "paid" }, []);
-    if (selected.some(s => s.reserved_checkout_id)) return await splitResponse({ outcome: "taken" }, []);
+    if (!prior && selected.some(s => s.reserved_checkout_id)) return await splitResponse({ outcome: "taken" }, []);
     const amount = selected.reduce((sum, s) => sum + s.amount_cents, 0);
     if (amount !== body.expectedCents) return await splitResponse({ outcome: "stale", amount_cents: amount }, []);
     if (amount < (split.currency === "USD" ? 50 : 1000)) return await splitResponse({ outcome: "below_minimum", amount_cents: amount }, []);
+    let tip = body.tipCents ?? 0;
+    if (body.tipPct !== undefined) {
+      const orders = await dinerCheckoutOrders(split.order_ids);
+      if (orders.length !== split.order_ids.length) throw new Error("Could not read frozen food");
+      const base = splitTipBase(frozenTipPrincipal(split.food_principal, orders), split.shares, slots);
+      tip = Math.round(tipFromPercent(base, body.tipPct) * 100);
+    }
     // Never silently reduce a tip the diner chose. Tips are outside both the
     // frozen debt and its fee budget, and may be at most the parts being paid.
-    const tip = body.tipCents ?? 0;
     if (tip > amount || !splitCents(amount + tip)) return await apiError("apiErr.invalidRequest", 400);
+    if (prior) {
+      const quote = legacySplitQuote(prior, amount / 100, tip / 100);
+      if (quote !== "total" && quote !== "tip") return await legacySplitRefusal(quote) ?? NextResponse.json({ url: prior.url });
+      const retired = await retireStaleLegacyPage(stripe, prior, restaurant.stripe_account_id, body.restaurantId, scopeKey);
+      if (!retired) return await apiError("apiErr.splitPageChanged", 409);
+      // Another payment can claim the parts while the old page is closing.
+      ({ data: selected, error: slotsError } = await readSelected());
+      if (slotsError || selected?.length !== slots.length) throw new Error("Could not read split slots");
+      if (selected.some(s => s.payment_id)) return await splitResponse({ outcome: "paid" }, []);
+      if (selected.some(s => s.reserved_checkout_id)) return await splitResponse({ outcome: "taken" }, []);
+      const currentAmount = selected.reduce((sum, s) => sum + s.amount_cents, 0);
+      if (currentAmount !== amount) return await splitResponse({ outcome: "stale", amount_cents: currentAmount }, []);
+    }
     const plan = await getPlan(body.restaurantId);
     const slice = selected.reduce((sum, s) => sum + s.fee_slice_cents, 0);
     const fee = plan ? await reserveFeeCents(body.restaurantId, plan.limits, slice, "split") : NO_FEE;
@@ -76,6 +98,10 @@ export async function paySplitSlots(req: NextRequest, body: SlotPayBody, member:
       cancel_url: `${origin}/r/${body.restaurantId}/t/${body.tableId}?cancelled=1`,
     }, { restaurantId: body.restaurantId, stripeAccount: restaurant.stripe_account_id, currency: split.currency,
       amountCents: amount + tip, orderIds: split.order_ids, payableIds: [], scopeKey, foodPrincipal: Number(split.food_principal) });
+    // A concurrent winner owns its page and fee; refuse a different quote
+    // without closing a page that another diner may already be paying.
+    const refusal = await legacySplitRefusal(legacySplitQuote(session, amount / 100, tip / 100));
+    if (refusal) return refusal;
     return NextResponse.json({ url: session.url });
   } catch (error) {
     if (error instanceof SplitReservationRejected) return await splitResponse(error.result, []);

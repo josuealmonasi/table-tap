@@ -46,7 +46,7 @@ describe("the demo team is one list", () => {
       const email = m[1] ?? m[4];
       // A request body carries an email and a role too — `POST /api/staff` with
       // `nope@x.dev` is a refusal being tested, not somebody who signs in.
-      if (email.endsWith("@tabletap.dev")) out.set(email, m[2] ?? m[3]);
+      if (email.endsWith("@tabletap.shop")) out.set(email, m[2] ?? m[3]);
     }
     return out;
   };
@@ -327,5 +327,12 @@ describe("the server code runs beside the database", () => {
     // database means moving this too, in the same change.
     const config = JSON.parse(read("vercel.json")) as { regions?: string[] };
     expect(config.regions, "vercel.json must pin the functions beside the database").toEqual(["pdx1"]);
+  });
+
+  it("deploys main only: branch previews used up the plan's daily deployments and blocked a release", () => {
+    const config = JSON.parse(read("vercel.json")) as { git?: { deploymentEnabled?: Record<string, boolean> } };
+    // "**", not "*": minimatch's "*" stops at a slash, and every branch here is
+    // claude/… or codex/…, so "*" left previews on for all of them.
+    expect(config.git?.deploymentEnabled).toEqual({ main: true, "**": false });
   });
 });

@@ -5,7 +5,7 @@ const checked = async query => {
   if (error) throw new Error(error.message);
   return data;
 };
-/** A private sitting per case. Cleanup never borrows another case's orders or money. */
+/** A private sitting per owner. Cleanup never borrows another fixture's orders or money. */
 export async function splitSlotFixture(admin, restaurantId, { currency = "MXN", totalCents = 11000, shares = 2, start = true } = {}) {
   const tableId = randomUUID(), sessionId = randomUUID(), orderId = randomUUID(), ref = randomUUID();
   let splitId;
@@ -21,7 +21,7 @@ export async function splitSlotFixture(admin, restaurantId, { currency = "MXN", 
     // every pnpm attack left its drawer short of the corte (cash and card).
     const receipts = await checked(admin.from("payments").select("id").eq("session_id", sessionId));
     if (receipts?.length) await checked(admin.from("user_logs").delete().in("id", receipts.map(p => p.id)));
-    await checked(admin.from("payments").delete().eq("session_id", sessionId));
+    await checked(admin.from("payments").delete().is("account_id", null).eq("session_id", sessionId));
     await checked(admin.from("user_logs").delete().eq("restaurant_id", restaurantId).eq("entity", "bill")
       .in("action", ["collected", "paid"]).like("detail", `table=split-${ref.slice(0, 8)} %`));
     await checked(admin.from("orders").delete().eq("id", orderId));
@@ -64,7 +64,14 @@ export async function splitSlotFixture(admin, restaurantId, { currency = "MXN", 
       table_label: `split-${ref.slice(0, 8)}`, items: [], subtotal: totalCents / 100, total: totalCents / 100,
       tip: 0, service_fee: 0, tax_pct: 0, discount: 0, status: "received", paid: false, currency, note: "split-slot-fixture" }));
     if (start) await begin();
-    return { scope, startBody, body, begin, hold, rpc, cleanup, orderId, get splitId() { return splitId; },
+    // What a shared read-only borrower must leave as it found it: the order,
+    // its parts and its receipts (run-fixtures names the first case that did not).
+    const fingerprint = async () => JSON.stringify([
+      await checked(admin.from("orders").select("*").eq("id", orderId).maybeSingle()),
+      splitId ? await checked(admin.from("bill_split_slots").select("*").eq("split_id", splitId).order("share_no")) : [],
+      await checked(admin.from("payments").select("id").eq("session_id", sessionId).order("id")),
+    ]);
+    return { scope, startBody, body, begin, hold, rpc, cleanup, fingerprint, orderId, get splitId() { return splitId; },
       slots: () => checked(admin.from("bill_split_slots").select("*").eq("split_id", splitId).order("share_no")),
       receipts: () => checked(admin.from("payments").select("*").eq("session_id", sessionId)) };
   } catch (error) { await cleanup(); throw error; }

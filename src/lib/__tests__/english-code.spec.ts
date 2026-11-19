@@ -221,7 +221,7 @@ const MATCHER_MAP = /\bsections\s*:\s*\{[^}]*$/;
 const MATCHER_CALL = /(includes|hasText|getByText|eq|ilike)\s*\(\s*$/;
 
 /** Seed content for the demo restaurant — Spanish because the diners are. */
-const SEED = ["scripts/mock-data.mjs", "scripts/seed-"];
+const SEED = ["scripts/mock-data.mjs", "scripts/mock-history.mjs", "scripts/seed-"];
 
 function spanishOutput(path: string): string[] {
   if (SEED.some(s => path.includes(s))) return [];

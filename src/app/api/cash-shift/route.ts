@@ -57,9 +57,12 @@ export async function POST(req: NextRequest) {
     const ref = uuidOf(body.ref);
     if (!shiftId || !ref) return await apiError("apiErr.shiftChanged", 409);
     // Held cash awaiting review is reviewed before the drawer is signed (C4).
+    // Only a manager can review it: a cashier is told to call one, not sent to
+    // a screen they cannot open (full review, screens #1).
+    const heldCash = MANAGES(actor.role) ? "apiErr.shiftHeldCash" : "apiErr.shiftHeldCashCashier";
     const waiting = await heldCashWaiting(db, actor.restaurantId).catch(() => null);
     if (waiting === null) return await apiError("apiErr.generic", 503);
-    if (waiting > 0) return await apiError("apiErr.shiftHeldCash", 409, { n: waiting });
+    if (waiting > 0) return await apiError(heldCash, 409, { n: waiting });
     // Only the shift still open: two people closing at once close it once.
     // The sum and the signature belong to one transaction, after every earlier
     // money writer and before another withdrawal can change the drawer.
@@ -70,6 +73,7 @@ export async function POST(req: NextRequest) {
     if (error?.code === "PT409") return await apiError("apiErr.retryConflict", 409);
     if (error) return await apiError("apiErr.generic", 500);
     if (!data) return await apiError("apiErr.shiftChanged", 409);
+    if (data.outcome === "held_cash") return await apiError(heldCash, 409, { n: data.waiting });
     await logEvent({
       operationKey: `shift:${shiftId.toLowerCase()}`,
       restaurantId: actor.restaurantId, actor: actor.email, entity: "cash", action: "closed",

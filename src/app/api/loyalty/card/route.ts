@@ -97,12 +97,13 @@ export async function POST(req: NextRequest) {
     if (!error) {
       const face = cardFace(restaurant, { code, progress: 0, ladder: program.steps }, req.nextUrl.origin);
       // An address given with the new card, for its tickets (paperless): only
-      // with the consent tick. One already on another card is not linked here;
-      // the card is still made and the answer says so.
+      // with the consent tick. Each card keeps its own address and stop link.
       let emailLinked: SetEmailResult["outcome"] | undefined;
       const email = normalizeEmail(body?.email);
       if (email && body?.consent === true) emailLinked = (await setCardEmail(restaurantId, code, email, "diner").catch(() => null))?.outcome;
-      return NextResponse.json({ code, face, qr: qrGrid(face.qrPayload), ...(emailLinked ? { email: emailLinked } : {}) });
+      // The answer describes this card only, never another card.
+      const emailAnswer = emailLinked === "saved" ? "submitted" : emailLinked;
+      return NextResponse.json({ code, face, qr: qrGrid(face.qrPayload), ...(emailAnswer ? { email: emailAnswer } : {}) });
     }
     if (error.code !== "23505") {
       console.error("loyalty card create failed:", error.message);

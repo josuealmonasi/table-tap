@@ -3,7 +3,7 @@ const s = vi.hoisted(() => ({ tables: [] as string[], model: 2, paid: true, held
 vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({ from: (table: string) => {
   s.tables.push(table);
   const data = table === "bill_splits" ? { id: "split", model_version: s.model, revision: 1, shares: 2,
-    status: "locked", amount: 110, proposed_by: "m", currency: "MXN", first_payment_attempt_at: null } :
+    status: "locked", amount: 110, order_ids: ["o"], food_principal: 110, proposed_by: "m", currency: "MXN", first_payment_attempt_at: null } :
     table === "bill_split_slots" ? [{ share_no: 0, amount_cents: 5500, fee_slice_cents: 150, payment_id: null, reserved_checkout_id: s.held ? "attempt" : null },
       { share_no: 1, amount_cents: 5500, fee_slice_cents: 150, payment_id: s.paid ? "payment" : null, reserved_checkout_id: null }] : [];
   const q: Record<string, unknown> = {};
@@ -12,13 +12,14 @@ vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({ from: (tabl
   q.then = (resolve: (value: unknown) => unknown) => Promise.resolve({ data, error: null }).then(resolve);
   return q;
 } }) }));
+vi.mock("@/lib/diner-checkout-orders", () => ({ dinerCheckoutOrders: async () => [{ id: "o", total: 110, tip: 0, service_fee: 10 }] }));
 vi.mock("@/lib/bill-data", () => ({ fetchTableBill: async () => [] }));
 const { currentSplit } = await import("@/lib/split-service");
 beforeEach(() => { s.tables = []; s.model = 2; s.paid = true; s.held = true; });
 it("reads model 2 slots without asking legacy claims to describe them", async () => {
   const split = await currentSplit("session", "m", "r", "t", [],
     { id: "m", sessionId: "session", restaurantId: "r", tableId: "t", closed: false });
-  expect(split).toMatchObject({ modelVersion: 2, revision: 1, currency: "MXN", frozen: true, slots: [
+  expect(split).toMatchObject({ modelVersion: 2, revision: 1, tipPrincipal: 100, currency: "MXN", frozen: true, slots: [
     { shareNo: 0, amountCents: 5500, feeCents: 150, paying: true, paid: false },
     { shareNo: 1, amountCents: 5500, feeCents: 150, paying: false, paid: true },
   ] });

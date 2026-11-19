@@ -82,6 +82,11 @@ Each needs the Supabase URL + keys, Stripe keys, and a `DATABASE_URL` (Supabase 
 **Connect** → _Session pooler_ URI, with your DB password). Next.js loads the
 right file automatically based on `NODE_ENV`.
 
+Login passwords live in `.env.development.local`: set `DEMO_PASSWORD` for the
+demo logins and `TEST_PASSWORD` for seeded test owners and teams. The committed
+examples leave these empty; scripts refuse missing values and never print them.
+Production scripts read their own values from `.env.production.local`.
+
 ### 2. Create the database
 
 With `DATABASE_URL` set in `.env.development.local`:
@@ -117,23 +122,24 @@ pnpm dev
   creates your restaurant), then you land on `/dashboard`. Sign in again any time
   at `http://localhost:3000/login`.
 - **Test logins (dev only):** `pnpm db:seed` / `pnpm db:reset` create five ready
-  accounts, password `test123`, each with its own "Test Restaurant N" — and each
+  accounts using `TEST_PASSWORD` from `.env.development.local`, each with its own "Test Restaurant N" — and each
   on a different plan, so every tier can be demonstrated by signing in rather
   than by editing the database. These are **never** created on prod.
 
   | login | plan | what it is for |
   | --- | --- | --- |
-  | `test1@tabletap.dev` | **Carta** (free) | The gates. Table QRs fall back to the counter menu, coupons and promotions are refused, the dish ceiling bites. It keeps the tables and dishes the seed built, which is what a real downgrade looks like. |
-  | `test2@tabletap.dev` | **Servicio** | The entry paid tier with tables: open bills, promotions, the visit card, customer accounts. No coupons, no menu schedules. |
-  | `test3@tabletap.dev` | **Casa** | Everything that is buyable — coupons, menu schedules, staff discounts, a year of analytics. |
-  | `test4@tabletap.dev` | **Grupo** | What the top tier unlocks, before the tier itself is finished. |
-  | `test5@tabletap.dev` | **Servicio, trial expired yesterday** | A lapsed trial without waiting thirty days for one: the app settles it to Carta on the first request, exactly as it would in life. |
+  | `test1@tabletap.shop` | **Carta** (free) | The gates. Table QRs fall back to the counter menu, coupons and promotions are refused, the dish ceiling bites. It keeps the tables and dishes the seed built, which is what a real downgrade looks like. |
+  | `test2@tabletap.shop` | **Servicio** | The entry paid tier with tables: open bills, promotions, the visit card, customer accounts. No coupons, no menu schedules. |
+  | `test3@tabletap.shop` | **Casa** | Everything that is buyable — coupons, menu schedules, staff discounts, a year of analytics. |
+  | `test4@tabletap.shop` | **Grupo** | What the top tier unlocks, before the tier itself is finished. |
+  | `test5@tabletap.shop` | **Servicio, trial expired yesterday** | A lapsed trial without waiting thirty days for one: the app settles it to Carta on the first request, exactly as it would in life. |
 - Customer menu: `http://localhost:3000/r/<restaurantId>/t/<tableId>` — `pnpm db:reset`
   prints a ready-to-open demo URL.
 - **Presentation data:** `pnpm db:mock` builds "Demo Bistro" — a fully populated
   restaurant to demo every feature (orders board, analytics, service requests,
-  staff). Logins: `demo@tabletap.dev` (owner), `demo-manager@`, `demo-waiter@`,
-  `demo-cashier@`, `demo-kitchen@`, password `demo123`. Run `pnpm db:dropmock` to remove it again.
+  staff). Logins: `demo@tabletap.shop` (owner), `demo-manager@`, `demo-waiter@`,
+  `demo-cashier@`, `demo-kitchen@`, using `DEMO_PASSWORD` from `.env.development.local`.
+  Run `pnpm db:dropmock` to remove it again.
 
 ### 4. Stripe test payments locally
 

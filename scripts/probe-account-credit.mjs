@@ -26,12 +26,18 @@ const creditSql = "select account_credit_v1($1,$2,$3,$4,$5,$6,$7,$8) value";
 const args = (order, amount = 1000, expected = 11000, request = randomUUID()) =>
   [restaurant, order, amount, expected, "error", "account-credit-probe", "probe", request];
 const credit = async values => (await db.query(creditSql, values)).rows[0].value;
-async function fixture() {
+async function fixture(currency = "MXN", legacy = false) {
   const account = randomUUID(), order = randomUUID();
   await db.query("insert into customer_accounts(id,restaurant_id,name,code,credit_limit,opened_by) values($1,$2,'credit probe',$3,1000,'probe')",
     [account, restaurant, account.replaceAll("-", "").slice(0, 12).toUpperCase()]);
-  await db.query("insert into orders(id,restaurant_id,account_id,status,subtotal,total,tip,service_fee,currency,charged_at) values($1,$2,$3,'completed',90,110,10,10,'MXN',now())",
-    [order, restaurant, account]);
+  // A legacy USD ceiling is established before its first charge. Never change
+  // the currency of a retained order after the writer has frozen it.
+  if (legacy) await db.query("update customer_accounts set credit_currency=$2 where id=$1", [account, currency]);
+  await db.query("insert into orders(id,restaurant_id,status,subtotal,total,tip,service_fee,currency) values($1,$2,'completed',90,110,10,10,$3)",
+    [order, restaurant, currency]);
+  const charged = (await db.query("select account_charge_v2($1,$2,$3,110,'probe') value", [restaurant, account, [order]])).rows[0].value;
+  assert.equal(charged.outcome, "charged");
+  if (legacy) await db.query("update customer_accounts set credit_currency=null where id=$1", [account]);
   return { account, order };
 }
 async function queued() {
@@ -46,7 +52,7 @@ async function queued() {
 }
 try {
   await db.connect(); await peer.connect();
-  await db.query("insert into restaurants(id,name,plan,plan_status,currency) values($1,'Credit probe','servicio','active','MXN'),($2,'Foreign credit probe','servicio','active','MXN')", [restaurant, foreign]);
+  await db.query("insert into restaurants(id,name,plan,plan_status,currency,account_journal_started_at) values($1,'Credit probe','servicio','active','MXN',now()),($2,'Foreign credit probe','servicio','active','MXN',now())", [restaurant, foreign]);
   const f = await fixture(), request = args(f.order, 3300);
   const first = await credit(request);
   assert.equal(first.outcome, "credited"); assert.equal(first.remainingCents, 7700);
@@ -63,9 +69,7 @@ try {
   assert.equal((await db.query("select count(*)::int n from order_adjustments where order_id=$1", [f.order])).rows[0].n, 2);
   assert.equal((await db.query("select count(*)::int n from payments where restaurant_id=$1", [restaurant])).rows[0].n, 0);
 
-  const legacy = await fixture();
-  await db.query("update customer_accounts set credit_currency=null where id=$1", [legacy.account]);
-  await db.query("update orders set currency='USD' where id=$1", [legacy.order]);
+  const legacy = await fixture("USD", true);
   assert.equal((await credit(args(legacy.order, 11000))).outcome, "credited");
   assert.equal((await db.query("select credit_currency from customer_accounts where id=$1", [legacy.account])).rows[0].credit_currency, "USD");
 

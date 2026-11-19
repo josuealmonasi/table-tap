@@ -48,8 +48,11 @@ export default function TaxCard({ restaurant, saving, save }: TaxCardProps) {
             max="100"
             value={taxPct}
             onChange={e => setTaxPct(e.target.value)}
+            aria-describedby="iva-on-ticket"
           />
         </label>
+        {/* The same rate, snapshotted on each order, prints "IVA 16% incluido" under the ticket's total. */}
+        <p id="iva-on-ticket" className="tt-muted" style={{ fontSize: 12, margin: 0 }}>{t("dash.ivaOnTicket")}</p>
 
         <SettingsToggle
           title={t("dash.showBreakdown")}

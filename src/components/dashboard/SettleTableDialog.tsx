@@ -4,7 +4,8 @@ import AttachCard from "./loyalty/AttachCard.react-component";
 import BillTicketEmail from "@/components/loyalty/BillTicketEmail.react-component";
 import { usePaymentCheck } from "@/hooks/usePaymentCheck";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { pollAfterSettle } from "@/lib/poll-after-settle";
 import { useStaffSlotReceipts } from "@/hooks/useStaffSlotReceipts";
 import SlotReceiptPrints from "./SlotReceiptPrints";
 import TableSplitCollection from "./TableSplitCollection";
@@ -87,7 +88,8 @@ export default function SettleTableDialog({
   // nothing: a failed read used to become an empty bill, and the waiter was
   // told "this table owes nothing" by a server that had not said anything.
   const [unread, setUnread] = useState(false);
-  const [attempt, setAttempt] = useState(0);
+  // Reads the bill again now, joining a read already on its way.
+  const reread = useRef<() => Promise<void>>(async () => {});
   const [attachingCard, setAttachingCard] = useState(false);
   const [cardCode, setCardCode] = useState<string | null>(null);
   const [skipTicketEmail, setSkipTicketEmail] = useState(false);
@@ -107,20 +109,24 @@ export default function SettleTableDialog({
   useEffect(() => {
     if (!open) return;
     let live = true;
-    // The staff view: everything the table owes, not just this service.
-    fetch(tableId ? `/api/table-bill?tableId=${tableId}` : `/api/table-bill?orderId=${orderId}`)
+    // The staff view: everything the table owes, not just this service. The
+    // next read waits for this one to settle (or time out): a fixed 5 s tick
+    // piled requests up on a slow database (audit of #648).
+    const read = (signal: AbortSignal) => fetch(tableId ? `/api/table-bill?tableId=${tableId}` : `/api/table-bill?orderId=${orderId}`, { signal })
       .then(async r => {
         if (!r.ok) throw new Error(String(r.status));
         const d = await r.json();
         if (live) { setUnread(false); setOrders(d.orders ?? []); setSplits(d.splits ?? []); }
       })
-      .catch(() => live && setUnread(true));
-    const timer = setInterval(() => setAttempt(n => n + 1), SPLIT_POLL_MS);
+      .catch(() => { if (live) setUnread(true); });
+    const poll = pollAfterSettle(read, SPLIT_POLL_MS);
+    reread.current = poll.refresh;
     return () => {
-      clearInterval(timer);
       live = false;
+      poll.stop();
+      reread.current = async () => {};
     };
-  }, [open, restaurantId, tableId, orderId, attempt]);
+  }, [open, restaurantId, tableId, orderId]);
 
   // The waiter is settling the whole table, so nothing here is "mine".
   const currencies = [...new Set(unpaidOrders(orders ?? []).map(o => o.currency))];
@@ -188,7 +194,7 @@ export default function SettleTableDialog({
         paymentCheck.capture(data, collectionScope);
         toast(data.error ?? t("settle.failed"), "error");
         // Another phone divided it after this sheet opened: offer its parts now.
-        if (data.code === "split") setAttempt(n => n + 1);
+        if (data.code === "split") void reread.current();
         return;
       }
       const data = await res.json();
@@ -238,7 +244,7 @@ export default function SettleTableDialog({
             <button
               className="tt-btn tt-btn-primary tt-btn-lg"
               style={{ width: "100%" }}
-              onClick={() => setAttempt(n => n + 1)}
+              onClick={() => void reread.current()}
             >
               {t("settle.retry")}
             </button>
@@ -330,7 +336,7 @@ export default function SettleTableDialog({
       )}
       </Modal>
       {open && writingOff && <SplitWriteOffDialog split={writingOff} orders={orders ?? []} canApprove={canApprove}
-        onRefresh={refreshBill} onClose={() => setWritingOff(null)} onApplied={() => { setAttempt(n => n + 1); onSettled(); }} />}
+        onRefresh={refreshBill} onClose={() => setWritingOff(null)} onApplied={() => { void reread.current(); onSettled(); }} />}
 
       {tableId && (
         <TableCalculator

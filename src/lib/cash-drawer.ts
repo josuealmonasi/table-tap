@@ -19,6 +19,10 @@ export interface CashMovement {
   note: string | null;
   actor_email: string;
   created_at: string;
+  /** What the cash was taken out for: tips paid to staff, or anything else. */
+  purpose?: "tips" | "other";
+  /** It pays out a resolved held receipt, so the server refuses to remove it. */
+  linked?: boolean;
 }
 
 /**

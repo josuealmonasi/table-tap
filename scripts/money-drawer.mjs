@@ -14,6 +14,7 @@ const columns = {
   payment_allocations: "id, restaurant_id, payment_id",
   refund_allocations: "id, restaurant_id, allocation_id, operation_id, amount, tip",
   order_adjustments: "id, restaurant_id, order_id",
+  held_cash_receipts: "id, restaurant_id, shift_id, currency, amount, recognized_at",
 };
 
 /** Read every source before reporting success: a failed page is never an empty table. */

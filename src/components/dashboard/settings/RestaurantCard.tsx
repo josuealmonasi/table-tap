@@ -4,7 +4,8 @@ import { useState } from "react";
 import { ZONE_GROUPS, offsetLabel } from "@/lib/timezones";
 import type { Restaurant } from "@/lib/types";
 import type { SettingsInput } from "@/hooks/useSettings";
-import { useT } from "@/lib/i18n/context";
+import { useLocale, useT } from "@/lib/i18n/context";
+import { dateLocale } from "@/lib/format";
 
 // Two-decimal currencies only, so checkout's Math.round(amount * 100) stays
 // correct (zero-decimal currencies like JPY would be off by 100x).
@@ -14,6 +15,8 @@ interface RestaurantCardProps {
   restaurant: Restaurant;
   saving: boolean;
   save: (input: Partial<SettingsInput>) => Promise<boolean>;
+  /** The 1st of next month while this month has card fees: the ceiling has no currency. */
+  currencyLockedUntil?: string | null;
 }
 
 /** What the diner sees of the place: its name, mark, line, clock and currency. Owner only. */
@@ -21,8 +24,15 @@ export default function RestaurantCard({
   restaurant,
   saving,
   save,
+  currencyLockedUntil = null,
 }: RestaurantCardProps) {
   const t = useT();
+  const { locale } = useLocale();
+  // A plain day in UTC, the month the fee ceiling counts in.
+  const lockedDate = currencyLockedUntil
+    ? new Intl.DateTimeFormat(dateLocale(locale), { day: "numeric", month: "long", timeZone: "UTC" })
+      .format(new Date(`${currencyLockedUntil}T00:00:00Z`))
+    : null;
   const [name, setName] = useState(restaurant.name);
   const [logo, setLogo] = useState(restaurant.logo ?? "");
   const [tagline, setTagline] = useState(restaurant.tagline ?? "");
@@ -107,6 +117,8 @@ export default function RestaurantCard({
           <select
             className="tt-input"
             value={currency}
+            disabled={Boolean(currencyLockedUntil)}
+            aria-describedby={currencyLockedUntil ? "tt-currency-locked" : undefined}
             onChange={e => setCurrency(e.target.value)}
           >
             {CURRENCIES.map(c => (
@@ -115,6 +127,11 @@ export default function RestaurantCard({
               </option>
             ))}
           </select>
+          {lockedDate && (
+            <span id="tt-currency-locked" className="tt-muted" style={{ fontSize: 12 }}>
+              {t("dash.currencyLockedHint", { date: lockedDate })}
+            </span>
+          )}
         </label>
 
         <div className="tt-prodform-actions">

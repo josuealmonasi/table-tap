@@ -27,7 +27,17 @@ export function fixture() {
       in: (k: string, v: unknown[]) => { filters.push(r => v.includes(value(r, k))); return q; },
       is: (k: string, v: unknown) => { filters.push(r => (value(r, k) ?? null) === v); return q; },
       not: (k: string) => { filters.push(r => value(r, k) != null); return q; },
-      or: () => { filters.push(r => r.provider_status == null || ["pending", "requires_action"].includes(String(r.provider_status))); return q; },
+      neq: (k: string, v: unknown) => { filters.push(r => value(r, k) !== v); return q; },
+      // Only the two shapes recovery sends: the refund status list, and "column.lt.value" alternatives.
+      or: (expression: string) => {
+        if (expression.startsWith("provider_status")) {
+          filters.push(r => r.provider_status == null || ["pending", "requires_action"].includes(String(r.provider_status)));
+        } else {
+          const terms = expression.split(",").map(term => term.split(/\.lt\./));
+          filters.push(r => terms.some(([k, v]) => r[k] != null && Date.parse(String(r[k])) < Date.parse(v)));
+        }
+        return q;
+      },
       lt: (k: string, v: string) => { filters.push(r => String(value(r, k)) < v); return q; },
       order: (k: string) => { sort.push(k); return q; },
       range: (from: number, to: number) => { offset = from; limit = to - from + 1; calls.push({ table, method: "range", args: [from, to] }); return q; },

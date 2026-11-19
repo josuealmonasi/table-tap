@@ -3,6 +3,8 @@ import { arrangeRetry, ask, checked, setAsideHeldCash } from "./api-retry-fixtur
 export function retryCases(fx) {
   const r = fx.restaurant.id;
   const orders = ["pos", "checkout", "table-order"].map(kind => {
+    const fixture = kind === "pos" ? fx.accountFixture ?? fx : fx;
+    const r = fixture.restaurant.id;
     const state = {};
     const path = kind === "pos" ? "/api/pos/order" : `/api/${kind}`;
     const body = () => kind === "pos"
@@ -13,7 +15,10 @@ export function retryCases(fx) {
       // the harness gives a diner's first request a phone's cookie, and a
       // reference reused from a different phone is refused by design (409).
       method: "POST", path, expect: [200], headers: { "x-forwarded-for": "203.0.113.220", ...(kind === "checkout" ? { cookie: "" } : {}) },
-      arrange: f => arrangeRetry(f, state, kind), body,
+      fixture, arrange: async f => {
+        if (kind === "pos" && !fx.accountFixture) throw new Error("POS retry requires a disposable account restaurant");
+        return arrangeRetry(f, state, kind);
+      }, body,
       check: async (first, f) => {
         const second = await ask(f, path, body(), kind === "checkout" ? "diner" : "manager");
         const rows = await checked(f.admin.from("orders").select("id, total, account_id, paid")
@@ -74,7 +79,8 @@ export function retryCases(fx) {
     return { name: `S20 K${kind === "close" ? 9 : 5}: ${path} retry leaves a newer shift alone`, as: "manager", method: "POST", path, expect: [200],
       arrange: async f => {
         const undo = await arrangeRetry(f, state, kind);
-        if (kind !== "close") return undo;
+        // Both kinds close a shift: the withdrawal case closes it directly in
+        // its check, and the close now refuses while held cash waits (#603).
         const putBack = await setAsideHeldCash(f, r).catch(async error => { await undo(); throw error; });
         return async () => { await putBack(); await undo(); };
       }, body,

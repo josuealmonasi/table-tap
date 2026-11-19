@@ -19,7 +19,7 @@ export async function checkKitchenMoney({ admin, kitchen, home, ok, bad, base })
         extras: [{ name: "Milk", price: 2 }],
         components: [{ name: "Coffee", qty: 1, price: 10, extras: [{ name: "Milk", price: 2 }] }] }],
     });
-    await plant("payments", { order_id: order.id, amount: 12, method: "cash", actor_email: "rls-kitchen@tabletap.dev" });
+    await plant("payments", { order_id: order.id, amount: 12, method: "cash", actor_email: "rls-kitchen@tabletap.shop" });
     const sitting = await plant("table_sessions", { table_id: table.id, closed_at: new Date().toISOString(), close_reason: "expired" });
     const split = await plant("bill_splits", { session_id: sitting.id, shares: 2, amount: 12, status: "done", proposed_by: "rls-kitchen" });
     const claim = await admin.from("bill_split_claims").insert({ split_id: split.id, share_no: 0, diner: "rls-kitchen", amount: 6 });
@@ -83,7 +83,7 @@ export async function checkKitchenMoney({ admin, kitchen, home, ok, bad, base })
     for (const name of ["payment_allocations", "order_adjustments", "refund_operations", "refund_allocations", "refund_attempts", "refund_due_attempts",
       "cash_shifts", "cash_movements", "terminal_deposits", "platform_fees", "offline_sale_queue",
       "customer_accounts", "account_checkouts", "ingredients", "ingredient_prices", "recipe_lines",
-      "waste_entries", "ingredient_purchases", "ingredient_counts", "restaurant_billing_operations", "restaurant_subscription_prices", "platform_admin_audit", "restaurant_accounting_records", "print_jobs",
+      "waste_entries", "ingredient_purchases", "ingredient_counts", "restaurant_billing_operations", "restaurant_subscription_prices", "platform_admin_audit", "restaurant_accounting_records", "terms_acceptances", "print_jobs",
       "loyalty_programs", "loyalty_cards", "loyalty_visits", "loyalty_redemptions"]) {
       const seen = await kitchen.from(name).select("*").limit(1);
       if (seen.error?.code === "42501") ok(`kitchen is denied ${name}`);

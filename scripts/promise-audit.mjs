@@ -33,9 +33,11 @@ import { pageInScope, reportScope } from "./gate-scope.mjs";
 import { skippedOnPurpose } from "./browser-fixtures.mjs";
 import { sessionCookie } from "./session-cookie.mjs";
 import { ready, trackData } from "./browser-ready.mjs";
+import { loginSecret } from "./login-secrets.mjs";
 
 const prod = process.argv.includes("--prod");
 process.loadEnvFile(join(process.cwd(), prod ? ".env.production.local" : ".env.development.local"));
+const demo = loginSecret("DEMO_PASSWORD");
 const BASE = prod
   ? (process.env.PROD_SITE_URL ?? "https://table-tap-star.vercel.app")
   : DEV_URL;
@@ -55,7 +57,7 @@ const admin = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.SUP
 // holding the word "null": every page redirected to the login screen, the
 // login screen offers nothing to search, and nine of a manager's screens
 // printed ok without one of them being seen. It took a network blip to show.
-const cookieFor = async (email, password = "demo123") => {
+const cookieFor = async (email, password = demo) => {
   const auth = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY);
   const { data, error } = await auth.auth.signInWithPassword({ email, password });
   if (error || !data?.session) throw new Error(`could not sign in as ${email}: ${error?.message ?? "no session"}`);
@@ -110,7 +112,7 @@ console.log(`\nPromises — ${prod ? "production" : "development"}\n`);
 for (const who of CREW) {
   console.log(`  ${who.role}\n`);
   // The platform admin's password is not the demo one. This used to sign in
-  // with demo123 regardless, fail, and check the admin screen signed out on
+  // with the demo password regardless, fail, and check the admin screen signed out on
   // every run there has been — reported ok each time.
   const password = who.passwordEnv ? process.env[who.passwordEnv] : undefined;
   // Missing, it is a gap, not a skip: a skip prints and passes (audit L, 9).
@@ -535,8 +537,8 @@ for (const state of STATES) {
   };
 
   try {
-    if (state.splitSlots) {
-      const fixture = await splitScreenFixture(admin, restaurant.id);
+    if (state.splitSlots || state.unsplitBill) {
+      const fixture = await splitScreenFixture(admin, restaurant.id, !state.unsplitBill);
       try { await visit(`/dashboard/bills?order=${fixture.orderId}`); }
       finally { await fixture.cleanup(); }
     } else if (state.as === "tracker") await withCounterOrder(id => visit(`/order/${id}`));

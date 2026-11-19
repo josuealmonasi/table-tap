@@ -12,9 +12,9 @@ export async function checkPaymentAllocations() {
     assert(r, "allocation checks require a seeded restaurant and table");
     const order = async (total = 100, extra = {}) => {
       const { rows: [o] } = await db.query(`insert into orders
-        (restaurant_id,items,subtotal,total,status,currency,tip,account_id,session_id,created_at)
-        values($1,'[]',$2,$2,$3,$4,$5,$6,$7,clock_timestamp()) returning id`,
-      [r.id, total, extra.status ?? "received", r.currency, extra.tip ?? 0, extra.account ?? null, extra.session ?? null]);
+        (restaurant_id,items,subtotal,total,status,currency,tip,session_id,created_at)
+        values($1,'[]',$2,$2,$3,$4,$5,$6,clock_timestamp()) returning id`,
+      [r.id, total, extra.status ?? "received", r.currency, extra.tip ?? 0, extra.session ?? null]);
       return o.id;
     };
     const check = () => db.query("set constraints all immediate");
@@ -30,7 +30,7 @@ export async function checkPaymentAllocations() {
     await check();
     const { rows: shares } = await db.query("select order_id,amount from payment_allocations where payment_id=$1 order by amount desc", [p.id]);
     assert.deepEqual(shares.map(a => Number(a.amount)), [33.34, 33.33, 33.33]);
-    await reject("update payments set amount=101 where id=$1", [p.id], /immutable/);
+    await reject("update payments set amount=101 where id=$1 and account_id is null", [p.id], /immutable/);
     await reject("update payment_allocations set amount=1 where payment_id=$1", [p.id], /immutable/);
     await reject("select settle_orders_v2($1,$2,'cash','cashier',null)", [r.id, ids], /not_owed/);
     await reject("update orders set total=99,tip=-1 where id=$1", [ids[1]], /adjustment/);
@@ -77,7 +77,9 @@ export async function checkPaymentAllocations() {
     await defer();
     const { rows: [account] } = await db.query(`insert into customer_accounts(restaurant_id,name,code,credit_limit,opened_by)
       values($1,'Allocation probe',$2,10000,'probe') returning id`, [r.id, randomUUID().replaceAll("-", "").slice(0, 12).toUpperCase()]);
-    const a = await order(110, { tip: 10, account: account.id });
+    const a = await order(110, { tip: 10 });
+    const { rows: [charge] } = await db.query("select account_charge_v2($1,$2,$3,110,'probe') result", [r.id, account.id, [a]]);
+    assert.equal(charge.result.outcome, "charged");
     await db.query("select account_settle_v2($1,$2,110,5,'cash','probe',$3)", [r.id, account.id, randomUUID()]);
     await check();
     const { rows: [funded] } = await db.query("select total,tip,paid,retained_order_coverage(restaurant_id,id) covered from orders where id=$1", [a]);

@@ -18,6 +18,9 @@ export interface SplitState {
   mine: { shareNo: number; amount: number; paid: boolean } | null;
   outstanding: number;
   ownSince: number;
+  /** Null means an old split has no trusted frozen principal for percentages. */
+  tipPrincipal?: number | null;
+  ownTipBase?: number;
 }
 
 /**
@@ -41,6 +44,8 @@ export function useSplit(
   diner: string;
   busy: boolean;
   error: string | null;
+  /** The server refused a new split because the owner turned splitting off. */
+  disabled: boolean;
   propose: (shares: number) => Promise<void>;
   join: () => Promise<void>;
   cancel: () => Promise<void>;
@@ -51,6 +56,7 @@ export function useSplit(
   const t = useT();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [disabled, setDisabled] = useState(false);
   const start = useRef<{ key: string; ref: string } | null>(null);
   const sending = useRef(false);
   const key = active && tableId && sessionId
@@ -83,7 +89,12 @@ export function useSplit(
         body: JSON.stringify({ sessionId, diner, restaurantId, tableId, ...body }),
       });
       const result = await res.json().catch(() => ({}));
-      if (!res.ok) setError(result.error ?? t("apiErr.generic"));
+      if (!res.ok) {
+        setError(result.error ?? t("apiErr.generic"));
+        // The menu said splitting was on when this sheet opened; the owner has
+        // since turned it off. Stop offering it (audit of #648).
+        if (result.code === "split_disabled") setDisabled(true);
+      }
       // Cancellation is final even when Wi-Fi loses the following read.
       else if (path === "/api/split/cancel" || method === "DELETE") start.current = null;
       // Offline for a moment: keep showing what we last knew.
@@ -105,6 +116,7 @@ export function useSplit(
     diner,
     busy,
     error: error ?? (readError ? t("slots.readFailed") : null),
+    disabled,
     ready: Boolean(data) && !readError,
     propose,
     join: () => send("/api/split/join", "POST", { splitId: split?.id }),

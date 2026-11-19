@@ -49,10 +49,12 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
       currency: restaurant.currency,
     },
     name: account.name,
+    hasEmail: Boolean(account.email),
     status: account.status,
     owed: statement.owed,
     currency: statement.currency,
     balances: statement.balances,
+    tipBalances: statement.tipBalances,
     // Without the order ids: row ids are nobody's business outside the staff.
     days: statement.days.map(d => ({
       ...d,

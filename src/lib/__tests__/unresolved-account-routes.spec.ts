@@ -51,3 +51,8 @@ it.each([undefined, "MXN"])("account card opening retries its exact %s quote wit
   expect(rpc).toHaveBeenCalledTimes(2); expect(rpc.mock.calls[1]).toEqual(rpc.mock.calls[0]);
   expect(rpc.mock.calls[0][1]).toMatchObject({ p_expected: 100, p_tip: 10, p_fee: 0 });
 });
+it.each(["abc", "15%", {}])("account card payment refuses a tip amount that is not a number (%s), like bill/split/slots (full review M3)", async tipAmount => {
+  const res = await open(request({ c: "K7QM3XW9TB4R", expected: 100, tipAmount }));
+  expect(res.status).toBe(400); expect(await res.json()).toEqual({ error: "apiErr.invalidRequest" });
+  expect(rpc).not.toHaveBeenCalled();
+});

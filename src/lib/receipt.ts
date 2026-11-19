@@ -1,8 +1,10 @@
+import { mailText } from "@/lib/mail-text";
 import { loyaltyReceiptLines, type ReceiptLoyalty } from "@/lib/loyalty/receipt";
 import type { ReturnComponents } from "@/lib/return-components";
 import { receiptReturnRows, type ReceiptReturn } from "@/lib/receipt-returns";
 import { receiptCents } from "@/lib/receipt-amount";
 import { formatMoney } from "@/lib/format";
+import { saleVatParts, type VatPart } from "@/lib/ticket-vat";
 import { lineUnitPrice, orderCode, type OrderLineItem } from "@/lib/types";
 
 export interface ReceiptOrder extends ReceiptLoyalty {
@@ -13,6 +15,7 @@ export interface ReceiptOrder extends ReceiptLoyalty {
   service_fee?: number | string | null;
   tip?: number | string | null;
   total: number | string;
+  tax_pct?: number | string | null;
   currency: string;
   table_label?: string | null;
   created_at: string;
@@ -46,6 +49,10 @@ export interface SlotReceiptPayment extends ReceiptLoyalty {
   created_at: string;
   slots: number[];
   table_label?: string | null;
+  /** The split's frozen debt carried no tips, so every part is all sale (read from the split). */
+  parts_without_tips?: boolean;
+  /** The split's orders all carry this saved rate; absent when they disagree. */
+  tax_pct?: number | null;
 }
 
 export interface Receipt {
@@ -83,6 +90,8 @@ export interface ReceiptModel {
   totalLabel: string;
   paid: number;
   payMethod: string | null;
+  /** What `paid` holds at each saved IVA rate — never the tip; null when uncertain (ticket-vat.ts). */
+  vatParts: VatPart[] | null;
 }
 
 export function receiptModel(
@@ -171,7 +180,8 @@ export function receiptModel(
     timeZone: place.timeZone,
   });
 
-  return { code, when, tableLabel: order.table_label ?? null, cur, lines, rows, totalLabel, paid, payMethod: payment ? null : orders[0]?.pay_method ?? null };
+  return { code, when, tableLabel: order.table_label ?? null, cur, lines, rows, totalLabel, paid,
+    payMethod: payment ? null : orders[0]?.pay_method ?? null, vatParts: saleVatParts(orders, payment) };
 }
 
 export function buildReceipt(
@@ -189,10 +199,10 @@ export function buildReceipt(
   const { code, when, cur, lines, rows, totalLabel, paid } = receiptModel(orders, place, t, payment);
   const order = { table_label: payment ? payment.table_label ?? null : orders[0]?.table_label ?? null };
   const loyaltyLines = loyaltyReceiptLines(payment ? [payment, ...orders] : orders, t);
-  const text = [
+  const text = mailText([
     place.name,
     t("receipt.heading", { code }),
-    order.table_label ? t("receipt.table", { label: order.table_label }) : "",
+    ...(order.table_label ? [t("receipt.table", { label: order.table_label })] : []),
     when,
     "",
     ...lines.map(l => `${l.label}  ${formatMoney(l.amount, cur)}`),
@@ -202,15 +212,14 @@ export function buildReceipt(
     "",
     ...loyaltyLines,
     t("receipt.footer"),
+    "",
     t("receipt.notFiscal"),
-  ]
-    .filter(Boolean)
-    .join("\n");
+  ]);
 
   const html = `
-<div style="font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;max-width:480px;margin:0 auto;padding:24px;color:#16211C">
+<div style="font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;max-width:480px;margin:0 auto;padding:24px;color:#111113">
   <h1 style="font-size:20px;margin:0">${esc(place.name)}</h1>
-  <p style="margin:4px 0 0;color:#6E7A74;font-size:13px">
+  <p style="margin:4px 0 0;color:#70707a;font-size:13px">
     ${esc(t("receipt.heading", { code }))}${order.table_label ? ` · ${esc(t("receipt.table", { label: order.table_label }))}` : ""}<br>${esc(when)}
   </p>
   <table style="width:100%;border-collapse:collapse;margin-top:20px;font-size:14px">
@@ -223,18 +232,18 @@ export function buildReceipt(
     ${rows
       .map(
         ([label, amount]) =>
-          `<tr><td style="padding:4px 0;color:#6E7A74;border-top:1px solid #E3E2DC">${esc(label)}</td>
-        <td style="padding:4px 0;text-align:right;color:#6E7A74;border-top:1px solid #E3E2DC">${esc(amount)}</td></tr>`,
+          `<tr><td style="padding:4px 0;color:#70707a;border-top:1px solid #e6e6e9">${esc(label)}</td>
+        <td style="padding:4px 0;text-align:right;color:#70707a;border-top:1px solid #e6e6e9">${esc(amount)}</td></tr>`,
       )
       .join("")}
     <tr>
-      <td style="padding:10px 0 0;font-weight:700;border-top:2px solid #16211C">${esc(totalLabel)}</td>
-      <td style="padding:10px 0 0;text-align:right;font-weight:700;border-top:2px solid #16211C">${esc(formatMoney(paid, cur))}</td>
+      <td style="padding:10px 0 0;font-weight:700;border-top:2px solid #111113">${esc(totalLabel)}</td>
+      <td style="padding:10px 0 0;text-align:right;font-weight:700;border-top:2px solid #111113">${esc(formatMoney(paid, cur))}</td>
     </tr>
   </table>
   ${loyaltyLines.map(line => `<p style="overflow-wrap:anywhere;font-size:13px">${esc(line)}</p>`).join("")}
-  <p style="margin-top:24px;color:#6E7A74;font-size:12px">${esc(t("receipt.footer"))}</p>
-  <p style="margin-top:8px;color:#6E7A74;font-size:12px">${esc(t("receipt.notFiscal"))}</p>
+  <p style="margin-top:24px;color:#70707a;font-size:12px">${esc(t("receipt.footer"))}</p>
+  <p style="margin-top:8px;color:#70707a;font-size:12px">${esc(t("receipt.notFiscal"))}</p>
 </div>`.trim();
 
   return { subject: t("receipt.subject", { restaurant: place.name, code }), text, html };

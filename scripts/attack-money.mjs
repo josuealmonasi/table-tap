@@ -34,9 +34,11 @@ import { attackFeeCeiling } from "./attack-fees.mjs";
 import { refuseProduction, watchDevWorker } from "./preflight.mjs";
 import { DEV_URL } from "./dev-url.mjs";
 import { sessionCookieHeader } from "./session-cookie.mjs";
+import { loginSecret } from "./login-secrets.mjs";
 
 refuseProduction("attack", "every case plants an order to attack");
 process.loadEnvFile(".env.development.local");
+const password = loginSecret("DEMO_PASSWORD");
 
 const base = DEV_URL;
 watchDevWorker(base);
@@ -56,7 +58,7 @@ async function cookieFor(email) {
     process.env.NEXT_PUBLIC_SUPABASE_URL,
     process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY,
   );
-  const { data, error } = await c.auth.signInWithPassword({ email, password: "demo123" });
+  const { data, error } = await c.auth.signInWithPassword({ email, password });
   if (error) throw new Error(`could not sign in as ${email}: ${error.message}`);
   return sessionCookieHeader(data.session, process.env.NEXT_PUBLIC_SUPABASE_URL);
 }
@@ -120,10 +122,10 @@ if (!neighbour) {
 }
 
 const who = {
-  waiter: await cookieFor("demo-waiter@tabletap.dev"),
-  kitchen: await cookieFor("demo-kitchen@tabletap.dev"),
-  cashier: await cookieFor("demo-cashier@tabletap.dev"),
-  manager: await cookieFor("demo-manager@tabletap.dev"),
+  waiter: await cookieFor("demo-waiter@tabletap.shop"),
+  kitchen: await cookieFor("demo-kitchen@tabletap.shop"),
+  cashier: await cookieFor("demo-cashier@tabletap.shop"),
+  manager: await cookieFor("demo-manager@tabletap.shop"),
 };
 
 // A table of our own, made for this and nothing else. Borrowing a real one
@@ -155,12 +157,12 @@ async function sweep() {
   const orderIds = (marked ?? []).map(o => o.id);
   // The ledger first: `payments.order_id` is `on delete set null`, so removing
   // the orders first would cut these loose rather than remove them.
-  if (orderIds.length) await admin.from("payments").delete().in("order_id", orderIds);
+  if (orderIds.length) await admin.from("payments").delete().is("account_id", null).in("order_id", orderIds);
   if (sittingIds.length) {
-    await admin.from("payments").delete().in("session_id", sittingIds);
+    await admin.from("payments").delete().is("account_id", null).in("session_id", sittingIds);
     await admin.from("bill_splits").delete().in("session_id", sittingIds);
   }
-  await admin.from("payments").delete().like("client_ref", `${MARK}%`);
+  await admin.from("payments").delete().is("account_id", null).like("client_ref", `${MARK}%`);
   await admin.from("orders").delete().eq("note", MARK);
   // The last-portion race orders through the route, which writes no marker.
   if (tableIds.length) await admin.from("orders").delete().in("table_id", tableIds);
@@ -398,7 +400,7 @@ try {
       : bad(`old owed ${oldOwed} got ${oldGot}, new owed ${newOwed} got ${newGot}`);
 
     // Tidy: the money, then the orders, then the sittings and the table.
-    await admin.from("payments").delete().in("session_id", [stale.id, fresh.id]);
+    await admin.from("payments").delete().is("account_id", null).in("session_id", [stale.id, fresh.id]);
     await admin.from("orders").delete().in("id", [old?.id, recent?.id].filter(Boolean));
     await admin.from("table_sessions").delete().in("id", [stale.id, fresh.id]);
     await admin.from("restaurant_tables").delete().eq("id", two.id);
@@ -576,7 +578,7 @@ try {
       ? ok("and the share frozen before it cannot be charged")
       : bad(`the share route answered ${res.status}${res.body.url ? " with a checkout url" : ""} after the waiter took the cash`);
 
-    await admin.from("payments").delete().eq("session_id", sat.id);
+    await admin.from("payments").delete().is("account_id", null).eq("session_id", sat.id);
     await admin.from("bill_split_claims").delete().eq("split_id", frozen.id);
     await admin.from("bill_splits").delete().eq("id", frozen.id);
     await admin.from("orders").delete().eq("session_id", sat.id);
@@ -688,7 +690,7 @@ try {
       ? ok("and the ones that lost the race are told the bill is covered")
       : bad(`a lost race answered ${shots.map(s => s.status).join("/")} — 500 is not an answer`);
 
-    await admin.from("payments").delete().eq("session_id", sat.id);
+    await admin.from("payments").delete().is("account_id", null).eq("session_id", sat.id);
     await admin.from("orders").delete().eq("session_id", sat.id);
     await admin.from("table_sessions").delete().eq("id", sat.id);
     await admin.from("restaurant_tables").delete().eq("id", spare.id);
@@ -724,7 +726,7 @@ try {
 
     // Each waiter's own tap, as the dialog sends it: the MX$200 they saw.
     const shots = await trackCollectionLogs(admin,
-      { restaurantId: home.id, actor: "demo-waiter@tabletap.dev", amount: 200 }, collectionLogs,
+      { restaurantId: home.id, actor: "demo-waiter@tabletap.shop", amount: 200 }, collectionLogs,
       () => Promise.all([...Array(5)].map(() =>
         post("/api/table-payment", { tableId: spare.id, settlement: "cash", expected: 200, currency: "MXN", ref: crypto.randomUUID() }, who.waiter))));
 
@@ -740,7 +742,7 @@ try {
       ? ok("and exactly one of them is told it settled; the rest are told the bill is not owed")
       : bad(`settling at once answered ${shots.map(s => s.status).join("/")}`);
 
-    await admin.from("payments").delete().eq("session_id", sat.id);
+    await admin.from("payments").delete().is("account_id", null).eq("session_id", sat.id);
     await admin.from("orders").delete().eq("session_id", sat.id);
     await admin.from("table_sessions").delete().eq("id", sat.id);
     await admin.from("restaurant_tables").delete().eq("id", spare.id);
@@ -785,7 +787,7 @@ try {
     // The money taken twice: cash at the table, then the card payment arrives.
     const { data: twice } = await order(150, MARK);
     const cash = await trackCollectionLogs(admin,
-      { restaurantId: home.id, actor: "demo-waiter@tabletap.dev", amount: 150 }, collectionLogs,
+      { restaurantId: home.id, actor: "demo-waiter@tabletap.shop", amount: 150 }, collectionLogs,
       () => post("/api/table-payment", { tableId: spare.id, settlement: "cash", expected: 150, currency: "MXN", ref: crypto.randomUUID() }, who.waiter));
     await card([twice.id], 150, intentFor("twice"));
     await card([twice.id], 150, intentFor("twice")); // Stripe sends it again
@@ -803,7 +805,7 @@ try {
 
     await admin.from("refunds_due").delete().in("stripe_payment_intent", [intentFor("ok"), intentFor("twice")]);
     await admin.from("notifications").delete().eq("restaurant_id", home.id).eq("kind", "refund_due").eq("data->>table", spare.label);
-    await admin.from("payments").delete().eq("session_id", sat.id);
+    await admin.from("payments").delete().is("account_id", null).eq("session_id", sat.id);
     await admin.from("orders").delete().eq("session_id", sat.id);
     await admin.from("table_sessions").delete().eq("id", sat.id);
     await admin.from("restaurant_tables").delete().eq("id", spare.id);
@@ -819,7 +821,7 @@ try {
     // its sitting, and a closed sitting is refused at the door (the phone is a
     // stranger to it) before the waiter's bill is ever asked about.
     await admin.from("table_sessions")
-      .update({ opened_by: "demo-waiter@tabletap.dev", closed_at: null, close_reason: null }).eq("id", sitting.id);
+      .update({ opened_by: "demo-waiter@tabletap.shop", closed_at: null, close_reason: null }).eq("id", sitting.id);
     const { data: owed } = await admin
       .from("orders").select("id").eq("session_id", sitting.id).eq("paid", false);
     const before = await takings(home.id);

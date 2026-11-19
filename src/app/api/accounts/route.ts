@@ -32,9 +32,10 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
 
   const account = await accountById(actor.restaurantId, id);
   if (!account) return await apiError("apiErr.notFound", 404);
-  const { data: restaurant } = await createAdminClient()
-    .from("restaurants").select("timezone").eq("id", actor.restaurantId).maybeSingle();
-  return NextResponse.json({ account, statement: await statementOf(account, restaurant?.timezone) });
+  const timeZone = createAdminClient()
+    .from("restaurants").select("timezone").eq("id", actor.restaurantId).maybeSingle()
+    .then(({ data: restaurant }) => restaurant?.timezone);
+  return NextResponse.json({ account, statement: await statementOf(account, timeZone) });
 }
 
 /** POST — open an account: a name, a ceiling, and optionally an email for the statement. */

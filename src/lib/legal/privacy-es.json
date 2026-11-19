@@ -6,7 +6,7 @@
     {
       "title": "1. Identidad y domicilio del responsable",
       "paragraphs": [
-        "«[RAZÓN SOCIAL]» («TableTap»), RFC «[RFC]», con domicilio en «[DOMICILIO]», es responsable del tratamiento de los datos personales de quienes contratan el servicio y administran la cuenta de su restaurante, y de los registros técnicos con los que protege la plataforma.",
+        "«[NOMBRE COMPLETO DE LA PERSONA FÍSICA O RAZÓN SOCIAL]» («TableTap»), RFC «[RFC]», con domicilio en «[DOMICILIO]», es responsable del tratamiento de los datos personales de quienes contratan el servicio y administran la cuenta de su restaurante, y de los registros técnicos con los que protege la plataforma.",
         "Las solicitudes y dudas sobre datos personales las atiende «[PERSONA O ÁREA DE DATOS PERSONALES]», en el correo «[CORREO DE PRIVACIDAD]» o en el domicilio indicado.",
         "Sitio: https://tabletap.shop. Los correos con tickets y recibos se envían desde ticket@tabletap.shop, a nombre del restaurante que realizó la venta."
       ]
@@ -22,7 +22,7 @@
     {
       "title": "3. Datos que tratamos",
       "paragraphs": [
-        "Del restaurante: nombre del negocio, nombre y correo electrónico de quien administra la cuenta, datos de contacto y datos fiscales cuando solicita factura. Si el restaurante los registra para sus tickets, también su razón social, RFC, régimen fiscal, domicilio y teléfono, que se imprimen en el ticket de sus ventas; son opcionales, solo el titular de la cuenta los modifica y no se muestran en el menú.",
+        "Del restaurante: nombre del negocio, nombre y correo electrónico de quien administra la cuenta, datos de contacto y datos fiscales cuando solicita factura. Si el restaurante los registra para sus tickets, también su razón social, RFC, régimen fiscal, domicilio y teléfono, que se imprimen en el ticket de sus ventas; son opcionales y solo el titular de la cuenta los modifica. De ellos, solo la razón social y el domicilio se muestran a los clientes en el menú y antes de pagar, para que sepan a quién le pagan; el RFC, el régimen fiscal y el teléfono no se muestran en el menú. Si el restaurante tuvo la prueba gratuita, conservamos su RFC, aun después de cerrar la cuenta, con el único fin de que la prueba se otorgue una sola vez por RFC.",
         "Del personal del restaurante: correo electrónico, rol y, si lo registra en su perfil, su nombre, con el fin de otorgar acceso al panel y de dejar constancia de quién realizó cada operación — pedidos, cobros, descuentos, cancelaciones, cambios en el equipo, turnos de caja, merma, conteos de existencias, compras y cambios en los costos —, como se describe en los Términos.",
         "De quien crea la cuenta: la contraseña, que se guarda cifrada de forma que nadie puede leerla; la versión de los Términos y de este aviso que aceptó, con la fecha, la hora y el correo con que lo hizo; y la confirmación de su correo electrónico. El proveedor de autenticación registra además, por seguridad, la dirección de red (IP) y el navegador desde los que se inicia cada sesión del panel.",
         "Del cobro de la suscripción: Stripe trata los datos de la tarjeta con que el restaurante paga su plan; TableTap solo conserva el identificador de cliente y de suscripción que Stripe le asigna, el plan y el estado de los pagos. Para que el restaurante reciba pagos con tarjeta, quien lo representa proporciona sus datos de identidad y bancarios directamente a Stripe, que los trata conforme a su propio aviso; TableTap solo recibe el identificador de la cuenta y si puede cobrar.",

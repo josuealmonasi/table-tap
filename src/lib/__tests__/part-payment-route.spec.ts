@@ -64,7 +64,7 @@ it("S21 refuses a reviewed MX$100 balance now owing MX$50 before recording", asy
   expect(response.status).toBe(409);
   expect(logEvent).not.toHaveBeenCalled();
   expect(closeBill).not.toHaveBeenCalled();
-  expect(record.mock.calls[0][1]).toEqual({ tableId: "t1", expected: 100, currency: "MXN" });
+  expect(record.mock.calls[0][1]).toEqual({ tableId: "t1", expected: 100, currency: "MXN", skipTicketEmail: false });
 });
 
 // A tab or cached till from before the reviewed balance shipped sends neither

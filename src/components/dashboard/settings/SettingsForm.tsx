@@ -35,6 +35,8 @@ interface SettingsFormProps {
   /** Whether a printer address has been issued. Never the address itself —
    *  it is a credential, and a page that does not receive it cannot leak it. */
   printerConfigured?: boolean;
+  /** The 1st of next month while this month has card fees; null when free to change. */
+  currencyLockedUntil?: string | null;
 }
 
 /** Dashboard Settings: identity + service charge (owner), tax + pausing (owner + manager). */
@@ -47,6 +49,7 @@ export default function SettingsForm({
   inventoryAllowed = false,
   cardsEnabled = false,
   printerConfigured = false,
+  currencyLockedUntil = null,
 }: SettingsFormProps) {
   const { saving, save } = useSettings();
   const t = useT();
@@ -116,7 +119,7 @@ export default function SettingsForm({
           <>
             <h2 className="tt-serif tt-settings-group">{t("settingsGroups.restaurant")}</h2>
             <div className="tt-cols">
-              <RestaurantCard restaurant={restaurant} saving={saving} save={save} />
+              <RestaurantCard restaurant={restaurant} saving={saving} save={save} currencyLockedUntil={currencyLockedUntil} />
               {fiscal && <FiscalCard fiscal={fiscal} saving={saving} save={save} />}
               <TicketFontCard font={restaurant.ticket_font} saving={saving} save={save} />
               <LogoCard restaurant={restaurant} />

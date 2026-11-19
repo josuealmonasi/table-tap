@@ -115,7 +115,7 @@ export function usePosCharge({ collector, collectorContext, restaurant, cart, de
    * taken, so a late send records it as it happened. Only money already in
    * hand — an account's ceiling cannot be checked without the server.
    */
-  function showHeld(sale: HeldSale, answered = false, paper?: ReceiptPopup): void {
+  function showHeld(sale: HeldSale, answered = false, paper?: ReceiptPopup, emailRequested = false): void {
     const receiptHtml = details.noTicket ? undefined : offlineReceipt(
       { loyaltyCode: sale.loyaltyCode, posRef: sale.posRef, at: sale.at, lines: sale.items, charge: sale.charge, method: sale.method, currency: restaurant.currency },
       { name: restaurant.name, timeZone: restaurant.timezone ?? "America/Mexico_City", locale: dateLocale(locale) }, t,
@@ -124,7 +124,7 @@ export function usePosCharge({ collector, collectorContext, restaurant, cart, de
     // Kept even when it printed: a blocked or jammed print must still leave
     // the cashier a way to the ticket before the sale reaches the server.
     setTicket({ code: orderCode(sale.posRef), total: sale.charge.total, handedOver: !sale.preparationPending, offline: true, answered,
-      receiptHtml });
+      receiptHtml, emailRequested });
     rememberLastSale(restaurant.id, sale.items);
     cart.clear();
     details.reset();
@@ -181,7 +181,7 @@ export function usePosCharge({ collector, collectorContext, restaurant, cart, de
     if (!navigator.onLine) {
       offline.setOnline(false);
       cart.charging?.(null);
-      if (sale) showHeld(sale, false, paper);
+      if (sale) showHeld(sale, false, paper, Boolean(saleEmail));
       else toast(t("pos.offlineNoAccount"), "error");
       paper?.close();
       finishSend();
@@ -193,7 +193,7 @@ export function usePosCharge({ collector, collectorContext, restaurant, cart, de
       // Saving a card address is optional: a failed save must never hold up collected money.
       if (!retriedAccount && canEmailReceipt && details.saveCardEmail && details.emailConsent && details.loyaltyCard && details.email.trim() && !details.noTicket && details.cardEmail === null) {
         const saved = await saveSaleEmail(details.loyaltyCard.code, details.email.trim());
-        if (!saved.saved) toast(saved.suffix ? t("cardEmail.taken", { suffix: saved.suffix }) : t("cardEmail.saveFailed"), "error");
+        if (!saved.saved) toast(t("cardEmail.saveFailed"), "error");
       }
       let res: Response;
       try {
@@ -232,7 +232,7 @@ export function usePosCharge({ collector, collectorContext, restaurant, cart, de
         // with the sale it already rang.
         offline.setOnline(false);
         cart.charging?.(null);
-        if (sale) showHeld(sale, false, paper);
+        if (sale) showHeld(sale, false, paper, Boolean(saleEmail));
         else toast(t("done.networkError"), "error");
         return;
       }
@@ -250,7 +250,7 @@ export function usePosCharge({ collector, collectorContext, restaurant, cart, de
         // that was refused. Only an answer that says nothing (a 5xx), or one
         // that says the money is already in the drawer (`held`), keeps the
         // sale on this device.
-        if (sale && (res.status >= 500 || data.held)) showHeld(sale, true, paper);
+        if (sale && (res.status >= 500 || data.held)) showHeld(sale, true, paper, Boolean(saleEmail));
         else if (sale) offline.discard(sale);
         if (data.code === "outOfStock") {
           // With the numbers in it. The refusal has always known how many are
@@ -263,7 +263,7 @@ export function usePosCharge({ collector, collectorContext, restaurant, cart, de
         return;
       }
       if (sale && !offline.acknowledge(sale, data)) {
-        showHeld(sale, true, paper);
+        showHeld(sale, true, paper, Boolean(saleEmail));
         toast(t("pos.saleNeedsReview"), "error");
         return;
       }
@@ -300,7 +300,7 @@ export function usePosCharge({ collector, collectorContext, restaurant, cart, de
       // The kitchen board and the badges have a new ticket to show.
       router.refresh();
     } catch {
-      if (sale) showHeld(sale, false, paper);
+      if (sale) showHeld(sale, false, paper, Boolean(saleEmail));
       toast(t("done.networkError"), "error");
     } finally {
       finishSend();

@@ -8,7 +8,132 @@ table owed MX$105 and the diner's screen said it owed nothing.
 So this is not a style guide. It is the list of things that have actually bitten
 us, and what now catches each one.
 
+## Suspended restaurants cannot start a diner checkout
+
+The suspension marker and checkout admission must agree. A new checkout now
+stops before stock and order writes; an existing checkout retry is resolved
+first so a payment already underway can finish. `checkout/route.spec.ts`
+checks the new-order refusal.
+## Mail configuration and recovery health agree
+
+The outbox and scheduler disagreed when mail was unconfigured: tickets were
+finished without a failure. They now retry on the bounded schedule and report
+failure, and recovery stays unhealthy during backoff. `card-email.spec.ts` and
+`recovery-route-health.spec.ts` check both sides.
+
+## A saved address keeps its stop link
+
+A card save and an earlier ticket's stop link must agree on the consent
+generation. Saving the same address keeps its token; changing or removing it
+starts a new generation. `shared-address.spec.ts` checks the link and card scope.
+
+## The ticket stop button stays in the layout gate
+
+The demo seed and the layout page list disagreed: the gate opened only the
+invalid link, so it never measured the stop button. The seed now gives one
+card a consented example address and a fixed link; the layout gate visits it
+and the bare link. `seed-stop-layout.spec.ts` checks both sides.
+## Dish choices stay above the cart button
+
+The scrolling choices and the pinned cart button must keep their distance. A
+quantity deal made the button wrap and an extra could sit within 4px of it. The
+dish clips its scrolling content above the footer, whose padding keeps the
+controls apart. `dish-footer-gap.spec.ts` pins the structure; the layout case
+chooses the promoted dish with the most extras and checks both languages.
+
+## Recovery requests carry one-use proof
+
+The database queue and recovery route must agree on a signature, timestamp and
+nonce: a queued bearer exposed the reusable secret. The route rejects stale,
+invalid and replayed proof before it runs recovery.
+
+## Production demo resets replace logins
+
+The reset and the access token must agree on identity. Deleting sessions alone
+left an issued token attached to the rebuilt demo; production recreates the
+logins, while development keeps its existing sessions for the gates.
+
+## The scheduler reports actual recovery
+
+The SQL enqueue and the HTTP result must agree. A successful cron statement did
+not prove the request worked, so only a successful signed database run updates
+the health record; production checks its age and development shows a skip.
+
+## Ticket counts require confirmed writes
+
+The email provider and the outbox must agree on the outcome. A refused update
+or a claim taken by another worker cannot be counted as a completed transition.
+The saved body and provider key allow the next worker to retry safely.
+
+## Split cancellation keeps an unconfirmed start
+
+The cancellation response and the start reference must agree. A refusal does
+not prove the split ended, so a retry keeps its reference until cancellation
+succeeds or a read confirms there is no split.
+## Historical card return imports stop retrying
+
+The import and the bill read disagreed about what a card return log could prove.
+A matching log kept the import pending even though only provider evidence can
+resolve the card return. The import records that reason on the review row; the
+need check skips it and the money check still lists it. `historical-card-import.spec.ts`
+checks the shared rule, and the rolled-back development probe checks both reads.
+
+## Admin usage keeps returned tips out of sales
+
+The usage report and return operations must agree on which part was a tip.
+Subtracting the whole return from sales would charge a returned tip to sales.
+`admin-usage-returns.spec.ts` checks partial pieces across periods and
+`admin-usage-read.spec.ts` checks the saved operation against its sale.
+
+## Admin usage keeps each fee in its own currency
+
+The fee ledger and checkout evidence must agree on a currency. The ledger has
+no currency column, so today's restaurant setting cannot relabel an older fee.
+`admin-usage-read.spec.ts` checks the matching restaurant and the unknown bucket.
+
 ## What runs on its own
+
+### Price notice wording names the first bill
+
+The notice needs to describe the same renewal boundary as the scheduled price.
+`price-notices.spec.ts` checks the first bill wording in both languages.
+
+### Price notices reach restaurants without a subscription
+
+A scheduled change queues every eligible restaurant, including one without a
+subscription. The mail worker used to require a Stripe subscription for every
+recipient, leaving those notices pending. `price-notices.spec.ts` checks that
+the owner gets the new price without a Stripe lookup.
+
+### Price notices keep their message on retry
+
+The owner address and current Stripe price can change after a mail reply is
+lost. The notice keeps its exact message before sending, so a retry uses the
+same provider key and body. `price-notices.spec.ts` checks the batch, retries,
+sent rows, founder exclusion, languages and missing subscription; `route.spec.ts`
+and `recovery-scheduler-client.spec.ts` keep the job in the healthy run. A
+notice without a readable subscription price stays pending for review.
+
+### Scheduled prices keep their notice queue
+
+The scheduled price and its recipients must be written together, and the queue
+must exclude founding prices. `plan-price-change-route.spec.ts` checks the
+admin, date, plan and price refusals and the single RPC call;
+`plan-price-change-schema.spec.ts` pins the transaction and service-only grant.
+The API case checks real recipients and removes its fixture. Notice delivery is separate from changing Stripe prices.
+
+### Login passwords stay outside the repository
+
+Seeds and the checks signing into those accounts have to agree on the target's
+private password. Public literals in scripts and README survived rotations and
+some checks ignored the configured demo password. `login-secrets.mjs` requires
+`DEMO_PASSWORD` or `TEST_PASSWORD` after the env file is loaded; reset validates
+before deleting anything, and reports point to the env file without printing it.
+`login-secrets.spec.ts` mocks seeded users and missing values.
+`login-password-invariant.spec.ts` scans `git ls-files` except lockfiles, permits
+generic test fakes only under `__tests__`, and plants violations in temporary
+copies to prove the guard rejects them. The retired values are refused even in
+docs and test fakes. Login addresses, roles and access checks stay the same.
 
 The deliberately unsigned legacy terminal example uses
 `mock-terminal-times.mjs` to keep its sale and deposit before `DRAWER_ERA`.
@@ -31,9 +156,81 @@ and that a new party cannot see the previous party's waiting phones.
 `src/lib/__tests__/invariants.spec.ts` enforces the rules that span files:
 
 | Rule | The bug it came from |
+| Price notice wording names the first bill | The email and the renewal boundary must describe the same bill |
+| A queued price notice reaches an owner without a subscription | Queue eligibility included restaurants whose notice worker required a subscription |
+| A price notice keeps its message across retries | A changed owner email or subscription price would make a retry conflict with the mail provider key |
+| Suspended restaurants refuse new diner checkouts | Checkout ignored the suspension marker and could start a new order |
+| A held sale offers paper when its one-sale email may be lost | The first request carried the address but replay did not; `card-email-pos.spec.tsx` checks the warning and printable ticket |
+| Admin usage and returned tips agree | A returned tip must not be deducted from sales; `admin-usage-returns.spec.ts` checks partial pieces |
+| Admin usage and fee currency evidence agree | A fee cannot inherit today's restaurant currency; `admin-usage-read.spec.ts` checks other currencies and missing evidence |
+| Scheduled plan prices keep their eligible notice queue | A scheduled price without its recipients could leave an owner without notice; the route and schema specs pin validation and the atomic queue |
+| One-click ticket unsubscribe retries return the same success | A cleared or unknown token returned 404 to mail providers; `ticket-stop-one-click.spec.ts` checks retries, invalid forms and the separate confirmation response |
+|---|---|
+| Dish deal callout and price agree | The hint looked ahead while the selected quantity already saved money; `deal-callout.spec.tsx` checks both together |
+| The demo stop link and layout paths agree | The gate measured only an invalid link and missed the button overflowing its card; `seed-stop-layout.spec.ts` checks the seed and both paths |
+| Dish choices and the pinned cart button keep their distance | The deal button wrapped beside a scrolling extra; `dish-footer-gap.spec.ts` and the dish detail layout case cover the structure and the rendered spacing |
+| Earlier acceptance rows and the backfill index agree | Relabeling every old row as a backfill could stop schema application; `acceptance-schema.spec.ts` pins the migration |
+| Terms evidence and the privacy notice agree | Acceptance saved request network details despite the notice; `acceptance-history.spec.ts` and `rate-limit-key.spec.ts` forbid collection |
+| Terms history access and kitchen denial agree | A table grant allowed authenticated reads to reach RLS; `acceptance-schema.spec.ts` pins service-only access |
+| Legacy acceptance capture and seed updates agree | An unchanged seed wrote another immutable record; `acceptance-schema.spec.ts` pins changed values |
+| Acceptance retries and history growth agree | Repeated requests could grow immutable history; `acceptance-schema.spec.ts` pins serialized deduplication and text limits |
+| Acceptance writer and owner authorization agree | The definer trusted its caller's restaurant and user; `acceptance-schema.spec.ts` pins the owner check |
+| Terms acceptances survive newer acceptances and restaurant deletion | The restaurant kept only its latest acceptance and was deleted with it; `acceptance-history.spec.ts`, `acceptance-schema.spec.ts` and `signup-verification.spec.ts` cover the writers and archive contract |
+| The retry schedule must run on the hosting plan and identify its caller | Vercel rejected the five-minute cron on Hobby; `recovery-schedule-platform.spec.ts`, `github-cron-auth.spec.ts` and `recovery-scheduler-client.spec.ts` pin the daily fallback and the exact signed main-branch job |
+|---|---|
+| A database recovery request contains only a one-use signature | The queue exposed the reusable bearer; `recovery-signed.spec.ts` checks freshness, signature and replay, and `recovery-schedule-platform.spec.ts` checks the SQL request |
+| Production demo resets replace identities while development keeps them | Revoked sessions left issued access tokens attached to the rebuilt demo; `mock-logins.spec.ts` and `seed-logins.spec.ts` check both paths |
+| Scheduled recovery health records successful database runs | An enqueue could succeed while recovery failed; `recovery-health.spec.ts` and `recovery-route-health.spec.ts` check freshness and caller |
+| Ticket drain counts follow confirmed outbox writes | A failed or lost update looked sent or released; `card-email.spec.ts` checks errors and lost claims |
+| A refused split cancellation keeps its start reference | A separate disabled check cleared the reference after other errors; `s23-hooks.spec.ts` retries the same start |
+| Historical card reviews do not retry on each bill read | The importer cannot use a log as provider evidence, but the need check kept finding it; `historical-card-import.spec.ts` checks the review marker |
+| The retry schedule must run on the hosting plan and identify its caller | Vercel rejected the five-minute cron on Hobby; `recovery-schedule-platform.spec.ts`, `github-cron-auth.spec.ts` and `recovery-scheduler-client.spec.ts` pin the daily fallback and the exact signed main-branch job |
+| Account email removal matches each caller and the saved address | Staff shared a customer IP limit, and a statement offered removal without an address; `account-email-remove.spec.ts`, `account-credit-public.spec.ts` and `remove-email.spec.tsx` cover the limits, projection and dialog |
+| Account email removal follows the privacy notice | Neither staff nor the code holder could remove a saved address; `account-email-remove.spec.ts`, `remove-email.spec.tsx` and `staff-remove-email.spec.tsx` cover the route and both screens |
+| Reopened split pages keep the tip and total the diner chose (review F4) | Both saved-principal shares and parts could return an earlier or concurrent page with another amount; route specs check the quote and safe retirement |
+| An old split without a frozen principal accepts exact tips only (review N14) | Gross amount included earlier gratuities, and an open checkout could silently keep a different tip; legacy-split-tip, legacy-split-tip-route and legacy-split-tip-input regression specs cover calculation, request, preview and retry |
+| The account promise opens its own unsplit bill | The first Collect could open another table's divided bill, which correctly offers parts instead of an account charge; `promise-account-bill.spec.ts` checks the target and cleanup |
 | A duplicate refund tracks customer completion and fee completion separately (S11 I5) | A failed fee return disappeared behind an already-refunded customer payment |
 | A duplicate refund keeps its original charge currency everywhere (S11 I9) | Changing the menu currency relabelled money owed back and the approval amount |
 |---|---|
+| Seeds and checks read the same private login passwords | Public scripts and README published login passwords while some checks ignored rotated env values; `login-password-invariant.spec.ts` scans tracked files and plants violations, and `login-secrets.spec.ts` mocks seed creation |
+| Seed receipts and allocation backfill keep the same historical evidence | Every seed inserted version-0 receipts, so reading a bill rewrote hundreds of rows; `seed-payment-allocations.spec.ts` compares every explicit-order field and allocation value with the backfill |
+| Read-only gate cases share their run's fixtures | Identical refusals repeatedly inserted and deleted orders, tables and splits; `gate-fixture-reuse.spec.ts`, `api-readonly-fixtures.spec.ts` and `run-fixtures.spec.ts` check reuse, writer isolation and cleanup |
+| Development reseeding restores demo logins without replacing their identities | Deleting the restaurant also deleted five healthy logins and sessions; `seed-logins.spec.ts` and `mock-logins.spec.ts` check identity reuse, changed passwords, metadata reset and explicit drop |
+| A counter quote is checked under the payment lock (review N1) | A discount after the route read could record less than the cash received; `counter-collection-race.spec.ts` and `review2-money-schema.spec.ts` hold the quote and writer together |
+| A coverage probe must check a restaurant before passing | An empty database or only restaurants awaiting backfill printed `ok`; `coverage-probe-empty.spec.ts` checks both and a refused connection |
+| Staff discounts preserve existing gratuities (review N2) | Both pricing and SQL discounted tips below the order total; `staff-discount-tip.spec.ts` and `staff-discount-tip-route.spec.ts` check direct and approved principal-only discounts |
+| Each subscription source has time to run (review N8) | Persistently unpaid reads starved cancellation recovery; `subscriptions.spec.ts` advances the clock across all three sources |
+| Overdue refunds remind each restaurant (review N9) | Only the globally oldest case got a reminder; `refunds.spec.ts` keeps two tenants pending and checks both bells |
+| Missing mail configuration is visible to recovery | The outbox discarded tickets while health stayed green; `card-email.spec.ts` and `recovery-route-health.spec.ts` check retry and health |
+| Repeated card saves keep delivered stop links | A retry rotated the token and left the address subscribed; `shared-address.spec.ts` checks the link and per-card scope |
+| A shared card email saves independently | The generic save answer and rewards read disagreed when another card used the address; `shared-address.spec.ts` compares both paths and stops each card independently |
+| Ticket retries run before tickets expire (review N10) | Daily recovery missed the backoff window; `ticket-email-schedule.spec.ts` models recovery without payment traffic |
+| A table payment check names the actual table relation (review N3) | `payment-check-route.spec.ts` rejects unknown relations and checks the tenant and table before Stripe |
+| Held approval keeps the kitchen's saved instructions (review N4) | `offline-sale.spec.ts` keeps notes and component extras without duplicating flattened extras |
+| New split offers follow the owner's switch (review N5) | Both menu readers omitted it and both creation paths ignored it; `public-menu-cache.spec.ts`, `ordering-split-setting.spec.ts` and `legacy-split-setting.spec.ts` cover the readers and writers |
+| An unread ticket address remains retryable (review N6) | `card-email.spec.ts` fails the card read, then sends after recovery |
+| The successful collector alone chooses ticket email (review N7) | A refused colleague could overwrite the choice before payment; `ticket-email-skip-race.spec.ts` interleaves opposite choices and `review2-money-schema.spec.ts` pins transactional rollback |
+| Cached menus page before schedule filtering (review N11) | A capped page of breakfast rows hid the serving dinner menu; `public-menu-cache.spec.ts` keeps the dinner dish behind that page |
+| Held history reads only the requested decision page (review N13) | Clamping a huge page still loaded the full history prefix; `held-sales-history-route.spec.ts` bounds retrieval and `held-resolution-history.spec.ts` checks both clocks under a small row cap |
+| Takings bound return evidence before grouping (SQL read cost 2) | The day filter reached PostgREST only after SQL had materialized the restaurant's refund history |
+| Cash case tests narrow optional matchers | A runtime assertion did not tell TypeScript which API cases have an error matcher, so the new contract spec broke type checking |
+| Return polling batches SQL progress (SQL read cost 1) | The list needed every outstanding balance, but sent one RPC per refund every 15 seconds |
+| Orders and pass feeds build their allowed restaurant list once per read | History called `has_role` for every order; the same pattern affected service requests and kitchen feeds. `orders-rls-equivalence.spec.ts` pins the old audience, and `probe-orders-rls-equivalence.mjs` compares counts and row identities under real RLS |
+| Every fetch poll waits for its last read and then its full interval | Slow reads stacked requests, or busy guards retried too soon; `poller-cadence.spec.tsx`, `poll-after-settle.spec.ts` and `invariants/polls.spec.ts` cover all nine former exceptions |
+| Connect onboarding uses the owner and currency from one membership lookup | The guard and route each asked for membership because React cache was assumed to memoise route handlers; `auth-round-trips.spec.ts` counts auth and table reads and refuses every non-owner |
+| The cash API case checks the cashier's own refusal in both languages | Role-specific instructions were correct, but the case still matched the manager's older wording and reported a false failure; `cash-held-api-contract.spec.ts` checks both translations |
+| The cash API contract spec typechecks from a clean checkout | The spec and the inferred case union must agree: some cases have no refusal matcher. A property guard keeps that distinction; a clean `tsc --noEmit` catches an unsafe read |
+| The POS retry fixture leaves journal sources for its restaurant cascade | The retry case used the demo restaurant and deleted its charged order individually; the journal correctly refused cleanup. `api-retry-account-fixture.spec.ts` checks the disposable tenant and retained sources |
+| Held receipts reuse the existing payment tenant key | The train created a second unique index on the same payment columns; `held-payment-index.spec.ts` keeps the original unique key and rejects the duplicate build |
+| Restaurant deletion archives the account journal with its source books | The restaurant cascade deleted original charge snapshots that the archive list omitted; `account-journal-archive.spec.ts` pins the journal copy, tenant lock and preserved held-receipt/dispute checks |
+| Printed IVA keeps each order's saved rate | A second current restaurant rate could relabel an older sale; `ticket-vat.spec.ts` and `receipt-vat-source.spec.ts` check saved rates, missing evidence and mixed-rate splits |
+| Statement text separates days and the payment link | HTML headings separated days while plain text ran them together; `mail-plaintext.spec.ts` snapshots both languages |
+| Receipt text keeps paragraph breaks | Empty separators were discarded before sending POS and diner receipts; `mail-plaintext.spec.ts` snapshots items, totals and paragraphs in both languages |
+| Card ticket text gives the stop link its own line | The HTML link stood apart while plain text buried its URL beside the label; `mail-plaintext.spec.ts` and `card-email.spec.ts` check the copy and actual sender |
+| Card ticket footer stays inside the receipt | Removing only its text left an empty paragraph and put the card footer outside the receipt; `ticket-email-polish.spec.ts` snapshots both languages |
+| Receipt emails use the Counter palette | The receipt kept retired colors while the app moved to Counter; `ticket-email-polish.spec.ts` checks ink, muted, line and link colors |
+| A mail provider can stop ticket emails in one click | The header and stop route disagreed about POST forms; `ticket-stop-one-click.spec.ts` checks the public rewrite and card update, and `card-email.spec.ts` checks the header |
 | Restaurant logos use PNG bytes, content type and path, and the bucket accepts PNG | The photo encoder stored WebP logos that the ticket PDF could not print; changing only the encoder would leave a WebP path and a bucket that refused PNG. `image-resize.spec.ts` checks logos and unchanged photo encodings; `images.spec.ts` checks the bucket allowlist |
 | A new card save cannot duplicate today's ticket after a lost reply (card email UI) | The save could commit unseen and both the card outbox and the per-sale sender mailed the same ticket; `card-email-pos.spec.tsx` holds the lost reply and checks skip in the charge and held replay |
 | A new card reader does not reuse another reader's address (card email UI) | A cashier could briefly see an owner's full address from the shared SWR cache; `card-email.spec.tsx` reproduces the flash with a delayed masked reply |
@@ -58,6 +255,7 @@ and that a new party cannot see the previous party's waiting phones.
 | Failed loyalty reads cannot open an empty editor (E2E D7) | A read failure looked like a program that had never existed |
 | Replay waits for the online send and preserves preparation (E2E C5) | Background replay raced a live request and completed food nobody had made |
 | Processing fees keep the payment currency (E2E D4) | A dollar charge used the fixed peso processing fee |
+| Diner menu, cart and bill show the restaurant's legal identity, read through the ticket's server-side path and never the public columns; the pickup-name and receipt-email fields carry the short privacy notice (`invariants/place-identity.spec.ts`, `place-identity.spec.tsx`) | The legal review found diners paying with no restaurant identity, address or notice in sight (LFPC 76 Bis, LFPDPPP 16) |
 | An elapsed time goes through `src/lib/elapsed.ts`; no dictionary key outside `elapsed` takes a raw count of minutes, hours or days, and no screen divides by 60 000 itself (`invariants/elapsed.spec.ts`) | The Pedidos board read "hace 1741 min" for a ticket a day and five hours old |
 | Terminal bank movements keep their sign (E2E C7) | A refund-heavy day's bank debit could not be recorded |
 | New owners prove email ownership before their trial starts (E2E E4) | Signup confirmed an address nobody had verified |
@@ -6561,7 +6759,249 @@ till, waiter pad and offline receipt now freeze each line's promotion revenue.
 understatement of unrelated revenue, bill-wide stacking, extras, combo display
 savings, free food costs, exact cents, legacy fallback and offline replay.
 Reports never fetch current promotions for old sales.
+## Sweep 10, findings 4, 5 and 7a: IVA and the shift's tips (2026-11-10)
 
+- **The bill's IVA line used today's rate.** It now uses the rate saved on the orders being paid (`BillAmounts.taxPct`). Orders priced at different rates show no single "IVA n%" line (`sweep10-iva.react-component.spec.tsx`).
+- **Net and IVA were rounded separately,** so MX$0.01 at 100% showed MX$0.01 + MX$0.01. `ivaSplit` now works in whole cents, so the parts always add up to the subtotal.
+- **The shift sum did not separate tips.** It now says which part of cash sales was tips (`cash_shift_totals.tips`), without changing the expected cash.
+- **Parked, with notes in `loop/codex/parked/`:**
+  - finding 7's tips paid out, which needs withdrawals to say what they were for.
+
+## Sweep 10, finding 7b: tips paid out of the drawer (schema handoff pending)
+
+A withdrawal's free-text note could not identify tips paid to staff. The form
+now sends `purpose` (`tips` or `other`, default `other`); the route rejects
+other values with 400 and passes it to both withdrawal RPCs. A lost reply keeps
+the purpose frozen with the original request. The server reader now preserves
+both `tips` and `tips_out`; the live shift, closed record and printed sheet
+show positive payouts below the tips line in the shift's saved currency.
+Tips paid out remain inside total withdrawals and never reduce expected cash
+twice. Existing notes are not used to guess historical purposes.
+
+The five `tips-out-*.react-component.spec.tsx` files check validation on both
+route paths, form submission/default/reset/retry, numeric RPC totals, and live,
+closed and printed labels in English and Spanish. The SQL source invariant
+removes only the two reporting additions and requires the entire old totals
+calculation to remain identical. Planted variants that subtract tips twice,
+exclude tip withdrawals or count only tip withdrawals must fail this check.
+These are local specs, not evidence of applied SQL or database behavior.
+
+Claude still owns the release checks:
+
+- Fold `supabase/PROPOSAL-tips-out.sql` into `schema.sql` and `drop.sql`, with
+  the new service-only signatures, removal of old overloads, and default
+  compatibility for old clients. Apply the schema before deploying the route.
+- Probe the database: historical/default purposes, invalid-purpose constraint
+  and RPC refusals, shift/restaurant/currency scoping, both withdrawal writers,
+  same-purpose replay (also after close), and changed-purpose retry conflict.
+  A shift with opening 20, gross cash 110 including 10 tips, and withdrawals
+  8.50 tips + 6.50 other must return `tips_out=8.50`, `withdrawn=15` and
+  `expected=115`. Changing only the purposes must preserve expected cash;
+  deleting a mistaken tip withdrawal must remove its payout subtotal too.
+- Extend the live cash API cases for both purposes, omitted purpose, invalid
+  purpose and retry conflict; run the cash, authorization and money gates.
+- Run layout/dialog checks and inspect the withdrawal choice, live shift,
+  closed record and print sheet in both languages at 360, 390, 820 and 1280px,
+  including zero payouts, payouts without cash tips and a changed menu currency.
+
+## Held receipt intake and manager review (2026-11-11)
+
+Queue validation, approval and the review screen must agree on the normalized
+receipt. Intake now refuses malformed whole-order text, string money, real
+sub-cent amounts and a tip above the total. Approval drops bad legacy text
+from the order; review renders normalized lines and amounts without changing
+the raw evidence. `held-intake.spec.ts` and
+`held-review.react-component.spec.tsx` cover the refusal, recovery and display
+paths. Every new assertion was checked by planting the corresponding bug;
+`loop/codex/held-intake-mutations.md` records the results. Audited resolution
+is only a SQL proposal: existing unapprovable money rows still need Claude's
+schema integration and PostgreSQL verification before shifts can be unblocked.
+
+## Held receipts resolved without a sale (2026-11-11)
+
+A held cash receipt that could never be approved blocked every shift close in
+its restaurant, with no way out (Codex sweep). `resolve_held_sale` lets an
+owner or manager resolve it with a reason: the cash kept in the drawer becomes
+an unclassified receipt in the open shift (in `expected`, not in sales), cash
+handed back needs its recorded withdrawal, a duplicate links the payment or
+receipt that already counted it (each backs one duplicate), and "nothing
+collected" takes no amount. The raw receipt and the resolution are frozen; a
+late approval of a resolved receipt fails. The shift close, the restaurant
+delete check, the held-cash preflight, the held-sales list and `pnpm money`'s
+rebuilt close all read the resolution. `scripts/probe-held-resolve.mjs` proves
+each rule in Postgres; the manager's screen for it is the next step.
+
+## Sweep 10, finding 6 — one food-only tip base (2026-11-11)
+
+The tip chips and card routes must agree: service and a tip already on an order
+were being tipped again, and account chips sent a computed amount while the
+percentage route used the entire debt. `tip-base.ts` now owns percentage tips
+and the bill, frozen-share and account food bases. Exact tips retain their caps.
+Collected principal is excluded; grouped slots sum their own frozen food slices.
+Account percentages are saved only after the checkout freezes its order IDs.
+
+The parked `sweep10-tip-base.react-component.spec.tsx` now passes. Route tests in
+`diner-currency.spec.ts` and `split-slots-pay.spec.ts` compare the same fixture's
+preview with Stripe parameters or the saved account tip. The sabotage-tested
+`invariants/tip-base.react-component.spec.tsx` refuses local percentage formulas
+in pay routes. The API bill, legacy split, slots and account cases assert the
+shared helper's amount against saved Stripe metadata or the checkout row, even
+when the fake connected account refuses the charge. Claude must run these API
+cases and the live gates; no database, provider or browser verification was run
+for this local change. Phone/tablet chip and total screenshots still need review.
+
+## The card-fee ceiling had no currency (sweep 11, finding 2, 2026-11-11)
+
+`platform_fees` counts cents per month with no currency. A Carta restaurant at
+MX$698 of fees that switched to USD had US$1 left of its US$699 ceiling, and an
+old peso fee returned freed dollar room. The owner chose one ceiling, one
+currency: while this UTC month has card fees (not released, not fully
+returned), the currency changes from the 1st of next month.
+`guard_fee_month_currency` refuses the change in the database, the settings
+route answers it by name (409 `currencyLockedMonth`), and Settings disables the
+currency with the date it frees up. `fee-month-currency.spec.tsx` covers all
+three, each sabotage-tested.
+
+## Sweep 11 — absent fees and terminal return rates
+
+An application fee can appear after its charge was refunded. The reconciler
+now checks the saved fee ledger and checkout before verifying zero; a positive
+fee or missing evidence keeps recovery pending. `fee-not-created.react-component.spec.tsx`
+covers delayed creation, zero-fee checkouts and failed reads. The platform's
+`application_fee.created` event also enqueues recovery before acknowledgement
+(`created-fee.react-component.spec.tsx`). Subscribe that endpoint to the event.
+
+Costs now reads terminal receipts, returns and signed rates together: MX$100
+less a same-day MX$40 return at 3.5% costs MX$2.10 and leaves MX$57.90. A later-day
+return retains the fee. `costs-terminal-returns.react-component.spec.tsx` checks
+both, historical and zero rates, local dates, rounding, voids and failed reads.
+`terminal-snapshot.spec.ts` signs the later deposit at 5% and keeps the original
+MX$96.50 carried return beside MX$200 takings, MX$10 fees and MX$93.50 expected.
+Each original bug was planted back and made its scenario fail. Provider delivery
+and database execution still require Claude's live checks.
+
+## Sweep 11 finding 6 — a return-only bank debit can be reconciled
+
+A signed MXN sale from yesterday gets a MX$40 return today, with no terminal
+sales today. The bank debits MX$40, but the writer returned `no_sales`, the
+screen hid the mark control, and the checker had no return-only target. A
+currency switch could leave that MXN debit waiting forever.
+
+The first unsigned day with net sales still owns the return. If none exists,
+the return owns its own day; an already signed day advances to the next
+unsigned calendar day, matching the existing screen fallback. A later sales
+day appearing before marking wins. A signed return-only manifest consumes
+its return IDs so later sales never carry them again. A fully reversed,
+unsigned same-day sale alone still owns no carried debit and returns
+`no_sales`. The bank amount may be negative within the existing bounds.
+
+The schema change is `record_terminal_deposit_v1` in `supabase/schema.sql`.
+The writer preserves the settlement money lock, tenant/currency scope, saved
+rate, receipt/return membership and legacy-manifest interpretation. The screen
+now offers the existing bank-movement form and explains the return-only debit
+in both languages; its own settlement date can become due or overdue. The
+checker independently reconstructs ownership at each snapshot, detects omitted
+returns even when expected is forged to zero, and rejects a return named by
+the wrong day.
+
+Offline coverage:
+
+- `terminal-returnonly-schema.react-component.spec.tsx`: SQL source contracts
+  for signed amounts, no-sales eligibility, negative expected, own-day fallback,
+  sales-day precedence and consumed manifest IDs. This does not execute SQL.
+- `terminal-returnonly.react-component.spec.tsx`: actual `depositDays` through
+  the rendered screen and bank form, submitting `-40.00`, Spanish/English copy,
+  next-day sales before marking, marked ownership and overdue status.
+- `money-terminal-returnonly.react-component.spec.tsx`: raw allocation/receipt
+  fixtures through `checkDrawer`, including current currency USD with a signed
+  MXN debit, correct and incorrect manifests, next-day sales before marking,
+  later sales after marking and duplicate consumption.
+
+Each plant was applied individually, its focused spec executed, then the fixed
+source restored. Every run below exited 1 with assertion failures (not startup
+errors). SQL rows are source-contract failures; screen/checker rows execute
+behavior against local fixtures.
+
+| Plant | Result |
+| --- | --- |
+| SQL restores sales-only `no_sales` guard | 1 of 4 failed |
+| SQL drops own-day fallback | 2 of 4 failed |
+| SQL stops seeking later sales before fallback | 1 of 4 failed |
+| SQL ignores consumed return IDs | 1 of 4 failed |
+| SQL adds instead of subtracting the debit | 1 of 4 failed |
+| SQL saves an empty return manifest | 1 of 4 failed |
+| Screen hides mark when sales count is zero | 2 of 5 failed |
+| Screen loses return-only debit copy | 2 of 5 failed |
+| Screen keeps a negative unmarked day pending forever | 3 of 5 failed |
+| Screen keeps own-day ownership when a later sale exists | 1 of 5 failed |
+| Screen ignores signed return IDs | 1 of 5 failed |
+| Checker drops own-day fallback | 3 of 6 failed |
+| Checker prefers own day over an available sales day | 1 of 6 failed |
+| Checker ignores prior signed return IDs | 1 of 6 failed |
+| Checker accepts a return assigned to a different day | 1 of 6 failed |
+| Checker accepts a day owning neither net sales nor returns | 1 of 6 failed |
+
+Fixed-source verification: 14 focused Vitest files, 101 checks passed (exit 0)
+using `node node_modules/vitest/vitest.mjs run --configLoader runner --cache=false`
+with the three new specs plus terminal, terminal-snapshot, terminal-window,
+terminal-deposit-api, terminal-deposit-currency, terminal-bank-schema,
+terminal-snapshot-schema, money-terminal-returns, money-drawer,
+money-drawer-history and costs-terminal-returns. TypeScript passed with
+`node node_modules/typescript/bin/tsc --noEmit --incremental false` (exit 0).
+ESLint passed on every touched code file with the repository config and
+`--max-warnings=0` (exit 0). The shared dependency symlink required resolving
+peer plugins from the installed Next config through a temporary local loader;
+no dependency or repository configuration was changed.
+
+No database, network, package-manager commands, commits or live gates were used.
+PostgreSQL execution and browser layout verification remain integration work.
+
+## Disputes PR 1 — provider money and restaurant books
+
+A dispute notification is discovery, not a debit. The Connect inbox commits
+before acknowledgment; all five notification types refresh current provider
+state on the original account. Duplicate/reordered delivery cannot invent a
+second withdrawal or a credit for winning. Failed provider reads remain in the
+existing bounded recovery runner. `disputes/__tests__` covers ingestion,
+provenance, shared-charge history, currencies, provider dates and structural
+money checks; the dispute rendering specs use both real language dictionaries.
+The SQL contract specs read `supabase/schema.sql` (folded by Claude, who added
+the deletion check and archive to the live `admin_delete_restaurant` rather than
+replacing it); they do not execute PostgreSQL. Still to prove on dev: the
+locks/leases, the deletion archive, RLS and retry races, and Stripe's separate
+fee-adjustment shapes. Sales,
+original contribution and the corte stay separate from actual chargeback net.
+Historical backfill/provider completeness is PR 3, not claimed by this gate.
+
+A dispute that matches no TableTap sale (case `review`) used to put its event
+back to `pending`: recovery re-read it from Stripe on every run, deletion
+answered `dispute` forever, and its chargeback (attributed through the account
+fallback) lowered the tenant's contribution. Now its event ends `done`, review
+cases never block `admin_delete_restaurant`, and `tenantBooks` drops them and
+their movements before any Costs/Analytics total or pending note.
+`report.spec.ts` and `read.spec.ts` cover the totals; `schema.spec.ts` only
+reads the SQL text, so the event state and the deletion guard are proved only
+by the api/money gates on a database.
+
+## R8-7 — dormant account journal and historical debt
+
+An opening balance and imported history must not count the same debt twice.
+PR 1 creates the schema and service-only backfill function without starting any
+account. PR 2 must activate all writers and the backfill together under the money
+lock, choosing the cutoff after it holds the lock. An opening stores current
+reduced debt; historical credits and collections have zero debt effect. Missing
+charge dates and original components remain unknown.
+
+| Regression | Automatic check | Live verification still required |
+| --- | --- | --- |
+| R8-7: premature journal activation loses intervening events; replay or imported history could double debt; mutable or cross-tenant records could corrupt the journal | account-journal-schema.spec.ts; invariants/account-journal-dormant.spec.ts (including activation-marker sabotage) | After applying schema on dev, run probe-account-journal.mjs for per-currency debt, partial/full credit and collection history, replay, privileged update/delete guards, bad signs/missing sources, tenant/currency isolation, effective roles and grants, restaurant cascade, the function's own money lock and rollback, and both two-connection settlement races; run the existing money gate. No production backfill in PR 1. |
+
+
+## R8-7 — atomic account journal writers and activation
+
+| Regression | Automated check | Database evidence before release |
+| --- | --- | --- |
+| A money writer can omit or duplicate an append, a tip can be counted twice, an orphan can balance missing debt, or a credit/collection race can lose money | account-journal-writers.spec.ts; account-journal-money.spec.ts (missing/duplicate/orphan/component/currency sabotage); invariants/account-journal-dormant.spec.ts writer allow-list; paginated money-account-journal.mjs source and per-currency debt checks | Apply journal-lock.sql (before any DDL), writers and journal-activate.sql in one transaction; run probe-account-journal.mjs on dev for activation, birth, charge, staff/online new tips, credit, both cancellation paths, replay, both credit/settle races and commit-time forgotten/orphan refusal; first adapt the older API/attack account fixtures to real charge writers and disposable restaurants (their direct attach/detach/delete paths are now refused), then Claude runs the full gates. Staff partial collection means a whole currency while another remains owed. No reader migration in this PR. |
 ## The ticket PDF says what the receipt says (2026-11-11)
 
 The 80 mm ticket and the HTML/email receipt are two forms of one sale. Both
@@ -6697,6 +7137,116 @@ written. The existing sender delivers today's ticket; the saved card delivers
 future ones. The lost-save-reply spec proves the skip reaches both the request
 and held replay, while charging remains available.
 
+## Restaurant deletion keeps the account journal
+
+The journal's restaurant cascade and the accounting archive list have to agree.
+Deleting a restaurant copied its orders and payments but lost the journal's
+original charge snapshots. The same locked, tenant-scoped archive loop now
+copies `account_movements` before deletion. `account-journal-archive.spec.ts`
+reproduces the missing table and keeps the held-receipt and dispute protections
+in the combined deletion function. The rolled-back dev probe checks the actual
+copy before this schema ships.
+
+## Held receipts reuse the payment tenant key
+
+The held-receipt reference and the existing payment index have to agree.
+The queue train added another unique index on `(restaurant_id, id)`, even
+though `payments_tenant_identity` already provides that key. Keep the original
+index so the tenant reference stays enforced without a second build.
+The schema does not drop the draft index: production never built it, and a dev
+database that did may have the held-receipt foreign key resting on it.
+`held-payment-index.spec.ts` reproduces the two definitions and pins the one
+unique key that both references can use.
+
+## The IVA line speaks of the total above it (2026-11-12)
+
+The ticket prints "IVA 16% incluido" under its TOTAL. The two have to agree:
+the IVA is worked out from the same values the total prints (`vatParts` on
+`receiptModel`, `saleVatParts` in `ticket-vat.ts`), less the tip that total
+contains — never the receipt's tip row, which shows the tip before a return or
+a forgiveness. A split part's amount can hold tips added to the orders before
+the split, which no ticket can separate, so a part prints the line only when
+its split's frozen debt carried none; anywhere the base is not certain the
+line is left off. `ticket-vat.spec.ts` pins the amounts (16 % of 116.00,
+8 %, 0, tip, discount, charge, forgiveness, table, split part and its return,
+the ambiguous part), the saved order rates, and the absence of a second
+restaurant tax setting; `ticket-pdf.spec.ts` checks the line sits right
+under the TOTAL and is absent at 0, at an unknown base and with no rate;
+`returns-receipt-source.spec.ts` checks the split read.
+
+## A ticket keeps the IVA rate its orders were sold at (2026-11-12)
+
+The saved order and the printed ticket have to agree about the tax rate.
+Reading a separate current restaurant setting could relabel an older sale.
+The ticket now groups the sale without tips by `orders.tax_pct`, using the
+same `withoutIva` calculation as Costs. Missing rates and ambiguous split
+parts leave the line off; they never stop the receipt. `ticket-vat.spec.ts`,
+`ticket-pdf.spec.ts` and `receipt-vat-source.spec.ts` cover the boundary.
+
+### Split payment answered a Stripe refusal with "Algo salió mal" (2026-11-12)
+Bill and account payments answer a checkout Stripe refused with `apiErr.checkoutFailed` ("El pago falló"); split payment alone used the generic error, so a diner paying their share was told nothing about what failed. The api gate's food-only tip case caught it on the whole-queue train. Now: all three pay routes answer `checkoutFailed`; the gate's tip-base account case restores the shared account restaurant's card settings, so the later "no card reader" case is judged on its own.
+
+## Retained held cash counts in the shift that collected it (2026-11-12)
+
+Approving a held cash receipt and resolving it as `retained_cash` have to put
+the same cash in the same shift. Approval dates the payment at the sale's time,
+so `cash_shift_totals` counts it in the shift that was open then, even one
+already signed. `resolve_held_sale` counted retained cash in whichever shift
+was open when the manager decided: the collecting shift kept an unexplained
+overage and the open shift got a matching false shortage (full review M1). Now
+it picks the shift whose window holds `p_collected_at`, closed or open, and
+dates the receipt there; only a collection no shift covers falls back to the
+open drawer. `cash_shifts_for_day` brings back a closed shift corrected that
+way, as it does for a late approval. `held-resolve-shift-schema.spec.ts` pins
+both SQL paths to the same window; `scripts/probe-held-resolve.mjs` runs both
+decisions on one receipt from a closed shift and asserts the same shift moves.
+Returned cash follows the same rule (owner's call: every shift explains
+itself): its receipt is received in the collecting shift, and the withdrawal
+that paid it out stays in the open shift where the cash left the drawer, so A
+shows +amount received and B the -amount withdrawal, neither over nor short.
+The probe's returned case closes both shifts on those counts with no
+difference.
+
+## Returned held cash cannot be backed by a tips payout (2026-11-12)
+
+The withdrawal behind a `returned_cash` resolution and the shift's tips line
+have to agree about what the cash was. A tips payout (`purpose='tips'`) could
+be linked, and the shift then showed a customer's refund as tips paid to staff
+(full review M2). `resolve_held_sale` now accepts only `purpose='other'`; the
+payout picker's read (`GET /api/pos/recover/resolve`) and the form offer only
+those, and never one already backing another resolution (screens #3, which
+the server refused with `heldResolveLinkUsed`). A withdrawal without a note is
+named by its local date and time, not a raw ISO string.
+`held-resolve-shift-schema.spec.ts`, `held-resolution-route.spec.ts`,
+`held-resolution.react-component.spec.tsx` and the probe pin it.
+
+## The drawer offered "Quitar" on a withdrawal it never removes (2026-11-12)
+
+`delete_cash_withdrawal` refuses a withdrawal that pays out a resolved held
+receipt, but the drawer showed "Quitar" on it (full review, screens #2).
+`shiftWithdrawals` now marks `linked` from `held_sale_resolutions`, and
+`ShiftBlock` shows a hint in place of the button.
+`shift-linked-withdrawal.react-component.spec.tsx` covers the read and both
+languages.
+
+## The till said nothing about held cash until after the blind count (2026-11-12)
+
+The till's "Cerrar caja" and `close_cash_shift` have to agree about held cash.
+The till blocked only on this device's unsent sales; the server refuses on
+every cash sale in the restaurant waiting for review, and told a cashier to
+review them in a screen only managers can use (full review, screens #1). The
+till page now reads the same `heldCashWaiting` count with its open shift,
+disables the close and says a manager must review N held sales; the route
+tells a cashier to call a manager (`apiErr.shiftHeldCashCashier`) and a
+manager to review them. `till-held-cash-close.react-component.spec.tsx` and
+`shift-held-cash.spec.ts` pin it.
+
+## Account card payment read a tip that is not a number as MX$0 (2026-11-12)
+
+Bill, split, slots and account payment have to refuse the same bad tip. The
+account route turned `tipAmount: "abc"` into no tip, silently dropping it
+(full review M3); it now answers `invalidRequest` 400 before anything opens.
+`unresolved-account-routes.spec.ts` pins it.
 
 ## Pedidos: a fixed-interval poll slower than its interval never goes idle
 
@@ -6792,3 +7342,987 @@ invariant (`a field label is a block`) parses every component and fails on
 any `<label>` or `<span>` with `tt-mod-label` that is neither inside a
 `.tt-field` nor given `display: block|flex|grid` by another of its classes.
 It has no allow-list.
+
+## The cashier's review instruction and its API case
+
+The cash-close refusal and the API gate's expected wording have to agree.
+Cashiers were correctly told to ask a manager to review held cash, but the
+case still expected the older instruction for somebody who can review it.
+It reported a failure even though the route refused the close with 409.
+
+The case now recognizes the cashier's instruction. The contract spec feeds
+it the real English and Spanish strings, so a copy change cannot silently
+leave the live gate checking words the route no longer sends.
+
+## Seed receipts and historical allocation evidence
+
+The seed's explicit receipts and `backfill_payment_allocations` must describe
+the same money. The seed wrote version 0, then the first bill read inserted
+allocations and rewrote hundreds of payments. Synthetic history now writes
+version 1 and its exact allocations at insertion. The contract spec compares
+all eight backfill fields and the allocation values, including preserved tip
+metadata, unknown breakdowns and legacy provenance. Live and unmarked legacy
+writers keep their existing paths. `mock-history.mjs` reads receipts for daily
+shifts; it does not insert payments.
+
+Cancelled legacy sales retain their historical review examples. A review
+without an unused refund log for that order cannot gain evidence, so the
+coverage check now skips that no-op import. Missing cancellations and
+unreturned allocations still request repair; a new unused refund log still
+retries the importer, which proves the amount, collector, currency and
+uniqueness as before. `seed-backfill-noop.spec.ts` pins these conditions. No
+review or return evidence is fabricated to make a read look clean.
+
+## Read-only gate cases and fixture ownership
+
+The fixture lifecycle and each case's effects have to agree. Refused split,
+inactive-order and frozen-offer requests repeatedly created the same rows.
+One run now owns each unchanged fixture set; case cleanup returns the borrowed
+rows without deleting them. Run cleanup removes them, including after failed
+requests. Frozen offers leave after their last case so an active promotion
+cannot discount a later case's sale; run cleanup remains their fallback. Failed
+group deletions remain reachable for that final cleanup, and their errors do
+not stop teardown of the API gate's other rows. Specs check reuse, incompatible
+states, separate runs, failed setup and private writer cleanup. Every gate verdict stays unchanged. The exact
+shared cases and cases that still need private rows are listed in
+`docs/gate-fixture-ownership.md`.
+
+## Demo logins and a restaurant reset
+
+The seed's clean restaurant and the gate's existing login must agree. Reseeding
+deleted five auth users, their identities, profiles and sessions before
+recreating the same people. It now retains the auth IDs, restores passwords
+only if changed, clears demo metadata and bans, removes accidental admin
+grants and restores names. Unchanged passwords never go through GoTrue's
+password update. Explicit `dropMock` still removes all five users. Mocked
+database and admin-client specs check both lifetimes without sending mail.
+## The account promise and the bill it opens
+
+The account control and the bill selected by the promise case must agree.
+The case opened the first Collect on the page, which can belong to a divided
+bill. That bill correctly offers its remaining parts rather than moving the
+whole debt to an account, so the case reported a missing working control.
+
+The case now owns an unsplit fixture and opens its exact order's bill. Its
+existing text and control assertions stay unchanged. `promise-account-bill.spec.ts`
+puts an unrelated divided bill first and checks that the case still visits its
+own bill, then checks cleanup when the browser fails.
+
+## The cash contract spec and its case union
+
+The spec and the JavaScript case list have to agree about optional fields.
+The list includes successful cases with no refusal matcher, so reading
+`expectError` before checking that it exists failed the clean CI typecheck.
+The spec now checks the property first, then still requires a real regular
+expression. Both language assertions and a clean typecheck cover the fix.
+
+## The POS retry fixture and its retained account charge
+
+The retry fixture's lifetime and the account journal's source rows have to
+agree. The POS retry charged an account in the demo restaurant, then tried
+to delete its order before the account. The journal correctly kept that
+source, so cleanup threw and stopped the API gate before the later cases.
+
+That retry now uses the existing disposable account restaurant and leaves
+its order, account and dish for the final restaurant cascade. Its borrowed
+menu and restaurant switches are still restored after the case. The focused
+spec reproduces the foreign-key refusal, checks the private fixture, and
+proves cleanup restores the switches without deleting retained sources.
+
+## Background jobs: what a stuck job tells, and when it stops (2026-11-12)
+
+A full review of the background work (`loop/reviews/full-review-background.md`)
+found eight places where a job and its promise had to agree with nothing
+checking that they did. Each is now pinned:
+
+- **The overdue duplicate-refund bell rang once per restaurant, ever.** Its ID
+  was the restaurant alone, written with "ignore duplicates", so a second stuck
+  refund months later rang nothing and the bell kept the first case's amount.
+  The key is now the restaurant and the stuck `refunds_due` row
+  (`src/lib/recovery/overdue.ts`). `refunds.spec.ts` resolves one case, sticks
+  another, and checks a second reminder with the new amount and table.
+- **A ticket email retried within seconds and gave up after three blips.** A
+  failure released the claim at once and the next drain took the same rows.
+  `ticket_email_outbox.next_attempt_at` now holds 1 min, 10 min, then 1 h; the
+  fourth failure, or a refusal no retry changes (a 4xx other than 429 and an
+  idempotent request in flight), finishes the rows as `failed` with
+  `failure_reason`. The claim skips rows waiting out their backoff and takes
+  fresh tickets before retries, so failing rows never fill every claim.
+  `card-email.spec.ts`, `background-reliability.spec.ts`.
+- **A ticket retry rebuilt a different body under the same key.** Resend
+  refuses a reused key with a changed payload, so a ticket delivered on the
+  first try (reply lost) finished as `failed`. The rendered body is stored on
+  the batch's rows (`mail_body`, cleared when it finishes) before the first
+  send and resent as is (`src/lib/ticket-email-body.ts`); Resend's
+  `invalid_idempotent_request` means an email went out under that key and
+  counts as sent. `card-email.spec.ts` sends, crashes, retries, and compares
+  the two bodies byte for byte.
+- **A missed cancellation kept a paid tier forever.** Recovery only re-read
+  locked and past-due restaurants. `restaurants.plan_period_ends_at` now keeps
+  the paid period's end, and recovery re-reads Stripe for an active or
+  trialing paid tier whose cancellation date or period end passed more than
+  three days ago, storing the answer through the webhook's transition (so a
+  cancelled subscription goes to Carta, an unpaid one locks). A failed Stripe
+  read writes nothing. Restaurants synced before the column existed are read
+  once (a page per run) to store their period end, without waiting for a
+  webhook. `recovery/__tests__/subscriptions.spec.ts`.
+- **The ticket drain got only the cron's leftovers.** It ran in `after()` once
+  five 10-second jobs had finished. It now runs alongside them with its own
+  40-second budget, stops between groups at the deadline and releases what it
+  had claimed; the route answers after it. Each job's page grew from 10 to 25
+  items (each item still stops at the job's time budget). `route.spec.ts`,
+  `card-email.spec.ts`, `bounds.spec.ts`.
+- **A re-queued fee looked new.** `enqueue_fee_reconcile` reset `enqueued_at`
+  on every refund event, so a stuck charge never aged into the overdue
+  warning. Only the generation moves now. `background-reliability.spec.ts`.
+- **A dispute event in error was polled forever and blocked deletion.** After
+  ten attempts `fail_stripe_dispute_event` sets the event to `review`:
+  recovery no longer polls it, `admin_delete_restaurant` does not wait on it,
+  it is archived with the restaurant, and `pnpm money` lists it. A new webhook
+  delivery may still claim and finish it. The restaurant's dispute readers
+  (Costs and Analytics summary, order history) show it as "Requiere revisión"
+  / "Needs review", counted apart from pending, never as both
+  (`DisputeReport.review`, `NEEDS_REVIEW`). `disputes/__tests__/recovery.spec.ts`,
+  `read.spec.ts`, `disputes.react-component.spec.tsx`.
+- **A forgiven walkout stamped the visit card and emailed a ticket** (owner's
+  decision, 2026-11-12: it does neither). Both triggers now skip an order
+  settled by `write_off_remainder_v1` (`tabletap.walkout_writer`, set only
+  around the loop that settles the orders) or carrying a `forgive`
+  adjustment (`settled_by_write_off`). `background-reliability.spec.ts`.
+
+Schema: `ticket_email_outbox.next_attempt_at`, `failure_reason`, `mail_body`;
+`restaurants.plan_period_ends_at`; `stripe_dispute_events.state` accepts
+`review`; `settled_by_write_off(uuid, uuid)` is new (in `drop.sql`), with the
+partial index `order_adjustments_forgiven_order` it reads. The
+code writes `plan_period_ends_at` and the outbox columns, so production is
+migrated before this merges.
+## Review leftovers (2026-11-12)
+
+Ten confirmed findings from the full review of `train/queue-all`
+(`loop/reviews/full-review-*.md`), each two places that had to agree.
+
+**bg4, the fee queue took refunds of charges that were never ours.** The
+Connect webhook enqueued every `charge.refunded` / `refund.*` on the account,
+the recovery only knew four tables to find the charge's account in, and a row
+it could not resolve stayed forever and held `admin_delete_restaurant` at
+`provider`. Now one list, `FEE_ACCOUNT_SOURCES` in `refunds/fee-queue.ts`
+(fee returns, diner checkouts, refund operations, refunds due, payments), is
+what the webhook checks before enqueueing, where the recovery reads the
+account, and what the deletion guard waits on. A row none of them explains is
+acked at its generation as not ours. `fee-queue-scope.spec.ts` and
+`fee-returns-schema.spec.ts` pin all three.
+
+**bg8, the delete archive missed money tables.** The archive was pinned
+against its own list, so fee returns, refund failures and coverage, fee
+epochs, coupon redemptions, write-off and discount approvals, loyalty
+redemptions and every bill split table cascaded away uncopied. They are
+archived now (keyless tables get an md5 id of their key), and
+`admin-safety-schema.spec.ts` walks every `on delete cascade` path from
+`restaurants` and fails on any table that is neither archived nor named in
+`NOT_BOOKS` with its reason.
+
+**bg9, one Stripe account, one restaurant.** Every webhook helper finds the
+restaurant with `maybeSingle()`; a duplicate account made each refund event
+raise and answer 500. A partial unique index now refuses the duplicate. The
+gate scripts that borrow a fake account give a second restaurant its own
+(`acct_api_check_other`, `acct_api_check_account`).
+
+**bg10, the fee month rolled over in UTC.** The cap and the currency lock
+used the UTC month, so in Mexico City both rolled at 18:00 on the last day.
+`fee_month(restaurant)` reads the restaurant's timezone and is the only month
+`reserve_platform_fee`, `record_session_fee` and `currency_locked_until` use.
+`fee-month-currency.spec.tsx`.
+
+**access1, a table member could take over the sitting's card.** Removing a
+card took its code; replacing it took nothing, so one phone could redirect the
+table's ticket emails and stamps to its own card. `attach_loyalty_card_v2`
+refuses a diner replacing a different card without that card's code
+(`taken`), under the row lock. Staff replace as before.
+
+**access2, the diner's "taken" was an address oracle.** A diner's link now
+answers `submitted` whether the address was linked or already on another
+card, in the card-email route and in card creation, and is limited per network
+address as well as per card. Staff still learn which card holds it. The diner
+screen notes what `submitted` means. `diner-answer.spec.ts`, `card-email.spec.tsx`.
+
+**access3, a far history page read the whole history.** The held-sales
+history page is clamped to the last page there is before reading. That first
+fix still read each clock's full prefix; review N13 below replaces those reads
+with one indexed decision clock. `held-sales-history-route.spec.ts`.
+
+**screens4 and screens5, errors said more than once.** Order history reads a
+page's chargebacks once (`useDisputeHistory`), only for orders a card could
+have paid, shows one alert when that fails and no per-row loading line, so the
+skeleton is unchanged. CardEmail says a failed read once.
+`order-history-disputes.spec.tsx`, `card-email.spec.tsx`.
+
+**M4, a legacy split under-tipped later shares.** A v1 split locked before
+`food_principal` read what its orders still owed, which shrank as shares were
+paid and was divided by the shares again. `splitTipPrincipal` uses the
+`amount` it froze, in the preview and the pay route alike.
+`tip-base.react-component.spec.tsx`.
+
+**Every bill read ran the allocation backfill.** `order_coverage` called
+`backfill_payment_allocations` on each read, so every bill, split, checkout and
+cancel preview took the restaurant's money lock, scanned the receipts and
+re-locked cancelled legacy orders, even with nothing to backfill. It was the
+database's largest cost (45,559 calls, 6,900 s and 116 MB of WAL on dev in
+eight days) and made readers queue behind money writers. A read now runs the
+backfill only when `payment_allocations_need_backfill` says it could change
+something, a check that mirrors both of the backfill's loops and may say yes
+for nothing but never no for something. The two places that must agree are
+that check and the backfill's own conditions; `coverage-read-no-write.spec.ts`
+compares them, and `scripts/probe-coverage-no-write.mjs` runs `order_coverage`
+inside `begin read only` on the demo data and compares its numbers with the
+old body's.
+
+## Statement text needs the same day boundaries as HTML
+
+The HTML headings and the plain-text day list had to agree about where each day
+begins. Items already had newlines in this checkout, so the fully concatenated
+body from the mail log was not reproduced. The missing blank lines between days
+and the inline payment URL were reproduced. `mailText` preserves intentional
+paragraph breaks; `mail-plaintext.spec.ts` snapshots English and Spanish days,
+items, balance and a payment URL on its own line. `mail-idempotency.spec.ts`
+checks that the provider payload keeps those newlines.
+
+## Receipt paragraphs must survive the text builder
+
+The receipt array contained empty lines to separate the header, dishes, total
+and footer, but its final filter removed every separator. The HTML layout and
+the text builder had to agree about those paragraphs. POS and diner receipts
+now use `mailText`; `mail-plaintext.spec.ts` checks both languages and a counter
+sale without a table, so an absent table does not split the header.
+
+## Card ticket links must remain readable outside HTML
+
+The HTML stop link and the card ticket's text footer had to offer the same clear
+way to stop emails. The text put the URL beside its label. `ticketMail` now
+keeps the receipt paragraphs and gives the stop URL its own line, while still
+replacing the receipt's promise not to keep the address with the card's footer.
+`mail-plaintext.spec.ts` snapshots both languages; `card-email.spec.ts` checks
+the actual outbox sender with its database and mail provider mocked.
+
+## Return polling batches SQL progress (SQL read cost 1)
+
+The Returns list and the SQL progress rules had to agree for every open refund.
+Limiting concurrency protected the pool, but still sent one RPC per refund on
+every poll. `refund_operations_progress_v1` delegates to the existing per-id
+function, scoped to the restaurant and requested ids. The reader joins balances
+by operation id and continues a capped response; missing, repeated or invalid
+balances fail the read instead of looking paid. `progress-reads.spec.ts` compares
+batched balances with per-id answers, checks one ordinary batch, capped pages,
+identity, errors and the absence of fee recovery on this read path.
+
+## Takings bound return evidence before grouping (SQL read cost 2)
+
+The day shown by Orders and the SQL event reader had to agree on where the
+window applies. Filtering the function's output still built the whole refund
+history first. The required `p_from` and `p_to` overload selects candidate
+operations before evidence aggregation and filters each event before
+`distinct on`. It checks all evidence for those operations, including conflicting
+records outside the window and other owners of the same provider refund.
+Undated successes still fail the read. The existing signature remains for
+inclusive shift trails. Open-ended reads pass `infinity`, preserving their
+existing lower-bound-only behavior. `money-read-sql.spec.ts` pins SQL ordering,
+shared progress rules, permissions and reset coverage; `takings-window.spec.ts`
+checks the takings RPC arguments and partial refunds on either side of midnight.
+
+## Cash case tests narrow optional matchers
+
+The API case list and the contract test had to agree that only some cases carry
+`expectError`. Checking the value with `instanceof` happened after an invalid
+property access on the inferred union. The test now checks the property first;
+its two language assertions are unchanged. `tsc --noEmit` checks the narrowing,
+and `cash-held-api-contract.spec.ts` still checks both actual refusal messages.
+
+## Order history and its allowed restaurant list
+
+The dashboard's history query and its RLS check had to agree about how much
+work one read needs. `has_role(restaurant_id, ...)` checked membership for
+every order, so a small history page still paid for the restaurant's entire
+history. Service requests and the kitchen's tickets and calls used the same
+row-dependent pattern.
+
+Those four SELECT policies now compare `restaurant_id` against an uncorrelated
+array subquery. PostgreSQL builds that array once as an InitPlan and can use
+the restaurant index. The existing helpers still decide which restaurants
+belong in it: founding owners, co-owners and the allowed staff roles retain
+their rows, kitchen retains its separate projection, and platform admins get
+no extra direct access. Helper calls now scale with restaurants, not orders.
+No function, grant or write policy changes. In particular, the diner tracker
+still reads its single order server-side.
+
+`orders-rls-equivalence.spec.ts` parses the saved old policies and the last
+current definitions, compares their audiences, and checks owners, co-owners,
+multiple memberships, other tenants, kitchen, platform admins and no user.
+`orders-rls-probe.spec.ts` checks the read-only probe's actor isolation,
+rollback, production refusal and row-identity comparison. Claude runs
+`scripts/probe-orders-rls-equivalence.mjs` before applying the schema and
+again with `--compare /tmp/orders-before.json` afterward, without reseeding
+between captures. `--explain` includes the actual authenticated plans.
+The probe refuses a comparison if the underlying rows or memberships changed;
+equal counts alone cannot hide a different restaurant's rows.
+## A slow poll and its next wait must agree
+
+Nine older pollers still used fixed intervals: table membership, the diner bill,
+the other-table notice, finished orders, the connection probe, held sales, split
+receipts, the staff calculator and the order tracker. A slow read could overlap
+the next one; the ones with busy guards still started again before a full wait
+had passed. They now share `pollAfterSettle`, which waits for the whole read
+before scheduling its next timeout, even on failure. Each keeps its interval,
+first-read timing, visibility rules and stop conditions. Held-sale retries join
+the active send rather than mistaking a busy guard for a completed upload.
+
+`poller-cadence.spec.tsx` fails against all nine original pollers and checks slow
+reads, the full wait after completion, teardown and hidden tabs.
+Focus and visibility events also join an unfinished read. Stop-condition checks
+keep the connection probe and closed-table recheck stopped, while the tracker
+keeps following delivered food until payment arrives.
+`poll-after-settle.spec.ts` checks retries, focus/visibility events, delayed starts,
+one-shot bills and cleanup. `invariants/polls.spec.ts` has no exceptions left.
+
+## Onboarding's owner and currency must come from the same lookup
+
+The Connect onboarding guard resolved an owner, then the route asked for the
+membership again to get the restaurant currency. React cache memoises a server
+render, not a route handler, so that second call repeated auth and both table
+reads. The route now reuses `actingManagerWithRestaurant` and still explicitly
+requires the owner role before calling Stripe. `auth-round-trips.spec.ts` counts
+one auth call and one read each of restaurants and staff, checks the owner's
+currency and email, and refuses managers, waiters, cashiers, kitchen logins,
+non-members and signed-out callers before Stripe is reached.
+
+## Review N3 — Checking a table payment
+
+The identity reader and schema had to agree on `restaurant_tables`. A typo
+returned an unverified payment without ever checking the saved Stripe page.
+The schema-aware route spec now checks the relation and both identity filters.
+
+## Review N4 — Approving interrupted kitchen work
+
+The saved order and held-line parser had to agree on `notes` and component
+extras. Approval now keeps bounded copies of both, with the original flattened
+extras unchanged so the receipt never adds an extra twice.
+
+## Review N6 — Retrying an unread ticket address
+
+The database read and outbox outcome had to agree on absence. A failed read
+now throws into the existing backoff path; only a successful read can finish
+a ticket as having no email. The spec retries after the database recovers.
+
+## Review N8 — Each subscription source has time to run
+
+Unpaid subscription reads and cancellation recovery had to share time fairly. Each source now has a reserved part of the job budget, so a persistently unpaid queue cannot hide expired paid tiers or period backfills.
+
+## Review N9 — Overdue refunds remind each restaurant
+
+The global oldest-age metric and per-case reminders had to agree on their scope. Reminders now inspect the bounded rotating page, retaining the existing per-case notification key across repeated runs.
+
+## Review N10 — Ticket retries run before tickets expire
+
+The retry clock and worker schedule had to agree. An independent scheduled
+GitHub job now requests recovery about every five minutes within the existing
+24-hour email lifetime. Vercel keeps the daily fallback. More frequent bounded
+runs also raise queue throughput; neither path waits for another payment.
+
+## The retry schedule and the production plan
+
+The five-minute retry change passed unit tests but Vercel rejected the deploy:
+Hobby only accepts a daily cron. The schedule and the plan have to agree before
+an email can ever be retried. The frequent job now runs in GitHub Actions,
+without copying the production cron secret, and Vercel's daily job remains.
+
+The server verifies GitHub's signature and the exact main-branch recovery job,
+including repository and owner IDs. A similarly named fork, a pull request,
+another workflow or a token for another endpoint must not open this global
+writer. The client refuses an unknown identity provider, follows no redirect,
+and prints no identity or response body to the public job log.
+
+`github-cron-auth.spec.ts` signs real fixture tokens and rejects forged,
+expired and wrongly scoped callers. `recovery-scheduler-client.spec.ts` checks
+the two requests and failed observations. `ticket-email-schedule.spec.ts`
+models recovery without new traffic, including a delayed runner, before the
+unchanged 24-hour expiration. `recovery-schedule-platform.spec.ts` keeps the
+fallback deployable and the scheduled job on its approved branch.
+
+## Review N1 — Collecting the counter quote
+
+The cashier's quote and locked receipt had to agree. Counter collection now
+sends the expected amount and currency to a required-argument SQL overload.
+It checks both after taking the money and order locks, before changing the
+ticket choice or marking anything paid. A concurrent discount or currency
+change refuses the stale quote without recording a smaller receipt.
+
+## Review N2 — Discounts leave gratuities owed
+
+The route's coupon base and both discount writers had to agree on principal.
+They now subtract existing tips before pricing and distributing the discount.
+A full coupon on MX$100 food plus MX$20 tip leaves MX$20 owed. Direct manager
+discounts and waiter requests use the same base, and approval refuses an old
+request that included gratuities. SQL also refuses inconsistent components.
+
+## Review N5 — The split switch reaches the menu and writers
+
+The owner's setting and diner payment controls had to agree. Cached and live
+restaurant projections now carry `split_enabled`; both the current locked
+writer and the legacy proposal route refuse new splits when it is off.
+Existing parts remain payable, and ordinary bill payment stays available.
+
+## Review N7 — The payment keeps its own email choice
+
+The successful receipt and ticket trigger had to agree on the cashier's choice.
+Counter, table and split collection pass that choice into the locked payment
+transaction. Refused, failed and duplicate collections roll back any tentative
+flag change. The latest successful split collection still decides for only its
+frozen orders; a new round at the table is outside that choice.
+
+## Review N11 — Cached menu pages precede schedule filtering
+
+The Data API page and currently serving menus had to agree on completeness.
+Cached raw menus, categories, items and dietary tags now use uniquely ordered
+pages before the time-sensitive filter runs. A thousand scheduled-closed
+breakfast items cannot hide a dinner dish on the next page. Anonymous menu
+reads retain their existing RLS filters.
+
+## Review N13 — History pages one decision clock
+
+The page boundary and merged decision order had to agree in the database.
+A stored `decision_at` column and tenant-scoped index merge approval and
+resolution clocks before paging. A request past the end counts once, clamps
+to the last page and retrieves at most that page plus one lookahead row,
+including its resolution evidence, even under a smaller Data API row cap.
+
+## Audit of #648 — The five-minute schedule that ran every few hours
+
+The spec's "every five minutes" and the scheduler had to agree. GitHub ran
+the workflow 8 times in two days, 3.5 to 10 hours apart, and N10's test
+modelled a delay, not a dropped run. The database now schedules the call
+itself: pg_cron job `tabletap-recover` posts to the route every five minutes
+with the Vault secret `cron_secret` as its bearer, and does nothing on a
+project without that secret. `ticket-email-schedule.spec.ts` counts only the
+daily Vercel cron and the pg_cron job; `recovery-schedule-platform.spec.ts`
+pins the job, its Vault read and the unschedule in `drop.sql`. The route's
+answer now carries the ticket drain, and the GitHub backup fails on a failed,
+expired or unattempted ticket (`recovery-scheduler-client.spec.ts`).
+
+## Audit of #648 — Polls the invariant could not see
+
+The poll rule and two fixed ticks had to agree. `SettleTableDialog` bumped a
+counter on a 5 s interval that re-ran its fetching effect, and
+`useMenuFreshness` called `router.refresh()` every 45 s. Both use
+`pollAfterSettle` now, and `invariants/polls.spec.ts` flags a setter chain and
+`router.refresh` as well as `fetch`; its sabotage cases are the two old shapes.
+A read that never answers is aborted after `max(2 × interval, 15 s)` and the
+poll goes on (`poll-after-settle.spec.ts`, `poller-cadence.spec.tsx`).
+
+## Audit of #648 — Smaller agreements
+
+- A MX$0 table close and the cashier's ticket choice: the close now uses a
+  six-argument `settle_orders_v2` that marks the skip under the money lock
+  (`zero-close-ticket-email.spec.ts`).
+- The ticket-choice wrappers and the kitchen board: they lock their rows in id
+  order and rewrite the flag only where it changes
+  (`review2-money-schema.spec.ts`).
+- The owner's split switch and the diner's copy: `split_disabled` with its own
+  ES and EN message, and the bill sheet stops offering to divide on it.
+- A kept production demo login and what a stranger gave it: a production
+  reseed deletes its MFA factors, sessions and pending email change
+  (`mock-logins.spec.ts`, `seed-logins.spec.ts`), and the seed's historical
+  receipt setting is cleared however the seed ends.
+- Shared read-only fixtures and failure order: the api and attack runners
+  fingerprint shared rows after each case and name the first case that
+  changed one (`run-fixtures.spec.ts`).
+### Legacy split tips use an amount when the frozen principal is unknown (N14)
+
+A split locked before `food_principal` existed froze gross debt, including any
+earlier tips. Using it as food offered a tip on a tip; subtracting today's tips
+cannot distinguish tips present at the lock from tips added by later shares.
+The owner chose exact amounts for these old splits. The read exposes a null
+principal, the screen offers no percentage presets, and the route refuses a
+percentage before any fee reservation. Zero-tip and capped exact-tip payments
+remain available. Trusted saved principals, including zero, keep their flow.
+A resumed old checkout must have the selected tip and total: an unchanged retry
+reuses its page without a second fee; a different tip gets an explanation.
+Unit and browser-component specs cover both languages, custom input, caps,
+no-tip payment, and preview/request agreement. No historical data is rewritten.
+
+### A highlighted promotion row is part of its listbox
+
+The live layout gate reported a coupon row's painted background as touching
+the list border, despite its text having 12px of padding. Multiple valid options
+also looked like independent buttons touching each other. Full-width listbox
+options now use their own inner text bounds and share the widget's background
+edges. This also checks text inside divided rows that the old full-row shortcut
+skipped. The real coupon dialog was reproduced at phone and desktop widths;
+the audit self-test includes valid adjacent options, cramped text on all four
+sides of both rows, and ordinary/partial/outside controls that must still fail.
+
+### A concurrent legacy checkout keeps the tip the diner selected
+
+Two requests could both read no open attempt before the shared opener returned
+the winner's existing session to the loser. Checking only the initial resume
+path silently redirected the loser to a different tip or total. Red route
+regressions reproduced both mismatches as HTTP 200. Both return paths now use
+one quote check before exposing the URL, preserving the existing attempt and
+fee lifecycle. Matching exact and zero-tip winners remain usable; invalid saved
+tip evidence refuses verification on either path. The race regression models
+the shared opener's documented return contract without making provider calls.
+
+### A diner whose share grew can still pay it (review F1–F3)
+
+A stale exact-tip page was reopened only when its tip and total matched. A diner
+who cancelled the Stripe page and then ordered dessert got 409 on every Pay
+until Stripe expired the page 30 minutes later, worded as the waiter's
+"collect again". The route now expires a resumed page whose total is stale,
+closes its attempt (and fee) through `resumeDinerAttempt`, and opens one at the
+new total; a concurrent winner keeps the strict check. When the old page cannot
+be closed the diner sees `apiErr.splitPageChanged`. The route and the screen now
+share `splitTakesExactTipOnly`, tested against one fixture table
+(`exact-tip-cases.ts`) on both sides; `apiErr.splitExactTip` tells a stale
+bundle to reload. Known follow-up (F4): modern v1 splits with a principal still
+reopen an earlier page or return a winner whose tip differs from the screen.
+
+## Terms acceptance history
+
+Signup and later consent both wrote the restaurant's one current acceptance,
+while deletion kept the books but not that acceptance. Both writers now save
+the current value and an individual history row together; deletion copies each
+row with the books before the cascade. The old value is backfilled once, with
+unknown identity and text hash left empty rather than guessed.
+`acceptance-history.spec.ts` exercises repeat acceptance, permission and failure;
+`signup-verification.spec.ts` covers the first acceptance and rollback;
+`acceptance-schema.spec.ts` pins the archive and service-only grant. Database
+execution and cascade behavior still need Claude's isolated gate.
+## Removing an account email
+
+The privacy notice and the account screens had to agree: an address could be
+saved but neither the customer nor staff could remove it. A manager or owner
+can clear it in the account dialog; the statement code holder can confirm its
+removal on the statement. Both use the same restaurant-scoped route, and the
+activity records the removal without keeping the address. A one-time statement
+email still uses the address the customer types for that message.
+
+### Account email removal matches the caller and statement
+
+The staff limit and the customer code limit shared an IP budget before staff
+authorization, so a busy restaurant could exhaust both. Staff now have a
+restaurant budget after authorization; code holders keep the small IP budget.
+The statement API and its button also have to agree on whether an address
+exists. The button disappears after removal, and the shared confirmation dialog
+works where native confirms are blocked. The account removal specs pin these
+boundaries; the API gate checks manager, customer, retry and unknown code.
+
+### Ticket email footer and colors
+
+The card footer belongs inside the same receipt container as the ticket; removing
+the old promise must also remove its paragraph. The receipt colors follow the
+Counter tokens so the email and the app do not drift apart. Both languages have
+HTML snapshots in `ticket-email-polish.spec.ts`.
+
+### Ticket email one-click unsubscribe
+
+A mail provider posts the one-click form to the link in the email header. The
+public link must route that POST to the same card update as the confirmation
+button, while a GET only opens the confirmation page: scanners open links.
+`ticket-stop-one-click.spec.ts` checks the route and rewrite, and
+`card-email.spec.ts` checks the outgoing header.
+
+### One-click ticket retries and confirmation
+
+The provider's retry and the card update had to agree after the token was
+cleared. A well-formed one-click form now returns the same success for a match,
+a retry or an unknown token; the confirmation page still gets its 404. Invalid
+forms and rate limits still stop before the update. `ticket-stop-one-click.spec.ts`
+checks both paths. Emails already queued before one-click support keep their
+original headers until they are sent.
+
+The emailed PDF and Settings preview both read the restaurant's fiscal fields
+through `ticketPlace`; the preview's sale lines alone are samples. A comparison
+of both actual paths with one restaurant row did not reproduce the reported
+regime mismatch. `ticket-place-regime.spec.ts` pins their saved regime, and
+`ticket-email-polish.spec.ts` checks the old receipt footer is absent in both
+languages.
+### Reopened split pages use the diner's current quote (F4)
+
+The phone showed its new tip while an older Stripe page could still charge the
+previous one. Both share models compare the saved tip and total before returning
+a page. A stale total is closed before a replacement is opened; an unverified
+closure or a concurrent winner is never replaced. Route tests cover both models.
+
+
+| Regression | Two places that must agree | Check |
+| --- | --- | --- |
+| A changed tip leaves a cancelled split payable | The diner's current quote and the resumed Stripe page | `legacy-split-tip-route.react-component.spec.tsx`, `split-slots-pay.spec.ts` |
+| A racing page explains the next step | The refusal and the diner's available controls in both languages | `split-race-copy.spec.ts` |
+| A slot retry preserves a valid page | The server's slot amount and the phone's expected amount | `split-slots-pay.spec.ts` |
+| Slot state takes precedence over a food read | Revision, payment and reservation checks and the percentage-tip read | `split-slots-pay.spec.ts` |
+
+### A changed tip leaves a cancelled split payable
+
+A resumed page and the current tip had to agree. A different tip now closes
+the earlier page through the same verified expiry and fee release as a changed
+total. If closure is uncertain the diner is asked to retry; a concurrent
+winner stays open and a different quote is refused. Route tests cover a
+cancelled modern split, a later dish and percentage tip, slots and races.
+
+### A racing page explains the next step
+
+The refusal and the screen's controls had to agree. A diner with no tip field
+can now understand the English or Spanish message and try again.
+
+### A slot retry preserves a valid page
+
+The phone's expected amount and the server's selected slots had to agree
+before expiring a page. A stale phone amount now leaves the valid page open.
+
+### Slot state takes precedence over a food read
+
+The selected slots and the percentage-tip food read had to agree on which
+answer comes first. Stale, paid and taken parts are reported before an
+unavailable food read can hide them.
+## Deleted restaurant books expire after ten years
+
+| Places that must agree | What went wrong | What checks it |
+| --- | --- | --- |
+| Restaurant deletion and scheduled retention | Archived books had no expiry job and stayed indefinitely | `accounting-purge.spec.ts`, `recovery/__tests__/route.spec.ts` |
+
+The archive records when the accounting copy is made in the deletion transaction.
+The scheduled worker removes only records older than ten years for restaurants
+that no longer exist, in bounded batches. The SQL contract pins the strict
+boundary; a database probe must check the actual boundary and restored IDs.
+
+
+## Accounting purge and recovery reporting agree
+
+| Places that must agree | What went wrong | What checks it |
+| --- | --- | --- |
+| Recovery jobs and the production scheduler | A failed accounting job could still report success | `recovery-scheduler-client.spec.ts` |
+| Retained books and the expiry worker | A second deletion timestamp rewrote old archives, and a restored restaurant was not excluded | `accounting-purge.spec.ts`; database probe |
+| Retention deadline and recovery age | Pending age included the ten years books must be kept | `accounting-purge.spec.ts` |
+
+The scheduler checks the accounting result. The purge uses the existing
+`retained_at`, excludes live restaurants from both deletion and pending counts,
+and reports the age since the retention deadline. The SQL contract test reads
+the function itself; the database probe must exercise the actual predicate.
+
+## Acceptance evidence and privacy
+
+The privacy notice and acceptance writer disagreed about network details.
+Acceptance keeps neither IP nor browser; `acceptance-history.spec.ts` and
+`rate-limit-key.spec.ts` check both writers and the address readers.
+
+## Acceptance history access
+
+The authenticated table grant disagreed with the kitchen denial check. Only
+the service role may read this history; `acceptance-schema.spec.ts` pins it.
+
+## Legacy acceptance capture
+
+Seed updates wrote history even when the values did not change. The capture
+trigger now checks the values; `acceptance-schema.spec.ts` pins that condition.
+
+## Acceptance retries and history growth
+
+Repeated accepts could grow immutable history without bound. The same user,
+version and hash within a minute share a row, and SQL bounds the text.
+`acceptance-schema.spec.ts` pins the lock, deduplication and limits.
+
+## Acceptance writer authorization
+
+The route checked ownership but its SQL writer trusted the caller's user and
+restaurant. The writer now checks the owner too; `acceptance-schema.spec.ts`
+pins the check. Claude's database probe must exercise these contracts, including
+concurrent retries and the ten-year archive purge.
+
+## Earlier acceptance rows and the backfill index
+
+An earlier draft could have more than one acceptance for a restaurant. Giving
+every row the backfill source would make the new unique index fail. The schema
+keeps the earlier backfill marker and labels the other rows separately;
+`acceptance-schema.spec.ts` pins the migration.
+## Rate limits that capped the answer, not the cost (security review 2026-11-17)
+
+Three limits each guarded one side of something that had to agree:
+- The floor's membership poll started the session check and two membership
+  reads before awaiting its limiter, to save a round trip. A caller over the
+  limit got 429 but still cost auth plus two reads per request. The limiter is
+  now awaited first.
+- Diner card-email changes were counted per network address, removals included.
+  One diner on the restaurant's Wi-Fi could spend the shared allowance and
+  leave everyone there unable to remove their own address for an hour. Removal
+  probes nothing and withdraws consent, so it is no longer counted; linking is.
+- Dispute history paged through the restaurant's whole dispute book and
+  checked each case's ownership for any request, including one with no order.
+  An empty request now answers `{}` without reading, and reads are capped at 30
+  a minute per manager.
+
+Check: `src/lib/__tests__/secreview-1117-limits.spec.ts` (fails on the old code
+for the first two; the third asserts no dispute read happens).
+## Android layout — separators stay with the word before them
+
+The GitHub layout gate renders text like Linux/Android Chrome, which wraps
+where macOS did not. A " · " joint could start a line (check payment, divided
+bill, part receipt), the dish or combo name ran up against its price (3px), and
+the account statement's order lines painted 1px into each other. Every inline
+" · " now joins with no-break spaces on both sides of the dot (a line can neither start nor end with one); the dish/combo head is
+`.tt-detail-head` (elastic name with `min-width: 0` and `overflow-wrap`, fixed
+price); `.tt-statement-lines` spaces its lines with a parent `gap`.
+
+The i18n strings (`es.ts`, `en.ts`) join with the same no-break spaces around the dot.
+
+## A gate's fake card reader that outlived every run (2026-11-17)
+
+The API cases lend Demo Bistro a fake Stripe account (`acct_api_check…`) so
+card routes get past "this restaurant takes no cards", and put back what they
+found afterwards. A run stopped mid-case left the fake on. Every later case
+then saved the fake as the "original" and restored it, and `db:mock` kept it
+too, because a reseed preserves a real test account. Every card route then
+failed at Stripe (500/502) and the attack gate refused its admission case, on
+every branch, looking like a bug in whatever PR was being gated (#653).
+`scripts/lent-stripe-account.mjs` names the fakes once; restores and reseeds
+never keep one. Check: `src/lib/__tests__/lent-stripe-account.spec.ts`.
+
+
+## Shared card email and the rewards read
+
+The save response and the later rewards read must agree. A unique email index
+refused a second card while the diner saw the same save answer, so the later
+read exposed whether another card had that address. Each card now saves its own
+address and consent, with a separate stop token. `shared-address.spec.ts` checks
+both starting states, the schema, and stopping one card without touching the
+other; `review2-deferred-probes.spec.ts` keeps the original regression.
+
+## Admin tier billing: five gaps from the 2026-11-17 review of #660
+
+- The emailed pay link checked the assignment before the billing lock; an owner
+  who subscribed to something else in between had that subscription moved to
+  the emailed tier and invoiced at once. It now checks inside the lock
+  (`assertStillAssigned`), bound to the assignment by its pay-by day (`until`),
+  and refuses once anything is live.
+- A payment-link assignment left the owner's older open Checkout payable, whose
+  subscription would then replace the assigned tier. It now runs under the
+  billing lock and closes every open Checkout first.
+- "From the next bill" accepted a subscription already set to end, promising a
+  bill that never comes; and a non-monthly one, where Stripe charges at once
+  whatever the proration. Both are refused with their own message.
+- A signed-out owner opening the pay link lost it at sign-in. `/login?next=`
+  keeps it, and only that exact link shape (`safeLoginNext`).
+
+Checks: `admin-tier.spec.ts`, `billing-assigned.spec.ts`.
+
+## Suspending a restaurant without losing money already collected (2026-11-18)
+
+A suspension refuses new sales on checkout, table orders and POS through one
+shared answer. The POS case is two places that must agree: refusing every POS
+request would also have refused a sale the till had already collected offline,
+and the device would have discarded money that is in the drawer. A collected
+sale from before the suspension is recorded; one from after is kept on the
+device as held. Checks: `pos-atomic.spec.tsx` (both collected cases),
+`cart-quantity-routes.spec.ts` (all three routes refuse and write nothing; the
+table-order case fails without its check), `admin-suspend.spec.ts`.
+## A held POS sale offers a ticket when email is uncertain
+
+The one-sale email and the held sale's replay disagreed: replay kept the card
+email skip but had no one-sale address. The first request may already have
+sent the email, so the held ticket tells the cashier it may not arrive and
+offers the printable receipt. `card-email-pos.spec.tsx` checks a lost reply,
+a sale taken offline and a sale without a one-sale address.
+## A zero-balance retry keeps the collector's ticket choice
+
+| Places that must agree | What went wrong | What checks it |
+| --- | --- | --- |
+| The successful collection and the later zero-balance close | A retry could replace the collector's ticket choice and send an unwanted email | `zero-close-ticket-email.spec.ts`; database probe |
+
+The receipt and the close must agree on whose choice applies. The close checks
+recorded allocations under the money lock before changing any order's mark;
+when a receipt exists it keeps the successful collector's choice for the whole
+bill. A genuinely free bill still uses the current cashier's choice. The unit
+spec models both choices and pins the SQL; Claude's database probe must exercise
+the real transaction, including a failed close and a retry.
+## Pay link bound to a day, and free moves outside the lock (review 1117b, findings 3 and 7)
+
+The pay link matched any trial on the same tier and pay-by day, so a replaced
+assignment recreated for the same tier and day reopened an old link; and a free
+assignment ran outside the billing lock, so a Checkout opened just before it
+could still be paid and its subscription wrote over the free tier. Each
+payment-link assignment now stores `restaurants.tier_assignment_id` and the link
+carries it (`a=`); a free move runs under the lock, closes open Checkouts and
+clears the id. Checks: `billing-assigned.spec.ts`, `admin-tier.spec.ts`.
+## Dish deal callout and selected price
+
+The deal hint and the add-to-cart price must describe the same selection. The
+hint looked for the next deal even when the chosen quantity already earned one.
+Both now use the selected line's price and saving, including other cart lines;
+`deal-callout.spec.tsx` renders quantities one through three in both languages.
+
+## A price move must not depend on when the job runs (2026-11-18)
+
+A job that changed a subscription's price after the effective date could miss
+a renewal billed before it ran, charging the old price for another month, or,
+run early, prorate a charge nobody was told about. The move is a Stripe
+subscription schedule whose second phase starts at a renewal boundary at least
+30 days after the notice; Stripe bills it there. Check: `price-moves.spec.ts`.
+## The diner menu has two loaders that must agree (2026-11-18)
+
+A suspended restaurant first read as "not taking orders" only through the
+cached menu loader, which runs in production; dev and any uncached read use
+`loadOrderingData`'s own restaurant read, so the diner still saw add buttons
+there. Both now go through `asDinerSees`. Seen in the browser while checking
+the suspension, before it shipped.
+
+## Price-change recipients read from Stripe too (review 1117b, finding 4)
+
+Scheduling a change queued the restaurants whose local `plan` was the tier.
+A subscriber Stripe already billed on that tier, whose sync had not landed,
+was missed and would have been moved without a notice. `price_recipients`
+reconciles every pending change from Stripe each run. Check:
+`price-recipients.spec.ts`.
+
+## Ownership moves in one place (2026-11-18)
+
+An owner is `restaurants.owner_id`, a manager is a `staff` row. Moving ownership
+by hand meant three writes that had to agree, and a half-done one left a login
+that was both owner and staff, or an owner with no way back in.
+`admin_transfer_ownership` does all three under the restaurant's row lock.
+Check: `admin-owner-transfer.spec.ts` and the api case that transfers and checks
+the former owner is a manager.
+
+## A support view that cannot write (2026-11-18)
+
+The platform team needed to see what an owner sees. Signing in as the owner,
+or letting admins through RLS, would have made every support look a possible
+change to somebody's restaurant. The owner view reads with the service key on
+one server page, records each visit first, and renders nothing that writes.
+Check: `admin-owner-view.spec.ts` (order of guard, record and read; no write,
+no control) and `pnpm roles` (the admin opens it from the console's link).
+
+## A webhook nobody configured looks like a quiet day (2026-11-18)
+
+Both Stripe endpoints refuse an event with a missing or wrong signing secret,
+and the only trace was a log line, so a Connect endpoint that was never set up
+looked exactly like no diner paying by card. Each endpoint now records its last
+accepted and last refused event, and the admin health shows it red until it
+accepts one. Check: `admin-health.spec.ts` (`webhookBad`).
+## Branch previews used up the day's deployments (2026-11-18)
+
+Vercel's plan caps deployments per day, and every push to any branch built a
+preview nobody opened: the gates run on GitHub, and the ship train reads only
+the deployment of a merge to main. On a busy day the cap was reached and the
+merge of #688 was refused ("Deployment rate limited — retry in 24 hours"),
+leaving production on the previous release. `vercel.json` now deploys main only
+(`git.deploymentEnabled`). Check: `invariants/operations.spec.ts`.
+
+## A coverage probe must check something
+
+The coverage probe compared eligible restaurants, but its final success line
+did not know whether any were eligible. An empty database or only restaurants
+awaiting backfill therefore looked like proof. It now fails when none was
+checked; the unit test also refuses a broken database connection.
+
+
+| Gap | Automated check | Dev verification |
+|---|---|---|
+| Money SQL was covered by mocks and text, while a failed probe could be missed | probes-gate.spec.ts | Run the probes gate on dev; its money cases roll back every fixture. |
+
+## Database behavior needs a gate
+
+The SQL writers and the checks that describe them must agree. Source matches and
+mocked RPCs cannot show what PostgreSQL actually did. The probes gate runs the
+rolled-back money and held-sale cases and the coverage read check. A failed or
+unstartable probe fails the gate. The journal race probe commits fixtures and
+still needs separate fixture isolation; the RLS equivalence probe needs a
+baseline from before a schema change, so neither belongs in this runner yet.
+
+## The first real run of the probes found a stale expectation (2026-11-18)
+
+The probes gate was written without ever running against PostgreSQL. Its first
+run passed 40 of 41: N5 still expected `forbidden` when a restaurant has turned
+splitting off, but audit #648 made the database answer `split_disabled`, which
+the route, the hook and their tests all handle. The probe was wrong, not the
+code. Run unchanged against an unreachable database, every probe errored and the
+runner exited 1. It now runs on GitHub in every gates run.
+
+## A freed founding place could never be taken again (2026-11-18)
+
+`claim_founding_price` gave the next number after the highest and refused past
+50, so a founding place given back in the middle (the new admin "cuenta de
+prueba") would have been lost for good: 49 founders, no place left. The limit
+now counts places held. Check: `admin-tier.spec.ts`.
+## Auth emails went to spam, in English, with a link a scanner could spend (2026-11-18)
+
+Supabase's default templates were English only and linked to the project's
+`supabase.co` host from a `tabletap.shop` sender, a classic spam signal; the
+owner's confirmation and reset both landed in Hotmail's spam. And a link that
+verified on GET was spent by Outlook's link scanner before the person clicked.
+Now the templates are bilingual, link to `/auth/confirm` on our domain, and
+that page spends nothing until its button posts. While checking it, the reset
+form said "mínimo 6 caracteres" under a rule of 8. Check:
+`auth-email-templates.spec.ts` (links, languages, POST only, placeholders match
+`PASSWORD_MIN`).
+
+## A trial nobody was told about (2026-11-18)
+
+Signing up started a free month of Servicio and, at its end, a quiet fall back
+to Carta. The only trace was a line on the Plan page, so the owner read the
+trial as being put on a plan without asking. The owner now gets a welcome once
+and a days-left banner everywhere. Check: `trial-notice.spec.ts`.
+## "*" did not match a branch with a slash (2026-11-18)
+
+#691 turned previews off with `"*": false`, but minimatch's `*` stops at `/`
+and every branch here is `claude/…` or `codex/…`, so every push still built a
+preview and the day's cap refused #692's production deploy. It is `"**"` now.
+Check: `invariants/operations.spec.ts`.
+
+## A new email was a new free month (2026-11-18)
+
+The trial was once per restaurant, and a restaurant is one email away, so the
+same business could take a free month again and again. A unique RFC would have
+blocked a legitimate second location; now a trial is once per RFC
+(`trial_rfcs`). Check: `one-trial-per-rfc.spec.ts`.
+
+## A red layout run left a sentence and an unrepeatable menu (2026-11-18)
+
+GitHub's layout gate failed "360px · diner en · dish detail — controls-touching
+(3.6px)" on some runs and could not be reproduced: the demo seed was random per
+run, and the artifact was a line of text. Now CI seeds with a fixed `SEED`
+(`scripts/seeded-random.mjs`; replay with `SEED=tabletap-ci-1 pnpm db:mock`),
+every list a random draw picks from comes in a fixed order (an unordered query
+had moved the stock-out dish between menus with the same seed), and a failed
+visit saves a full-page screenshot plus the offending boxes and their scroll
+container under `gate-output/evidence`. Checked on dev: the same seed twice gave
+the same 67 dishes, extras, modifiers and promotions. Check:
+`layout-evidence.spec.ts`.
+## The privacy notice said the menu shows no fiscal data; it shows two (2026-11-18)
+
+The notice promised the restaurant's fiscal data "no se muestran en el menú",
+while `PlaceIdentity` shows the legal name and address on the menu and before
+paying, as consumer law expects. Two places that had to agree, and the legal one
+was the promise. It now names the two fields shown and why (terms 2026-11-18.2).
+Check: `invariants/place-identity.spec.ts`.
+
+## The platform admin's login was on a domain nobody owned (2026-11-18)
+
+Every seeded login — the platform admin, the demo team, the test restaurants —
+used `@tabletap.dev`, which is not registered (`NXDOMAIN`). Whoever bought it
+for a few dollars would receive their password-reset emails and could take over
+the platform admin. They now use `@tabletap.shop`, which the owner holds;
+production's 18 logins were renamed in place (same ids, passwords and roles,
+`loop/tools/rename-login-domain.cjs`). Check: `invariants/operations.spec.ts`
+(seeded logins) and a DNS look at any new login domain before using it.
+## A trial ended with no email (2026-11-18)
+
+The only warning that a free month was ending was a banner inside a dashboard
+the owner might not open that week, so Carta arrived unannounced. The recovery
+job `trial_reminders` now emails the owner three days before, once per trial
+end. Check: `recovery/__tests__/trial-reminders.spec.ts`.
+
+## Another site could sign a visitor into its own account (2026-11-19)
+
+`/auth/callback` accepted a POST from anywhere, so a page elsewhere could
+auto-submit its own account's token and leave a visitor signed into the
+attacker's restaurant, where they might type real details (login CSRF). The
+POST now needs `Sec-Fetch-Site: same-origin` (or our Origin). Checked in a real
+browser: our confirm page still signs in; a cross-site form lands on /login with
+no session. Check: `same-site-post.spec.ts`.
+

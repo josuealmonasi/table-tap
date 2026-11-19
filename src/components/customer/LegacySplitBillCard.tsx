@@ -5,9 +5,7 @@ import { useT } from "@/lib/i18n/context";
 import { formatMoney } from "@/lib/format";
 import type { SplitState } from "@/hooks/useSplit";
 import { shareChoices } from "@/lib/split-shares";
-import { applyPayment } from "@/lib/table-balance";
-import { tipFor } from "@/lib/pricing";
-import { SEP } from "@/lib/separator";
+import LegacySplitPayment from "./legacy-split-payment.react-component";
 
 interface SplitBillCardProps {
   split: SplitState | null;
@@ -39,7 +37,7 @@ interface SplitBillCardProps {
   propose: (shares: number) => Promise<void>;
   join: () => Promise<void>;
   cancel: () => Promise<void>;
-  onPay: () => void;
+  onPay: (tipAmount?: number) => void;
 }
 
 /**
@@ -165,32 +163,7 @@ export default function LegacySplitBillCard({
 
   // ── Agreed, and this is the bill
   if (split.status === "locked" && mine) {
-    const total = mine.amount + split.ownSince;
-    const taken = applyPayment(total,total,tipFor(total,tipPct));
-    return (
-      <div className="tt-split tt-split-locked">
-        <strong>{t("split.yourShare")}</strong>
-        <span className="tt-split-amount">{formatMoney(mine.amount, currency)}</span>
-        {split.ownSince > 0 && (
-          // Ordered after the table agreed, so it is this person's alone. Said
-          // plainly rather than folded silently into one number: somebody who
-          // orders a beer and then sees a bigger figure deserves to know why.
-          <span className="tt-muted tt-split-since">
-            {t("split.plusYours", { amount: formatMoney(split.ownSince, currency) })}
-            {SEP}
-            <strong>{formatMoney(total, currency)}</strong>
-          </span>
-        )}
-        {!mine.paid && taken.tip > 0 && <span className="tt-muted">{t("totals.tip")} · {formatMoney(taken.tip,currency)}</span>}
-        {mine.paid ? (
-          <span className="tt-split-done">{t("split.paid")}</span>
-        ) : (
-          <button type="button" className="tt-btn tt-btn-primary" onClick={onPay} disabled={busy}>
-            {t("split.payShare", { amount: formatMoney(taken.amount, currency) })}
-          </button>
-        )}
-      </div>
-    );
+    return <LegacySplitPayment key={split.id} split={split} busy={busy} currency={currency} tipPct={tipPct} onPay={onPay} />;
   }
 
   // ── Frozen, and this phone is not in it

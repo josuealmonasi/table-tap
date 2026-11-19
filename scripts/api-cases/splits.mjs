@@ -1,9 +1,12 @@
+import { tipBaseCase } from "./tip-base.mjs";
 import { MARK } from "../api-fixtures.mjs";
+import { loginSecret } from "../login-secrets.mjs";
 
 export function splitsCases(fx) {
   const { restaurant, table } = fx;
   const r = restaurant.id;
   return [
+    tipBaseCase("split"),
     // A receipt follows a paid part even after the bill closes. Its reader
     // requires the same approved phone as the bill, never the sitting id alone.
     { name: "GET  /api/receipt/payments (approved phone)", as: "diner", method: "GET",
@@ -69,7 +72,7 @@ export function splitsCases(fx) {
     { name: "POST /api/ratings (a rating that is null)", as: "diner", method: "POST", path: "/api/ratings",
       body: { restaurantId: r, ratings: [null] }, expect: [400, 429] },
     { name: "POST /api/signup (a name that is a number)", as: "diner", method: "POST", path: "/api/signup",
-      body: { acceptedTerms: true, restaurantName: 7, email: "a@example.com", password: "abcdefgh" }, expect: [400, 429] },
+      body: () => ({ acceptedTerms: true, restaurantName: 7, email: "a@example.com", password: loginSecret("TEST_PASSWORD") }), expect: [400, 429] },
     { name: "POST /api/split/join (no such split)", as: "diner", method: "POST", path: "/api/split/join",
       body: { splitId: "00000000-0000-0000-0000-000000000000", sessionId: fx.sessionId ?? "",
               diner: "apicheck", restaurantId: r, tableId: table.id },
@@ -113,7 +116,9 @@ export function splitsCases(fx) {
           .eq("restaurant_id", other.id).order("label").limit(1).single();
         f.otherRestaurant = other.id;
         f.otherTable = otherTable.id;
-        await f.admin.from("restaurants").update({ stripe_account_id: "acct_api_check", stripe_charges_enabled: true }).eq("id", other.id);
+        // Its own fake account: one account belongs to one restaurant (bg9),
+        // and the borrowed reader may hold acct_api_check on the demo.
+        await f.admin.from("restaurants").update({ stripe_account_id: "acct_api_check_other", stripe_charges_enabled: true }).eq("id", other.id);
         return async () => {
           await f.admin.from("restaurants").update({
             stripe_account_id: other.stripe_account_id, stripe_charges_enabled: other.stripe_charges_enabled,

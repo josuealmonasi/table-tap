@@ -1,5 +1,6 @@
 import { after } from "next/server";
 import { drainTicketEmails } from "@/lib/ticket-email";
+import { ordersTipBase, splitTakesExactTipOnly, splitTipBase, splitTipPrincipal, tipFromPercent } from "@/lib/tip-base";
 import { paySplitSlots } from "@/lib/split-slots-pay";
 import { tableMember } from "@/lib/table-membership";
 import { dinerCheckoutOrders } from "@/lib/diner-checkout-orders";
@@ -22,6 +23,7 @@ import {
 } from "@/lib/platform-fee";
 import { orderFeeCents } from "@/lib/plan";
 import { round2 } from "@/lib/money";
+import { legacySplitQuote, legacySplitRefusal, retireStaleLegacyPage } from "@/lib/legacy-split-checkout";
 import { siteOrigin } from "@/lib/site-origin";
 
 export const runtime = "nodejs";
@@ -56,6 +58,9 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   if (!splitId || !sessionId || !restaurantId || !tableId) {
     return await apiError("apiErr.invalidRequest", 400);
   }
+  // Refused before anything is reserved: a tip that is not a number would
+  // otherwise reach Stripe as NaN, after the share's fee slice was taken.
+  if (tipAmount != null && !Number.isFinite(Number(tipAmount))) return await apiError("apiErr.invalidRequest", 400);
 
   const member = await tableMember(req, restaurantId, tableId, sessionId, true).catch(() => null);
   if (!member) return await apiError("apiErr.tableJoin", 403);
@@ -112,11 +117,19 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   if (!claim) return await apiError("apiErr.splitNotYours", 403);
   if (claim.paid_at) return await apiError("apiErr.splitAlreadyPaid", 409);
 
+  // Old gross splits may already contain tips. Ask for an amount instead of
+  // charging a percentage of that uncertainty; zero-tip payment still works.
+  // The same rule decides whether the screen shows the exact-amount field.
+  const exactOnly = splitTakesExactTipOnly(split);
+  if (exactOnly && tipAmount == null && Number(tipPct) > 0) {
+    return await apiError("apiErr.splitExactTip", 409);
+  }
+
   const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
   const scopeKey = `split:${splitId}:${claim.share_no}`;
+  let prior: Stripe.Checkout.Session | null;
   try {
-    const prior = await resumeDinerAttempt(stripe, restaurantId, scopeKey);
-    if (prior) return NextResponse.json({ url: prior.url });
+    prior = await resumeDinerAttempt(stripe, restaurantId, scopeKey);
   } catch { return await apiError("apiErr.checkoutFailed", 502); }
 
   // Their own orders since the freeze — verified, never taken on trust: unpaid,
@@ -133,6 +146,29 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
   const payable = round2(Number(claim.amount) + ownTotal);
   if (payable <= 0) return await apiError("apiErr.billSettled", 409);
+  // Percentage tips need the same frozen food the screen uses, even when
+  // this is a retry: returning early used to reopen a different tip.
+  const earlyFrozenOrders = !exactOnly && prior && tipAmount == null
+    ? await dinerCheckoutOrders(split.order_ids).catch(() => null) : null;
+  if (!exactOnly && prior && tipAmount == null && (!earlyFrozenOrders?.length || earlyFrozenOrders.length !== split.order_ids.length)) {
+    return await apiError("apiErr.verifyOrders", 503);
+  }
+  const priorBase = splitTipBase(splitTipPrincipal(split, earlyFrozenOrders ?? []) ?? 0,
+    Math.max(1, Number(split.shares) || 1), [claim.share_no], ordersTipBase(own));
+  const priorAsked = tipAmount != null ? Number(tipAmount) : tipFromPercent(priorBase, Number(tipPct));
+  const priorTip = Math.min(Math.max(0, round2(priorAsked)), payable);
+
+  // A lost reply keeps its original page only when its tip and total match.
+  // A changed tip must not silently reopen the page with its previous tip.
+  // A changed tip or a total this share no longer owes (the diner ordered more
+  // since, or a waiter collected part of a later order) needs a fresh page:
+  // refusing it left the share unpayable until Stripe expired it.
+  if (prior) {
+    const quote = legacySplitQuote(prior, payable, priorTip);
+    if (quote !== "total" && quote !== "tip") return await legacySplitRefusal(quote) ?? NextResponse.json({ url: prior.url });
+    const retired = await retireStaleLegacyPage(stripe, prior, restaurant.stripe_account_id, restaurantId, scopeKey);
+    if (!retired) return await apiError("apiErr.splitPageChanged", 409);
+  }
 
   // The share is the amount frozen when the table agreed, and it has no idea
   // what has happened since. If the bill has been settled another way — a
@@ -140,10 +176,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   // food nobody owes for any more.
   if (tableBill(orders, []).total <= 0) return await apiError("apiErr.billSettled", 409);
 
-  const pct = Math.min(100, Math.max(0, Number(tipPct) || 0));
-  const asked = tipAmount != null ? Number(tipAmount) : (payable * pct) / 100;
-  const tip = Math.min(Math.max(0, round2(asked)), payable);
-  const cents = Math.round(round2(payable + tip) * 100);
+
 
   // Our cut is the table's, not one per person: a bill divided four ways is
   // still one bill, and charging the restaurant four times for the courtesy of
@@ -168,7 +201,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       fee = await reserveFeeCents(restaurantId, feePlan.limits, slice, "split");
     }
   } catch {
-    return await apiError("apiErr.generic", 502);
+    return await apiError("apiErr.checkoutFailed", 502);
   }
   const appFee = fee.cents;
 
@@ -180,7 +213,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   // opened was answered "could not verify the orders" instead.
   // No attempt is open yet, so the share's fee slice is all there is to give back.
   const giveBackFee = () => releaseFee(fee.id).catch(err => console.error("split pay: the fee reservation stays counted", err));
-  const frozenOrders = await dinerCheckoutOrders(split.order_ids).catch(() => null);
+  const frozenOrders = earlyFrozenOrders ?? await dinerCheckoutOrders(split.order_ids).catch(() => null);
   if (!frozenOrders?.length || frozenOrders.length !== split.order_ids.length) {
     await giveBackFee();
     return await apiError("apiErr.verifyOrders", 503);
@@ -190,6 +223,11 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     await giveBackFee();
     return await apiError("apiErr.mixedCurrencies", 409);
   }
+
+  const tipBase = splitTipBase(splitTipPrincipal(split, frozenOrders) ?? 0, shares, [claim.share_no], ordersTipBase(own));
+  const asked = tipAmount != null ? Number(tipAmount) : tipFromPercent(tipBase, Number(tipPct));
+  const tip = Math.min(Math.max(0, round2(asked)), payable);
+  const cents = Math.round(round2(payable + tip) * 100);
 
   try {
     const session = await openDinerAttempt(stripe,
@@ -234,13 +272,18 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       },
     );
 
+    // Another request can win after our resume read. The opener returns that
+    // winner's durable session; its quote must match before we expose the URL.
+    // It was opened moments ago, so it is never closed here: that is a race.
+    const error = await legacySplitRefusal(legacySplitQuote(session, payable, tip));
+    if (error) return error;
     // A session with no page is still a session: its fee waits for expiry.
-    if (!session.url) return await apiError("apiErr.generic", 502);
+    if (!session.url) return await apiError("apiErr.checkoutFailed", 502);
     return NextResponse.json({ url: session.url });
   } catch {
     // Released only when Stripe refused outright: an answer that never
     // arrived may still be a session, which Stripe's expiry releases.
     // `openDinerAttempt` releases only the reservation it knows was refused.
-    return await apiError("apiErr.generic", 502);
+    return await apiError("apiErr.checkoutFailed", 502);
   }
 }

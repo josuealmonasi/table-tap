@@ -150,7 +150,7 @@ async function main() {
          values ($1,$2,$3,$4,$5,$6,
                  case when $7::int is null then null else now() + ($7 || ' days')::interval end,
                  case when $8::int is null then null else now() + ($8 || ' days')::interval end,
-                 'sample@tabletap.dev')`,
+                 'sample@tabletap.shop')`,
         [r.id, c.code, c.kind, c.value, c.max_uses, c.min_subtotal, from ?? null, to ?? null],
       );
       totals.coupons++;

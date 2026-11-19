@@ -1,5 +1,6 @@
 import type Stripe from "stripe";
 import type { createAdminClient } from "@/lib/supabase/admin";
+import { verifyNoChargeFee } from "./missing-charge-fee";
 
 type Db = ReturnType<typeof createAdminClient>;
 interface FeeReturn {
@@ -62,6 +63,7 @@ export async function reconcileChargeFee(
     if (!charge?.amount) throw new Error("Could not verify the original charge for the returned fee");
     const feeId = typeof charge.application_fee === "string" ? charge.application_fee : charge.application_fee?.id;
     const fee = feeId ? await client.applicationFees.retrieve(feeId) : null;
+    if (!fee) await verifyNoChargeFee(db, restaurant, intentId);
     let refunded = 0;
     const refundIds: string[] = [];
     for await (const refund of client.refunds.list({ payment_intent: intentId, limit: 100 }, { stripeAccount: account })) {

@@ -42,17 +42,13 @@ describe("the text and the version cannot drift apart", () => {
       .digest("hex")
       .slice(0, 16);
 
-  // 2026-11-13, bumped from 2026-11-12: the legal review under the 2025 data
-  // protection law. The terms gained who TableTap is and how the contract is
-  // made, the restaurant as merchant of record, refunds and chargebacks, the
-  // fee's 5% cap and that it never touches the tip, prices with IVA included,
-  // CFDI, the restaurant's consumer-law and privacy-notice duties, the
-  // processor clause, a fair change clause and a named jurisdiction. The
-  // notice gained the elements its article 15 requires (identity, sensitive
-  // data, purposes split, ways to limit use, ARCO procedure and deadlines,
-  // the new authority), the providers and their countries, cookies, auth
-  // logs, the deletion archive, and a model short notice for diners — new
-  // categories and new commitments, so every restaurant is asked again.
+  // 2026-11-18.2: the privacy notice promised the fiscal data is "not shown on
+  // the menu", but the menu and checkout show the legal name and address
+  // (PlaceIdentity). It now says exactly which two are shown and why.
+  // 2026-11-18, bumped from 2026-11-12: the free trial is once per RFC, not
+  // only per restaurant, and the privacy notice keeps a trial's RFC after the
+  // account closes for that one purpose, a new retention, so every restaurant
+  // is asked again.
   // 2026-11-12, bumped from 2026-11-11: a diner may link an email to their
   // visit card to receive every ticket there — the notice stopped promising
   // that no diner email is ever kept, so every restaurant is asked again.
@@ -79,15 +75,15 @@ describe("the text and the version cannot drift apart", () => {
   // kept the version as a clarification.)
   it("has terms that match the version in force", () => {
     expect({ version: TERMS_VERSION, text: fingerprint("terms-es") }).toEqual({
-      version: "2026-11-13",
-      text: "2c9ac18199e0fd88",
+      version: "2026-11-18.2",
+      text: "8cce805f4850523f",
     });
   });
 
   it("has a privacy notice that matches the version in force", () => {
     expect({ version: TERMS_VERSION, text: fingerprint("privacy-es") }).toEqual({
-      version: "2026-11-13",
-      text: "c4a77fc648021aa1",
+      version: "2026-11-18.2",
+      text: "9f3d8fc2a2344491",
     });
   });
 });

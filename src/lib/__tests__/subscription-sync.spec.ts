@@ -144,6 +144,12 @@ it("stores a scheduled cancellation date in the same revision as the price", asy
   await applySubscription(sub());
   expect(patches[0]).toMatchObject({ plan_ends_at: new Date(1800000000000).toISOString(), subscribed_price: 1499, subscription_sync_revision: 1 });
 });
+it("stores a renewing subscription's period end, which recovery checks once it has passed", async () => {
+  reads.push(current());
+  retrieve.mockResolvedValue({ ...sub(), items: { data: [{ current_period_end: 1800000000, price: { unit_amount: 149900 } }] } });
+  await applySubscription(sub());
+  expect(patches[0]).toMatchObject({ plan_ends_at: null, plan_period_ends_at: new Date(1800000000000).toISOString() });
+});
 it("clears a resumed cancellation date and an ended subscription price", async () => {
   reads.push(current());
   await applySubscription(sub());

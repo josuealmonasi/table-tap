@@ -13,6 +13,7 @@ import { join } from "node:path";
 import { requireServer, retryFetch } from "./preflight.mjs";
 import { DEV_URL } from "./dev-url.mjs";
 import { sessionCookieHeader } from "./session-cookie.mjs";
+import { loginSecret } from "./login-secrets.mjs";
 
 const prod = process.argv.includes("--prod");
 process.loadEnvFile(join(process.cwd(), prod ? ".env.production.local" : ".env.development.local"));
@@ -25,8 +26,8 @@ await requireServer(BASE, prod);
 
 const { createClient } = await import("@supabase/supabase-js");
 
-const EMAIL = process.env.SMOKE_EMAIL ?? "demo@tabletap.dev";
-const PASSWORD = process.env.SMOKE_PASSWORD ?? "demo123";
+const EMAIL = process.env.SMOKE_EMAIL ?? "demo@tabletap.shop";
+const PASSWORD = loginSecret(process.env.SMOKE_PASSWORD !== undefined ? "SMOKE_PASSWORD" : "DEMO_PASSWORD");
 
 const auth = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,

@@ -6,6 +6,8 @@ const state = vi.hoisted(() => ({
   ops: [] as { table: string; op: string; value?: Record<string, unknown> }[],
   calls: [] as { name: string; args: Record<string, unknown> }[],
   ticket: null as Record<string, unknown> | null,
+  suspended: false,
+  suspendedAt: "2026-11-17T00:00:00Z",
   lost: false,
   reply: null as Record<string, unknown> | null,
 }));
@@ -18,7 +20,7 @@ vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({
       state.ops.push({ table, op, value }); return q;
     };
     const result = () => ({ data: table === "orders" ? state.ticket : table === "restaurants"
-      ? { currency: "MXN", service_pct: 0, tax_pct: 0 } : [], error: null });
+      ? { currency: "MXN", service_pct: 0, tax_pct: 0, suspended_at: state.suspended ? state.suspendedAt : null } : [], error: null });
     q.single = q.maybeSingle = async () => result();
     q.then = (resolve: (v: unknown) => unknown) => Promise.resolve(result()).then(resolve);
     return q;
@@ -64,7 +66,7 @@ const { ringOffline } = await import("@/lib/pos-offline");
 const { POST } = await import("@/app/api/pos/order/route");
 const actor = { restaurantId: "r1", email: "cashier", role: "owner" } as Parameters<typeof ringOffline>[0];
 const body = () => ({ collectorContext: issueOfflineContext("r1", "cashier", "MXN", Date.now() - 60_000), posRef: id, method: "cash" as const, items: [{ itemId: "x", name: "Dish", price: 100, qty: 1, mods: {}, emoji: "" }], offline: { at: new Date().toISOString(), subtotal: 100, serviceFee: 0, tip: 0, discount: 0, total: 100 } });
-beforeEach(() => { process.env.SUPABASE_SECRET_KEY = "test-offline-secret"; state.ops = []; state.calls = []; state.ticket = null; state.lost = false; state.reply = null; });
+beforeEach(() => { process.env.SUPABASE_SECRET_KEY = "test-offline-secret"; state.ops = []; state.calls = []; state.ticket = null; state.suspended = false; state.suspendedAt = "2026-11-17T00:00:00Z"; state.lost = false; state.reply = null; });
 
 it("W1.1 keeps a committed offline sale when its response is lost", async () => {
   state.lost = true;
@@ -190,4 +192,33 @@ it("a lost account approval response returns its approved ticket on retry", asyn
   state.lost = false;
   expect(await (await POST(request())).json()).toMatchObject({ settled: true, repeat: true, onAccount: { name: "Guest" } });
   expect(state.calls).toHaveLength(1);
+});
+
+it("refuses a new POS sale while the restaurant is suspended", async () => {
+  state.suspended = true;
+  const { offline: _, ...online } = body(); void _;
+  const res = await POST(new NextRequest("http://localhost/api/pos/order", { method: "POST", body: JSON.stringify(online) }));
+  expect(res.status).toBe(409);
+  expect(await res.json()).toEqual({ error: "apiErr.restaurantSuspended" });
+  expect(state.calls).toEqual([]);
+});
+
+it("records a sale the till collected before the suspension started", async () => {
+  state.suspended = true;
+  const { offline: collected, ...online } = body();
+  state.suspendedAt = new Date(new Date((collected as { at: string }).at).getTime() + 60_000).toISOString();
+  const res = await POST(new NextRequest("http://localhost/api/pos/order", { method: "POST", body: JSON.stringify({ ...online, collected }) }));
+  expect(res.status).toBe(200);
+  expect(state.calls.some(call => call.name === "ring_pos_sale_v2")).toBe(true);
+});
+
+it("keeps a sale collected after the suspension on the device, held for a manager", async () => {
+  state.suspended = true;
+  const { offline: collected, ...online } = body();
+  state.suspendedAt = new Date(new Date((collected as { at: string }).at).getTime() - 60_000).toISOString();
+  const res = await POST(new NextRequest("http://localhost/api/pos/order", { method: "POST", body: JSON.stringify({ ...online, collected }) }));
+  expect(res.status).toBe(409);
+  // held: the device keeps the money it collected instead of discarding the sale.
+  expect(await res.json()).toMatchObject({ error: "apiErr.restaurantSuspended", held: true });
+  expect(state.calls).toEqual([]);
 });

@@ -87,3 +87,42 @@ it("rings the existing refund-due bell once for that restaurant across repeated 
     data: { amount: 10, currency: "MXN", table: "7", account: null } });
   expect(f.calls.filter(c => c.method === "upsert")[0].args[1]).toEqual({ onConflict: "id", ignoreDuplicates: true });
 });
+
+it("rings again for a later stuck refund at the same restaurant, with that case's amount and table", async () => {
+  f.client.refunds.retrieve.mockResolvedValue({ ...provider, status: "pending" });
+  f.rpc.mockResolvedValue({ data: { outcome: "pending" }, error: null });
+  f.tables.refund_due_attempts = [{ ...attempt, provider_status: "pending" }];
+  await recoverRefunds(f.context);
+  // The first case resolves; months later a different duplicate refund sticks.
+  f.tables.refund_due_attempts = [{ ...attempt, id: "attempt2", due_id: "due2", amount: 25, provider_status: "pending",
+    refunds_due: { ...attempt.refunds_due!, amount: 25, table_label: "12" } }];
+  f.client.refunds.retrieve.mockResolvedValue({ ...provider, amount: 2500, status: "pending" });
+  await recoverRefunds(f.context);
+  expect(f.tables.notifications).toHaveLength(2);
+  expect(f.tables.notifications[1]).toMatchObject({ restaurant_id: "r1", kind: "refund_due",
+    data: { amount: 25, currency: "MXN", table: "12" } });
+  expect(f.tables.notifications[0].id).not.toBe(f.tables.notifications[1].id);
+});
+
+it("N9: reminds both concurrently overdue restaurants while the oldest stays stuck", async () => {
+  f.tables.refund_due_attempts = [
+    { ...attempt, provider_status: "pending" },
+    { ...attempt, id: "attempt-b", restaurant_id: "r2", due_id: "due-b", provider_status: "pending",
+      created_at: new Date(Date.parse(old) + 3600_000).toISOString() },
+  ];
+  f.client.refunds.retrieve.mockResolvedValue({ ...provider, status: "pending" });
+  f.rpc.mockResolvedValue({ data: { outcome: "pending" }, error: null });
+  await recoverRefunds(f.context);
+  await recoverRefunds(f.context);
+  expect(f.tables.notifications.map(row => row.restaurant_id).sort()).toEqual(["r1", "r2"]);
+});
+
+it("N9: a refund recovered in this run needs no overdue reminder", async () => {
+  f.tables.refund_due_attempts = [{ ...attempt, provider_status: "pending" }];
+  f.rpc.mockImplementation(async () => {
+    f.tables.refund_due_attempts = [];
+    return { data: { outcome: "completed" }, error: null };
+  });
+  await recoverRefunds(f.context);
+  expect(f.tables.notifications ?? []).toEqual([]);
+});

@@ -1,11 +1,14 @@
 "use client";
 
+import { tipFromPercent } from "@/lib/tip-base";
+
 import { useStatementMail } from "@/hooks/useStatementMail";
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useLocale, useT } from "@/lib/i18n/context";
 import { formatMoney, dateLocale } from "@/lib/format";
 import { qrSvg } from "@/lib/qr";
+import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { BackIcon } from "@/components/ui/icons";
 import TipPicker from "@/components/customer/TipPicker";
 import StatementDays from "./StatementDays";
@@ -21,12 +24,14 @@ interface Statement {
   owed: number;
   currency?: string | null;
   balances?: CurrencyBalance[];
+  tipBalances?: CurrencyBalance[];
   days: StatementDay[];
   payments: { at: string; amount: number; tip: number; currency?: string; method: "cash" | "card" }[];
   returns?: { id: string; amount: number; currency: string; status: string; created_at: string }[];
   cardsEnabled: boolean;
   payingOnline: boolean;
   canEmail: boolean;
+  hasEmail: boolean;
   timeZone: string | null;
 }
 
@@ -38,6 +43,7 @@ interface Statement {
  */
 export default function AccountStatement({ code, paid }: { code: string; paid: boolean }) {
   const t = useT();
+  const confirm = useConfirm();
   const sendStatement = useStatementMail(code);
   const { locale } = useLocale();
   const [data, setData] = useState<Statement | null>(null);
@@ -100,7 +106,8 @@ export default function AccountStatement({ code, paid }: { code: string; paid: b
   if (!data) return <StatementSkeleton />;
 
   const money = (n: number) => formatMoney(n, currency);
-  const tip = Math.min(Math.max(0, tipCustom ?? Math.round(owed * tipPct) / 100), owed);
+  const tipBase = data.tipBalances?.find(b => b.currency === currency)?.amount ?? 0;
+  const tip = Math.min(Math.max(0, tipCustom ?? tipFromPercent(tipBase, tipPct)), owed);
 
   async function payOnline(): Promise<void> {
     setBusy(true);
@@ -109,7 +116,7 @@ export default function AccountStatement({ code, paid }: { code: string; paid: b
       const res = await fetch("/api/account/pay", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ c: code, expected: owed, currency, tipAmount: tip }),
+        body: JSON.stringify({ c: code, expected: owed, currency, ...(tipCustom === null ? { tipPct } : { tipAmount: tipCustom }) }),
       });
       const d = await res.json().catch(() => ({}));
       if (!res.ok || !d.url) {
@@ -118,6 +125,24 @@ export default function AccountStatement({ code, paid }: { code: string; paid: b
         return;
       }
       window.location.href = d.url;
+    } catch {
+      setNotice(t("done.networkError"));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function removeEmail(): Promise<void> {
+    if (!await confirm({ title: t("account.removeEmailConfirm"), confirmLabel: t("account.removeEmail"), danger: true })) return;
+    setBusy(true);
+    setNotice(null);
+    try {
+      const res = await fetch("/api/account/remove-email", {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ c: code }),
+      });
+      const result = await res.json().catch(() => ({}));
+      setNotice(res.ok ? t("account.removeEmailDone") : result.error ?? t("apiErr.generic"));
+      if (res.ok) setData(current => current ? { ...current, hasEmail: false } : current);
     } catch {
       setNotice(t("done.networkError"));
     } finally {
@@ -168,8 +193,8 @@ export default function AccountStatement({ code, paid }: { code: string; paid: b
                 <li key={i}>
                   {/* The restaurant's day, as the charges above use: a 00:30 Mexico City
                     payment read on a Los Angeles phone was dated the day before (sweep 8, finding 5). */}
-                  {new Intl.DateTimeFormat(dateLocale(locale), { dateStyle: "medium", timeZone: data.timeZone ?? undefined }).format(new Date(p.at))} ·{" "}
-                  {p.currency ? formatMoney(p.amount, p.currency) : `${Number(p.amount).toFixed(2)}${SEP}${t("attribution.currencyUnknown")}`} · {t(p.method === "cash" ? "account.byCash" : "account.byCard")}
+                  {new Intl.DateTimeFormat(dateLocale(locale), { dateStyle: "medium", timeZone: data.timeZone ?? undefined }).format(new Date(p.at))}&nbsp;·&nbsp;
+                  {p.currency ? formatMoney(p.amount, p.currency) : `${Number(p.amount).toFixed(2)}${SEP}${t("attribution.currencyUnknown")}`}&nbsp;·&nbsp;{t(p.method === "cash" ? "account.byCash" : "account.byCard")}
                 </li>
               ))}
             </ul>
@@ -178,7 +203,7 @@ export default function AccountStatement({ code, paid }: { code: string; paid: b
 
         {Boolean(data.returns?.length) && <section className="tt-section">
           <h3>{t("returns.title")}</h3>
-          {data.returns?.map(r => <p key={r.id}>{formatMoney(Number(r.amount), r.currency)} · {t(`returns.${r.status}`)}</p>)}
+          {data.returns?.map(r => <p key={r.id}>{formatMoney(Number(r.amount), r.currency)}&nbsp;·&nbsp;{t(`returns.${r.status}`)}</p>)}
         </section>}
 
         {notice && <p className="tt-field-error" role="status">{notice}</p>}
@@ -201,6 +226,7 @@ export default function AccountStatement({ code, paid }: { code: string; paid: b
                     tipPct={tipCustom !== null ? 0 : tipPct}
                     tipCustom={tipCustom}
                     maxTip={owed}
+                    tipBase={tipBase}
                     onPresetTip={pct => {
                       setTipCustom(null);
                       setTipPct(pct);
@@ -238,6 +264,9 @@ export default function AccountStatement({ code, paid }: { code: string; paid: b
           <button type="button" className="tt-btn tt-btn-ghost tt-btn-sm" onClick={() => window.print()}>
             {t("account.print")}
           </button>
+          {data.hasEmail && <button type="button" className="tt-btn tt-btn-ghost tt-btn-sm" disabled={busy} onClick={() => void removeEmail()}>
+            {t("account.removeEmail")}
+          </button>}
           {data.canEmail && mode !== "mail" && (
             <button type="button" className="tt-btn tt-btn-ghost tt-btn-sm" onClick={() => setMode("mail")}>
               {t("account.email")}

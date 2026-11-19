@@ -35,12 +35,12 @@ export async function attackCashShift({ ok, bad }) {
     made = true;
     for (const action of ["create", "delete"]) {
       const shift = (await db.query("insert into cash_shifts(restaurant_id,opened_by,opening_amount) values($1,'shift-race',100) returning id", [restaurant])).rows[0].id;
-      const movement = (await db.query("select create_cash_withdrawal($1,$2,20,null,'shift-race') value", [restaurant, shift])).rows[0].value.id;
+      const movement = (await db.query("select create_cash_withdrawal($1,$2,20,null,'shift-race','other') value", [restaurant, shift])).rows[0].value.id;
       // This is the id the route read while open. Its RPC reaches the lock
       // after close has acquired it, so that earlier read proves nothing.
       await db.query("begin");
       await db.query("select lock_restaurant_money($1)", [restaurant]);
-      const sql = action === "create" ? "select create_cash_withdrawal($1,$2,10,null,'shift-race') value"
+      const sql = action === "create" ? "select create_cash_withdrawal($1,$2,10,null,'shift-race','other') value"
         : "select delete_cash_withdrawal($1,$2,$3) value";
       // Catch immediately: an early query failure must not become unhandled
       // while this connection is checking whether its peer reached the lock.

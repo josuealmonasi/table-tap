@@ -23,9 +23,12 @@ import { refuseProduction, watchDevWorker } from "./preflight.mjs";
 import { DEV_URL } from "./dev-url.mjs";
 import { everyLogin } from "./logins.mjs";
 import { sessionCookieHeader } from "./session-cookie.mjs";
+import { loginSecret } from "./login-secrets.mjs";
 
 refuseProduction("rls", "it plants rows, and asks for writes on a real restaurant that must be refused");
 process.loadEnvFile(join(process.cwd(), ".env.development.local"));
+const demo = loginSecret("DEMO_PASSWORD");
+const test = loginSecret("TEST_PASSWORD");
 const BASE = DEV_URL;
 watchDevWorker(BASE);
 
@@ -55,17 +58,18 @@ console.log("The key on every diner's phone");
 for (const table of [
   "kitchen_tickets", "kitchen_requests", "orders", "table_sessions", "write_off_requests", "discount_requests",
   "coupons", "coupon_redemptions", "staff", "user_logs", "profiles",
-  "platform_admins", "platform_admin_audit", "restaurant_accounting_records", "rate_limits", "restaurant_tables",
+  "plan_price_changes", "plan_price_notices", "platform_admins", "platform_admin_audit", "restaurant_admin_notes", "trial_rfcs", "webhook_heartbeats", "restaurant_accounting_records", "terms_acceptances", "rate_limits", "restaurant_tables",
   "icon_groups", "icon_group_items",
-  "loyalty_programs", "loyalty_cards", "loyalty_visits", "loyalty_redemptions", "ticket_email_outbox",
+  "loyalty_programs", "loyalty_cards", "loyalty_visits", "loyalty_redemptions", "ticket_email_outbox", "recovery_nonces", "recovery_runs",
   // A customer's name and what they owe: read only through the routes.
-  "customer_accounts", "account_checkouts", "diner_checkouts", "table_session_members",
+  "customer_accounts", "account_checkouts", "account_movements", "diner_checkouts", "table_session_members",
   // The drawer's shifts and what was taken out of it; the restaurant's costs.
   "cash_shifts", "cash_movements", "ingredients", "ingredient_prices", "recipe_lines",
   "waste_entries", "ingredient_purchases", "ingredient_counts", "ingredient_consumption", "ingredient_movements",
   // The ledger and everything around it, the bell, the kitchen's paper, a
   // table's division, and what the routes keep for themselves.
-  "offline_sale_queue", "payment_allocations", "order_adjustments", "refund_operations", "refund_allocations", "refund_attempts", "refund_due_attempts", "refund_failures", "refund_fee_epochs", "fee_returns", "fee_reconcile_queue", "refund_due_coverage",
+  "offline_sale_queue", "held_cash_receipts", "held_sale_resolutions", "payment_allocations", "order_adjustments", "refund_operations", "refund_allocations", "refund_attempts", "refund_due_attempts", "refund_failures", "refund_fee_epochs", "fee_returns", "fee_reconcile_queue", "refund_due_coverage",
+  "stripe_disputes", "stripe_dispute_movements", "stripe_dispute_events",
   "payments", "refunds_due", "notifications", "print_jobs", "bill_splits", "bill_split_claims", "bill_split_slots", "bill_split_checkout_slots",
   "service_requests", "dish_ratings", "plan_limits", "stock_reservations",
   "terminal_deposits", "platform_fees", "restaurant_billing_operations", "restaurant_subscription_prices",
@@ -150,7 +154,7 @@ let signIn = { error: new Error("no restaurant has an owner who can sign in") };
 for (const r of restaurants ?? []) {
   const owner = users.find(u => u.id === r.owner_id);
   if (!owner?.email) continue;
-  for (const password of ["demo123", "test123"]) {
+  for (const password of [demo, test]) {
     const attempt = await asUser.auth.signInWithPassword({ email: owner.email, password });
     if (!attempt.error) { mine = r; signIn = attempt; break; }
   }
@@ -306,7 +310,7 @@ if (!signIn.error && theirs) {
     const drop = async (what, query) => { const { error } = await query; if (error) failed.push(`${what}: ${error.message}`); };
     for (const f of made) {
       if (f.session) {
-        await drop("payments", admin.from("payments").delete().eq("session_id", f.session));
+        await drop("payments", admin.from("payments").delete().is("account_id", null).eq("session_id", f.session));
         await drop("orders", admin.from("orders").delete().eq("session_id", f.session));
         await drop("sitting", admin.from("table_sessions").delete().eq("id", f.session));
       }
@@ -411,7 +415,7 @@ if (!signIn.error && theirs) {
     process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY,
   );
   const kSignIn = await kitchen.auth.signInWithPassword({
-    email: "demo-kitchen@tabletap.dev", password: "demo123",
+    email: "demo-kitchen@tabletap.shop", password: demo,
   });
   if (!kSignIn.error) {
     const kCookie = sessionCookieHeader(kSignIn.data.session, process.env.NEXT_PUBLIC_SUPABASE_URL);
@@ -482,7 +486,7 @@ if (!signIn.error && theirs) {
   const home = rs3.find(r => r.name === "Demo Bistro") ?? rs3[0];
   const away = rs3.find(r => r.id !== home.id);
   const kitchen = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY);
-  const kSignIn = await kitchen.auth.signInWithPassword({ email: "demo-kitchen@tabletap.dev", password: "demo123" });
+  const kSignIn = await kitchen.auth.signInWithPassword({ email: "demo-kitchen@tabletap.shop", password: demo });
   const signInError = kSignIn.error?.message;
   const [{ data: myTable }, { data: theirTable }] = await Promise.all([
     admin.from("restaurant_tables").select("id, label").eq("restaurant_id", home.id).limit(1).maybeSingle(),
@@ -511,7 +515,7 @@ if (!signIn.error && theirs) {
       if (still.status === "open") ok("kitchen cannot write a service request directly");
       else bad(`kitchen wrote a service request directly (${still.status})`);
       const waiter = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY);
-      const { error: waiterError } = await waiter.auth.signInWithPassword({ email: "demo-waiter@tabletap.dev", password: "demo123" });
+      const { error: waiterError } = await waiter.auth.signInWithPassword({ email: "demo-waiter@tabletap.shop", password: demo });
       if (waiterError) bad(`cannot sign in as the waiter — the control did not run: ${waiterError.message}`);
       else {
         await waiter.from("service_requests").update({ status: "done" }).eq("id", probe.id);
@@ -549,7 +553,7 @@ if (!signIn.error && theirs) {
   // anonymous key cannot read these columns either, so a failed sign-in
   // printed four oks about a staff account that never took part.
   const { error: staffErr } = await staff.auth.signInWithPassword({
-    email: "demo-kitchen@tabletap.dev", password: "demo123",
+    email: "demo-kitchen@tabletap.shop", password: demo,
   });
   if (staffErr) {
     bad(`cannot sign in as the kitchen — the staff column checks went unchecked (${staffErr.message})`);
@@ -583,8 +587,8 @@ if (!signIn.error && theirs) {
     process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY,
   );
   const { error: inErr } = await kitchen.auth.signInWithPassword({
-    email: "demo-kitchen@tabletap.dev",
-    password: "demo123",
+    email: "demo-kitchen@tabletap.shop",
+    password: demo,
   });
   if (inErr) {
     bad("cannot sign in as the kitchen — the takings check did not run");
@@ -606,8 +610,8 @@ if (!signIn.error && theirs) {
       process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY,
     );
     const { error: floorErr } = await floor.auth.signInWithPassword({
-      email: "demo-cashier@tabletap.dev",
-      password: "demo123",
+      email: "demo-cashier@tabletap.shop",
+      password: demo,
     });
     const paid = await floor.from("payments").select("id").limit(1);
     if (floorErr) bad(`cannot sign in as the cashier — whether they read payments went unchecked (${floorErr.message})`);
@@ -644,11 +648,12 @@ if (!signIn.error && theirs) {
     "staff", "table_sessions", "user_logs", "write_off_requests",
     "loyalty_programs", "loyalty_cards", "loyalty_visits", "loyalty_redemptions",
     "customer_accounts", "account_checkouts", "diner_checkouts", "table_session_members",
+    "stripe_disputes", "stripe_dispute_movements", "stripe_dispute_events",
     "cash_shifts", "cash_movements", "ingredients", "ingredient_prices", "recipe_lines",
     "waste_entries", "ingredient_purchases", "ingredient_counts", "ingredient_consumption", "ingredient_movements", "terminal_deposits", "platform_fees"];
-  const TEAM = [["anon", null], ["owner", "demo@tabletap.dev"], ["manager", "demo-manager@tabletap.dev"],
-    ["waiter", "demo-waiter@tabletap.dev"], ["cashier", "demo-cashier@tabletap.dev"],
-    ["kitchen", "demo-kitchen@tabletap.dev"]];
+  const TEAM = [["anon", null], ["owner", "demo@tabletap.shop"], ["manager", "demo-manager@tabletap.shop"],
+    ["waiter", "demo-waiter@tabletap.shop"], ["cashier", "demo-cashier@tabletap.shop"],
+    ["kitchen", "demo-kitchen@tabletap.shop"]];
 
   if (others.length === 0) {
     bad("only one restaurant exists — cross-tenant checks cannot run");
@@ -687,7 +692,7 @@ if (!signIn.error && theirs) {
       process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY,
     );
     if (email) {
-      const { error } = await who.auth.signInWithPassword({ email, password: "demo123" });
+      const { error } = await who.auth.signInWithPassword({ email, password: demo });
       if (error) { bad(`cannot sign in as ${role} — this role went unchecked`); continue; }
     }
     let reads = 0, writes = 0;
@@ -782,8 +787,8 @@ if (!signIn.error && theirs) {
     process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY,
   );
   const { data: kitchenAuth, error: signInError } = await kitchen.auth.signInWithPassword({
-    email: "demo-kitchen@tabletap.dev",
-    password: "demo123",
+    email: "demo-kitchen@tabletap.shop",
+    password: demo,
   });
   // The socket is a separate connection with its own idea of who is asking,
   // and orders belong to the team under RLS. The client usually carries the

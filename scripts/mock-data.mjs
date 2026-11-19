@@ -19,27 +19,45 @@
 // ============================================================================
 
 import { randomBytes, randomUUID } from "node:crypto";
+import { installSeed } from "./seeded-random.mjs";
+import { isLentAccount } from "./lent-stripe-account.mjs";
 import { createClient } from "@supabase/supabase-js";
 import { populateMenu } from "./menu-catalog.mjs";
+import { FEED_DEMO, PRICE_SCALE, menuPrice } from "./demo-prices.mjs";
 import { TERMS_VERSION } from "./terms-version.mjs";
 import { seedLoyalty } from "./mock-loyalty.mjs";
 import { seedAccounts } from "./mock-accounts.mjs";
 import { seedCosts } from "./mock-costs.mjs";
-import { seedOffline } from "./mock-offline.mjs";
+import { seedOffline, seedResolvedOffline } from "./mock-offline.mjs";
 import { seedAllocations } from "./mock-allocations.mjs";
 import { seedTerminal } from "./mock-terminal.mjs";
 import { legacyTerminalTimes } from "./mock-terminal-times.mjs";
 import { finalizeMockCashShift } from "./mock-cash-shift.mjs";
 import { bulkInsert, randInt, sample } from "./menu-catalog.mjs";
+import { loginSecret } from "./login-secrets.mjs";
+import { resetDemoUser } from "./mock-logins.mjs";
+
+// Replayable when SEED is set (CI sets one); random otherwise.
+installSeed();
+
+// Every list a random choice is drawn from comes in a fixed order. A query with
+// no ORDER BY returns rows as Postgres likes, so the same seeded draw picked a
+// different dish each run (the stock-out dish moved between menus).
+const STABLE_DISHES = `select mi.id, mi.name from menu_items mi
+  left join menus m on m.id = mi.menu_id left join categories c on c.id = mi.category_id
+  where mi.restaurant_id = $1 and not mi.is_addon
+  order by m.sort_order, c.sort_order, mi.sort_order, mi.name`;
 
 export const DEMO_RESTAURANT = "Demo Bistro";
-export const DEMO_PASSWORD = "demo123";
-export const DEMO_OWNER = { email: "demo@tabletap.dev", name: "Diego Owner" };
+// Read when the seeder runs, after its caller loaded the env file: production's
+// demo logins can carry a password of their own (feed-demo).
+export const demoPassword = () => loginSecret("DEMO_PASSWORD");
+export const DEMO_OWNER = { email: "demo@tabletap.shop", name: "Diego Owner" };
 export const DEMO_TEAM = [
-  { email: "demo-manager@tabletap.dev", role: "manager", name: "María Manager" },
-  { email: "demo-waiter@tabletap.dev", role: "waiter", name: "Walter Waiter" },
-  { email: "demo-cashier@tabletap.dev", role: "cashier", name: "Carmen Cashier" },
-  { email: "demo-kitchen@tabletap.dev", role: "kitchen", name: "Carlos Kitchen" },
+  { email: "demo-manager@tabletap.shop", role: "manager", name: "María Manager" },
+  { email: "demo-waiter@tabletap.shop", role: "waiter", name: "Walter Waiter" },
+  { email: "demo-cashier@tabletap.shop", role: "cashier", name: "Carmen Cashier" },
+  { email: "demo-kitchen@tabletap.shop", role: "kitchen", name: "Carlos Kitchen" },
 ];
 const DEMO_EMAILS = [DEMO_OWNER.email, ...DEMO_TEAM.map(t => t.email)];
 
@@ -51,28 +69,10 @@ function adminClient() {
   );
 }
 
-/** Reuse an existing auth user (surviving a drop) or create one. */
-async function ensureUser(pg, admin, email, name) {
-  const { rows } = await pg.query("select id from auth.users where email = $1", [email]);
-  let userId = rows[0]?.id;
-  if (!userId) {
-    const { data, error } = await admin.auth.admin.createUser({
-      email,
-      password: DEMO_PASSWORD,
-      email_confirm: true,
-    });
-    if (error) throw new Error(`${email}: ${error.message}`);
-    userId = data.user.id;
-  }
-  if (name) {
-    await pg.query(
-      `insert into profiles (user_id, full_name, updated_at)
-       values ($1, $2, now())
-       on conflict (user_id) do update set full_name = $2`,
-      [userId, name],
-    );
-  }
-  return userId;
+/** Development keeps sessions for the gates; production replaces the user
+ * so an old access token cannot regain the rebuilt demo (review of #651). */
+async function ensureUser(pg, admin, email, name, production) {
+  return resetDemoUser(pg, admin, email, name, demoPassword(), production);
 }
 
 /**
@@ -87,21 +87,25 @@ async function ensureUser(pg, admin, email, name) {
  */
 let keptStripe = null;
 
-/** Removes Demo Bistro (cascades all its data) and the demo logins. */
-export async function dropMock(pg) {
+/** Removes Demo Bistro (cascades all its data); reseeding keeps the logins. */
+export async function dropMock(pg, { keepLogins = false } = {}) {
   const { rows } = await pg.query(
     "select id, stripe_account_id, stripe_charges_enabled from restaurants where name = $1",
     [DEMO_RESTAURANT],
   );
   for (const r of rows) {
-    if (r.stripe_account_id) {
+    // A real test account survives a reseed; a gate's lent fake never does.
+    if (r.stripe_account_id && !isLentAccount(r.stripe_account_id)) {
       keptStripe = {
         stripe_account_id: r.stripe_account_id,
         stripe_charges_enabled: r.stripe_charges_enabled,
       };
     }
     await pg.query("delete from restaurants where id = $1", [r.id]);
+    // Demo consent is fixture data, not a real contract to retain on reseed.
+    await pg.query("delete from restaurant_accounting_records where restaurant_id = $1 and source_table = 'terms_acceptances'", [r.id]);
   }
+  if (keepLogins) return rows.length;
   const admin = adminClient();
   for (const email of DEMO_EMAILS) {
     const { rows: u } = await pg.query("select id from auth.users where email = $1", [
@@ -166,6 +170,9 @@ function buildLines(products) {
       qty: randInt(1, 3),
       mods,
       extras: extras.map(e => ({ id: e.id, name: e.name, emoji: e.emoji, price: Number(e.price) })),
+      // As the app writes it: a line carries its section's station, or the
+      // bar never saw a seeded drink (owner's question, 2026-11-11).
+      ...(p.station === "bar" ? { station: "bar" } : {}),
     };
   });
 }
@@ -180,15 +187,31 @@ function pickTip(subtotal) {
   return sample([10, 20, 25, 30, 50], 1)[0]; // a round custom amount
 }
 
-export async function seedMock(pg) {
-  await pg.query("select set_config('tabletap.allocation_origin', 'fixture_history', false)");
+/**
+ * Rebuilds Demo Bistro. `production` replaces demo logins so old tokens
+ * cannot regain access; pass it on every production target.
+ */
+export async function seedMock(pg, { production = false } = {}) {
+  demoPassword(); // Refuse missing credentials before deleting the demo.
   if (!process.env.SUPABASE_SECRET_KEY) {
     throw new Error("SUPABASE_SECRET_KEY missing — needed to create demo logins.");
   }
-  await dropMock(pg); // clean slate → repeatable
+  // Historical receipts are written as the backfill writes them. The setting
+  // lives on this connection, so it is cleared however the seed ends: a
+  // caller reusing the client must never write real sales as history.
+  await pg.query("select set_config('tabletap.allocation_origin', 'fixture_history', false)");
+  try {
+    return await seedDemo(pg, production);
+  } finally {
+    await pg.query("select set_config('tabletap.allocation_origin', '', false)");
+  }
+}
+
+async function seedDemo(pg, production) {
+  await dropMock(pg, { keepLogins: true }); // Development keeps sessions; production replaces logins below.
 
   const admin = adminClient();
-  const ownerId = await ensureUser(pg, admin, DEMO_OWNER.email, DEMO_OWNER.name);
+  const ownerId = await ensureUser(pg, admin, DEMO_OWNER.email, DEMO_OWNER.name, production);
 
   // ── Restaurant + tables ──
   const {
@@ -268,7 +291,7 @@ export async function seedMock(pg) {
 
   // Showcase option groups (modifiers) on a handful of products.
   const { rows: allProducts } = await pg.query(
-    "select id, name from menu_items where restaurant_id = $1 and not is_addon",
+    STABLE_DISHES,
     [rid],
   );
   const spice = { label: "Spice level", type: "single", options: ["Mild", "Medium", "Hot"] };
@@ -305,7 +328,7 @@ export async function seedMock(pg) {
   // ── Team (manager + kitchen) with names, plus an activity log ──
   const logs = [];
   for (const member of DEMO_TEAM) {
-    const uid = await ensureUser(pg, admin, member.email, member.name);
+    const uid = await ensureUser(pg, admin, member.email, member.name, production);
     await pg.query(
       `insert into staff (restaurant_id, user_id, email, role) values ($1, $2, $3, $4)
        on conflict (user_id) do update set restaurant_id = $1, role = $4`,
@@ -327,16 +350,19 @@ export async function seedMock(pg) {
 
   // ── Orders: menu with extras + modifiers for realistic line items ──
   const { rows: products } = await pg.query(
-    `select p.id, p.name, p.emoji, p.price, p.modifiers,
+    `select p.id, p.name, p.emoji, p.price, p.modifiers, c.station,
        coalesce(
-         json_agg(json_build_object('id', a.id, 'name', a.name, 'emoji', a.emoji, 'price', a.price))
+         json_agg(json_build_object('id', a.id, 'name', a.name, 'emoji', a.emoji, 'price', a.price) order by a.name)
            filter (where a.id is not null), '[]'
        ) as extras
      from menu_items p
+     left join categories c on c.id = p.category_id
      left join item_addons ia on ia.product_id = p.id
      left join menu_items a on a.id = ia.addon_id
+     left join menus m on m.id = p.menu_id
      where p.restaurant_id = $1 and not p.is_addon and p.available
-     group by p.id`,
+     group by p.id, c.station, c.sort_order, m.sort_order
+     order by m.sort_order, c.sort_order, p.sort_order, p.name`,
     [rid],
   );
 
@@ -375,7 +401,9 @@ export async function seedMock(pg) {
     );
     const serviceFee = round2(subtotal * 0.1);
     const tip = pickTip(subtotal);
-    const cancelled = Math.random() < 0.07;
+    // The presentation restaurant cancels like a real one (about 1.5%), so its
+    // refunds-to-confirm list is a handful, not thirty.
+    const cancelled = Math.random() < (FEED_DEMO ? 0.015 : 0.07);
     const t = tables[randInt(0, tables.length - 1)];
     const when = randomOrderDate(HISTORY_DAYS);
     // Two in three pay by card; of those, one in five asks for the receipt by
@@ -463,7 +491,7 @@ export async function seedMock(pg) {
   const takers = DEMO_TEAM.filter(m => m.role === "cashier" || m.role === "waiter").map(m => m.email);
   const { rows: settled } = await pg.query(
     `select id, restaurant_id, session_id, total, pay_method, created_at
-       from orders where restaurant_id = $1 and paid and total > 0`,
+       from orders where restaurant_id = $1 and account_id is null and paid and total > 0`,
     [rid],
   );
   if (settled.length > 0) {
@@ -620,7 +648,7 @@ export async function seedMock(pg) {
     );
     await pg.query(
       `insert into payments (restaurant_id, order_id, amount, method, actor_email, created_at)
-       values ($1, $2, $3, $5, 'demo-cashier@tabletap.dev', $4)`,
+       values ($1, $2, $3, $5, 'demo-cashier@tabletap.shop', $4)`,
       [rid, sale.id, subtotal, at, method],
     );
     if (method === "card") lateCard = { at, amount: subtotal };
@@ -628,7 +656,7 @@ export async function seedMock(pg) {
     // and `pnpm money` holds it to the ledger.
     await pg.query(
       `insert into user_logs (restaurant_id, actor_email, entity, action, detail, created_at)
-       values ($1, 'demo-cashier@tabletap.dev', 'bill', 'paid', $2, $3)`,
+       values ($1, 'demo-cashier@tabletap.shop', 'bill', 'paid', $2, $3)`,
       [rid, `code=ORD-${sale.id.replace(/-/g, "").slice(0, 4).toUpperCase()} amount=${subtotal.toFixed(2)} method=${method}`, at],
     );
   }
@@ -642,7 +670,7 @@ export async function seedMock(pg) {
     const lateNet = round2(lateCard.amount * (1 - 3.5 / 100));
     await pg.query(
       `insert into terminal_deposits (restaurant_id, sales_day, currency, expected, received, recorded_by, created_at)
-       values ($1, $2, 'MXN', $3, $4, 'demo-manager@tabletap.dev', $5)
+       values ($1, $2, 'MXN', $3, $4, 'demo-manager@tabletap.shop', $5)
        on conflict (restaurant_id, sales_day, currency) where currency is not null do nothing`,
       [rid, day, expected, round2(expected + lateNet), legacyTerminal.depositAt],
     );
@@ -661,6 +689,7 @@ export async function seedMock(pg) {
             o.created_at, o.created_at
        from orders o
       where o.restaurant_id = $1
+        and o.account_id is null
         and o.paid
         and o.total > 0
         and not exists (select 1 from payments p where p.order_id = o.id)`,
@@ -749,7 +778,12 @@ export async function seedMock(pg) {
   } = await pg.query(
     `insert into promotions (restaurant_id, kind, name, emoji, description, tiers, sort_order)
      values ($1,'tiered','Más postres, mejor precio','🍰','Para compartir',$2,2) returning id`,
-    [rid, JSON.stringify([{ qty: 2, price: 95 }, { qty: 3, price: 130 }])],
+    // The presentation restaurant prices the deal off the dessert itself: 15%
+    // off two, 20% off three. The gates' seed keeps its fixed figures.
+    [rid, JSON.stringify(FEED_DEMO
+      ? [{ qty: 2, price: menuPrice(Number(forPromo[4].price) * 2 * 0.85 / PRICE_SCALE) },
+        { qty: 3, price: menuPrice(Number(forPromo[4].price) * 3 * 0.8 / PRICE_SCALE) }]
+      : [{ qty: 2, price: 95 }, { qty: 3, price: 130 }])],
   );
   await bulkInsert(pg, "promotion_items", ["promotion_id", "item_id", "qty"],
     [[tiered.id, forPromo[4].id, 1]]);
@@ -783,7 +817,7 @@ export async function seedMock(pg) {
     [rid],
   );
   const { rows: menuIds } = await pg.query(
-    "select id, name from menu_items where restaurant_id = $1 and not is_addon", [rid]);
+    STABLE_DISHES, [rid]);
   const byName = new Map(menuIds.map(m => [m.name, m.id]));
   const ratings = [];
   for (const o of rateable) {
@@ -915,8 +949,13 @@ export async function seedMock(pg) {
     ]);
 
   // ── Founder, and what Stripe charges them ─────────────────────────────
+  // The presentation copy (feed-demo, which can run on production) takes no
+  // founder slot: those are numbered seats real restaurants hold, and slot 1
+  // being taken would fail this update after the old demo was already gone.
   await pg.query(
-    "update restaurants set founding_number = coalesce(founding_number, 1), subscribed_price = 1499 where id = $1",
+    FEED_DEMO
+      ? "update restaurants set subscribed_price = 1499 where id = $1"
+      : "update restaurants set founding_number = coalesce(founding_number, 1), subscribed_price = 1499 where id = $1",
     [rid],
   );
 
@@ -938,7 +977,7 @@ export async function seedMock(pg) {
   // one comfortable, one about to run out, one already gone. The rest stay
   // untracked, which is how most of a real menu looks.
   const counted = sample(
-    (await pg.query("select id, name from menu_items where restaurant_id = $1 and not is_addon", [rid])).rows,
+    (await pg.query(STABLE_DISHES, [rid])).rows,
     3,
   );
   if (counted.length === 3) {
@@ -998,21 +1037,21 @@ export async function seedMock(pg) {
   const { rows: [closedShift] } = await pg.query(
     `insert into cash_shifts (restaurant_id, opened_by, opened_at, opening_amount, closed_by, closed_at,
                               counted_cash, expected_cash, difference, difference_note, explained_by)
-     values ($1, 'demo-cashier@tabletap.dev', now() - interval '50 minutes', 200,
-             'demo-cashier@tabletap.dev', now() - interval '40 minutes', 180, 200, -20,
-             'Di cambio de más a la mesa 4', 'demo-cashier@tabletap.dev') returning id`,
+     values ($1, 'demo-cashier@tabletap.shop', now() - interval '50 minutes', 200,
+             'demo-cashier@tabletap.shop', now() - interval '40 minutes', 180, 200, -20,
+             'Di cambio de más a la mesa 4', 'demo-cashier@tabletap.shop') returning id`,
     [rid],
   );
   const { rows: [openShift] } = await pg.query(
     `insert into cash_shifts (restaurant_id, opened_by, opened_at, opening_amount)
-     values ($1, 'demo-cashier@tabletap.dev', now() - interval '30 minutes', 250) returning id`,
+     values ($1, 'demo-cashier@tabletap.shop', now() - interval '30 minutes', 250) returning id`,
     [rid],
   );
   await bulkInsert(
     pg,
     "cash_movements",
     ["restaurant_id", "kind", "amount", "note", "actor_email", "shift_id"],
-    [[rid, "withdrawal", 120, "Pago al proveedor de verduras", "demo-cashier@tabletap.dev", openShift.id]],
+    [[rid, "withdrawal", 120, "Pago al proveedor de verduras", "demo-cashier@tabletap.shop", openShift.id]],
   );
 
   // A counter product and a kitchen printer with a ticket already through it,
@@ -1061,6 +1100,7 @@ export async function seedMock(pg) {
   await pg.query("select set_config('tabletap.allocation_origin', '', false)");
   await seedAllocations(pg, rid);
   await seedOffline(pg, rid);
+  await seedResolvedOffline(pg, rid);
   // Deposits from the restaurant's own card terminal, and voucher numbers.
   // Marked last, once the books are whole: the allocation backfill turns old
   // cancelled sales from voids into adjustments, and a deposit signed before

@@ -145,6 +145,8 @@ interface StaffRow {
  *
  * Still runs on the user-scoped client, so RLS applies exactly as before —
  * this is a round-trip change, not a permission change.
+ *
+ * Keep the verified auth user server-side; page membership props stay unchanged.
  */
 export const getMembership = cache(async (): Promise<Membership | null> => (await getMember()).membership);
 

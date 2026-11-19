@@ -1,5 +1,6 @@
 "use client";
 
+import { pollAfterSettle } from "@/lib/poll-after-settle";
 import { useEffect, useState } from "react";
 import { forgetSitting, recallSitting } from "@/lib/table-binding";
 
@@ -36,11 +37,10 @@ export function useSitting(
     if (!sitting || sitting.tableId === tableId) return;
 
     let active = true;
-    let timer: ReturnType<typeof setInterval> | null = null;
     // A refusal is not an answer. It used to stand in as `{ open: false }`,
     // and "closed" is what makes this phone forget the table: one 429 threw
     // away the note of a bill it still owed.
-    const check = () => fetch(`/api/session?id=${sitting.sessionId}`)
+    const check = (signal?: AbortSignal) => fetch(`/api/session?id=${sitting.sessionId}`, { signal })
       .then(async r => {
         if (!r.ok || !active) return;
         const d = (await r.json()) as { open: boolean; tableLabel?: string; owed?: number };
@@ -48,22 +48,23 @@ export function useSitting(
         if (!d.open) {
           forgetSitting(restaurantId); // settled or aged out: they are free
           setElsewhere(null);
-          if (timer) clearInterval(timer);
+          poll.stop();
           return;
         }
         setElsewhere({ tableLabel: d.tableLabel ?? "", owed: d.owed ?? 0, tableId: sitting.tableId });
-        // Asked again while blocked: checked once, the notice stayed after
-        // somebody else paid the other table (A5, end-to-end review).
-        timer ??= setInterval(() => void check(), ELSEWHERE_RECHECK_MS);
       })
       .catch(() => {
         // A check we could not make must not stop somebody ordering dinner.
       });
-    void check();
+    // Asked again while blocked: checked once, the notice stayed after
+    // somebody else paid the other table (A5, end-to-end review). The first
+    // check is part of the poll too, so one that never answers times out and
+    // is asked again rather than leaving nothing to recheck (audit of #648).
+    const poll = pollAfterSettle(check, ELSEWHERE_RECHECK_MS);
 
     return () => {
       active = false;
-      if (timer) clearInterval(timer);
+      poll.stop();
     };
   }, [restaurantId, tableId]);
 

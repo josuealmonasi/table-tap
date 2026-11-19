@@ -3,6 +3,7 @@ import { randomBytes } from "node:crypto";
 import { createClient } from "@supabase/supabase-js";
 import { forgetBrowserMember } from "./table-member-fixture.mjs";
 import { sessionCookie } from "./session-cookie.mjs";
+import { loginSecret } from "./login-secrets.mjs";
 
 /** A role this run leaves out on purpose: `GATE_SKIP_ROLES=admin,…`. */
 export function skippedOnPurpose(role) {
@@ -14,7 +15,9 @@ export function skippedOnPurpose(role) {
 export async function crewCookies(crew, base, phase) {
   const cookies = new Map();
   for (const who of crew) {
-    const password = who.passwordEnv ? process.env[who.passwordEnv] : "demo123";
+    // The demo logins share DEMO_PASSWORD from this target's env file, the
+    // same value its seed uses. A public fallback would survive a rotation.
+    const password = who.passwordEnv ? process.env[who.passwordEnv] : loginSecret("DEMO_PASSWORD");
     if (!password) {
       // A login that cannot be made is a screen nobody checked. It used to be
       // "skipped", and a skipped visit counts as passed, so every admin screen

@@ -327,6 +327,11 @@ export const SPACING_AUDIT = String.raw`
     if (!readable(el) || context.floating) continue;
     const ink = painted(r, el.parentElement);
     if (ink.width <= 0 || ink.height <= 0) continue;
+    // A listbox option paints a row of the widget, rather than a separate
+    // button beside it. Measure its text against its own inner edges below.
+    const optionRow = el.matches('[role="option"]') && el.parentElement?.matches('[role="listbox"]') &&
+      context.box && Math.abs(r.left - context.box.inner.left) <= 1 &&
+      Math.abs(r.width - el.parentElement.clientWidth) <= 1;
     const fullRow = context.box && sides.some(side => hasBorder(s, side)) &&
       Math.abs(r.left - context.box.inner.left) <= 1 && Math.abs(r.right - context.box.inner.right) <= 1;
     context.edgeRow ||= fullRow;
@@ -334,7 +339,7 @@ export const SPACING_AUDIT = String.raw`
     if (el.matches(edgeControl)) {
       const text = (el.getAttribute('aria-label') || el.textContent || el.getAttribute('value') || el.tagName).trim();
       const paintsBox = surface(s, context.box?.background ?? background(el.parentElement));
-      if (el.matches(borderControl) && !context.paintedControl && paintsBox) {
+      if (el.matches(borderControl) && !context.paintedControl && paintsBox && !optionRow) {
         // A pinned bar's controls are compared only with each other: against the
         // page scrolling past, the gap changes with every scroll position.
         if (!context.joined) add(pinned(el) ? pinnedControlGroups : controlGroups, context.layer, { r: ink, text });
@@ -342,10 +347,10 @@ export const SPACING_AUDIT = String.raw`
       }
       // Unpainted controls use their descendant text Ranges below, never their
       // invisible hit targets (which may fill or overhang a card).
-      if (paintsBox) edge({ r: ink, raw: r, text }, context);
+      if (paintsBox && !optionRow) edge({ r: ink, raw: r, text }, context);
     }
     if (el.matches(iconControl)) context.control = el;
-    if (cardBox(s, r)) {
+    if (cardBox(s, r) || optionRow) {
       context.box = { background: background(el), inner: { left: r.left + parseFloat(s.borderLeftWidth), right: r.right - parseFloat(s.borderRightWidth),
         top: r.top + parseFloat(s.borderTopWidth), bottom: r.bottom - parseFloat(s.borderBottomWidth) },
         // A box scrolled part-way puts its content wherever the scroll leaves

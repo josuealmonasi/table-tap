@@ -1,12 +1,12 @@
 {
   "title": "Términos y Condiciones",
-  "intro": "Estos términos son el contrato entre «[RAZÓN SOCIAL]» (en adelante, «TableTap»), RFC «[RFC]», con domicilio en «[DOMICILIO]», y el restaurante que contrata el servicio en https://tabletap.shop. Están redactados para ser comprensibles; si algún punto no resulta claro, le pedimos escribirnos a «[CORREO DE CONTACTO]» antes de aceptarlos.",
+  "intro": "Estos términos son el contrato entre «[NOMBRE COMPLETO DE LA PERSONA FÍSICA O RAZÓN SOCIAL]» (en adelante, «TableTap»), RFC «[RFC]», con domicilio en «[DOMICILIO]», y el restaurante que contrata el servicio en https://tabletap.shop. Están redactados para ser comprensibles; si algún punto no resulta claro, le pedimos escribirnos a «[CORREO DE CONTACTO]» antes de aceptarlos.",
   "version": "__VERSION__",
   "clauses": [
     {
       "title": "1. Quiénes somos y cómo se celebra este contrato",
       "paragraphs": [
-        "El servicio lo presta «[RAZÓN SOCIAL]», RFC «[RFC]», con domicilio en «[DOMICILIO]». Para aclaraciones, reclamaciones y avisos puede escribirnos a «[CORREO DE CONTACTO]» o llamar al «[TELÉFONO DE CONTACTO]».",
+        "El servicio lo presta «[NOMBRE COMPLETO DE LA PERSONA FÍSICA O RAZÓN SOCIAL]», RFC «[RFC]», con domicilio en «[DOMICILIO]». Para aclaraciones, reclamaciones y avisos puede escribirnos a «[CORREO DE CONTACTO]» o llamar al «[TELÉFONO DE CONTACTO]».",
         "El contrato se celebra por medios electrónicos y queda perfeccionado cuando usted acepta estos términos al crear su cuenta o, si cambian, en el aviso que se muestra al ingresar al panel. Esa aceptación expresa por medios electrónicos tiene la misma validez que una firma en papel.",
         "De cada aceptación se registra la versión aceptada, la fecha y hora, y el correo de la cuenta que la otorgó. El texto de cada versión se puede consultar y descargar en PDF en cualquier momento, con su fecha al pie."
       ]
@@ -40,7 +40,7 @@
     {
       "title": "5. Periodo de prueba",
       "paragraphs": [
-        "Se ofrecen 30 días de prueba sin necesidad de tarjeta, sobre el plan Servicio, contados desde que confirma su correo electrónico. La prueba se otorga por una sola ocasión por restaurante.",
+        "Se ofrecen 30 días de prueba sin necesidad de tarjeta, sobre el plan Servicio, contados desde que confirma su correo electrónico. La prueba se otorga por una sola ocasión por restaurante y por RFC: si el RFC que registra en su cuenta ya obtuvo la prueba en otra cuenta, la prueba de esta termina al guardarlo y la cuenta pasa al plan Carta, sin pérdida de información.",
         "Al concluir, si no se contrata un plan de paga, el restaurante pasa al plan gratuito.",
         "No se elimina información alguna al terminar la prueba: el menú, las mesas y los pedidos permanecen disponibles. Lo que deja de estar disponible son las funciones propias del plan de paga, entre ellas el servicio en mesa y el conteo de existencias. Las existencias que ya haya capturado se conservan, pero dejan de descontarse con cada pedido y los platillos dejan de retirarse solos de la carta al llegar a cero: la disponibilidad vuelve a depender del interruptor de cada platillo."
       ]

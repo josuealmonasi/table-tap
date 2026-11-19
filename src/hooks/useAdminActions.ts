@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useToast } from "@/components/ui/Toast";
 import { useT } from "@/lib/i18n/context";
+import type { TierAssignment } from "@/components/dashboard/admin/AdminTierDialog";
 
 export interface NewUserInput {
   email: string;
@@ -60,11 +61,21 @@ export function useAdminActions() {
       password?: string;
       role?: string;
     }) => call("/api/admin/users", "PATCH", input, t("admin.loginUpdated")),
+    transferOwner: (restaurantId: string, userId: string, doneMsg: string) =>
+      call("/api/admin/restaurants/owner", "POST", { id: restaurantId, userId }, doneMsg),
     deleteUser: (userId: string) =>
       call("/api/admin/users", "DELETE", { userId }, t("admin.loginDeleted")),
     deleteRestaurant: (id: string) =>
       call("/api/admin/restaurants", "DELETE", { id }, t("admin.restaurantDeleted")),
-    movePlan: (id: string, plan: string, doneMsg: string) =>
-      call("/api/admin/restaurants", "PATCH", { id, plan }, doneMsg),
+    schedulePrice: (plan: string, newPrice: number, effectiveAt: string, doneMsg: string) =>
+      call("/api/admin/plan-price-changes", "POST", { plan, newPrice, effectiveAt }, doneMsg),
+    suspend: (id: string, reason: string, doneMsg: string) =>
+      call("/api/admin/restaurants/suspend", "POST", { id, reason }, doneMsg),
+    changeTrial: (id: string, endsAt: string | null, doneMsg: string) =>
+      call("/api/admin/restaurants/trial", "PATCH", { id, endsAt }, doneMsg),
+    liftSuspension: (id: string, doneMsg: string) =>
+      call("/api/admin/restaurants/suspend", "DELETE", { id }, doneMsg),
+    movePlan: (id: string, plan: string, doneMsg: string, choice: TierAssignment) =>
+      call("/api/admin/restaurants", "PATCH", { id, plan, ...choice }, doneMsg),
   };
 }

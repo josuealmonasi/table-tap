@@ -14,6 +14,8 @@
 // ============================================================================
 import { randomBytes } from "node:crypto";
 import { bulkInsert } from "./menu-catalog.mjs";
+import { SEED_STOP_TOKEN } from "./seed-stop-token.mjs";
+import { TERMS_VERSION } from "./terms-version.mjs";
 
 // The same alphabet as src/lib/loyalty/code.ts; loyalty_cards.code refuses
 // anything else, so a slip here fails the seed rather than hiding.
@@ -27,7 +29,7 @@ const LADDER = [
 ];
 const GOAL = LADDER[LADDER.length - 1].visits;
 const REWARD = LADDER[LADDER.length - 1].reward;
-const FLOOR = ["demo-waiter@tabletap.dev", "demo-cashier@tabletap.dev", "demo-manager@tabletap.dev"];
+const FLOOR = ["demo-waiter@tabletap.shop", "demo-cashier@tabletap.shop", "demo-manager@tabletap.shop"];
 
 // The demo restaurant's own calendar, the one a stamp is dated by. The first
 // version dated visits in UTC: after six in the evening in Mexico City, "one
@@ -59,7 +61,7 @@ export async function seedLoyalty(pg, rid) {
   const stages = [
     { visits: 1, spent: [], endDaysAgo: 2 },
     { visits: 8, spent: [4], endDaysAgo: 1 },
-    { visits: 12, spent: [], endDaysAgo: 3 },
+    { visits: 12, spent: [], endDaysAgo: 3, stopLink: true },
     { visits: GOAL + 3, spent: [4, 8, 12], endDaysAgo: 1 },
   ];
 
@@ -70,8 +72,11 @@ export async function seedLoyalty(pg, rid) {
     const [card] = await bulkInsert(
       pg,
       "loyalty_cards",
-      ["restaurant_id", "code", "goal", "steps", "round_no", "created_at"],
-      [[rid, code(), GOAL, steps, rounds, `${oldest}T19:00:00Z`]],
+      ["restaurant_id", "code", "goal", "steps", "round_no", "created_at",
+        "email", "email_consent_at", "email_notice_version", "email_set_by", "email_unsubscribe"],
+      [[rid, code(), GOAL, steps, rounds, `${oldest}T19:00:00Z`,
+        stage.stopLink ? "stop-link@example.invalid" : null, stage.stopLink ? new Date().toISOString() : null,
+        stage.stopLink ? TERMS_VERSION : null, stage.stopLink ? "seed" : null, stage.stopLink ? SEED_STOP_TOKEN : null]],
       "id",
     );
     await bulkInsert(

@@ -6,7 +6,10 @@ import { expect, it } from "vitest";
 // replayed on dev Postgres in rolled-back transactions; these pin the rules.
 const sql = readFileSync("supabase/schema.sql", "utf8");
 const drop = readFileSync("supabase/drop.sql", "utf8");
-const body = (name: string) => sql.slice(sql.lastIndexOf(`create or replace function public.${name}(`)).split("$$;")[0];
+// The ticket-choice overload delegates to this retained slot writer. Its
+// transaction boundary is pinned separately in review2-money-schema.spec.ts.
+const body = (name: string) => [...sql.matchAll(/create or replace function public\.(\w+)\([\s\S]*?\$\$;/g)]
+  .filter(m => m[1] === name && !m[0].split("returns")[0].includes("p_skip_ticket_email")).at(-1)?.[0] ?? "";
 
 const SERVER_ONLY = [
   "start_bill_split_v2(uuid, uuid, uuid, uuid, int, int, text, uuid, int)",

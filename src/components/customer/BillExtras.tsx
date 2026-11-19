@@ -17,6 +17,7 @@ interface BillExtrasProps {
   tipCustom: number | null;
   /** The most a tip can be: what is being paid before it. */
   maxTip: number;
+  tipBase: number;
   onTipPct: (pct: number) => void;
   onTipCustom: (amount: number | null) => void;
 }
@@ -40,6 +41,7 @@ export default function BillExtras({
   tipPct,
   tipCustom,
   maxTip,
+  tipBase,
   onTipPct,
   onTipCustom,
 }: BillExtrasProps) {
@@ -62,6 +64,7 @@ export default function BillExtras({
           tipPct={tipPct}
           tipCustom={tipCustom}
           maxTip={maxTip}
+          tipBase={tipBase}
           onPresetTip={onTipPct}
           onCustomTip={onTipCustom}
         />

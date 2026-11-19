@@ -3,7 +3,10 @@ import { describe, expect, it } from "vitest";
 
 const schema = readFileSync("supabase/schema.sql", "utf8");
 const definition = (name: string): string => {
-  const all = [...schema.matchAll(/create or replace function public\.([a-z_0-9]+)\([\s\S]*?\$\$;/g)].filter(m => m[1] === name);
+  // The ticket-choice overload delegates to the guarded collection below;
+  // review2-money-schema.spec.ts pins that delegation and rollback.
+  const all = [...schema.matchAll(/create or replace function public\.([a-z_0-9]+)\([\s\S]*?\$\$;/g)]
+    .filter(m => m[1] === name && !m[0].split("returns")[0].includes("p_skip_ticket_email"));
   return all.at(-1)?.[0] ?? "";
 };
 

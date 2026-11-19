@@ -23,8 +23,8 @@ export async function loyaltyAttachmentFixture(f) {
     for (const key of [room, hash(`${room}|${tableId}`), hash(`${room}|counter`)]) {
       await checked(admin.from("rate_limits").delete().like("bucket", `%:${key}`));
     }
-    await checked(admin.from("payments").delete().eq("restaurant_id", r).eq("session_id", sessionId));
-    await checked(admin.from("payments").delete().eq("restaurant_id", r).in("order_id", ids));
+    await checked(admin.from("payments").delete().is("account_id", null).eq("restaurant_id", r).eq("session_id", sessionId));
+    await checked(admin.from("payments").delete().is("account_id", null).eq("restaurant_id", r).in("order_id", ids));
     await checked(admin.from("orders").delete().eq("restaurant_id", r).in("id", ids));
     await checked(admin.from("table_sessions").delete().eq("restaurant_id", r).eq("id", sessionId));
     await checked(admin.from("restaurant_tables").delete().eq("restaurant_id", r).eq("id", tableId));

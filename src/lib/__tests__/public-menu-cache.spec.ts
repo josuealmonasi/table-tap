@@ -1,7 +1,7 @@
 import { beforeEach, afterEach, describe, expect, it, vi } from "vitest";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-const state = vi.hoisted(() => ({ calls: [] as string[], cache: new Map<string, { tags: string[]; data: Promise<unknown> }>(), planRead: false, readError: "", plan: { allows_loyalty: true, allows_menu_schedules: true, allows_promotions: true, allows_online_ordering: true } }));
+const state = vi.hoisted(() => ({ calls: [] as string[], cache: new Map<string, { tags: string[]; data: Promise<unknown> }>(), planRead: false, readError: "", cap: Infinity, plan: { allows_loyalty: true, allows_menu_schedules: true, allows_promotions: true, allows_online_ordering: true } }));
 vi.mock("next/cache", () => ({
   unstable_cache: (fn: (...args: unknown[]) => unknown, keys: string[], options: { tags: string[] }) => async (...args: unknown[]) => {
     const key = JSON.stringify([keys, args]);
@@ -51,10 +51,10 @@ const client = {
         state.calls.push(table);
         if (state.readError === table) { resolve({ data: null, error: { message: "database unavailable" } }); return; }
         // Model the anon policies as well as projection; admin menus alone may see hidden rows.
-        if (table === "menu_items") result = result.filter(r => r.available && r.menu_id === "open");
+        if (table === "menu_items") result = result.filter(r => r.available && rows.menus.some(m => m.id === r.menu_id && m.active));
         if (table === "categories") result = result.filter(r => r.menu_id === "open");
         if (columns !== "*") result = result.map(r => Object.fromEntries(columns.split(",").map(c => c.trim()).filter(c => c in r).map(c => [c, r[c]]).concat(columns.includes("items:promotion_items(") ? [["items", r.items]] : [])));
-        resolve({ data: single ? result[0] ?? null : result, error: null });
+        resolve({ data: single ? result[0] ?? null : result.slice(0, state.cap), error: null });
       },
     };
     return query;
@@ -92,7 +92,7 @@ describe("restaurant public menu cache", () => {
     }));
   });
 
-  it("counts a complete table visit: 19 before, 14 cold, 3 warm (one add-on row plus its empty final page)", async () => {
+  it("counts a complete table visit: 19 before, 18 cold, 3 warm (one add-on row plus its empty final page)", async () => {
     async function visit() {
       state.calls = []; state.planRead = false;
       await Promise.all([loadCoverState("r1"), menuShowsLoyalty("r1")]);
@@ -103,7 +103,7 @@ describe("restaurant public menu cache", () => {
     vi.stubEnv("PUBLIC_MENU_CACHE", "0");
     expect(await visit()).toHaveLength(19);
     vi.stubEnv("PUBLIC_MENU_CACHE", "1");
-    expect(await visit()).toHaveLength(14);
+    expect(await visit()).toHaveLength(18);
     expect(await visit()).toEqual(["plan", "restaurant_tables", "table_sessions"]);
   });
 
@@ -178,5 +178,23 @@ describe("restaurant public menu cache", () => {
     expect((await loadOrderingData("r1")).promos).toEqual([]);
     expect(state.calls).toHaveLength(reads);
   });
+
+it.each(["0", "1"])("N5: carries the split setting through the public reader (cache %s)", async cache => {
+  vi.stubEnv("PUBLIC_MENU_CACHE", cache);
+  rows.restaurants[0].split_enabled = false;
+  try { expect((await loadOrderingData("r1")).restaurant?.split_enabled).toBe(false); }
+  finally { delete rows.restaurants[0].split_enabled; }
+});
+it("N11: reads serving dishes behind a capped page of scheduled-closed dishes", async () => {
+  const original = structuredClone({ menus: rows.menus, menu_items: rows.menu_items });
+  state.cap = 1000;
+  vi.useFakeTimers(); vi.setSystemTime(new Date("2026-11-10T18:00:00Z"));
+  rows.menus = [{ id: "breakfast", active: true, schedule: { enabled: true, rules: [{ days: [0,1,2,3,4,5,6], start: "08:00", end: "10:00" }] } },
+    { id: "open", active: true, schedule: null }];
+  rows.menu_items = [...Array.from({ length: 1000 }, (_, i) => ({ id: `breakfast-${i}`, menu_id: "breakfast", available: true })),
+    { id: "dinner", menu_id: "open", available: true }];
+  try { expect((await loadOrderingData("r1")).items.map(i => i.id)).toEqual(["dinner"]); }
+  finally { Object.assign(rows, original); state.cap = Infinity; vi.useRealTimers(); }
+});
 
 });

@@ -46,6 +46,7 @@ export function useBillPayment(
     diner: string;
     ownOrderIds: string[];
     tipPct: number;
+    tipAmount?: number;
   }): Promise<void> {
     if (!sessionId || busy) return;
     setBusy(true);
@@ -62,7 +63,8 @@ export function useBillPayment(
           // Which orders this phone believes are its own. Checked on the server
           // against what was actually placed after the freeze.
           ownOrderIds: share.ownOrderIds,
-          tipPct: share.tipPct,
+          tipPct: share.tipAmount == null ? share.tipPct : undefined,
+          tipAmount: share.tipAmount,
         }),
       });
       await redirectOrSay(res);
@@ -73,13 +75,13 @@ export function useBillPayment(
   }
 
   /** These parts belong to this revision; the route checks them again before opening a card page. */
-  async function paySlots(pay: { splitId: string; revision: number; slots: number[]; expectedCents: number; tipCents?: number }): Promise<void> {
+  async function paySlots(pay: { splitId: string; revision: number; slots: number[]; expectedCents: number; tipCents?: number; tipPct?: number }): Promise<void> {
     if (!sessionId || busy) return;
     setBusy(true);
     try {
       const res = await fetch("/api/split/pay", {
         method: "POST", headers: { "content-type": "application/json" },
-        body: JSON.stringify({ ...pay, restaurantId, tableId, sessionId, tipCents: pay.tipCents ?? 0 }),
+        body: JSON.stringify({ ...pay, restaurantId, tableId, sessionId, ...(pay.tipPct === undefined ? { tipCents: pay.tipCents ?? 0 } : { tipPct: pay.tipPct }) }),
       });
       await redirectOrSay(res, () => {
         rememberSettling([]);

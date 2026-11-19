@@ -176,12 +176,18 @@ export async function sittingFor(
  * It answered "settled" whatever happened: a failed write left the orders owed
  * while the waiter was told the table was clear. Now a failure is "not
  * settled", the bill stays open at MX$0 owing, and "Pagó en efectivo" closes it.
+ *
+ * `skipTicketEmail` is the cashier's ticket choice when this close is the
+ * collection itself (a MX$0 table): SQL marks it under the same lock that
+ * settles, unless recorded coverage already carries the collector's choice.
+ * Left out, the marks stay as the collection that paid wrote them.
  */
 export async function closeBill(
   actor: Actor,
   tableId: string,
   method: "cash" | "card",
   currency?: string,
+  skipTicketEmail?: boolean,
 ): Promise<boolean> {
   const db = createAdminClient();
   let query = db
@@ -209,6 +215,8 @@ export async function closeBill(
     p_method: method,
     p_actor: actor.email,
     p_sittings: [],
+    // The six-argument overload; without a choice, the original five.
+    ...(skipTicketEmail === undefined ? {} : { p_skip_ticket_email: skipTicketEmail }),
   });
   if (error) {
     console.error("closing a bill paid in parts failed:", error.message);

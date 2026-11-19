@@ -15,14 +15,18 @@ interface ReadResult {
   error: { message: string } | null;
 }
 
-function queue(results: ReadResult[]): void {
+function queryResult(result: ReadResult | Promise<ReadResult>) {
   // Supabase queries are awaitable even when the last operation is a filter.
-  for (const result of results) from.mockReturnValueOnce(Object.assign(Promise.resolve(result), {
+  return Object.assign(Promise.resolve(result), {
     select: vi.fn().mockReturnThis(), eq: vi.fn().mockReturnThis(), in: vi.fn().mockReturnThis(),
     not: vi.fn().mockReturnThis(), or: vi.fn().mockReturnThis(),
     order: vi.fn().mockReturnThis(), limit: vi.fn().mockReturnThis(), is: vi.fn().mockReturnThis(),
     maybeSingle: vi.fn().mockResolvedValue(result), update: vi.fn().mockReturnThis(),
-  }));
+  });
+}
+
+function queue(results: (ReadResult | Promise<ReadResult>)[]): void {
+  for (const result of results) from.mockReturnValueOnce(queryResult(result));
 }
 
 const badgeReads = (): ReadResult[] => [
@@ -62,7 +66,8 @@ it("keeps an explicit disabled setting empty without counting work", async () =>
 });
 
 it.each([0, 1])("refuses a failed notification read at step %s rather than emptying the bell", async index => {
-  const reads: ReadResult[] = [{ data: [{ id: "notice" }], error: null }, { count: 3, error: null }, { data: [], error: null }];
+  const reads: ReadResult[] = [{ data: [{ id: "notice" }], error: null }, { count: 3, error: null },
+    { data: { timezone: "Asia/Tokyo" }, error: null }, { data: [], error: null }];
   reads[index] = { data: null, count: null, error: { message: "database unavailable" } };
   queue(reads);
   const response = await notifications(new NextRequest("http://localhost/api/notifications"));
@@ -71,10 +76,59 @@ it.each([0, 1])("refuses a failed notification read at step %s rather than empty
 });
 
 it("keeps the notification list and its full unread count", async () => {
-  queue([{ data: [{ id: "notice" }], error: null }, { count: 3, error: null }, { data: [], error: null }, { data: { timezone: "Asia/Tokyo" }, error: null }]);
+  queue([{ data: [{ id: "notice" }], error: null }, { count: 3, error: null }, { data: { timezone: "Asia/Tokyo" }, error: null }, { data: [], error: null }]);
   const response = await notifications(new NextRequest("http://localhost/api/notifications"));
   expect(response.status).toBe(200);
   expect(await response.json()).toEqual({ notifications: [{ id: "notice" }], unread: 3, nextCursor: null, timeZone: "Asia/Tokyo" });
+});
+
+it("executes only the badge counts each role uses, preserving all five response shapes", async () => {
+  const roles = ["waiter", "cashier", "kitchen", "owner", "manager"];
+  const results = [];
+  for (const role of roles) {
+    from.mockReset();
+    actor.mockResolvedValue({ restaurantId: "r1", role });
+    queue([{ data: { badges_enabled: true }, error: null }, ...Array.from({ length: 4 }, () => ({ count: 7, error: null }))]);
+    const response = await badges();
+    results.push({ role, status: response.status, body: await response.json(),
+      queries: from.mock.calls.slice(1).map(([table], i) => {
+        const query = from.mock.results[i + 1].value;
+        return { table, select: query.select.mock.calls, eq: query.eq.mock.calls, in: query.in.mock.calls };
+      }),
+    });
+  }
+  const count = (table: string, eq: unknown[][], inside: unknown[][] = []) => ({ table,
+    select: [["id", { count: "exact", head: true }]], eq: [["restaurant_id", "r1"], ...eq], in: inside });
+  const ready = count("orders", [["written_off", false], ["status", "ready"]]);
+  const cooking = count("orders", [["written_off", false]], [["status", ["received", "preparing"]]]);
+  const approvals = ["discount_requests", "write_off_requests"].map(table => count(table, [["status", "pending"]]));
+  expect(results).toEqual(roles.map(role => ({ role, status: 200,
+    body: { badges: role === "owner" || role === "manager" ? { "/dashboard/orders": 14, "/dashboard/bills": 14 } : { "/dashboard/orders": 7 } },
+    queries: role === "owner" || role === "manager" ? [cooking, ready, ...approvals] : [role === "kitchen" ? cooking : ready],
+  })));
+});
+
+it.each([
+  { restaurant: { data: { timezone: "Asia/Tokyo" }, error: null }, status: 200, timeZone: "Asia/Tokyo" },
+  { restaurant: { data: { timezone: null }, error: null }, status: 200, timeZone: "America/Mexico_City" },
+  { restaurant: { data: null, error: null }, status: 503, timeZone: undefined },
+  { restaurant: { data: null, error: { message: "unavailable" } }, status: 503, timeZone: undefined },
+])("starts timezone alongside the held notification reads ($status, $timeZone)", async ({ restaurant, status, timeZone }) => {
+  let release!: (value: ReadResult) => void;
+  const held = new Promise<ReadResult>(resolve => { release = resolve; });
+  const timezoneQuery = queryResult(restaurant);
+  const notificationQueries = [held, { count: 3, error: null }, { data: [], error: null }].map(queryResult);
+  from.mockImplementation(table => table === "restaurants" ? timezoneQuery : notificationQueries.shift());
+  const pending = notifications(new NextRequest("http://localhost/api/notifications"));
+  await new Promise<void>(resolve => setImmediate(resolve));
+  const started = from.mock.calls.map(([table]) => table);
+  const timezoneScope = from.mock.results[2]?.value.eq.mock.calls;
+  release({ data: [{ id: "notice" }], error: null });
+  const response = await pending;
+  expect({ started, timezoneScope, status: response.status, body: await response.json() }).toEqual({
+    started: ["notifications", "notifications", "restaurants"], timezoneScope: [["id", "r1"]], status,
+    body: status === 200 ? { notifications: [{ id: "notice" }], unread: 3, nextCursor: null, timeZone } : { error: "apiErr.generic" },
+  });
 });
 
 it.each([["badges", badges], ["notifications", notifications]] as const)("keeps authorization before %s reads", async (_name, read) => {

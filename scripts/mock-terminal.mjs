@@ -27,7 +27,7 @@ export async function seedTerminal(pg, rid) {
     // manifest `pnpm money` reconciles. A direct insert had none, and every
     // demo deposit read as unsigned. The bank's figure is set afterwards.
     const { rows: [mark] } = await pg.query(
-      `select record_terminal_deposit_v1($1, $2, $3, 0, $4, 'demo-manager@tabletap.dev') as result`,
+      `select record_terminal_deposit_v1($1, $2, $3, 0, $4, 'demo-manager@tabletap.shop') as result`,
       [rid, d.day, d.currency, short ? "Bank statement shows a chargeback" : null],
     );
     if (mark.result?.error) continue;
@@ -39,7 +39,8 @@ export async function seedTerminal(pg, rid) {
   }
   await pg.query(
     `update payments set terminal_ref = 'AUT ' || (100000 + (abs(hashtext(id::text)) % 900000))::text
-      where id in (select id from payments where restaurant_id = $1 and method = 'card'
+      where account_id is null and order_id in (select id from orders where account_id is null)
+        and id in (select id from payments where restaurant_id = $1 and method = 'card'
                      and stripe_payment_intent is null order by created_at desc limit 6)`,
     [rid],
   );

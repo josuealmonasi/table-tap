@@ -18,4 +18,5 @@ export const attachmentErrors = {
   off: { key: "loyaltyAttach.off", status: 409 },
   paid: { key: "loyaltyAttach.paid", status: 409 },
   gone: { key: "loyaltyAttach.gone", status: 404 },
+  taken: { key: "loyaltyAttach.taken", status: 409 },
 } as const;

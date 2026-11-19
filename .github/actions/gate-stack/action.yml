@@ -1,0 +1,137 @@
+name: Gate stack
+description: >
+  Everything a gate needs on one runner — a throwaway local Supabase with the
+  schema and the demo seed, and the run's production build (the `next-build`
+  artifact) served on localhost:3000 against it. Nothing here can reach the
+  dev or production projects: scripts/ci-env.mjs refuses any address that is
+  not this machine.
+
+inputs:
+  stripe-test-secret:
+    description: A Stripe TEST key (sk_test_…), or empty to skip the cases that reach Stripe.
+    required: false
+    default: ""
+  playwright:
+    description: Install Chromium for the browser gates.
+    required: false
+    default: "false"
+  build-only:
+    description: >
+      For the job that builds: the stack only for the URL and keys the build
+      inlines; no seed, no server.
+    required: false
+    default: "false"
+
+runs:
+  using: composite
+  steps:
+    - name: Set up pnpm
+      uses: pnpm/action-setup@v4
+      with:
+        version: 11.9.0
+
+    - name: Set up Node
+      uses: actions/setup-node@v4
+      with:
+        node-version: 24
+        cache: pnpm
+
+    - name: Install dependencies
+      shell: bash
+      run: pnpm install --frozen-lockfile
+
+    - name: Set up the Supabase CLI
+      uses: supabase/setup-cli@v1
+      with:
+        version: 3.2.0
+
+    # Only the services the app talks to: the database, auth, the REST API,
+    # realtime (pnpm rls asks the socket directly) and storage (the schema
+    # makes the menu bucket). The rest only cost pull time. The build job
+    # starts the same set: `supabase status` reports the API URL and keys the
+    # build inlines only while the API gateway is up.
+    # Retried: a hosted runner sometimes still holds port 54322 from a previous
+    # job ("failed to bind host port 0.0.0.0:54322: address already in use").
+    # That failed #649 and #653's roles gate on 2026-11-17 with no code at fault,
+    # so a red gate there meant nothing. Stop what half-started, wait, try again.
+    - name: Start a throwaway Supabase
+      shell: bash
+      run: |
+        for attempt in 1 2 3; do
+          supabase start --workdir ci -x studio,imgproxy,edge-runtime,logflare,vector,supavisor,postgres-meta,mailpit && exit 0
+          echo "::warning::supabase start failed (attempt $attempt); stopping and retrying"
+          supabase stop --no-backup --workdir ci || true
+          sleep $((attempt * 15))
+        done
+        exit 1
+
+    - name: Point the gates at it
+      shell: bash
+      env:
+        STRIPE_TEST_SECRET: ${{ inputs.stripe-test-secret }}
+      run: supabase status -o env --workdir ci | node scripts/ci-env.mjs
+
+    # The same scripts that build the dev project: the schema file, the test
+    # logins and platform admin (db:seed), and the demo restaurant (db:mock).
+    - name: Create the schema and seed it
+      if: inputs.build-only != 'true'
+      shell: bash
+      run: |
+        pnpm db:create
+        pnpm db:seed
+        pnpm db:mock
+
+    - name: Fetch the run's build
+      if: inputs.build-only != 'true'
+      uses: actions/download-artifact@v4
+      with:
+        name: next-build
+        path: .next
+
+    # The build inlined the Supabase URL and publishable key. Every local
+    # stack derives them from the same defaults; if that ever stops being
+    # true, say so here rather than as a few hundred failed logins.
+    - name: Check the build matches this stack
+      if: inputs.build-only != 'true'
+      shell: bash
+      run: |
+        now=$(printf '%s\n%s' "$NEXT_PUBLIC_SUPABASE_URL" "$NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY" | sha256sum | cut -c1-64)
+        built=$(cat .next/gate-build-env)
+        if [ "$now" != "$built" ]; then echo "The build was made for another Supabase URL or key than this stack's"; exit 1; fi
+
+    - name: Start the server
+      if: inputs.build-only != 'true'
+      shell: bash
+      run: |
+        nohup pnpm start -p 3000 > server.log 2>&1 &
+        for _ in $(seq 1 60); do
+          code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 30 http://localhost:3000/login || true)
+          [ "$code" = 200 ] && break
+          sleep 2
+        done
+        if [ "$code" != 200 ]; then echo "The server never answered /login (last: $code)"; cat server.log; exit 1; fi
+        # Never gate a build wired anywhere else: its bundle must name the
+        # local stack and no hosted project.
+        page=$(curl -s http://localhost:3000/login)
+        bundle=$(for js in $(echo "$page" | grep -oE '/_next/static/chunks/[^"]+\.js' | sort -u | head -60); do curl -s "http://localhost:3000$js"; done)
+        if ! echo "$page$bundle" | grep -q "127.0.0.1:54321"; then echo "REFUSING: the build does not name the local Supabase"; exit 1; fi
+        if echo "$page$bundle" | grep -qE "[a-z0-9]{20}\.supabase\.co"; then echo "REFUSING: the build names a hosted Supabase project"; exit 1; fi
+        echo "Server up on http://localhost:3000 against the local Supabase."
+
+    - name: Cache Playwright's browsers
+      if: inputs.playwright == 'true'
+      id: playwright-cache
+      uses: actions/cache@v4
+      with:
+        path: ~/.cache/ms-playwright
+        key: playwright-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+
+    - name: Install Chromium
+      if: inputs.playwright == 'true' && steps.playwright-cache.outputs.cache-hit != 'true'
+      shell: bash
+      run: pnpm exec playwright install --with-deps chromium
+
+    - name: Install Chromium's system libraries
+      if: inputs.playwright == 'true' && steps.playwright-cache.outputs.cache-hit == 'true'
+      shell: bash
+      run: pnpm exec playwright install-deps chromium

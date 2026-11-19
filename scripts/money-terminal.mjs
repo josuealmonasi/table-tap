@@ -72,15 +72,25 @@ export function checkTerminalDeposits(rows, { ok, bad, info }) {
         && cents(p.amount) - ledger.events.filter(r => r.payment_id === p.id && day(r.at) === day(p.created_at)
           && time(r.at) <= cutoff(d) && !signedDays.has(day(p.created_at))).reduce((n, r) => n + cents(r.amount), 0) > 0)
         .map(p => day(p.created_at)))].sort();
+      let ownsReturn = false;
       for (const r of ledger.events.filter(r => time(r.at) <= cutoff(d))) {
         const returnDay = day(r.at), saleDay = day(r.created_at);
         const consumed = prior.some(m => m.return_ids?.includes(r.id) || (m.return_ids == null
           && time(r.at) <= time(m.created_at) && m.sales_day === salesDays.find(s => s >= returnDay)));
         if (consumed) continue;
         const sameDay = saleDay === returnDay && !signedDays.has(saleDay);
-        const target = sameDay ? saleDay : salesDays.find(s => s >= returnDay && !signedDays.has(s));
+        let ownDay = returnDay;
+        while (signedDays.has(ownDay)) {
+          const next = new Date(`${ownDay}T12:00:00Z`);
+          next.setUTCDate(next.getUTCDate() + 1);
+          ownDay = next.toISOString().slice(0, 10);
+        }
+        const target = sameDay ? saleDay : salesDays.find(s => s >= returnDay && !signedDays.has(s)) ?? ownDay;
+        if (!sameDay && target === d.sales_day) ownsReturn = true;
+        if (target !== d.sales_day && d.return_ids.includes(r.id)) fail(`deposit ${d.id} return ${r.id} belongs to ${target}`);
         if (target === d.sales_day && !d.return_ids.includes(r.id)) fail(`deposit ${d.id} is missing return ${r.id}`);
       }
+      if (!salesDays.includes(d.sales_day) && !ownsReturn) fail(`deposit ${d.id} has no net sales or owned returns`);
     }
     for (const p of ledger.receipts) {
       const original = marks.find(d => d.sales_day === day(p.created_at));
@@ -95,13 +105,13 @@ export function checkTerminalDeposits(rows, { ok, bad, info }) {
     }
     for (const r of ledger.events) {
       if (returnOwners.has(r.id) || !modern.some(d => d.sales_day === day(r.created_at))) continue;
-      // A return without an unsigned sales day has no deposit to name yet,
-      // even when another day's later cutoff exists. Keep that debt visible.
+      // An unconsumed return can be marked on its own unsigned day when no
+      // sales day exists. Keep that bank debit visible until it is marked.
       pendingReturns++;
       const original = marks.find(d => d.sales_day === day(r.created_at));
       const amount = cents(r.amount);
       const debit = amount - (day(r.at) === day(r.created_at) ? fee(amount, original?.fee_pct ?? config.terminal_fee_pct) : 0);
-      info(`    REVIEW   terminal return ${r.id}: awaiting a later deposit (${(debit / 100).toFixed(2)} ${currency})`);
+      info(`    REVIEW   terminal return ${r.id}: awaiting reconciliation (${(debit / 100).toFixed(2)} ${currency})`);
     }
   }
   if (!failures) {

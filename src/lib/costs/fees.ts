@@ -53,10 +53,11 @@ export interface FeeRate {
  * The period's fees as a share of its takings.
  *
  * @param platformFees TableTap's per-order fees over the same period.
+ * @param terminalFees Net terminal processing fees from receipts and returns.
  */
-export function feeRate(payments: FeePayment[], platformFees: number, terminalPct: number): FeeRate {
+export function feeRate(payments: FeePayment[], platformFees: number, terminalPct: number, terminalFees?: number): FeeRate {
   let takings = 0;
-  let fees = platformFees;
+  let fees = platformFees + (terminalFees ?? 0);
   let cash = 0;
   let online = 0;
   let terminal = 0;
@@ -64,7 +65,7 @@ export function feeRate(payments: FeePayment[], platformFees: number, terminalPc
   for (const p of payments) {
     const amount = Number(p.amount);
     takings += amount;
-    fees += paymentFee(p, terminalPct);
+    if (terminalFees === undefined || p.method !== "card" || p.stripe_payment_intent) fees += paymentFee(p, terminalPct);
     if (p.stripe_payment_intent && p.processing_fee === undefined && charged.has(p.stripe_payment_intent)) fees -= STRIPE_FIXED * (1 + FEE_IVA_PCT / 100);
     if (p.stripe_payment_intent) charged.add(p.stripe_payment_intent);
     if (p.method === "cash") cash += amount;

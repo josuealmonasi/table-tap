@@ -1,5 +1,6 @@
 "use client";
 
+import { pollAfterSettle } from "@/lib/poll-after-settle";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { BILL_POLL_MS } from "@/lib/poll";
 import type { SplitScope } from "@/lib/split-slots";
@@ -38,13 +39,13 @@ export function useSlotReceiptOffer(scope?: SplitScope, settled: boolean | null 
       && saved?.restaurantId === restaurantId && saved.tableId === tableId && saved.sessionId === sessionId
       && Array.isArray(saved.slots) ? saved : null;
     let stopped = false, busy = false;
-    async function reload(): Promise<void> {
+    async function reload(signal?: AbortSignal): Promise<void> {
       if (busy || document.visibilityState === "hidden") return;
       busy = true;
       const forDecision = latestDecision.current;
       setDiscovery(null);
       try {
-        const response = await fetch(`/api/receipt/payments?${params}`);
+        const response = await fetch(`/api/receipt/payments?${params}`, { signal });
         if (!response.ok) return;
         const data = await response.json() as { payments: SlotReceiptTarget[]; split: boolean; splitOrderIds: string[] };
         if (stopped || !Array.isArray(data.payments) || !Array.isArray(data.splitOrderIds)) return;
@@ -69,15 +70,12 @@ export function useSlotReceiptOffer(scope?: SplitScope, settled: boolean | null 
       } finally {
         busy = false;
         // A reply begun before the bill closed cannot decide its receipt.
-        if (!stopped && latestDecision.current !== forDecision) void reload();
+        if (!stopped && latestDecision.current !== forDecision) await reload();
       }
     }
-    refresh.current = reload;
-    void reload();
-    const visible = () => { void reload(); };
-    const tick = setInterval(visible, BILL_POLL_MS);
-    window.addEventListener("focus", visible); document.addEventListener("visibilitychange", visible);
-    return () => { stopped = true; refresh.current = null; clearInterval(tick); window.removeEventListener("focus", visible); document.removeEventListener("visibilitychange", visible); };
+    const poll = pollAfterSettle(reload, BILL_POLL_MS, { pauseWhenHidden: true, refreshOnVisible: true, refreshOnFocus: true });
+    refresh.current = poll.refresh;
+    return () => { stopped = true; refresh.current = null; poll.stop(); };
   }, [restaurantId, tableId, sessionId]);
   const dismiss = useCallback(() => {
     current.current.ids = current.current.ids.slice(1);

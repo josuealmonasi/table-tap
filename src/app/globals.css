@@ -1431,6 +1431,13 @@ a.tt-btn {
   background: color-mix(in srgb, var(--tt-warning) 14%, var(--tt-surface));
   border-color: color-mix(in srgb, var(--tt-warning) 40%, transparent);
 }
+/* A free trial with time left is news, not a warning: the accent, calm. It
+   takes the warning look only in its last week (tt-frozen-banner-warn). */
+.tt-trial-banner:not(.tt-frozen-banner-warn) {
+  background: color-mix(in srgb, var(--tt-accent) 8%, var(--tt-surface));
+  border-color: color-mix(in srgb, var(--tt-accent) 25%, transparent);
+  color: var(--tt-ink);
+}
 .tt-frozen-text {
   display: flex;
   align-items: center;
@@ -2492,6 +2499,21 @@ a.tt-btn {
   border: none;
   font-size: 22px;
   cursor: pointer;
+}
+/* The dish or combo name beside its price. The name is the elastic child: it
+   wraps inside the room the price leaves instead of running up against it. */
+.tt-detail-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+.tt-detail-head > h2 {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.tt-detail-head > .tt-price-lg {
+  flex: none;
 }
 .tt-price-lg {
   font-weight: 700;
@@ -4285,14 +4307,83 @@ a.tt-btn {
    every rule in this file, which is what stopped the phone layout below from
    applying. */
 .tt-admin-tr--rest {
-  grid-template-columns: minmax(0, 1.4fr) minmax(0, 1.4fr) 132px 56px 90px 32px;
+  grid-template-columns: minmax(0, 1.4fr) minmax(0, 1.4fr) 132px 56px 90px 104px;
 }
+/* The row's actions (suspend, delete) side by side in the last column. */
+.tt-admin-row-actions {
+  display: flex;
+  gap: 4px;
+  justify-content: flex-end;
+}
+
 /* The plan a platform admin moves a restaurant to: a field, sized to its cell. */
 .tt-admin-plan {
   width: 100%;
   min-width: 0;
   padding: 5px 8px;
   font-size: 13px;
+}
+/* How a restaurant pays, under its name in the admin list: one line, cut with
+   an ellipsis like the name above it, the whole text in its tooltip. */
+.tt-admin-billing {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--tt-muted);
+}
+.tt-admin-billing--warn { color: var(--tt-warning); }
+.tt-admin-billing--danger { color: var(--tt-danger); }
+/* Platform health counts; a red one needs a look. */
+.tt-admin-health {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+}
+.tt-admin-health li {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 12px;
+  border: 1px solid var(--tt-cream);
+  border-radius: var(--tt-radius-sm);
+  font-size: 13px;
+}
+.tt-admin-health li strong { font-size: 16px; }
+.tt-admin-health li.tt-admin-health--bad { border-color: var(--tt-danger); }
+.tt-admin-health li.tt-admin-health--bad strong { color: var(--tt-danger); }
+/* A plan's price, its next change and the button to change it. */
+.tt-admin-price-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 2fr) auto;
+  align-items: center;
+  gap: 12px;
+  padding: 9px 4px;
+  border-top: 1px solid var(--tt-cream);
+  font-size: 14px;
+}
+.tt-admin-price-row:first-of-type { border-top: none; }
+.tt-admin-price-next { font-size: 13px; }
+@media (max-width: 700px) {
+  .tt-admin-price-row { grid-template-columns: minmax(0, 1fr) auto; }
+  .tt-admin-price-next { grid-column: 1 / -1; }
+}
+/* The platform team's notes about a restaurant, newest first. */
+.tt-admin-notes {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.tt-admin-notes li {
+  border-top: 1px solid var(--tt-cream);
+  padding-top: 8px;
 }
 .tt-admin-tr:first-of-type {
   border-top: none;
@@ -5728,6 +5819,35 @@ a.tt-btn {
   padding: 14px 20px calc(14px + env(safe-area-inset-bottom));
 }
 
+/* A scrolling choice can otherwise stop right beside the pinned button. Clip
+   the choices above the bar, leaving its padding between the two controls even
+   when a deal wraps the button onto two lines. */
+.tt-dish-detail {
+  height: 100dvh;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.tt-dish-detail-scroll {
+  min-height: 0;
+  flex: 1;
+  overflow-y: auto;
+}
+.tt-dish-detail .tt-detail-actions {
+  position: static;
+  flex: none;
+  margin: 0;
+  padding: 20px 20px calc(20px + env(safe-area-inset-bottom));
+}
+.tt-dish-detail > .tt-req-note {
+  margin: 0 20px;
+}
+@media (min-width: 1025px) {
+  .tt-detail-panel .tt-dish-detail {
+    height: 88vh;
+  }
+}
+
 /* Inside the action bar the stepper is a sibling control, not a standalone
    widget: it holds its width, matches the button's height and radius, and
    gets a border so both read as the same kind of thing. */
@@ -6400,6 +6520,13 @@ a.tt-btn {
 }
 .tt-tier-name {
   font-size: 17px;
+}
+/* What the tier is for, in one line, before the numbers. */
+.tt-tier-desc {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--tt-muted);
 }
 .tt-tier-badge {
   font-size: 11px;
@@ -7941,6 +8068,11 @@ a.tt-user-plan:hover {
   margin: 4px 0 0;
   padding: 0;
   font-size: 14px;
+  /* The gap lives here, on the parent: each line used to touch the next, and
+     an emoji line painted 1px into its neighbour. */
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
 }
 .tt-statement-lines li > span:first-child {
   min-width: 0;
@@ -8447,3 +8579,57 @@ a.tt-user-plan:hover {
   background: color-mix(in srgb, var(--tt-danger) 10%, transparent);
   color: var(--tt-danger);
 }
+
+/* Who the diner is paying, and the short notice under a field that takes personal data. */
+.tt-place-identity,
+.tt-privacy-hint {
+  margin: 8px 0 0;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--tt-muted);
+  overflow-wrap: anywhere;
+}
+.tt-place-identity {
+  padding: 16px 0 96px;
+  text-align: center;
+}
+.tt-place-identity a,
+.tt-privacy-hint a {
+  color: inherit;
+  text-decoration: underline;
+}
+
+/* The platform team's read-only view of a restaurant. */
+.tt-admin-view-note {
+  margin: 0 0 16px;
+  padding: 10px 12px;
+  border: 1px solid var(--tt-cream);
+  border-radius: var(--tt-radius-sm);
+  font-size: 13px;
+}
+.tt-admin-view-facts {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 20px;
+  font-size: 14px;
+}
+.tt-admin-view-list {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+}
+.tt-admin-view-list li {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 4px 12px;
+  padding: 8px 0;
+  border-top: 1px solid var(--tt-cream);
+  font-size: 14px;
+}
+.tt-admin-view-list li:first-child { border-top: none; }
+.tt-admin-view-wrap { min-width: 0; overflow-wrap: anywhere; }
+

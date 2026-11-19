@@ -45,7 +45,7 @@ it("I2 uses the same stored-currency sum for the close and review, without doubl
   for (const part of ["p.currency = s.currency", "f.currency = s.currency", "m.currency = s.currency",
     "p.method = 'cash'", "f.status = 'succeeded' and f.source = 'cash'", "nullif(f.payout_actor, '') is not null",
     "f.historical_log_id = l.id", "p.created_at between s.opened_at and s.until_at",
-    "f.completed_at between s.opened_at and s.until_at", "'expected', round(s.opening_amount + r.amount - f.amount - h.amount - w.amount, 2)"]) expect(sql).toContain(part);
+    "f.completed_at between s.opened_at and s.until_at", "'expected', round(s.opening_amount + r.amount + u.amount - f.amount - h.amount - w.amount, 2)"]) expect(sql).toContain(part);
   expect(sql).not.toContain("from restaurants");
   expect(readFileSync("src/lib/cash-shift-server.ts", "utf8")).toContain('rpc("cash_shift_totals"');
 });
@@ -64,7 +64,7 @@ it("I13 selects overnight closes and late original-currency cash without a row c
 
 it("restricts every new helper to the server and registers it for teardown", () => {
   for (const [name, args] of [["freeze_cash_currency", ""], ["cash_shift_totals", "uuid, uuid, timestamptz"],
-    ["close_cash_shift", "uuid, uuid, numeric, text"], ["create_cash_withdrawal", "uuid, uuid, numeric, text, text"],
+    ["close_cash_shift", "uuid, uuid, numeric, text"], ["create_cash_withdrawal", "uuid, uuid, numeric, text, text, text"],
     ["delete_cash_withdrawal", "uuid, uuid, uuid"], ["cash_shifts_for_day", "uuid, timestamptz"]]) {
     expect(schema).toContain(`revoke all on function public.${name}(${args}) from public, anon, authenticated`);
     expect(schema).toContain(`grant execute on function public.${name}(${args}) to service_role`);

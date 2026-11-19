@@ -345,7 +345,9 @@ describe("a link the app sends is built on its own address", () => {
   it("never reads the caller's Origin header", () => {
     // A script set Origin to another site, and the statement email the app
     // sent from its own verified sender carried a "pay" link there.
-    const offenders = sources.filter(f => /headers\.get\(\s*["']origin["']\s*\)/i.test(read(f)));
+    // One reader may: same-site-post.ts only COMPARES Origin with our own
+    // address to refuse a cross-site form (login CSRF); it never builds a link.
+    const offenders = sources.filter(f => !f.endsWith("same-site-post.ts") && /headers\.get\(\s*["']origin["']\s*\)/i.test(read(f)));
     expect(offenders).toEqual([]);
     expect(sources.filter(f => /siteOrigin\(req\)/.test(read(f))).length).toBeGreaterThanOrEqual(9);
   });

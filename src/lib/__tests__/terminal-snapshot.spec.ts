@@ -37,6 +37,11 @@ it("I7 carries a same-day return after sign-off net of its original fee", () => 
     { ...pay("return:x", 100, d.sales_day), payment_id: "a", returned_at: "2026-10-20T19:00:00Z" }], [d], 5, 1, "UTC", "2026-10-21");
   expect(days.find(row => row.day === d.sales_day)).toMatchObject({ expected: 96.5, givenBack: 0, status: "received" });
   expect(days[0]).toMatchObject({ givenBack: 96.5, expected: 93.5 });
+  const next = mark("2026-10-21", 93.5, ["b"], ["return:x"]); next.fee_pct = 5;
+  const signed = depositDays([pay("a", 100, d.sales_day), pay("b", 200, next.sales_day),
+    { ...pay("return:x", 100, d.sales_day), payment_id: "a", returned_at: "2026-10-20T19:00:00Z" }], [d, next], 7, 1, "UTC", next.sales_day)[0];
+  expect(signed).toMatchObject({ takings: 200, fee: 10, givenBack: 96.5, expected: 93.5, status: "received" });
+  expect(signed.takings - signed.fee - signed.givenBack).toBeCloseTo(signed.expected);
 });
 it("keeps same-day voids already in the manifest out of takings and fees", () => {
   const d = mark("2026-10-20", 193, ["a", "b"], ["return:x"]); d.fee_pct = 3.5;

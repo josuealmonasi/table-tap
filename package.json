@@ -19,6 +19,8 @@
     "db:purge": "node scripts/db.mjs purge",
     "db:mock": "node scripts/db.mjs mock",
     "db:dropmock": "node scripts/db.mjs dropmock",
+    "feed-demo": "node scripts/feed-demo.mjs",
+    "feed-demo:prod": "node scripts/feed-demo.mjs --prod",
     "db:promos": "node scripts/seed-promos.mjs",
     "db:ratings": "node scripts/seed-ratings.mjs",
     "db:create:prod": "node scripts/db.mjs create --prod",
@@ -45,6 +47,7 @@
     "rls:audit:prod": "node scripts/rls-audit.mjs --prod",
     "api": "node scripts/api-check.mjs",
     "gate": "node scripts/gate.mjs",
+    "probes": "node scripts/probes.mjs",
     "dev:fresh": "node scripts/dev-fresh.mjs",
     "promises": "node scripts/promise-audit.mjs",
     "promises:prod": "node scripts/promise-audit.mjs --prod",
@@ -60,6 +63,7 @@
     "@stripe/stripe-js": "^4.0.0",
     "@supabase/ssr": "^0.5.0",
     "@supabase/supabase-js": "^2.45.0",
+    "jose": "6.2.17",
     "jsqr": "^1.4.0",
     "next": "15.5.28",
     "qrcode": "^1.5.4",
@@ -86,7 +90,7 @@
     "vitest": "4.1.12"
   },
   "engines": {
-    "node": ">=18.18.0"
+    "node": "24.x"
   },
   "packageManager": "pnpm@11.9.0"
 }

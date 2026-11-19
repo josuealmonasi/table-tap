@@ -1,7 +1,10 @@
 import type Stripe from "stripe";
 import type { createAdminClient } from "@/lib/supabase/admin";
 
-export const BATCH_SIZE = 10;
+// Items per page. Every item still stops at the job's time budget, so a larger
+// page only lets a fast queue (stock, settled refunds) clear more per run; it
+// was ten, and a queue growing by more than ten a day never caught up.
+export const BATCH_SIZE = 25;
 export const JOB_BUDGET_MS = 10_000;
 const OVERDUE_SECONDS = 6 * 3600;
 
@@ -32,6 +35,16 @@ export async function isolateJob(name: string, run: () => Promise<RecoveryResult
   }
 }
 
+/** One job's result from several sources sharing its budget: an unknown
+ * source count stays unknown, and the oldest pending item of any source wins. */
+export function combineResults(results: RecoveryResult[], ageBasis: string): RecoveryResult {
+  const oldest = results.filter(r => r.oldest_pending_at).sort((a, b) => a.oldest_pending_at!.localeCompare(b.oldest_pending_at!))[0];
+  return { done: results.reduce((n, r) => n + r.done, 0), failed: results.reduce((n, r) => n + r.failed, 0),
+    pending: results.some(r => r.pending === null) ? null : results.reduce((n, r) => n + r.pending!, 0),
+    oldest_pending_at: oldest?.oldest_pending_at ?? null, oldest_pending_age_seconds: oldest?.oldest_pending_age_seconds ?? null,
+    age_basis: ageBasis, ...(results.some(r => r.observation_failed) ? { observation_failed: true } : {}) };
+}
+
 /** Reserve time to count what remains, rather than calling a partial batch a drained queue. */
 export function hasTime(context: RecoveryContext): boolean {
   return Date.now() < context.deadline - 2000;
@@ -54,14 +67,25 @@ export async function runBatch<T extends PendingItem>(
   const offset = pages > 1 ? Math.floor(Math.random() * pages) * BATCH_SIZE : 0;
   if (offset) batch = await load(BATCH_SIZE, offset);
   if (batch.error) throw new Error(`${name} discovery failed: ${batch.error.message}`);
+  // The oldest global row is only a metric. Every still-pending overdue
+  // case on the bounded rotating page needs its own reminder, across tenants.
   for (const item of batch.data ?? []) {
-    if (!hasTime(context)) break;
-    try {
-      const done = await recover(item);
-      result.done += Number(done);
-    } catch (error) {
-      result.failed++;
-      console.error("Recovery item failed", name, item.restaurant_id, error);
+    let done = false;
+    if (hasTime(context)) {
+      try {
+        const recovered = await recover(item);
+        result.done += Number(recovered);
+        done = Boolean(recovered);
+      } catch (error) {
+        result.failed++;
+        console.error("Recovery item failed", name, item.restaurant_id, error);
+      }
+    }
+    // Only duplicate-payment refunds have an existing matching bell kind.
+    // Reusing a stock warning for a stuck fee would send owners to stock.
+    if (onOverdue && !done && (Date.now() - Date.parse(item.created_at)) / 1000 > OVERDUE_SECONDS) {
+      try { await onOverdue(item); }
+      catch (error) { result.failed++; console.error("Recovery reminder failed", name, error); }
     }
   }
   try {
@@ -72,12 +96,9 @@ export async function runBatch<T extends PendingItem>(
     if (oldest) {
       result.oldest_pending_at = oldest.created_at;
       result.oldest_pending_age_seconds = Math.max(0, Math.floor((Date.now() - Date.parse(oldest.created_at)) / 1000));
-      // Only duplicate-payment refunds have an existing matching bell kind.
-      // Reusing a stock warning for a stuck fee would send owners to stock.
       if (result.oldest_pending_age_seconds > OVERDUE_SECONDS) {
         console.warn("Recovery overdue", { job: name, restaurant_id: oldest.restaurant_id,
           oldest_pending_at: oldest.created_at, age_basis: ageBasis });
-        if (onOverdue) await onOverdue(oldest);
       }
     }
   } catch (error) {

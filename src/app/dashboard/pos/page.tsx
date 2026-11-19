@@ -12,6 +12,8 @@ import PlanLock from "@/components/dashboard/plan/PlanLock";
 import { allPlans } from "@/lib/plan-server";
 import { cheapestWith } from "@/lib/plan";
 import { openShift } from "@/lib/cash-shift-server";
+import { heldCashWaiting } from "@/lib/held-cash";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { LIVE_FLOW } from "@/lib/order-flow";
 import { topSellers } from "@/lib/pos-quick";
@@ -75,6 +77,10 @@ export default async function PosPage() {
   if (soldRes.error) console.error("till: best sellers", soldRes.error.message);
 
   const shift = await openShift(membership.restaurant.id);
+  // The same restaurant-wide count the close refuses on, read before the
+  // cashier counts: only a number, and a failed read leaves the server's
+  // refusal as the guard (full review, screens #1).
+  const heldCash = shift ? await heldCashWaiting(createAdminClient(), membership.restaurant.id).catch(() => 0) : 0;
   const collector = (await currentUser())?.email ?? "staff";
   return (
     <PosScreen
@@ -98,6 +104,7 @@ export default async function PosPage() {
       shiftId={shift?.id}
       shiftOpen={shift !== null}
       shiftCurrency={shift?.currency}
+      heldCashWaiting={heldCash}
       counterOrders={(counterRes.data as Order[] | null) ?? []}
       bestSellers={topSellers((soldRes.data as { items: OrderLineItem[] | null }[] | null) ?? [], data.items)}
     />

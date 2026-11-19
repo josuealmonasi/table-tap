@@ -113,7 +113,21 @@ export default function AccountDialog({ account, onClose, currency, timeZone, ca
         <p className="tt-account-owed">
           {t("accounts.owesOf", { owed: owedLabel(balances, account.currency ?? currency), limit: money(Number(account.credit_limit)) })}
         </p>
-        {account.email && <p className="tt-muted" style={{ marginTop: 0 }}>{account.email}</p>}
+        {account.email && <p className="tt-muted" style={{ marginTop: 0 }}>
+          {account.email}{" "}
+          {canManage && <button type="button" className="tt-btn tt-btn-ghost tt-btn-sm" onClick={async () => {
+            const ok = await confirm({ title: t("accounts.removeEmail"), message: t("accounts.removeEmailConfirm"), confirmLabel: t("accounts.removeEmail") });
+            if (!ok) return;
+            setError(null);
+            try {
+              const res = await fetch("/api/account/remove-email", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: account.id }) });
+              const data = await res.json().catch(() => ({}));
+              if (!res.ok) { setError(data.error ?? t("apiErr.generic")); return; }
+              toast(t("accounts.removeEmailDone"));
+              onChanged();
+            } catch { setError(t("done.networkError")); }
+          }}>{t("accounts.removeEmail")}</button>}
+        </p>}
 
         {failed ? (
           <p className="tt-field-error" role="alert">

@@ -1,9 +1,26 @@
+import { tipBaseCase } from "./tip-base.mjs";
 import { randomUUID } from "node:crypto";
 import { MARK } from "../api-fixtures.mjs";
 
-export function accountsCases(fx) {
+export function accountsCases(root) {
+  const fx = root.accountFixture ?? root;
   const { dish } = fx;
+  const arrangeEmail = async f => {
+    const { data, error } = await f.admin.from("customer_accounts").select("email").eq("id", fx.accountId).single();
+    if (error) throw error;
+    const { error: updateError } = await f.admin.from("customer_accounts").update({ email: "gate@example.com" }).eq("id", fx.accountId);
+    if (updateError) throw updateError;
+    return async () => {
+      const { error: restoreError } = await f.admin.from("customer_accounts").update({ email: data.email }).eq("id", fx.accountId);
+      if (restoreError) throw restoreError;
+    };
+  };
+  const emailGone = async f => {
+    const { data, error } = await f.admin.from("customer_accounts").select("email").eq("id", fx.accountId).single();
+    return error ? error.message : data.email === null || "the saved email remains";
+  };
   return [
+    tipBaseCase("account"),
     // ── Customer accounts ("cuenta abierta") ─────────────────────────────
     // In the order a real one lives: opened, its ceiling moved, a table's bill
     // put on it, a charge past the ceiling refused, a sale rung onto it at the
@@ -16,7 +33,7 @@ export function accountsCases(fx) {
         const { data } = await f.admin.from("customer_accounts").select("opened_by, credit_limit, code")
           .eq("restaurant_id", f.restaurant.id).eq("name", `${MARK} customer`).maybeSingle();
         if (!data) return "no account was opened";
-        if (data.opened_by !== "demo-waiter@tabletap.dev") return `opened by ${data.opened_by}, not the waiter`;
+        if (data.opened_by !== fx.emails.waiter) return `opened by ${data.opened_by}, not the waiter`;
         return /^[0-9A-HJKMNP-TV-Z]{12}$/.test(data.code) || `a code the QR cannot carry: ${data.code}`;
       } },
     { name: "POST /api/accounts (no name)", as: "waiter", method: "POST", path: "/api/accounts",
@@ -34,7 +51,7 @@ export function accountsCases(fx) {
       effect: async f => {
         const { data: o } = await f.admin.from("orders").select("account_id, paid, charged_by").eq("id", fx.acctOrder).single();
         if (o.account_id !== fx.accountId || o.paid) return `the order is ${JSON.stringify(o)}`;
-        if (o.charged_by !== "demo-waiter@tabletap.dev") return `charged by ${o.charged_by}`;
+        if (o.charged_by !== fx.emails.waiter) return `charged by ${o.charged_by}`;
         const { data: s } = await f.admin.from("table_sessions").select("close_reason").eq("id", fx.acctSessionId).single();
         return s.close_reason === "account" || `the table's sitting closed as ${s.close_reason}`;
       } },
@@ -96,7 +113,7 @@ export function accountsCases(fx) {
         if ((pays ?? []).length !== 1) return `${(pays ?? []).length} payments for one collection`;
         const [p] = pays;
         if (Math.abs(Number(p.amount) - (f.accountOwed + 10)) > 0.01 || Number(p.tip) !== 10) return `paid ${p.amount} with tip ${p.tip}`;
-        if (p.actor_email !== "demo-cashier@tabletap.dev") return `the drawer is ${p.actor_email}'s`;
+        if (p.actor_email !== fx.emails.cashier) return `the drawer is ${p.actor_email}'s`;
         return (owed ?? []).length === 0 || "orders still owed after the account was paid";
       } },
     { name: "GET  /api/account (a statement)", as: "diner", method: "GET", path: `/api/account?c=${fx.accountCode}`,
@@ -115,7 +132,22 @@ export function accountsCases(fx) {
       body: { c: fx.accountCode, expected: 1 }, expect: [409], expectError: /tarjeta|card/i },
     // Dev carries a placeholder mail key, so a real send fails there: either
     // answer is one the route gives, and neither keeps the address.
+    { name: "POST /api/account/remove-email (waiter refused)", as: "waiter", method: "POST", path: "/api/account/remove-email",
+      body: { id: fx.accountId }, expect: [403] },
+    { name: "POST /api/account/remove-email (manager)", as: "manager", method: "POST", path: "/api/account/remove-email",
+      arrange: arrangeEmail, body: { id: fx.accountId }, expect: [200], effect: emailGone },
+    { name: "POST /api/account/remove-email (diner and retry)", as: "diner", method: "POST", path: "/api/account/remove-email",
+      arrange: arrangeEmail, body: { c: fx.accountCode }, expect: [200],
+      effect: async f => {
+        const gone = await emailGone(f);
+        if (gone !== true) return gone;
+        const res = await fetch(`${f.base}/api/account/remove-email`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ c: fx.accountCode }) });
+        if (res.status !== 200) return `retry answered ${res.status}`;
+        return emailGone(f);
+      } },
+    { name: "POST /api/account/remove-email (unknown code)", as: "diner", method: "POST", path: "/api/account/remove-email",
+      body: { c: "000000000000" }, expect: [404] },
     { name: "POST /api/account/email (the statement)", as: "diner", method: "POST", path: "/api/account/email",
       body: { c: fx.accountCode, email: "cliente@example.com", ref: randomUUID() }, expect: [200, 409, 502] },
-  ];
+  ].map(c => ({ ...c, fixture: fx }));
 }

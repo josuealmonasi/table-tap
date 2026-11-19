@@ -1,3 +1,4 @@
+import { ordersTipBase, tipFromPercent } from "@/lib/tip-base";
 import { applyCoupon, type AppliedCoupon } from "@/lib/pricing";
 import { round2 } from "@/lib/money";
 import { applyPayment } from "@/lib/table-balance";
@@ -11,14 +12,21 @@ export interface BillAmounts {
   applied: number;
   couponOff: number;
   discount: number;
-  /** What a new tip is worked out on: the food after this coupon. */
+  /** Payable debt after this coupon, including service and earlier tips. */
   base: number;
+  tipBase: number;
   tip: number;
   total: number;
   service: number;
   priorTip: number;
   dishes: number;
   servicePct: number;
+  /**
+   * The IVA rate saved on the orders being paid, never today's setting (sweep
+   * 10, finding 4). Null when they were priced at different rates: no single
+   * "IVA n%" line would be true.
+   */
+  taxPct: number | null;
 }
 
 /**
@@ -45,9 +53,12 @@ export function billAmounts(
   const couponOff = coupon ? applyCoupon(coupon, Math.max(0, round2(food - priorTip))) : 0;
   const discount = round2(applied + couponOff);
   const base = round2(food - couponOff);
-  const { tip } = applyPayment(base, base, tipCustom ?? round2(base * (tipPct / 100)));
+  const paying = scope === "mine" ? bill.mine.orders : [...bill.mine.orders, ...bill.others.orders];
+  const tipBase = ordersTipBase(paying, couponOff);
+  const { tip } = applyPayment(base, base, tipCustom ?? tipFromPercent(tipBase, tipPct));
   const total = round2(base + tip);
   const service = scope === "mine" ? bill.mine.service : bill.service;
+  const rates = new Set(paying.map(o => Number(o.tax_pct) || 0));
   const dishes = round2(food - service - priorTip);
   return {
     food,
@@ -56,11 +67,13 @@ export function billAmounts(
     couponOff,
     discount,
     base,
+    tipBase,
     tip,
     total,
     service,
     priorTip,
     dishes,
     servicePct: servicePercent(service, dishes),
+    taxPct: rates.size === 1 ? [...rates][0] : null,
   };
 }

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import fs from "node:fs";
 import nextConfig from "../../../next.config";
-import { contentSecurityPolicy } from "@/lib/csp";
+import { contentSecurityPolicy, loopbackDatabase } from "@/lib/csp";
 
 /**
  * The headers every response carries.
@@ -151,6 +151,36 @@ describe("the content security policy", () => {
     expect(preview).not.toContain("unsafe-eval");
     expect(live).not.toContain("vercel.live");
     expect(dev).not.toContain("vercel.live");
+  });
+});
+
+describe("a production build against a local database (the GitHub gates)", () => {
+  it("names the local Supabase only when it is on this machine", () => {
+    expect(loopbackDatabase("http://127.0.0.1:54321")).toBe("http://127.0.0.1:54321");
+    expect(loopbackDatabase("http://localhost:54321/")).toBe("http://localhost:54321");
+    expect(loopbackDatabase("https://abc.supabase.co")).toBe("");
+    expect(loopbackDatabase("http://127.0.0.1.evil.example")).toBe("");
+    expect(loopbackDatabase(undefined)).toBe("");
+    expect(loopbackDatabase("not a url")).toBe("");
+  });
+
+  it("lets the browser reach that database and nothing else extra", () => {
+    const local = contentSecurityPolicy("n", false, false, "http://127.0.0.1:54321");
+    const connect = /connect-src ([^;]*)/.exec(local)?.[1] ?? "";
+    expect(connect.split(" ").filter(Boolean).sort()).toEqual([
+      "'self'",
+      "http://127.0.0.1:54321",
+      "https://*.supabase.co",
+      "ws://127.0.0.1:54321",
+      "wss://*.supabase.co",
+    ]);
+    expect(local).not.toContain("unsafe-eval");
+    expect(local).not.toContain("upgrade-insecure-requests");
+  });
+
+  it("leaves a deployed build's policy exactly as it was", () => {
+    const deployed = contentSecurityPolicy("n", false, false, loopbackDatabase("https://abc.supabase.co"));
+    expect(deployed).toBe(contentSecurityPolicy("n", false));
   });
 });
 

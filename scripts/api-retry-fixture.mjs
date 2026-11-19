@@ -23,6 +23,9 @@ export async function arrangeRetry(f, state, kind) {
     .select("plan, plan_status, accepting_orders, allow_pay_later, service_enabled, low_stock_alerts_enabled").eq("id", r).single());
   const menu = await checked(f.admin.from("menus").select("active, schedule").eq("id", f.menu.id).single());
   const undo = async () => {
+    // The POS retry charges an account. Its journal retains these sources,
+    // so the disposable restaurant's final cascade removes them together.
+    const retained = kind === "pos";
     const orders = await checked(f.admin.from("orders").select("id, stock_reservation_id").eq("restaurant_id", r)
       .or(`request_ref.eq.${state.ref},pos_ref.eq.${state.ref}`));
     const ids = orders.map(o => o.id);
@@ -30,8 +33,8 @@ export async function arrangeRetry(f, state, kind) {
       await checked(f.admin.from("coupon_redemptions").delete().eq("coupon_id", state.coupon.id));
       await checked(f.admin.from("coupons").delete().eq("id", state.coupon.id));
     }
-    if (ids.length) {
-      await checked(f.admin.from("payments").delete().in("order_id", ids));
+    if (ids.length && !retained) {
+      await checked(f.admin.from("payments").delete().is("account_id", null).in("order_id", ids));
       await checked(f.admin.from("orders").delete().in("id", ids));
       await checked(f.admin.from("ingredient_consumption").delete().eq("source_kind", "sale").in("source_id", ids));
       const reservations = orders.map(o => o.stock_reservation_id).filter(Boolean);
@@ -41,8 +44,8 @@ export async function arrangeRetry(f, state, kind) {
       await checked(f.admin.from("table_sessions").delete().eq("table_id", state.table));
       await checked(f.admin.from("restaurant_tables").delete().eq("id", state.table));
     }
-    if (state.dish) await checked(f.admin.from("menu_items").delete().eq("id", state.dish));
-    if (state.account) await checked(f.admin.from("customer_accounts").delete().eq("id", state.account));
+    if (state.dish && !retained) await checked(f.admin.from("menu_items").delete().eq("id", state.dish));
+    if (state.account && !retained) await checked(f.admin.from("customer_accounts").delete().eq("id", state.account));
     if (state.ingredient) {
       // Movement rows are a separate journal, so removing the source is not enough.
       const sourceIds = [];
@@ -106,7 +109,7 @@ export async function arrangeRetry(f, state, kind) {
  */
 export async function setAsideHeldCash(f, restaurantId) {
   const held = await checked(f.admin.from("offline_sale_queue").select("pos_ref")
-    .eq("restaurant_id", restaurantId).is("approved_at", null).eq("body->>method", "cash"));
+    .eq("restaurant_id", restaurantId).is("approved_at", null).is("resolved_at", null).eq("body->>method", "cash"));
   const refs = held.map(h => h.pos_ref);
   if (refs.length) await checked(f.admin.from("offline_sale_queue").update({ approved_at: new Date().toISOString() }).in("pos_ref", refs).select("pos_ref"));
   return async () => {

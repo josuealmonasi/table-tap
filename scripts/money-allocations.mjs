@@ -13,7 +13,7 @@ export async function checkAllocations(db, all, orders, payments, { ok, bad }) {
   const [allocations, returns, operations, adjustments] = await Promise.all([
     rows("payment_allocations", "id, restaurant_id, payment_id, order_id, amount, tip"),
     rows("refund_allocations", "allocation_id, operation_id, amount, tip"),
-    rows("refund_operations", "id, restaurant_id, adjustment_id, source, amount, tip, status, completed_at, stripe_refund_id"),
+    rows("refund_operations", "id, restaurant_id, adjustment_id, source, amount, tip, status, completed_at, stripe_refund_id, historical_import_reason"),
     rows("order_adjustments", "id, restaurant_id, order_id, kind, previous_total, resulting_total, previous_tip, resulting_tip, forgiven, currency, operation_ref, request_id, request, amount_cents, reason, previous_service_fee, resulting_service_fee"),
   ]);
   const sum = (rs, key) => rs.reduce((s, r) => s + Math.round(Number(r[key]) * 100), 0);
@@ -42,7 +42,7 @@ export async function checkAllocations(db, all, orders, payments, { ok, bad }) {
     if (o.status === "succeeded" && (!o.completed_at || (o.source === "stripe" && !o.stripe_refund_id))) bad(`return ${o.id} lacks completion evidence`);
     if (o.status !== "succeeded") {
       exceptions++;
-      console.log(`    REVIEW   return ${o.id}: ${o.status}, ${o.amount}`);
+      console.log(`    REVIEW   return ${o.id}: ${o.status}, ${o.amount}${o.historical_import_reason ? `, ${o.historical_import_reason}` : ""}`);
     }
   }
   const cancelled = new Set(adjustments.filter(a => a.kind === "cancel").map(a => a.order_id));

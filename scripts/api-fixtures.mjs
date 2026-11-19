@@ -1,3 +1,5 @@
+import { apiAccountFixtures } from "./api-account-fixtures.mjs";
+import { accountToRestore } from "./lent-stripe-account.mjs";
 // ============================================================================
 // The data and identities `pnpm api` needs.
 //
@@ -10,6 +12,7 @@ import { memberFixture } from "./table-member-fixture.mjs";
 import { createClient } from "@supabase/supabase-js";
 import { loginByEmail } from "./logins.mjs";
 import { sessionCookieHeader } from "./session-cookie.mjs";
+import { loginSecret } from "./login-secrets.mjs";
 
 export const MARK = "apicheck";
 
@@ -29,11 +32,13 @@ export const PART_TIP = 0.45;
 const PART_TOTAL = (PART_AMOUNT + PART_TIP).toFixed(2);
 
 export async function setup(env, base) {
+  const demo = loginSecret("DEMO_PASSWORD", env);
+  const test = loginSecret("TEST_PASSWORD", env);
   // When this run began: what it reserved in the fee ledger is removed after.
   const startedAt = new Date().toISOString();
   const admin = createClient(env.NEXT_PUBLIC_SUPABASE_URL, env.SUPABASE_SECRET_KEY);
 
-  const cookieFor = async (email, password = "demo123") => {
+  const cookieFor = async (email, password = demo) => {
     const c = createClient(env.NEXT_PUBLIC_SUPABASE_URL, env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY);
     const { data, error } = await c.auth.signInWithPassword({ email, password });
     if (error) throw new Error(`could not sign in as ${email}: ${error.message}`);
@@ -41,15 +46,15 @@ export async function setup(env, base) {
   };
 
   const who = {
-    owner: await cookieFor("demo@tabletap.dev"),
-    manager: await cookieFor("demo-manager@tabletap.dev"),
-    waiter: await cookieFor("demo-waiter@tabletap.dev"),
-    cashier: await cookieFor("demo-cashier@tabletap.dev"),
-    kitchen: await cookieFor("demo-kitchen@tabletap.dev"),
+    owner: await cookieFor("demo@tabletap.shop"),
+    manager: await cookieFor("demo-manager@tabletap.shop"),
+    waiter: await cookieFor("demo-waiter@tabletap.shop"),
+    cashier: await cookieFor("demo-cashier@tabletap.shop"),
+    kitchen: await cookieFor("demo-kitchen@tabletap.shop"),
     // The platform admin has a password of its own. Missing, the admin cases
     // would sign in as nobody and be refused — which reads as working.
     platformAdmin: env.PLATFORM_ADMIN_PASSWORD
-      ? await cookieFor("admin@tabletap.dev", env.PLATFORM_ADMIN_PASSWORD)
+      ? await cookieFor("admin@tabletap.shop", env.PLATFORM_ADMIN_PASSWORD)
       : (() => { throw new Error("PLATFORM_ADMIN_PASSWORD is not set: the admin cases cannot run"); })(),
     diner: "",
   };
@@ -147,7 +152,7 @@ export async function setup(env, base) {
         .from("orders").select("id").eq("restaurant_id", restaurant.id).eq("note", `${MARK} caja`);
       const ids = (sales ?? []).map(o => o.id);
       if (ids.length) {
-        await admin.from("payments").delete().in("order_id", ids);
+        await admin.from("payments").delete().is("account_id", null).in("order_id", ids);
         await admin.from("orders").delete().in("id", ids);
       }
     };
@@ -342,10 +347,7 @@ export async function setup(env, base) {
       .update({ stripe_account_id: "acct_api_check", stripe_charges_enabled: true })
       .eq("id", restaurant.id);
     return async () => {
-      await admin.from("restaurants").update({
-        stripe_account_id: was?.stripe_account_id ?? null,
-        stripe_charges_enabled: was?.stripe_charges_enabled ?? false,
-      }).eq("id", restaurant.id);
+      await admin.from("restaurants").update(accountToRestore(was)).eq("id", restaurant.id);
     };
   };
 
@@ -379,13 +381,13 @@ export async function setup(env, base) {
   // Made directly rather than by invitation, because the invitation is the
   // part that cannot work here. `staff.user_id` is not null and points at
   // auth.users, so there has to be a real login behind it.
-  const staffEmail = `${MARK}-crew@tabletap.dev`;
+  const staffEmail = `${MARK}-crew@tabletap.shop`;
   let staffUserId = null;
   {
     staffUserId = (await loginByEmail(admin, staffEmail))?.id ?? null;
     if (!staffUserId) {
       const { data: made } = await admin.auth.admin.createUser({
-        email: staffEmail, password: "demo123", email_confirm: true,
+        email: staffEmail, password: test, email_confirm: true,
       });
       staffUserId = made?.user?.id ?? null;
     }
@@ -496,7 +498,7 @@ export async function setup(env, base) {
   // cancelling does not take it off: the cash arrived, and it stays arrived.
   await admin.from("payments").insert({
     restaurant_id: restaurant.id, order_id: cashPaidOrder, amount: line.price,
-    method: "cash", actor_email: "demo@tabletap.dev", client_ref: `${MARK}-cash-${cashPaidOrder}`,
+    method: "cash", actor_email: "demo@tabletap.shop", client_ref: `${MARK}-cash-${cashPaidOrder}`,
   });
 
   // A sale settled with no payment of its own — the way an order ends up when
@@ -511,7 +513,7 @@ export async function setup(env, base) {
   const posCardOrder = await make({ paid: true, pay_method: "card", status: "received" });
   await admin.from("payments").insert({
     restaurant_id: restaurant.id, order_id: posCardOrder, amount: line.price,
-    method: "card", actor_email: "demo-cashier@tabletap.dev", client_ref: `${MARK}-pos-${posCardOrder}`,
+    method: "card", actor_email: "demo-cashier@tabletap.shop", client_ref: `${MARK}-pos-${posCardOrder}`,
   });
 
   // One order of a table's bill paid online in one go: the intent is on the
@@ -538,26 +540,6 @@ export async function setup(env, base) {
     itemId: comboRow.id, comboId: comboRow.id, name: comboRow.name,
     emoji: comboRow.emoji, price: Number(comboRow.combo_price), qty: 1, mods: {},
   };
-
-  // ── A customer account of the gate's own ─────────────────────────────
-  // Named with the mark, with a table bill to put on it — an unpaid order on
-  // a table of its own with an open sitting, so charging it closes the sitting
-  // the way a real table's would — and a counter order for the ceiling case.
-  const acctCode = () => Array.from({ length: 12 }, () => "0123456789ABCDEFGHJKMNPQRSTVWXYZ"[Math.floor(Math.random() * 32)]).join("");
-  const { data: account } = await admin.from("customer_accounts").insert({
-    restaurant_id: restaurant.id, name: `${MARK} account`, code: acctCode(),
-    credit_limit: 1000, opened_by: "demo@tabletap.dev",
-  }).select("id, code").single();
-  const { data: acctTable } = await admin
-    .from("restaurant_tables").insert({ restaurant_id: restaurant.id, label: `${MARK}-acct` })
-    .select("id, label").single();
-  const { data: acctSession } = await admin
-    .from("table_sessions").insert({ restaurant_id: restaurant.id, table_id: acctTable.id })
-    .select("id").single();
-  const acctOrder = await make({
-    paid: false, table_id: acctTable.id, table_label: acctTable.label, session_id: acctSession.id,
-  });
-  const acctOrder2 = await make({ paid: false });
 
   // A ticket of our own for the printer to collect, so the cases below do not
   // race the seed's or swallow one a real screen queued. Queued by the trigger
@@ -600,11 +582,7 @@ export async function setup(env, base) {
     onCaja,
     onCarta,
     phoneMembers,
-    accountId: account.id,
-    accountCode: account.code,
-    acctOrder,
-    acctOrder2,
-    acctSessionId: acctSession.id,
+    accountFixture: await apiAccountFixtures(admin, env, base),
     lineTotal: line.price,
     withCardSavedBefore,
     withProgramRewardRenamed,
@@ -689,6 +667,8 @@ export async function setup(env, base) {
 
 /** Everything marked goes, whatever happened to the tests. */
 export async function teardown(fx) {
+  const sharedCleanup = await Promise.allSettled([fx.splitSlotFixtures?.cleanup(), fx.readOnlyFixtures?.cleanup()]);
+  await fx.accountFixture?.cleanup();
   await fx.phoneMembers?.cleanup();
   const { admin, restaurant } = fx;
   await admin.from("offline_sale_queue").delete().eq("restaurant_id", restaurant.id).like("body->>note", `${MARK} offline%`);
@@ -712,7 +692,7 @@ export async function teardown(fx) {
     .eq("restaurant_id", restaurant.id).like("note", `${MARK} offline%`);
   const offlineIds = (offlineSales ?? []).map(o => o.id);
   if (offlineIds.length) {
-    await admin.from("payments").delete().in("order_id", offlineIds);
+    await admin.from("payments").delete().is("account_id", null).in("order_id", offlineIds);
     await admin.from("orders").delete().in("id", offlineIds);
   }
   // A terminal deposit a case marked and did not get to take back.
@@ -725,17 +705,6 @@ export async function teardown(fx) {
   }
   if (fx.parkedShift) {
     await admin.from("cash_shifts").update({ closed_by: null, closed_at: null, counted_cash: null }).eq("id", fx.parkedShift);
-  }
-  // The gate's customer accounts and everything on them, first: an order still
-  // pointing at an account keeps the account from going. The money first of all.
-  const { data: ourAccounts } = await admin.from("customer_accounts").select("id")
-    .eq("restaurant_id", restaurant.id).like("name", `${MARK}%`);
-  const accountIds = (ourAccounts ?? []).map(a => a.id);
-  if (accountIds.length) {
-    await admin.from("payments").delete().in("account_id", accountIds);
-    await admin.from("orders").delete().in("account_id", accountIds);
-    await admin.from("account_checkouts").delete().in("account_id", accountIds);
-    await admin.from("customer_accounts").delete().in("id", accountIds);
   }
   // The visits and the redemption the loyalty cases made, and the goals the
   // redemption moved, back to what the demo had. Its log lines go with the
@@ -783,7 +752,7 @@ export async function teardown(fx) {
   // from the demo restaurant. Nothing else is touched: every other payment the
   // suite makes keeps both of its records, exactly as it always has.
   await admin.from("payments")
-    .delete().eq("restaurant_id", restaurant.id).like("client_ref", `${MARK}%`);
+    .delete().is("account_id", null).eq("restaurant_id", restaurant.id).like("client_ref", `${MARK}%`);
   // And the ones written with no reference of their own. Settling a table by
   // card or cash records against the ORDER and names no collection, so the
   // filter above never saw them — the order was then deleted below,
@@ -795,7 +764,7 @@ export async function teardown(fx) {
   const settledHere = [
     fx.paidOrder, fx.unpaidOrder, fx.tableOrder, fx.walkoutOrder, fx.cashPaidOrder,
   ].filter(Boolean);
-  if (settledHere.length) await admin.from("payments").delete().in("order_id", settledHere);
+  if (settledHere.length) await admin.from("payments").delete().is("account_id", null).in("order_id", settledHere);
   await admin.from("user_logs").delete()
     .eq("restaurant_id", restaurant.id).eq("entity", "bill").eq("action", "collected")
     .like("detail", `%amount=${PART_TOTAL} method=cash%`);
@@ -879,7 +848,9 @@ export async function teardown(fx) {
   await admin.from("restaurant_tables").delete().eq("restaurant_id", restaurant.id).like("label", `${MARK}%`);
   await admin.from("write_off_requests").delete().eq("restaurant_id", restaurant.id).eq("note", MARK);
   // The test login: the row and the user holding it up.
-  const { data: hired } = await admin.from("staff").select("user_id").eq("email", `${MARK}@tabletap.dev`).maybeSingle();
-  await admin.from("staff").delete().eq("email", `${MARK}@tabletap.dev`);
+  const { data: hired } = await admin.from("staff").select("user_id").eq("email", `${MARK}@tabletap.shop`).maybeSingle();
+  await admin.from("staff").delete().eq("email", `${MARK}@tabletap.shop`);
   if (hired?.user_id) await admin.auth.admin.deleteUser(hired.user_id).catch(() => {});
+  const failedCleanup = sharedCleanup.find(result => result.status === "rejected");
+  if (failedCleanup) throw failedCleanup.reason;
 }

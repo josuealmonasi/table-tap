@@ -91,9 +91,9 @@ describe("what the terminal should deposit", () => {
       const later = depositDays([...sales, pay(300, 0, "2026-10-15T15:00:00Z")], [], 0, 1, TZ, "2026-10-15");
       expect(later.map(d => d.day)).toEqual(["2026-10-15", "2026-10-13"]);
       expect(later[0]).toMatchObject({ givenBack: 100, expected: 200 });
-      // No sale since: it stays on its own day, waiting — never late.
+      // No sale since: its own day can be reconciled, and becomes overdue.
       const none = depositDays(sales, [], 0, 1, TZ, "2026-10-20");
-      expect(none.find(d => d.day === "2026-10-14")).toMatchObject({ count: 0, givenBack: 100, status: "pending" });
+      expect(none.find(d => d.day === "2026-10-14")).toMatchObject({ count: 0, givenBack: 100, status: "overdue" });
     });
 
     it("lists no day before the window, but still takes back a void from it", () => {

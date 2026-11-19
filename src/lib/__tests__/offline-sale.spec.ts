@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { offlineCharge, offlineDrift, offlineLines, OFFLINE_MAX_AGE_DAYS } from "@/lib/offline-sale";
+import { heldApprovalCharge, offlineCharge, offlineDrift, offlineLines, OFFLINE_MAX_AGE_DAYS } from "@/lib/offline-sale";
 import { replayBody, type HeldSale } from "@/lib/offline-sales";
 import { offlineReceipt } from "@/lib/offline-receipt";
 
@@ -116,4 +116,32 @@ describe("the tax rate a held sale was rung under (C6, end-to-end review)", () =
     expect(offlineCharge({ ...base, taxPct: "16" })).not.toHaveProperty("taxPct");
     expect(offlineCharge(base)).not.toHaveProperty("taxPct");
   });
+});
+
+describe("held receipts that stored their amounts as text", () => {
+  const text = (o: Record<string, unknown> = {}) => ({ at: "2026-10-15T17:30:00Z", subtotal: "120.50", serviceFee: "0", tip: "0", discount: "0", total: "120.50", ...o });
+  it("a manager's approval accepts plain decimals with at most 2 places and returns numbers", () => {
+    const c = heldApprovalCharge(text(), NOW);
+    expect(c?.subtotal).toBe(120.5);
+    expect(c?.total).toBe(120.5);
+  });
+  it("approval still rejects 3 decimals, non-numbers and negatives", () => {
+    expect(heldApprovalCharge(text({ subtotal: "12.345", total: "12.345" }), NOW)).toBeNull();
+    expect(heldApprovalCharge(text({ subtotal: "abc" }), NOW)).toBeNull();
+    expect(heldApprovalCharge(text({ tip: "-1" }), NOW)).toBeNull();
+  });
+  it("a new receipt never accepts text money, even in recovery", () => {
+    expect(offlineCharge(text(), NOW)).toBeNull();
+    expect(offlineCharge(text(), NOW, true)).toBeNull();
+  });
+});
+
+it("N4: keeps preparation notes and component extras without adding flattened extras again", () => {
+  const extra = { id: "cheese", name: "Cheese", emoji: "", price: 10 };
+  const [line] = offlineLines([{ itemId: "combo", comboId: "combo", qty: 1, notes: "No peanuts",
+    extras: [extra], components: [{ itemId: "burger", qty: 1, extras: [extra] }] }]);
+  expect(line.notes).toBe("No peanuts");
+  expect(line.components?.[0].extras).toEqual([extra]);
+  expect(line.extras).toEqual([extra]);
+  expect(offlineLines([{ itemId: "x", qty: 1, notes: "x".repeat(1000) }])[0].notes?.length).toBeLessThanOrEqual(500);
 });

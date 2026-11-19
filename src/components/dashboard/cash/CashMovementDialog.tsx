@@ -37,11 +37,12 @@ export default function CashMovementDialog({ kind, currency, shiftId, onClose, o
   const toast = useToast();
   const [amount, setAmount] = useState("");
   const [note, setNote] = useState("");
+  const [purpose, setPurpose] = useState<"tips" | "other">("other");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [shownFor, setShownFor] = useState<typeof kind>(null);
 
-  const frozen = attempt.frozen<{ amount: string; note: string }>();
+  const frozen = attempt.frozen<{ amount: string; note: string; purpose: "tips" | "other" }>();
   const pending = attempt.pending();
   const shownCurrency = pending ? reviewedCurrency.current : currency;
   // Each time it opens it starts afresh, unless the withdrawal still needs an answer.
@@ -49,6 +50,7 @@ export default function CashMovementDialog({ kind, currency, shiftId, onClose, o
     setShownFor(kind);
     setAmount(frozen?.amount ?? "");
     setNote(frozen?.note ?? "");
+    setPurpose(frozen?.purpose ?? "other");
     setError(null);
   }
 
@@ -64,7 +66,7 @@ export default function CashMovementDialog({ kind, currency, shiftId, onClose, o
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: shownKind === "opening" ? JSON.stringify({ action: "open", amount })
-          : attempt.body({ kind: "withdrawal", shiftId, amount, note }),
+          : attempt.body({ kind: "withdrawal", shiftId, amount, note, purpose }),
       });
       const data = await res.json();
       if (shownKind === "withdrawal" && ((res.ok && data.id) || (!res.ok && attempt.settles(res.status)))) attempt.clear();
@@ -108,6 +110,16 @@ export default function CashMovementDialog({ kind, currency, shiftId, onClose, o
             required
           />
         </label>
+        {shownKind === "withdrawal" && (
+          <label className="tt-field">
+            <span className="tt-mod-label">{t("corte.withdrawalPurpose")}</span>
+            <select className="tt-input" disabled={busy || pending} value={frozen?.purpose ?? purpose}
+              onChange={e => setPurpose(e.target.value === "tips" ? "tips" : "other")}>
+              <option value="other">{t("corte.otherWithdrawal")}</option>
+              <option value="tips">{t("corte.tipsOut")}</option>
+            </select>
+          </label>
+        )}
         {shownKind === "withdrawal" && (
           <label className="tt-field">
             <span className="tt-mod-label">{t("corte.withdrawalNote")}</span>
