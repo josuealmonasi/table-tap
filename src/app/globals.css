@@ -4323,12 +4323,14 @@ a.tt-btn {
   padding: 5px 8px;
   font-size: 13px;
 }
-/* How a restaurant pays, under its name in the admin list: one line, cut with
-   an ellipsis like the name above it, the whole text in its tooltip. */
+/* How a restaurant pays, under its name in the admin list. It wraps instead of
+   being cut like the name above it: it carries the date a trial or a pay link
+   runs out, and "hasta e…" hid exactly that (layout gate, 820px, 2026-11-19).
+   The cell is nowrap for the name, so this line opts back in. */
 .tt-admin-billing {
   display: block;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  white-space: normal;
+  overflow-wrap: anywhere;
   font-size: 12px;
   font-weight: 400;
   color: var(--tt-muted);

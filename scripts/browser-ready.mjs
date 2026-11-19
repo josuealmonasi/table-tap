@@ -42,6 +42,9 @@ export function trackData(tab) {
 
 export function contentFor(url) {
   const path = new URL(url).pathname;
+  // The admin's two-step page is a sign-in card, not a dashboard screen: it is
+  // shown before the session is the admin, so there is no dashboard around it.
+  if (path === "/dashboard/admin/mfa") return ".tt-login";
   if (path.startsWith("/dashboard")) return ".tt-dash";
   if (path.startsWith("/r/")) return ".tt-root";
   if (path.startsWith("/order/")) return ".tt-root, .tt-track";
