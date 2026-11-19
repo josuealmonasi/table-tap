@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { getMembership, MANAGES } from "@/lib/membership";
-import { getPlatformAdmin } from "@/lib/admin";
+import { getPlatformAdmin, pendingPlatformAdmin } from "@/lib/admin";
 import DashboardHome from "@/components/dashboard/DashboardHome";
 import { ConfirmProvider } from "@/components/ui/ConfirmDialog";
 import { getLocale } from "@/lib/i18n/server";
@@ -21,6 +21,7 @@ export default async function DashboardPage() {
   if (!user) redirect("/login");
 
   if (await getPlatformAdmin()) redirect("/dashboard/admin");
+  if (await pendingPlatformAdmin()) redirect("/dashboard/admin/mfa");
 
   const membership = await getMembership();
   if (membership && !MANAGES(membership.role)) redirect("/dashboard/orders");

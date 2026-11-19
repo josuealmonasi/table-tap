@@ -3194,6 +3194,21 @@ votes: "Votes",
     after: "After that date your restaurant moves to Carta, the free plan: you keep your menu, tables and orders. To stay on {plan} or another plan, choose it before then.",
     button: "Choose my plan",
   },
+  adminMfa: {
+    nudge: "This account controls every restaurant. Turn on two-step verification with an authenticator app.",
+    enrollTitle: "Two-step verification",
+    enrollBody: "Scan the code with your authenticator app (Google Authenticator, 1Password, Authy…) and type the 6-digit code it shows.",
+    verifyTitle: "Enter your code",
+    verifyBody: "Open your authenticator app and type the 6-digit TableTap code.",
+    qrAlt: "QR code for your authenticator app",
+    secret: "Can't scan? Type this key: {secret}",
+    codePlaceholder: "6-digit code",
+    turnOn: "Turn on verification",
+    verify: "Verify",
+    wrongCode: "That code is wrong or has expired. Type the one your app shows now.",
+    noFactor: "We couldn't find your authenticator app. Write to us to reset it.",
+    unavailable: "We couldn't reach the verification service. Try again in a moment.",
+  },
 };
 
 export type Messages = typeof en;
