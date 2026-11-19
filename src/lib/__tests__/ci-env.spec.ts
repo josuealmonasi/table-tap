@@ -3,7 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { ciEnv, isLoopback, parseStatus, writeCiEnv, ENV_FILE } from "../../../scripts/ci-env.mjs";
-import { browserScope, CORE_PAGES } from "../../../scripts/gate-scope-ci.mjs";
+import { browserScope, CORE_PAGES, pagePattern } from "../../../scripts/gate-scope-ci.mjs";
 
 /**
  * The GitHub gates write `.env.development.local` from the throwaway stack the
@@ -114,6 +114,15 @@ describe("the browser gates' scope on GitHub", () => {
     expect(s.run).toBe(true);
     expect(s.pages).toEqual(CORE_PAGES);
     expect(s.why).toMatch(/capped to the core screens/);
+  });
+
+  it("a capped run still opens every page the change adds or edits (#703's two-step page was capped out)", () => {
+    const s = browserScope({ run: true, why: "its own script changed", scope: {} }, "plan", ["^/dashboard/admin/mfa$", CORE_PAGES[0]]);
+    expect(s.pages).toEqual([...CORE_PAGES, "^/dashboard/admin/mfa$"]);
+    expect(s.why).toMatch(/plus 1 changed page/);
+    expect(pagePattern("src/app/dashboard/admin/restaurants/[id]/page.tsx")).toBe("^/dashboard/admin/restaurants/[^/]+$");
+    expect(pagePattern("src/app/(public)/r/[restaurantId]/page.tsx")).toBe("^/r/[^/]+$");
+    expect(pagePattern("src/lib/admin.ts")).toBeNull();
   });
 
   it("runs the core screens on request whatever the plan says", () => {
