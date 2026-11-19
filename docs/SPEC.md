@@ -170,7 +170,8 @@ Supabase dashboard. Each is written in Spanish and English, switched on
 save from the request's language cookie (`requestLocale`); without it,
 Spanish. Links go to `tabletap.shop/auth/confirm`, never to the Supabase host.
 That page only shows a button that POSTs the token to `/auth/callback`, so a
-mail scanner that opens the link cannot spend it.
+mail scanner that opens the link cannot spend it. The POST is accepted only from our own pages
+(`sameSitePost`), so another site cannot sign a visitor into its account.
 
 ## The free trial, told
 
