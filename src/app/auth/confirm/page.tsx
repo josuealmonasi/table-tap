@@ -3,7 +3,7 @@ import { messagesFor, translate } from "@/lib/i18n";
 
 export const dynamic = "force-dynamic";
 
-const KINDS = ["signup", "invite", "recovery", "email_change"] as const;
+const KINDS = ["signup", "invite", "recovery", "email_change", "magiclink"] as const;
 type Kind = (typeof KINDS)[number];
 
 /**

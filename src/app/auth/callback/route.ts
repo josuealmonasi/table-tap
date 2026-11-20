@@ -11,12 +11,13 @@ const TYPES = new Set<EmailOtpType>(["signup", "invite", "recovery", "email_chan
 // turns the one-time token into a real session cookie, then sends the user on
 // to `next`. Handles both the PKCE `code` flow and the `token_hash` flow.
 //
-// GET serves the older links that point here directly. The email templates
-// (docs/auth-email-templates/) link to /auth/confirm instead, which POSTs here
-// from a button: mail scanners (Outlook's Safe Links) open every link in a
-// message to check it, and a GET that spends the token spent it before the
-// person ever clicked.
-async function confirm(origin: string, params: { get(name: string): string | null }): Promise<NextResponse> {
+// Older email links point here directly. Send them to the same confirmation
+// form as the current templates so mail scanners cannot spend their tokens.
+async function confirm(
+  origin: string,
+  params: { get(name: string): string | null },
+  method: "GET" | "POST",
+): Promise<NextResponse> {
   const code = params.get("code");
   const tokenHash = params.get("token_hash");
   const rawType = params.get("type") as EmailOtpType | null;
@@ -26,11 +27,17 @@ async function confirm(origin: string, params: { get(name: string): string | nul
   const rawNext = params.get("next") ?? "/dashboard";
   const next = rawNext.startsWith("/") && !rawNext.startsWith("//") ? rawNext : "/dashboard";
 
+  if (method === "GET" && !code && tokenHash && type) {
+    const page = new URL("/auth/confirm", origin);
+    page.search = new URLSearchParams({ token_hash: tokenHash, type, next }).toString();
+    return NextResponse.redirect(page, 303);
+  }
+
   const supabase = await createClient();
   let failed = false;
   if (code) {
     failed = Boolean((await supabase.auth.exchangeCodeForSession(code)).error);
-  } else if (tokenHash && type) {
+  } else if (method === "POST" && tokenHash && type) {
     failed = Boolean((await supabase.auth.verifyOtp({ type, token_hash: tokenHash })).error);
   } else {
     failed = true;
@@ -46,7 +53,7 @@ async function confirm(origin: string, params: { get(name: string): string | nul
 
 export async function GET(req: NextRequest) {
   const url = new URL(req.url);
-  return await confirm(url.origin, url.searchParams);
+  return await confirm(url.origin, url.searchParams, "GET");
 }
 
 export async function POST(req: NextRequest) {
@@ -54,5 +61,5 @@ export async function POST(req: NextRequest) {
   if (!sameSitePost(req, origin)) return NextResponse.redirect(`${origin}/login`, 303);
   const form = await req.formData().catch(() => null);
   const get = (name: string) => { const v = form?.get(name); return typeof v === "string" ? v : null; };
-  return await confirm(origin, { get });
+  return await confirm(origin, { get }, "POST");
 }

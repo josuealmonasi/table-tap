@@ -8261,6 +8261,10 @@ form said "mínimo 6 caracteres" under a rule of 8. Check:
 `auth-email-templates.spec.ts` (links, languages, POST only, placeholders match
 `PASSWORD_MIN`).
 
+Older email links that went straight to the callback now open the
+confirmation page too. The callback test checks each supported email token
+type, the confirmation POST, and the separate PKCE code exchange.
+
 ## A trial nobody was told about (2026-11-18)
 
 Signing up started a free month of Servicio and, at its end, a quiet fall back

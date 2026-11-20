@@ -3163,14 +3163,15 @@ votes: "Votos",
     rfcUsed: "Guardado. Este RFC ya usó su prueba gratis en otra cuenta, así que tu restaurante pasa a Carta, el plan gratuito. Puedes elegir un plan en Plan.",
   },
   authConfirm: {
-    title: { signup: "Confirma tu correo", invite: "Únete a tu equipo", recovery: "Restablece tu contraseña", email_change: "Confirma tu nuevo correo" },
+    title: { signup: "Confirma tu correo", invite: "Únete a tu equipo", recovery: "Restablece tu contraseña", email_change: "Confirma tu nuevo correo", magiclink: "Inicia sesión en TableTap" },
     body: {
       signup: "Un paso más: confirma que este correo es tuyo para empezar a usar TableTap.",
       invite: "Te invitaron a TableTap. Acepta para elegir tu contraseña.",
       recovery: "Pulsa el botón para elegir una contraseña nueva.",
       email_change: "Pulsa el botón para empezar a usar este correo en TableTap.",
+      magiclink: "Pulsa el botón para iniciar sesión en TableTap.",
     },
-    button: { signup: "Confirmar mi correo", invite: "Aceptar invitación", recovery: "Elegir contraseña nueva", email_change: "Confirmar correo" },
+    button: { signup: "Confirmar mi correo", invite: "Aceptar invitación", recovery: "Elegir contraseña nueva", email_change: "Confirmar correo", magiclink: "Iniciar sesión" },
     broken: "Este enlace está incompleto. Abre el enlace completo del correo o pide uno nuevo.",
   },
   trialMail: {
