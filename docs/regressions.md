@@ -8204,6 +8204,11 @@ and the only trace was a log line, so a Connect endpoint that was never set up
 looked exactly like no diner paying by card. Each endpoint now records its last
 accepted and last refused event, and the admin health shows it red until it
 accepts one. Check: `admin-health.spec.ts` (`webhookBad`).
+
+A slow heartbeat write could delay processing a valid Stripe event. The
+webhook now records diagnostics after responding, with a write deadline.
+`stripe-webhook.spec.ts` checks that the verified event reaches its handler
+before the database write starts.
 ## Branch previews used up the day's deployments (2026-11-18)
 
 Vercel's plan caps deployments per day, and every push to any branch built a
