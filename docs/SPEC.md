@@ -145,6 +145,8 @@ admin audit events after removing disposable business fixtures.
 
 **Two-step verification for the platform admin.** `/dashboard/admin/mfa`
 enrols an authenticator app (TOTP, Supabase MFA) and later asks for its code.
+The admin guard reads the assurance claim from the exact access token that
+Supabase Auth verified for the user.
 Once enrolled, `getPlatformAdmin()` answers null for a session that has not
 entered the code (token `aal` below `aal2`), so every admin page sends it to the
 code and every admin API answers 403; the page offers sign-out, never a dead
