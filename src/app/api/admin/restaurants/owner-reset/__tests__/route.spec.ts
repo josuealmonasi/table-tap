@@ -11,8 +11,8 @@ vi.mock("@/lib/admin-audit", () => ({
     _action: string,
     handle: (req: NextRequest, context: AdminAuditContext) => Promise<Response>,
   ) => async (req: NextRequest) => {
-    const { id } = await req.json();
-    return handle(req, { targetId: id });
+    const body = await req.json();
+    return handle(req, { body, targetId: body.id });
   },
 }));
 vi.mock("@/lib/admin", () => ({ getPlatformAdmin: async () => ({ userId: "fixture-admin" }) }));

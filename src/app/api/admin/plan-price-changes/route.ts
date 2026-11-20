@@ -1,17 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getPlatformAdmin } from "@/lib/admin";
-import { auditedAdminAction } from "@/lib/admin-audit";
+import { auditedAdminAction, type AdminAuditContext } from "@/lib/admin-audit";
 import { apiError } from "@/lib/api-error";
-import { jsonBody } from "@/lib/json-body";
 import { priceChangeDate } from "@/lib/price-change-date";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 export const runtime = "nodejs";
 
-async function schedule(req: NextRequest): Promise<Response> {
+async function schedule(_req: NextRequest, { body }: AdminAuditContext): Promise<Response> {
   const admin = await getPlatformAdmin();
   if (!admin) return await apiError("apiErr.forbidden", 403);
-  const body = await jsonBody<{ plan?: unknown; newPrice?: unknown; effectiveAt?: unknown }>(req);
   const effectiveAt = priceChangeDate(body?.effectiveAt);
   if (!body || typeof body.plan !== "string" || typeof body.newPrice !== "number"
     || !Number.isFinite(body.newPrice) || body.newPrice <= 0 || !effectiveAt) {

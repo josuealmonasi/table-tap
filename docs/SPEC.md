@@ -134,8 +134,9 @@ with money outstanding stays available for its team to finish refunds.
 Platform actions have a separate append-only `platform_admin_audit` stream:
 actor and target identities, action, outcome and allowlisted before/after facts.
 It covers login creation, updates (including founding-owner password resets),
-platform admin creation/deletion, restaurant deletion and plan moves. Passwords
-are never copied; only set/reset flags are recorded. A durable start precedes
+platform admin creation/deletion, restaurant deletion and plan moves. The audit
+represents password changes with set/reset flags. The audit wrapper and
+the handler use the same parsed request body. A durable start precedes
 writes and a result shares its attempt ID. Missing results mean unresolved work,
 not a promise to retry safely. No actor or target FK can cascade this history.
 RLS denies clients and only the service can insert/read; mutation and truncation

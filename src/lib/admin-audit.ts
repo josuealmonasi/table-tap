@@ -10,8 +10,12 @@ type Action = "login.create" | "login.update" | "login.delete" | "restaurant.del
   | "restaurant.suspend" | "restaurant.unsuspend" | "restaurant.trial"
   | "restaurant.owner_transfer"
   | "restaurant.owner_reset";
-export interface AdminAuditContext { targetId?: string }
-type Handler = (req: NextRequest, audit: AdminAuditContext) => Promise<Response>;
+type AuditBody = Record<string, unknown>;
+export interface AdminAuditContext<Body extends AuditBody = AuditBody> {
+  targetId?: string;
+  body: Body | null;
+}
+type Handler<Body extends AuditBody> = (req: NextRequest, audit: AdminAuditContext<Body>) => Promise<Response>;
 type Db = ReturnType<typeof createAdminClient>;
 
 // Copy named facts only. In particular, neither request bodies, Auth results,
@@ -53,17 +57,18 @@ async function beforeFacts(db: Db, action: Action, id?: string): Promise<Facts> 
 
 /** Start before any sensitive write. A process crash leaves an explicit
  * unresolved attempt; results append another row, never rewrite history. */
-export function auditedAdminAction(action: Action, handler: Handler) {
+export function auditedAdminAction<Body extends AuditBody>(action: Action, handler: Handler<Body>) {
   return async (req: NextRequest): Promise<Response> => {
     const admin = await getPlatformAdmin();
     if (!admin) return await apiError("apiErr.forbidden", 403);
-    const body = await jsonBody<Record<string, unknown>>(req.clone()) ?? {};
-    const target = action.startsWith("restaurant.") ? body.id : body.userId;
-    const context: AdminAuditContext = { targetId: typeof target === "string" ? target : undefined };
+    // Use one read for both the audit and the action.
+    const body = await jsonBody<Body>(req);
+    const target = action.startsWith("restaurant.") ? body?.id : body?.userId;
+    const context: AdminAuditContext<Body> = { body, targetId: typeof target === "string" ? target : undefined };
     const db = createAdminClient();
     const attempt = randomUUID();
     let before: Facts;
-    const requested = requestedFacts(body, action);
+    const requested = requestedFacts(body ?? {}, action);
     const append = async (outcome: string, after: Facts) => {
       const { error } = await db.from("platform_admin_audit").insert({
         attempt_id: attempt, actor_id: admin.userId, actor_email: admin.email,

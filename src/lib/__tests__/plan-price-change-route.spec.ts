@@ -41,9 +41,18 @@ it("refuses anyone outside platform administration", async () => {
 });
 it("audits and schedules the change and notices in one RPC", async () => {
   const effectiveAt = future();
-  expect((await POST(request({ effectiveAt }))).status).toBe(200);
+  const input = request({ effectiveAt });
+  const clone = vi.spyOn(input, "clone");
+  const json = vi.spyOn(input, "json");
+  expect((await POST(input)).status).toBe(200);
+  expect(clone).not.toHaveBeenCalled();
+  expect(json).toHaveBeenCalledTimes(1);
   expect(rpc).toHaveBeenCalledWith("schedule_plan_price_change", {
     p_plan: "casa", p_price: 2500, p_effective_at: effectiveAt, p_created_by: "admin-1",
   });
   expect(audit).toHaveBeenCalledTimes(2);
+  expect(audit).toHaveBeenNthCalledWith(1, expect.objectContaining({
+    outcome: "started",
+    after_facts: { plan: "casa", new_price: 2500, effective_at: effectiveAt },
+  }));
 });
