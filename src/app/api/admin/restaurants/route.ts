@@ -1,8 +1,7 @@
 import { invalidatePublicMenu } from "@/lib/public-menu-cache";
-import { auditedAdminAction } from "@/lib/admin-audit";
+import { auditedAdminAction, type AdminAuditContext } from "@/lib/admin-audit";
 import { NextRequest, NextResponse } from "next/server";
 import { apiError } from "@/lib/api-error";
-import { jsonBody } from "@/lib/json-body";
 import { getPlatformAdmin } from "@/lib/admin";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { assignTier, TIER_BILLING, type TierBilling } from "@/lib/admin-tier";
@@ -18,11 +17,10 @@ export const runtime = "nodejs";
 // its live data only when no payment or refund is outstanding. The locked RPC
 // retains accounting copies first; menus, tables and staff then cascade via FK.
 // The founding owner's LOGIN survives; delete it separately if wanted.
-async function deleteRestaurant(req: NextRequest) {
+async function deleteRestaurant(_req: NextRequest, { body }: AdminAuditContext) {
   const admin = await getPlatformAdmin();
   if (!admin) return await apiError("apiErr.forbidden", 403);
 
-  const body = await jsonBody<Record<string, unknown>>(req);
   if (!body) return await apiError("apiErr.invalidRequest", 400);
   const { id } = body;
   if (typeof id !== "string" || !id) return await apiError("apiErr.invalidRequest", 400);
@@ -99,11 +97,10 @@ async function deleteRestaurant(req: NextRequest) {
 // the plan belongs to the restaurant. `billing` says how it is paid
 // (`assignTier`): from the next Stripe invoice, by a payment link the owner
 // gets by email, or free. Without it, free — the move this route always made.
-async function movePlan(req: NextRequest) {
+async function movePlan(req: NextRequest, { body }: AdminAuditContext) {
   const admin = await getPlatformAdmin();
   if (!admin) return await apiError("apiErr.forbidden", 403);
 
-  const body = await jsonBody<{ id?: unknown; plan?: unknown; billing?: unknown; payBy?: unknown }>(req);
   if (!body || typeof body.id !== "string" || typeof body.plan !== "string") {
     return await apiError("apiErr.invalidRequest", 400);
   }

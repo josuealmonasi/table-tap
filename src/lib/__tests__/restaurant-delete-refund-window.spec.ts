@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { beforeEach, expect, it, vi } from "vitest";
 import { NextRequest, NextResponse } from "next/server";
 import { messagesFor, translate, type Locale } from "@/lib/i18n";
+import type { AdminAuditContext } from "@/lib/admin-audit";
 
 const rpc = vi.fn();
 const billing = vi.fn();
@@ -9,7 +10,10 @@ const deleteUser = vi.fn();
 let locale: Locale = "en";
 vi.mock("@/lib/i18n/server", () => ({ getLocale: async () => locale }));
 vi.mock("@/lib/admin", () => ({ getPlatformAdmin: async () => ({ email: "admin@test.dev" }) }));
-vi.mock("@/lib/admin-audit", () => ({ auditedAdminAction: (_action: string, handler: unknown) => handler }));
+vi.mock("@/lib/admin-audit", () => ({
+  auditedAdminAction: (_action: string, handler: (req: NextRequest, audit: AdminAuditContext) => unknown) =>
+    async (req: NextRequest) => handler(req, { body: await req.json() }),
+}));
 vi.mock("@/lib/admin-tier", () => ({ TIER_BILLING: [], assignTier: vi.fn() }));
 vi.mock("@/lib/billing-delete", () => ({ endRestaurantBilling: (...args: unknown[]) => billing(...args) }));
 vi.mock("@/lib/billing-operation", () => ({

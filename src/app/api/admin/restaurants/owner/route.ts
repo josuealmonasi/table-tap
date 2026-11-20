@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auditedAdminAction } from "@/lib/admin-audit";
+import { auditedAdminAction, type AdminAuditContext } from "@/lib/admin-audit";
 import { apiError } from "@/lib/api-error";
-import { jsonBody } from "@/lib/json-body";
 import { getPlatformAdmin } from "@/lib/admin";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { logEvent } from "@/lib/activity-log";
@@ -20,10 +19,9 @@ const ANSWERS: Record<string, [string, number]> = {
 // POST /api/admin/restaurants/owner { id, userId } — the restaurant becomes
 // userId's; they must already be on its team. The former owner stays on as a
 // manager. Written in the restaurant's activity log.
-async function transfer(req: NextRequest) {
+async function transfer(_req: NextRequest, { body }: AdminAuditContext) {
   const admin = await getPlatformAdmin();
   if (!admin) return await apiError("apiErr.forbidden", 403);
-  const body = await jsonBody<{ id?: unknown; userId?: unknown }>(req);
   if (!body || typeof body.id !== "string" || typeof body.userId !== "string" || !UUID.test(body.id) || !UUID.test(body.userId)) {
     return await apiError("apiErr.invalidRequest", 400);
   }

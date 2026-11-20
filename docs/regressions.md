@@ -8345,6 +8345,10 @@ The owner password-reset handler now uses the restaurant ID already parsed
 by its audit wrapper. The dev API gate caught a valid audited ID returning
 400 when the handler tried to read the request again. The owner-reset route
 spec checks that the handler looks up the same target the audit recorded.
+The price-change route hit the same failure despite a valid audit start. The
+audit wrapper now reads the JSON once and passes it to every audited handler.
+`plan-price-change-route.spec.ts` checks the single read and the agreement
+between the recorded request and the scheduled change.
 
 ## Half the production log was one harmless warning (2026-11-19)
 

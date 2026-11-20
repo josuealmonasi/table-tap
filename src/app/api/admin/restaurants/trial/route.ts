@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auditedAdminAction } from "@/lib/admin-audit";
+import { auditedAdminAction, type AdminAuditContext } from "@/lib/admin-audit";
 import { apiError } from "@/lib/api-error";
-import { jsonBody } from "@/lib/json-body";
 import { getPlatformAdmin } from "@/lib/admin";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { changeTrial } from "@/lib/admin-trial";
@@ -10,10 +9,9 @@ export const runtime = "nodejs";
 
 // PATCH /api/admin/restaurants/trial { id, endsAt } — extend a trial to a date,
 // or end it now with endsAt: null (drops to Carta like an expired trial).
-async function trial(req: NextRequest) {
+async function trial(_req: NextRequest, { body }: AdminAuditContext) {
   const admin = await getPlatformAdmin();
   if (!admin) return await apiError("apiErr.forbidden", 403);
-  const body = await jsonBody<{ id?: unknown; endsAt?: unknown }>(req);
   if (!body || typeof body.id !== "string" || !(body.endsAt === null || typeof body.endsAt === "string")) {
     return await apiError("apiErr.invalidRequest", 400);
   }
