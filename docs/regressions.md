@@ -8341,6 +8341,11 @@ now asks Supabase Auth to verify the same token it uses for the assurance
 check. `failed-lookup.spec.ts` pins the token sent for verification and checks
 that a refused session cannot grant admin access.
 
+The owner password-reset handler now uses the restaurant ID already parsed
+by its audit wrapper. The dev API gate caught a valid audited ID returning
+400 when the handler tried to read the request again. The owner-reset route
+spec checks that the handler looks up the same target the audit recorded.
+
 ## Half the production log was one harmless warning (2026-11-19)
 
 The layout read `session.user` to label the offline cache, and Supabase logs a
