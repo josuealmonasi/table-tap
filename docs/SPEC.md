@@ -3618,8 +3618,9 @@ Each Stripe webhook endpoint (platform and connect) also has a tile: when it
 last accepted a signed event, red if it never has or has accepted none for 7
 days. The last refusal and its reason (no secret, invalid signature) show
 beside it but never turn it red, since anyone can send one; refusals are
-written at most once a minute per server. `readStripeEvent` records both in
-`webhook_heartbeats` (service-only); a failed record never stops the event.
+written at most once per minute per endpoint on each server.
+`readStripeEvent` records both in `webhook_heartbeats` (service-only) after
+the webhook responds, with a short write deadline.
 A failed health read shows "unavailable" instead of taking the console down.
 
 ### Database behavior probes
