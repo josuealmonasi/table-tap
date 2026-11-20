@@ -42,6 +42,8 @@ describe("the text and the version cannot drift apart", () => {
       .digest("hex")
       .slice(0, 16);
 
+  // 2026-11-19 (#642): the legal review — identity, ARCO procedure, providers,
+  // processor clause, IVA, CFDI, disputes, jurisdiction. Every owner re-accepts.
   // 2026-11-18.2: the privacy notice promised the fiscal data is "not shown on
   // the menu", but the menu and checkout show the legal name and address
   // (PlaceIdentity). It now says exactly which two are shown and why.
@@ -75,15 +77,15 @@ describe("the text and the version cannot drift apart", () => {
   // kept the version as a clarification.)
   it("has terms that match the version in force", () => {
     expect({ version: TERMS_VERSION, text: fingerprint("terms-es") }).toEqual({
-      version: "2026-11-18.2",
-      text: "8cce805f4850523f",
+      version: "2026-11-19",
+      text: "7563cd14008ed769",
     });
   });
 
   it("has a privacy notice that matches the version in force", () => {
     expect({ version: TERMS_VERSION, text: fingerprint("privacy-es") }).toEqual({
-      version: "2026-11-18.2",
-      text: "9f3d8fc2a2344491",
+      version: "2026-11-19",
+      text: "56eb2ed4b2d55a1f",
     });
   });
 });
