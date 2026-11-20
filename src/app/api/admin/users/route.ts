@@ -2,7 +2,6 @@ import { requestLocale } from "@/lib/i18n";
 import { auditedAdminAction, type AdminAuditContext } from "@/lib/admin-audit";
 import { NextRequest, NextResponse } from "next/server";
 import { apiError } from "@/lib/api-error";
-import { jsonBody } from "@/lib/json-body";
 import { passwordTooShort } from "@/lib/password";
 import { getPlatformAdmin } from "@/lib/admin";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -18,17 +17,17 @@ const MAX_OWNERS = 3;
 // (owner/manager/kitchen) of an existing restaurant.
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-async function createUser(req: NextRequest, audit: AdminAuditContext) {
+async function createUser(req: NextRequest, audit: AdminAuditContext<{
+  email?: string;
+  password?: string;
+  role?: string;
+  restaurantId?: string;
+  restaurantName?: string;
+}>) {
   const admin = await getPlatformAdmin();
   if (!admin) return await apiError("apiErr.forbidden", 403);
 
-  const body = await jsonBody<{
-    email?: string;
-    password?: string;
-    role?: string;
-    restaurantId?: string;
-    restaurantName?: string;
-  }>(req);
+  const { body } = audit;
   if (!body) return await apiError("apiErr.invalidRequest", 400);
   const { email, password, role, restaurantId, restaurantName } = body;
   if (typeof email !== "string" || !/^\S+@\S+\.\S+$/.test(email)) {
@@ -127,17 +126,16 @@ async function createUser(req: NextRequest, audit: AdminAuditContext) {
 // PATCH /api/admin/users — a platform admin edits a login: name, email, a
 // password reset (sets a NEW one; the old is never readable), and — for team
 // members — the role. Founding-owner and admin roles can't be changed here.
-async function updateUser(req: NextRequest) {
+async function updateUser(_req: NextRequest, { body }: AdminAuditContext<{
+  userId?: string;
+  fullName?: string;
+  email?: string;
+  password?: string;
+  role?: string;
+}>) {
   const admin = await getPlatformAdmin();
   if (!admin) return await apiError("apiErr.forbidden", 403);
 
-  const body = await jsonBody<{
-    userId?: string;
-    fullName?: string;
-    email?: string;
-    password?: string;
-    role?: string;
-  }>(req);
   if (!body) return await apiError("apiErr.invalidRequest", 400);
   const { userId, fullName, email, password, role } = body;
   if (!userId) return await apiError("apiErr.invalidRequest", 400);
@@ -226,11 +224,10 @@ async function updateUser(req: NextRequest) {
 
 // DELETE /api/admin/users — a platform admin removes any login. Founding
 // owners must have their restaurant deleted (or transferred) first.
-async function deleteUser(req: NextRequest) {
+async function deleteUser(_req: NextRequest, { body }: AdminAuditContext) {
   const admin = await getPlatformAdmin();
   if (!admin) return await apiError("apiErr.forbidden", 403);
 
-  const body = await jsonBody<{ userId?: string }>(req);
   if (!body) return await apiError("apiErr.invalidRequest", 400);
   const { userId } = body;
   // Shape-checked before it reaches Postgres: a malformed id threw inside the
