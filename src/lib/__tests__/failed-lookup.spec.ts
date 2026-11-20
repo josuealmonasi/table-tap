@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { AuthRetryableFetchError, AuthSessionMissingError } from "@supabase/supabase-js";
+import { AuthApiError, AuthRetryableFetchError, AuthSessionMissingError } from "@supabase/supabase-js";
 
 /**
  * Who someone is, and what they may do, when the database or the auth server
@@ -16,12 +16,16 @@ import { AuthRetryableFetchError, AuthSessionMissingError } from "@supabase/supa
 vi.mock("react", async original => ({ ...(await original<typeof import("react")>()), cache: <T>(fn: T) => fn }));
 
 const auth = { user: null as { id: string; email: string } | null, error: null as unknown, aal: "aal1", next: "aal1" };
+const sessionToken = () => `h.${Buffer.from(JSON.stringify({ aal: auth.aal })).toString("base64url")}.s`;
+const getUser = vi.fn(async () => ({
+  data: { user: auth.user && { ...auth.user,
+    factors: auth.next === "aal2" ? [{ status: "verified", factor_type: "totp" }] : [] } },
+  error: auth.error,
+}));
 vi.mock("@/lib/supabase/server", () => ({
   createClient: async () => ({
     // Enrolment rides on the verified user; the level on the token's `aal`.
-    auth: { getUser: async () => ({ data: { user: auth.user && { ...auth.user,
-        factors: auth.next === "aal2" ? [{ status: "verified", factor_type: "totp" }] : [] } }, error: auth.error }),
-      getSession: async () => ({ data: { session: { access_token: `h.${Buffer.from(JSON.stringify({ aal: auth.aal })).toString("base64url")}.s` } } }) },
+    auth: { getUser, getSession: async () => ({ data: { session: { access_token: sessionToken() } }, error: null }) },
   }),
 }));
 
@@ -52,8 +56,8 @@ const none = { data: null, error: null };
 const down = { data: null, error: { message: "canceling statement due to statement timeout" } };
 
 beforeEach(() => {
-  auth.user = OWNER;
-  auth.error = null;
+  Object.assign(auth, { user: OWNER, error: null, aal: "aal1", next: "aal1" });
+  getUser.mockClear();
   answers.restaurants = none;
   answers.staff = none;
   answers.platform_admins = none;
@@ -117,7 +121,40 @@ describe("the platform admin", () => {
     Object.assign(auth, { aal: "aal2", next: "aal2" });
     await expect(getPlatformAdmin()).resolves.toEqual({ userId: "u1", email: OWNER.email });
     await expect(pendingPlatformAdmin()).resolves.toBe(false);
-    Object.assign(auth, { aal: "aal1", next: "aal1" });
+  });
+
+  it("verifies the same access token whose assurance grants admin access", async () => {
+    answers.platform_admins = { data: { user_id: "u1", email: OWNER.email }, error: null };
+    Object.assign(auth, { aal: "aal2", next: "aal2" });
+    await expect(getPlatformAdmin()).resolves.toEqual({ userId: "u1", email: OWNER.email });
+    expect(getUser.mock.calls).toEqual([[], [sessionToken()]]);
+  });
+
+  it("denies admin access when Auth refuses the session token", async () => {
+    answers.platform_admins = { data: { user_id: "u1", email: OWNER.email }, error: null };
+    Object.assign(auth, { aal: "aal2", next: "aal2" });
+    getUser.mockImplementationOnce(async () => ({
+      data: { user: { ...OWNER, factors: [{ status: "verified", factor_type: "totp" }] } },
+      error: null,
+    })).mockResolvedValueOnce({
+      data: { user: null },
+      error: new AuthApiError("Session refused", 401, "session_not_found"),
+    });
+    await expect(getPlatformAdmin()).resolves.toBeNull();
+    expect(getUser.mock.calls).toEqual([[], [sessionToken()]]);
+  });
+
+  it("denies access when the assurance token belongs to a different user", async () => {
+    answers.platform_admins = { data: { user_id: "u1", email: OWNER.email }, error: null };
+    Object.assign(auth, { aal: "aal2", next: "aal2" });
+    getUser.mockImplementationOnce(async () => ({
+      data: { user: { ...OWNER, factors: [{ status: "verified", factor_type: "totp" }] } },
+      error: null,
+    })).mockResolvedValueOnce({
+      data: { user: { id: "u2", email: "other@example.com", factors: [] } },
+      error: null,
+    });
+    await expect(getPlatformAdmin()).resolves.toBeNull();
   });
 });
 

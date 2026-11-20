@@ -8334,6 +8334,18 @@ verification; after that a password-only session reaches no admin page or
 action until it enters the authenticator code. Checked on dev end to end:
 enrol, password-only → code page and API 403, code → console, sign-out from
 the code page. Check: `failed-lookup.spec.ts`.
+
+The admin guard previously read identity and assurance through separate
+session reads. A refresh could give those reads different tokens. The guard
+now asks Supabase Auth to verify the same token it uses for the assurance
+check. `failed-lookup.spec.ts` pins the token sent for verification and checks
+that a refused session cannot grant admin access.
+
+The owner password-reset handler now uses the restaurant ID already parsed
+by its audit wrapper. The dev API gate caught a valid audited ID returning
+400 when the handler tried to read the request again. The owner-reset route
+spec checks that the handler looks up the same target the audit recorded.
+
 ## Half the production log was one harmless warning (2026-11-19)
 
 The layout read `session.user` to label the offline cache, and Supabase logs a
