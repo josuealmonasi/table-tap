@@ -168,8 +168,10 @@ dish counts, tables, team and the last 15 orders, read with the service key
 (`readOwnerView`). It is read only — the loader never writes and the screen has
 no control — and not an impersonation: the owner's own screens read under the
 signed-in login's RLS, which a platform admin is not part of, and widening that
-was refused. Every visit writes `restaurant.view` to `platform_admin_audit`
-before anything is read; if that write fails the view is not shown.
+was refused. An authorized visit with a valid restaurant ID records a
+`restaurant.view` attempt in `platform_admin_audit` before the restaurant
+lookup. The result uses the same attempt ID and records a missing restaurant
+as refused. If an audit write fails, the page withholds the result.
 
 ## Auth emails
 
