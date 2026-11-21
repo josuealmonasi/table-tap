@@ -1,5 +1,6 @@
 import "server-only";
 import { randomUUID } from "node:crypto";
+import type { PlatformAdmin } from "@/lib/admin";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { everyRow } from "@/lib/paged";
 import { restaurantSetup } from "@/lib/setup-steps-server";
@@ -23,25 +24,25 @@ export interface OwnerView {
 
 const RECENT_ORDERS = 15;
 
-/** Whether the restaurant exists: a visit to one that does not is not recorded as a view. */
-export async function restaurantExists(restaurantId: string): Promise<boolean> {
-  const { data, error } = await createAdminClient().from("restaurants").select("id").eq("id", restaurantId).maybeSingle();
-  if (error) throw error;
-  return Boolean(data);
-}
+type AuditedOwnerView = { audited: true; view: OwnerView | null } | { audited: false };
 
-/**
- * Records that a platform admin opened a restaurant's owner view, before
- * anything is read. Every use is logged; if the record cannot be written the
- * view is not shown.
- */
-export async function recordOwnerView(admin: { userId: string; email: string }, restaurantId: string): Promise<boolean> {
-  const { error } = await createAdminClient().from("platform_admin_audit").insert({
-    attempt_id: randomUUID(), actor_id: admin.userId, actor_email: admin.email,
-    target_type: "restaurant", target_id: restaurantId, action: "restaurant.view", outcome: "succeeded",
-    before_facts: {}, after_facts: { read_only: true },
-  });
-  return !error;
+/** Audit the attempt before reading the restaurant, then append its result. */
+export async function auditedOwnerView(admin: PlatformAdmin, restaurantId: string): Promise<AuditedOwnerView> {
+  const db = createAdminClient();
+  const attemptId = randomUUID();
+  const record = async (outcome: "started" | "succeeded" | "refused"): Promise<boolean> => {
+    const { error } = await db.from("platform_admin_audit").insert({
+      attempt_id: attemptId, actor_id: admin.userId, actor_email: admin.email,
+      target_type: "restaurant", target_id: restaurantId, action: "restaurant.view", outcome,
+      before_facts: {}, after_facts: { read_only: true },
+    });
+    return !error;
+  };
+
+  if (!(await record("started"))) return { audited: false };
+  const view = await readOwnerView(db, restaurantId);
+  if (!(await record(view ? "succeeded" : "refused"))) return { audited: false };
+  return { audited: true, view };
 }
 
 /**
@@ -50,8 +51,7 @@ export async function recordOwnerView(admin: { userId: string; email: string }, 
  * page that shows it offers no control that would. Null when the restaurant
  * does not exist; a failed read throws, like every dashboard page.
  */
-export async function readOwnerView(restaurantId: string): Promise<OwnerView | null> {
-  const db = createAdminClient();
+async function readOwnerView(db: ReturnType<typeof createAdminClient>, restaurantId: string): Promise<OwnerView | null> {
   const { data: restaurant, error } = await db.from("restaurants")
     .select("id, name, plan, plan_status, currency, accepting_orders, suspended_at, stripe_charges_enabled")
     .eq("id", restaurantId).maybeSingle();

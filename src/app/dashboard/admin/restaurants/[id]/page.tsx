@@ -1,6 +1,6 @@
 import { notFound, redirect } from "next/navigation";
 import { getPlatformAdmin } from "@/lib/admin";
-import { readOwnerView, recordOwnerView, restaurantExists } from "@/lib/admin-owner-view";
+import { auditedOwnerView } from "@/lib/admin-owner-view";
 import AdminOwnerView from "@/components/dashboard/admin/AdminOwnerView";
 import { getLocale } from "@/lib/i18n/server";
 import { messagesFor, translate } from "@/lib/i18n";
@@ -16,8 +16,9 @@ export default async function AdminOwnerViewPage({ params }: { params: Promise<{
   const admin = await getPlatformAdmin();
   if (!admin) redirect("/dashboard");
   const { id } = await params;
-  if (!UUID.test(id) || !(await restaurantExists(id))) notFound();
-  if (!(await recordOwnerView(admin, id))) {
+  if (!UUID.test(id)) notFound();
+  const result = await auditedOwnerView(admin, id);
+  if (!result.audited) {
     const m = messagesFor(await getLocale());
     return (
       <div className="tt-dash"><div className="container">
@@ -25,7 +26,6 @@ export default async function AdminOwnerViewPage({ params }: { params: Promise<{
       </div></div>
     );
   }
-  const view = await readOwnerView(id);
-  if (!view) notFound();
-  return <AdminOwnerView view={view} />;
+  if (!result.view) notFound();
+  return <AdminOwnerView view={result.view} />;
 }
