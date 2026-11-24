@@ -563,11 +563,10 @@ end $$;
 revoke all on function public.storage_restaurant(text) from public;
 grant execute on function public.storage_restaurant(text) to anon, authenticated;
 
-do $$ begin
-  create policy "menu images are public to read" on storage.objects
-    for select using (bucket_id = 'menu');
-exception when duplicate_object then null;
-end $$;
+-- The menu bucket is public: photos are served by their public URL with no
+-- policy at all. A SELECT policy only added listing every restaurant's
+-- uploads, published or not (security sweep 2026-11-24).
+drop policy if exists "menu images are public to read" on storage.objects;
 
 do $$ begin
   create policy "team manages its own menu images" on storage.objects
@@ -728,7 +727,7 @@ create policy "team reads menu items"
 
 drop policy if exists "public read item addons" on item_addons;
 create policy "public read item addons"
-  on item_addons for select using (true);
+  on item_addons for select using (exists (select 1 from menu_items mi where mi.id = product_id));
 
 -- ── Rate limiting ───────────────────────────────────────────────────────────
 -- A tiny shared counter so the public API routes (checkout, service requests,
@@ -986,7 +985,7 @@ create policy "team manages promotions"
 
 drop policy if exists "public read promotion items" on promotion_items;
 create policy "public read promotion items"
-  on promotion_items for select using (true);
+  on promotion_items for select using (exists (select 1 from promotions p where p.id = promotion_id));
 
 drop policy if exists "team manages promotion items" on promotion_items;
 create policy "team manages promotion items"
@@ -1139,6 +1138,11 @@ as $$
          count(*)                          as rating_count
     from dish_ratings r
    where r.restaurant_id = p_restaurant_id
+     -- Diners see averages only for dishes they can see; the server key (the
+     -- owner's analytics, staff menus) sees every dish (security sweep 2026-11-24).
+     and (auth.role() = 'service_role' or exists (
+       select 1 from menu_items mi join menus m on m.id = mi.menu_id
+        where mi.id = r.item_id and mi.restaurant_id = p_restaurant_id and mi.available and m.active))
    group by r.item_id
   having count(*) >= 3;
 $$;
@@ -2248,6 +2252,10 @@ create policy "managers mark notifications read"
   with check (has_role(restaurant_id, array['manager']));
 
 revoke all on notifications from anon;
+-- A table-level UPDATE (Supabase's default grant) outranks the column grant
+-- below: managers could rewrite an alert's kind and data, not just mark it
+-- read (security sweep 2026-11-24). Revoke the table-level rights first.
+revoke insert, update, delete, truncate, references, trigger on notifications from authenticated;
 grant select (restaurant_id, id, kind, data, read_at, created_at) on notifications to authenticated;
 grant update (read_at) on notifications to authenticated;
 
