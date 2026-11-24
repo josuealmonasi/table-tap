@@ -139,6 +139,7 @@ drop table if exists loyalty_redemptions cascade;
 drop table if exists loyalty_visits      cascade;
 drop table if exists recovery_nonces cascade;
 drop table if exists recovery_runs cascade;
+drop table if exists cron_token_claims cascade;
 drop table if exists ticket_email_outbox cascade;
 -- Dropping the cards also drops their per-card stop-token index.
 drop table if exists loyalty_cards       cascade;
