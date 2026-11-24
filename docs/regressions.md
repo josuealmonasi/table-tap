@@ -91,6 +91,21 @@ The fee ledger and checkout evidence must agree on a currency. The ledger has
 no currency column, so today's restaurant setting cannot relabel an older fee.
 `admin-usage-read.spec.ts` checks the matching restaurant and the unknown bucket.
 
+## Free and test plans respect live Stripe billing
+
+Stripe and the admin's plan assignment must agree on whether a restaurant
+already pays. Stripe can start billing before the webhook saves the
+subscription ID. A free or test move now checks Stripe under the billing lock
+before touching Checkout, the plan or the founding place. `admin-tier.spec.ts`
+checks both choices with a live subscription and an empty local ID.
+
+## The plan move reports the plan that saved
+
+The saved plan and the admin's reply must agree. If giving back the founding
+place fails after the plan saves, the reply confirms the move and reports the
+seat release as unsuccessful. `admin-tier.spec.ts` checks the reply when that
+write fails.
+
 ## What runs on its own
 
 ### Price notice wording names the first bill
@@ -163,6 +178,8 @@ and that a new party cannot see the previous party's waiting phones.
 | A held sale offers paper when its one-sale email may be lost | The first request carried the address but replay did not; `card-email-pos.spec.tsx` checks the warning and printable ticket |
 | Admin usage and returned tips agree | A returned tip must not be deducted from sales; `admin-usage-returns.spec.ts` checks partial pieces |
 | Admin usage and fee currency evidence agree | A fee cannot inherit today's restaurant currency; `admin-usage-read.spec.ts` checks other currencies and missing evidence |
+| Free and test plans respect live Stripe billing | A late webhook could let an admin move a paying restaurant and give away its founding place; `admin-tier.spec.ts` checks both choices |
+| The plan move reports the plan that saved | A founding place write failure could make a saved plan move look like a failure; `admin-tier.spec.ts` checks the reply |
 | Scheduled plan prices keep their eligible notice queue | A scheduled price without its recipients could leave an owner without notice; the route and schema specs pin validation and the atomic queue |
 | One-click ticket unsubscribe retries return the same success | A cleared or unknown token returned 404 to mail providers; `ticket-stop-one-click.spec.ts` checks retries, invalid forms and the separate confirmation response |
 |---|---|

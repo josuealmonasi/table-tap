@@ -79,13 +79,21 @@ export async function assignTier(
     // subscription would write over the tier given here (review finding 3).
     try {
       const moved = await withRestaurantBilling(db, input.restaurantId, async operation => {
-        const { sessions, snapshot, exists } = await restaurantBilling(db, input.restaurantId);
+        const { live, sessions, snapshot, exists } = await restaurantBilling(db, input.restaurantId);
         if (!exists) return { ok: false, error: "apiErr.restaurantNotFound", status: 404 } as const;
+        // Stripe can already be billing before the webhook saves the subscription ID.
+        if (live.length > 0) return { ok: false, error: "apiErr.tierLiveSubscription", status: 409 } as const;
         await operation.record(snapshot);
         for (const session of sessions) await operation.write(() => client.checkout.sessions.expire(session.id));
         const result = await moveRestaurantPlan(db, input.restaurantId, input.plan, adminEmail, client);
         if (!result.ok || input.billing !== "test") return { ...result, seatReleased: false };
-        return { ...result, seatReleased: await releaseFoundingSeat(db, input.restaurantId) };
+        try {
+          return { ...result, seatReleased: await releaseFoundingSeat(db, input.restaurantId) };
+        } catch (err) {
+          // The plan already changed, so reporting a failed move would invite a retry.
+          console.error("admin founding place release failed", input.restaurantId, err);
+          return { ...result, seatReleased: false };
+        }
       });
       return moved.ok ? { ...moved, billing: input.billing } : moved;
     } catch (err) {
