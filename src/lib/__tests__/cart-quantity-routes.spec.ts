@@ -4,6 +4,7 @@ import { en } from "@/lib/i18n/en";
 import { translate } from "@/lib/i18n";
 
 const writes = vi.hoisted(() => vi.fn());
+vi.mock("@/lib/staff-request-guard", () => ({ staffWriteLimited: async () => false, repeatedStaffRequest: async () => null }));
 vi.mock("@/lib/stripe", () => ({ stripe: {} }));
 vi.mock("@/lib/api-error", () => ({ apiError: async (key: string, status: number) =>
   NextResponse.json({ error: translate(en, key) }, { status }) }));

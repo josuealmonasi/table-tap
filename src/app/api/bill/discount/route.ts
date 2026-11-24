@@ -12,6 +12,7 @@ import { applyCoupon } from "@/lib/pricing";
 import { billTotal, discountableOrders } from "@/lib/staff-discount";
 import { applyToOrders } from "@/lib/apply-bill-discount";
 import type { Order } from "@/lib/types";
+import { repeatedStaffRequest } from "@/lib/staff-request-guard";
 
 export const runtime = "nodejs";
 
@@ -84,6 +85,8 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
   // A waiter or a cashier asks; only management grants.
   if (SERVES(actor.role)) {
+    const repeated = await repeatedStaffRequest(db, "discount_requests", actor.restaurantId, orders[0].table_id ?? null, actor.email);
+    if (repeated) return repeated;
     const { error } = await db.from("discount_requests").insert({
       restaurant_id: actor.restaurantId,
       table_id: orders[0].table_id,

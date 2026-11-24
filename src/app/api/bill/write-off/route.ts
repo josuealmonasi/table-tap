@@ -16,6 +16,7 @@ import {
   writeOffTotal,
 } from "@/lib/write-off";
 import type { Order } from "@/lib/types";
+import { repeatedStaffRequest } from "@/lib/staff-request-guard";
 
 export const runtime = "nodejs";
 
@@ -100,6 +101,8 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
   // A waiter's ask is recorded and stops there — the table still owes.
   if (!MANAGES(actor.role)) {
+    const repeated = await repeatedStaffRequest(db, "write_off_requests", actor.restaurantId, tableId ?? orders[0].table_id ?? null, actor.email);
+    if (repeated) return repeated;
     const { error } = await db.from("write_off_requests").insert({
       restaurant_id: actor.restaurantId,
       table_id: tableId ?? orders[0].table_id ?? null,
@@ -167,6 +170,8 @@ async function writeOffTheRest(p: {
   const detail = logDetail({ table: label, amount: lost.toFixed(2), paid: paid.toFixed(2), kind: "rest", reason, note: note || null });
 
   if (!MANAGES(actor.role)) {
+    const repeated = await repeatedStaffRequest(createAdminClient(), "write_off_requests", actor.restaurantId, p.tableId ?? orders[0].table_id ?? null, actor.email);
+    if (repeated) return repeated;
     const { error } = await createAdminClient().from("write_off_requests").insert({
       restaurant_id: actor.restaurantId,
       table_id: p.tableId ?? orders[0].table_id ?? null,

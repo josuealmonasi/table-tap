@@ -1,3 +1,4 @@
+import { staffWriteLimited } from "@/lib/staff-request-guard";
 import { orderItemsWithRevenue } from "@/lib/order-line-revenue";
 import { suspensionRefusal } from "@/lib/restaurant-suspension";
 import { invalidatePublicMenu } from "@/lib/public-menu-cache";
@@ -76,6 +77,10 @@ export async function POST(req: NextRequest) {
 
   const ref = uuidOf(body.ref);
   if (body.ref !== undefined && !ref) return await apiError("apiErr.invalidRequest", 400);
+  // A per-person ceiling, so a waiter cannot flood the kitchen with tickets
+  // (security sweep 2026-11-24). The screen's retry reference keeps a resend
+  // of one order a replay, not a second ticket.
+  if (await staffWriteLimited(actor.email, "table-order")) return await apiError("apiErr.tooManyWait", 429);
   const surface = `table-order:${body.tableId}`;
   const intent = ref ? { restaurantId: actor.restaurantId, ref, scope: orderRequestScope(surface, body), legacyScope: surface } : null;
   if (intent) {

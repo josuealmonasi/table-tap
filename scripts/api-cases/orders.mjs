@@ -73,8 +73,8 @@ export function tableOrderCases(fx) {
     // case that places one without it leaves it behind for good. This one did,
     // every run, and the kitchen ticket with it.
     { name: "POST /api/table-order", as: "waiter", method: "POST", path: "/api/table-order",
-      body: { tableId: table.id, note: MARK, items: [{ itemId: dish.id, name: dish.name,
-        emoji: dish.emoji, price: Number(dish.price), qty: 1, mods: {} }] },
+      body: () => ({ tableId: table.id, note: MARK, ref: crypto.randomUUID(), items: [{ itemId: dish.id, name: dish.name,
+        emoji: dish.emoji, price: Number(dish.price), qty: 1, mods: {} }] }),
       expect: [200, 403],
       // 403 when the tier does not carry it; 200 says it landed owing.
       check: d => !d.orderId || Number(d.total) > 0 || "created an order that owes nothing" },

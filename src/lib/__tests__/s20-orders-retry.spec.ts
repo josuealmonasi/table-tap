@@ -3,6 +3,7 @@ import { NextRequest } from "next/server";
 const state = vi.hoisted(() => ({ orders: [] as Record<string, unknown>[], stock: 10, reservations: 0 }));
 const dish = { itemId: "dish", name: "Dish", price: 100, qty: 1, emoji: "", mods: {} };
 const ref = "00000000-0000-4000-8000-000000000001";
+vi.mock("@/lib/staff-request-guard", () => ({ staffWriteLimited: async () => false, repeatedStaffRequest: async () => null }));
 vi.mock("@/lib/api-guard", () => ({ actingStaff: async () => ({ restaurantId: "r", role: "owner", email: "owner" }) }));
 vi.mock("@/lib/api-error", () => ({ apiError: async (error: string, status: number) => Response.json({ error }, { status }) }));
 vi.mock("@/lib/plan-guard", () => ({ frozenBlocks: async () => null, planBlocks: async () => null }));
