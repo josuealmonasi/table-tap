@@ -25,7 +25,7 @@ describe("the ratings threshold is one number", () => {
     const { MIN_RATINGS_TO_SHOW } = await import("@/lib/ratings");
     const sql = read("supabase/schema.sql");
     const fn = sql.slice(sql.indexOf("function public.dish_rating_stats"));
-    const having = /having count\(\*\) >= (\d+)/.exec(fn.slice(0, 800));
+    const having = /having count\(\*\) >= (\d+)/.exec(fn.split("$$;")[0]);
 
     expect(having, "dish_rating_stats no longer withholds thin averages").toBeTruthy();
     expect(Number(having![1]), "the SQL threshold and the constant disagree").toBe(
