@@ -6,7 +6,10 @@ import type Stripe from "stripe";
 import { stripe } from "@/lib/stripe";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { everyRow, everyRowIn } from "@/lib/paged";
-import { discoverReturn, legacyRefund, refundEvidence, returnCharge, verifiedRefund } from "./return-provider";
+import {
+  checkReviewedReturn, discoverReturn, flagReturnForReview, recheckChargeRefunds,
+  refundEvidence, refundForAttempt, retireUnsentReturn, returnCharge, verifiedRefund,
+} from "./return-provider";
 
 export interface RefundOperation {
   id: string;
@@ -72,7 +75,11 @@ export async function executeOrderRefund(
 ): Promise<boolean> {
   const db = createAdminClient();
   const operation = await returnCharge(restaurantId, operationId);
-  if (!operation || operation.source !== "stripe" || operation.status === "review") return false;
+  if (!operation || operation.source !== "stripe") return false;
+  if (operation.status === "review") {
+    await checkReviewedReturn(client, restaurantId, operation, actor);
+    return false;
+  }
   const { stripe_payment_intent: intent, stripe_account_id: account } = operation;
   // Completed money needs only fee recovery. Opening Bills must never POST it again.
   if (operation.status === "succeeded") {
@@ -109,38 +116,44 @@ export async function executeOrderRefund(
     }
   }
   const options = { stripeAccount: attempt.stripe_account_id as string };
+  // Recover evidence before considering a new request, even after the key expires.
+  const saved = { ...attempt, operation_id: operationId };
+  const matchesAttempt = (made: Stripe.Refund) => refundForAttempt(made, saved);
+  let prior = discovered.refunds.find(matchesAttempt);
+  if (!attempt.stripe_refund_id && !prior) {
+    // Keep the existing 23-hour cutoff, and retire an expired attempt only
+    // after a full list shows no provider refund for it (sweep 6, finding 1).
+    const age = attempt.created_at ? Date.now() - Date.parse(attempt.created_at) : NaN;
+    if (!retried && !attempt.provider_status && age >= 24 * 3600000) {
+      let retired: boolean;
+      try { retired = await retireUnsentReturn(restaurantId, operationId, attempt.id, actor); }
+      catch (error) {
+        console.error("Order refund remains pending", operationId, error);
+        return false;
+      }
+      return retired ? executeOrderRefund(restaurantId, operationId, actor, client, true) : false;
+    }
+    if (!Number.isFinite(age) || age >= 23 * 3600000
+      || !Number.isSafeInteger(attempt.outstanding_cents) || attempt.outstanding_cents <= 0
+      || !attempt.idempotency_key || Math.round(Number(attempt.amount) * 100) !== attempt.outstanding_cents) return false;
+
+    // A failed final read propagates before any request can go to Stripe.
+    const latest = await recheckChargeRefunds(client, restaurantId, operation, discovered.refunds, saved);
+    if (latest.foreign) {
+      await flagReturnForReview(restaurantId, operationId, attempt.id, actor, latest.foreign.id);
+      return false;
+    }
+    prior = latest.refunds.find(matchesAttempt);
+  }
   let refund: Stripe.Refund;
   try {
-    if (attempt.stripe_refund_id) {
-      refund = await client.refunds.retrieve(attempt.stripe_refund_id, options);
-    } else {
-      // Provider idempotency expires. A durable metadata search recovers an
-      // older successful attempt before its key can ever create another one.
-      const prior = discovered.refunds.find(made => made.metadata?.refund_attempt === attempt.id || legacyRefund(made, { ...attempt, operation_id: operationId }));
-      // An expired key cannot prove an unknown POST failed — but the charge's
-      // full refund list just read can: past the key's 24 hours, an attempt
-      // with no refund there never reached Stripe. It is retired and a new one
-      // opened, once; between 23 and 24 hours it waits (sweep 6, finding 1).
-      const age = attempt.created_at ? Date.now() - Date.parse(attempt.created_at) : NaN;
-      if (!prior && !retried && !attempt.stripe_refund_id && !attempt.provider_status && age >= 24 * 3600000) {
-        const { data: retired, error: retireError } = await db.rpc("retire_unsent_refund_attempt_v1", {
-          p_restaurant: restaurantId, p_operation: operationId, p_attempt: attempt.id, p_actor: actor,
-        });
-        if (retireError) throw new Error(`Could not retire the unsent refund attempt: ${retireError.message}`);
-        return retired === true ? executeOrderRefund(restaurantId, operationId, actor, client, true) : false;
-      }
-      // Otherwise keep the obligation visible instead of sending a fresh provider request.
-      if (!prior && (!attempt.created_at || !Number.isFinite(Date.parse(attempt.created_at))
-        || Date.now() - Date.parse(attempt.created_at) >= 23 * 3600000
-        || !Number.isSafeInteger(attempt.outstanding_cents) || attempt.outstanding_cents <= 0
-        || !attempt.idempotency_key || Math.round(Number(attempt.amount) * 100) !== attempt.outstanding_cents)) return false;
-      refund = prior ?? await client.refunds.create({
+    refund = attempt.stripe_refund_id ? await client.refunds.retrieve(attempt.stripe_refund_id, options)
+      : prior ?? await client.refunds.create({
         payment_intent: attempt.stripe_payment_intent,
         amount: attempt.outstanding_cents,
         refund_application_fee: true,
         metadata: { refund_operation: operationId, refund_attempt: attempt.id },
       }, { ...options, idempotencyKey: attempt.idempotency_key });
-    }
   } catch (error) {
     // Unknown means outstanding, never completed and never a new attempt.
     console.error("Order refund remains pending", operationId, error);

@@ -14,7 +14,9 @@ function provider(made: unknown[] = []) {
   const evidence = { amount: 3334, currency: "mxn", payment_intent: "pi_original" };
   return {
     refunds: {
-      list: vi.fn(() => (async function* () { for (const r of made) yield { ...evidence, ...r as object }; })()),
+      list: vi.fn((_params?: Stripe.RefundListParams, _options?: Stripe.RequestOptions) => (async function* () {
+        for (const r of made) yield { ...evidence, ...r as object };
+      })()),
       create: vi.fn().mockResolvedValue({ ...evidence, id: "re_one", status: "succeeded" }),
       retrieve: vi.fn(),
     },
@@ -100,5 +102,79 @@ describe("durable order returns", () => {
     syncFee.mockRejectedValue(new Error("database unavailable")); const client = provider();
     expect(await executeOrderRefund("tenant", "operation", "manager", client as unknown as Stripe)).toBe(true);
     expect(rpc).toHaveBeenLastCalledWith("finish_refund_operation_v2", expect.objectContaining({ p_status: "succeeded", p_refunds: [expect.objectContaining({ id: "re_one" })] }));
+  });
+});
+
+describe("the final Stripe refund listing", () => {
+  it("posts after the same refund IDs are listed again", async () => {
+    const client = provider([{ id: "re_old", status: "canceled" }]);
+    expect(await executeOrderRefund("tenant", "operation", "manager", client as unknown as Stripe)).toBe(true);
+    expect(client.refunds.list).toHaveBeenCalledTimes(2);
+    expect(client.refunds.list).toHaveBeenLastCalledWith({ payment_intent: "pi_original", limit: 100 }, { stripeAccount: "acct_original" });
+    expect(rpc.mock.invocationCallOrder[0]).toBeLessThan(client.refunds.list.mock.invocationCallOrder[1]);
+    expect(client.refunds.list.mock.invocationCallOrder[1]).toBeLessThan(client.refunds.create.mock.invocationCallOrder[0]);
+    expect(client.refunds.create).toHaveBeenCalledOnce();
+  });
+
+  it("records manual review when a foreign refund appears after the attempt opens", async () => {
+    const write = Promise.resolve({ error: null });
+    const filters = Object.assign(write, { eq: vi.fn(() => filters), is: vi.fn(() => filters) });
+    const update = vi.fn((_table: string, _values: unknown) => filters);
+    from.mockImplementation(table => ({ ...fixture.from(table), update: (values: unknown) => update(table, values) }));
+    const client = provider();
+    client.refunds.list.mockImplementationOnce(provider().refunds.list)
+      .mockImplementationOnce(provider([{ id: "re_manual", amount: 1000, status: "succeeded" }]).refunds.list);
+
+    expect(await executeOrderRefund("tenant", "operation", "manager", client as unknown as Stripe)).toBe(false);
+    expect(client.refunds.list).toHaveBeenCalledTimes(2);
+    expect(client.refunds.create).not.toHaveBeenCalled();
+    expect(rpc).toHaveBeenCalledExactlyOnceWith("start_refund_attempt", { p_restaurant: "tenant", p_operation: "operation" });
+    expect(update).toHaveBeenCalledWith("refund_operations", { status: "review" });
+    expect(update).toHaveBeenCalledWith("refund_attempts", { last_error: expect.stringMatching(/re_manual.*manager/) });
+    expect(filters.eq).toHaveBeenCalledWith("restaurant_id", "tenant");
+    expect(filters.eq).toHaveBeenCalledWith("status", "processing");
+    expect(filters.eq).toHaveBeenCalledWith("id", "attempt-1");
+    expect(console.error).toHaveBeenCalledWith("Order refund needs manual reconciliation", "operation", "attempt-1", "re_manual");
+    expect(syncFee).not.toHaveBeenCalled();
+  });
+
+  it("throws on a lost page of the final listing without posting", async () => {
+    const client = provider();
+    client.refunds.list.mockImplementationOnce(provider().refunds.list).mockImplementationOnce(async function* () {
+      yield* provider([{ id: "re_old", status: "canceled" }]).refunds.list();
+      throw new Error("lost listing reply");
+    });
+    await expect(executeOrderRefund("tenant", "operation", "manager", client as unknown as Stripe)).rejects.toThrow("lost listing reply");
+    expect(client.refunds.create).not.toHaveBeenCalled();
+    expect(rpc).toHaveBeenCalledTimes(1);
+    expect(syncFee).not.toHaveBeenCalled();
+  });
+
+  it("recovers the same app attempt when its refund first appears in the final listing", async () => {
+    const client = provider();
+    client.refunds.list.mockImplementationOnce(provider().refunds.list)
+      .mockImplementationOnce(provider([{ id: "re_ours", status: "succeeded", metadata: { refund_attempt: attempt.id } }]).refunds.list);
+    expect(await executeOrderRefund("tenant", "operation", "manager", client as unknown as Stripe)).toBe(true);
+    expect(client.refunds.create).not.toHaveBeenCalled();
+    expect(rpc).toHaveBeenLastCalledWith("finish_refund_operation_v2", expect.objectContaining({
+      p_refunds: [expect.objectContaining({ id: "re_ours" })],
+    }));
+  });
+
+  it.each([false, true])("a review check only retires an expired attempt with no Stripe refund (provider refund: %s)", async hasRefund => {
+    fixture.tables.refund_operations[0].status = "review";
+    fixture.tables.refund_attempts[0].created_at = "2020-01-01T00:00:00Z";
+    from.mockImplementation(table => {
+      const q = fixture.from(table);
+      return Object.assign(q, { limit: () => q });
+    });
+    const client = provider(hasRefund ? [{ id: "re_ours", status: "succeeded", metadata: { refund_attempt: attempt.id } }] : []);
+    expect(await executeOrderRefund("tenant", "operation", "manager", client as unknown as Stripe)).toBe(false);
+    expect(client.refunds.list).toHaveBeenCalledOnce();
+    expect(client.refunds.create).not.toHaveBeenCalled();
+    if (hasRefund) expect(rpc).not.toHaveBeenCalled();
+    else expect(rpc).toHaveBeenCalledExactlyOnceWith("retire_unsent_refund_attempt_v1", {
+      p_restaurant: "tenant", p_operation: "operation", p_attempt: attempt.id, p_actor: "manager",
+    });
   });
 });
