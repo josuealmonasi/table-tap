@@ -8458,3 +8458,13 @@ GHSA-pc58-hwjq-p385 (cross-client response injection) and GHSA-7qx7-33qx-rqx2
 (SVG rejection bypass in the image optimiser), all fixed in 15.5.29. Next and
 eslint-config-next now pin 15.5.29, and the framework floor in
 `security-headers.spec.ts` rises to it, so a downgrade fails the unit tests.
+
+### Three guards that did not match their siblings (security sweep 2026-11-24)
+
+`PATCH /api/staff` changed roles while the subscription was locked (invitations
+were frozen); `POST /api/terminal/deposits/verify` edited a deposit with the
+till locked or off the tier (the other deposit routes refuse); and CloudPRNT
+counted every poll against the caller's address, so anyone sharing the
+restaurant's public IP could use up the printer's allowance. Each now matches:
+the freeze check, the deposit guard, and a per-restaurant printer allowance
+counted after the token is verified. Check: `sweep-1124-guards.spec.ts`.
