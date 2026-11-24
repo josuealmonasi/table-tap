@@ -8458,3 +8458,14 @@ GHSA-pc58-hwjq-p385 (cross-client response injection) and GHSA-7qx7-33qx-rqx2
 (SVG rejection bypass in the image optimiser), all fixed in 15.5.29. Next and
 eslint-config-next now pin 15.5.29, and the framework floor in
 `security-headers.spec.ts` rises to it, so a downgrade fails the unit tests.
+
+### Coupon minimum counted the service charge; offline tips had no real ceiling (security sweep 2026-11-24)
+
+Paying a bill, a coupon's minimum spend and its discount were judged on the
+dishes plus the service charge, while the cart judges them on the dishes alone:
+MX$90 of food and MX$15 of service passed a MX$100 minimum. The bill screen and
+`bill/pay` now both use the dishes (`BillAmounts.dishes`). Separately, an
+offline receipt's tip was only checked against a total that already contains
+it, so a manager approving one could record a tip above the food; it now obeys
+the till's ceiling (the discounted subtotal). Check: `bill-principal.spec.ts`,
+`offline-sale.spec.ts`.
