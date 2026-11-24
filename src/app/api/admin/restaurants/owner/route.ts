@@ -14,6 +14,7 @@ const ANSWERS: Record<string, [string, number]> = {
   not_found: ["apiErr.restaurantNotFound", 404],
   already_owner: ["apiErr.alreadyOwner", 409],
   not_on_team: ["apiErr.notOnTeam", 409],
+  owns_another: ["apiErr.ownerOwnsAnother", 409],
 };
 
 // POST /api/admin/restaurants/owner { id, userId } — the restaurant becomes

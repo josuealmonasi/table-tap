@@ -8,7 +8,7 @@ it("ends only a free trial whose RFC already had one elsewhere, and records firs
   expect(fn).toContain("if new.stripe_subscription_id is not null or new.tier_assignment_id is not null then return new;");
   expect(fn).toContain("exists (select 1 from trial_rfcs where rfc = new.rfc and restaurant_id <> new.id)");
   expect(fn).toContain("new.plan := 'carta'; new.plan_status := 'active'; new.trial_ends_at := null;");
-  expect(fn).toMatch(/elsif new\.trial_ends_at is not null then\s+insert into trial_rfcs/);
+  expect(fn).toMatch(/if new\.trial_ends_at is not null and not exists \(select 1 from trial_rfcs where rfc = new\.rfc and restaurant_id <> new\.id\) then[\s\S]*?insert into trial_rfcs \(rfc, restaurant_id\) values \(new\.rfc, new\.id\) on conflict \(rfc\) do nothing/);
   expect(sql).toContain("create trigger restaurants_one_trial_per_rfc before update of rfc on restaurants");
   const table = sql.split("create table if not exists trial_rfcs (")[1]?.split("\n);")[0] ?? "";
   expect(table).not.toMatch(/references/i);
@@ -18,4 +18,9 @@ it("ends only a free trial whose RFC already had one elsewhere, and records firs
 it("the terms and the privacy notice say it", () => {
   expect(readFileSync("src/lib/legal/terms-es.json", "utf8")).toContain("por una sola ocasión por restaurante y por RFC");
   expect(readFileSync("src/lib/legal/privacy-es.json", "utf8")).toContain("con el único fin de que la prueba se otorgue una sola vez por RFC");
+});
+
+it("the loser of two saves of one RFC ends its own trial (review 1118)", () => {
+  expect(fn).toContain("on conflict (rfc) do nothing;\n    if found then return new; end if;");
+  expect(fn.indexOf("if found then return new")).toBeLessThan(fn.indexOf("new.plan := 'carta'"));
 });

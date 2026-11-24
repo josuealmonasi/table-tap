@@ -8402,3 +8402,16 @@ it merged, and the next PR (#704) failed layout and dialogs on it. A capped
 run now always adds every page file the change adds or edits
 (`pagePattern`). Check: `ci-env.spec.ts`.
 
+
+### Founding claim, owner transfer and the RFC trial race (review 1118)
+
+Three database functions checked something, then acted on it without the
+check still holding. `claim_founding_price` returned a number a concurrent
+claim for the same restaurant had not written. `admin_transfer_ownership`
+checked team membership, then removed the staff row — a member removed in
+between became owner. It also made the former owner a manager of a second
+restaurant, breaking one login, one restaurant. `one_trial_per_rfc` let two
+restaurants saving one RFC at once both keep a trial: the loser's insert was
+silently dropped. Each now acts first and reads what its own write did.
+Check: `admin-tier.spec.ts`, `admin-owner-transfer.spec.ts`,
+`one-trial-per-rfc.spec.ts`, plus a rolled-back probe on dev.

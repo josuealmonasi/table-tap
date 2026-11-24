@@ -8,7 +8,10 @@ const body = sql.split("create or replace function public.admin_transfer_ownersh
 it("transfers only to someone on the team, under a row lock, and keeps the former owner as a manager", () => {
   expect(body.indexOf("for update")).toBeGreaterThan(0);
   expect(body.indexOf("for update")).toBeLessThan(body.indexOf("update restaurants set owner_id"));
-  expect(body.indexOf("'not_on_team'")).toBeLessThan(body.indexOf("delete from staff"));
+  // The removal itself is the eligibility check (no EXISTS a concurrent removal can beat).
+  expect(body).toContain("delete from staff where restaurant_id = p_restaurant and user_id = p_new_owner returning user_id into v_member");
+  expect(body).toMatch(/if v_member is null then return 'not_on_team'/);
+  expect(body.indexOf("'owns_another'")).toBeLessThan(body.indexOf("delete from staff"));
   expect(body).toContain("where restaurant_id = p_restaurant and user_id = p_new_owner");
   expect(body).not.toMatch(/on conflict/i);
   expect(body).toMatch(/insert into staff \(restaurant_id, user_id, email, role\) values \(p_restaurant, v_old, [^)]*\), 'manager'\)/);
