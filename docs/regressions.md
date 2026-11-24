@@ -8462,3 +8462,10 @@ failed final listing aborts the request. A manager can use Check to retire the
 attempt after 24 hours if a fresh listing still shows no refund for it, then
 attribute the manual refund. A Stripe refund made after the final listing can
 still race the POST. Check: `src/lib/refunds/__tests__/operations.spec.tsx`.
+### Next.js 15.5.28 carried three published advisories (security sweep 2026-11-24)
+
+`pnpm audit --prod` reported GHSA-f3mh-rxg3-f5g2 (HttpOnly cookie exposure),
+GHSA-pc58-hwjq-p385 (cross-client response injection) and GHSA-7qx7-33qx-rqx2
+(SVG rejection bypass in the image optimiser), all fixed in 15.5.29. Next and
+eslint-config-next now pin 15.5.29, and the framework floor in
+`security-headers.spec.ts` rises to it, so a downgrade fails the unit tests.
