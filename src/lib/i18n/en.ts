@@ -1899,6 +1899,7 @@ foundingLeftBody: "Subscribe now and keep this subscription price for as long as
     notOnTrial: "This restaurant is not on a trial.",
     alreadyOwner: "That person already owns it.",
     notOnTeam: "Only someone already on this restaurant's team can become its owner.",
+    ownerOwnsAnother: "The current owner also owns another restaurant, so they cannot stay on here as a manager. Transfer that other restaurant first.",
     ownerMissing: "This restaurant has no owner with an email.",
     restaurantSuspended: "This restaurant isn't taking orders or payments right now. Anything already collected is kept.",
     notAccepting: "The restaurant isn't taking orders right now. Please try again later.",
