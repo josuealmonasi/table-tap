@@ -8326,6 +8326,24 @@ the owner might not open that week, so Carta arrived unannounced. The recovery
 job `trial_reminders` now emails the owner three days before, once per trial
 end. Check: `recovery/__tests__/trial-reminders.spec.ts`.
 
+| Places that must agree | What went wrong | What checks it |
+| --- | --- | --- |
+| The due list and the restaurant's current plan | An owner could get a trial reminder after subscribing | `trial-reminders.spec.ts` |
+| Email delivery and the recorded trial end | A failed write after the send could let the next run send again | `trial-reminders.spec.ts` |
+
+### A trial reminder went out after the owner subscribed
+
+The due list was a snapshot, and the plan lookup did not check whether the
+trial still qualified. The worker now checks the current trial, subscription
+and tier assignment in the same write that claims the reminder.
+
+### A failed write could send the same trial reminder twice
+
+Resend accepted the email before TableTap recorded the trial end. If that write
+failed, a retry after Resend forgot the key could send again. The worker now
+claims the trial end before sending, clears the claim on a definite refusal,
+and keeps it if the provider might already have accepted the email.
+
 ## Another site could sign a visitor into its own account (2026-11-19)
 
 `/auth/callback` accepted a POST from anywhere, so a page elsewhere could
