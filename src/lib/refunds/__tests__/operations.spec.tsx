@@ -14,7 +14,7 @@ function provider(made: unknown[] = []) {
   const evidence = { amount: 3334, currency: "mxn", payment_intent: "pi_original" };
   return {
     refunds: {
-      list: vi.fn((_params?: Stripe.RefundListParams, _options?: Stripe.RequestOptions) => (async function* () {
+      list: vi.fn<(params?: Stripe.RefundListParams, options?: Stripe.RequestOptions) => AsyncGenerator<object>>(() => (async function* () {
         for (const r of made) yield { ...evidence, ...r as object };
       })()),
       create: vi.fn().mockResolvedValue({ ...evidence, id: "re_one", status: "succeeded" }),
@@ -119,7 +119,7 @@ describe("the final Stripe refund listing", () => {
   it("records manual review when a foreign refund appears after the attempt opens", async () => {
     const write = Promise.resolve({ error: null });
     const filters = Object.assign(write, { eq: vi.fn(() => filters), is: vi.fn(() => filters) });
-    const update = vi.fn((_table: string, _values: unknown) => filters);
+    const update = vi.fn<(table: string, values: unknown) => typeof filters>(() => filters);
     from.mockImplementation(table => ({ ...fixture.from(table), update: (values: unknown) => update(table, values) }));
     const client = provider();
     client.refunds.list.mockImplementationOnce(provider().refunds.list)
