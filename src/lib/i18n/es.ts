@@ -1897,6 +1897,7 @@ foundingLeftBody: "Quien contrata ahora conserva este precio de suscripción mie
     notOnTrial: "Este restaurante no está en periodo de prueba.",
     alreadyOwner: "Esa persona ya es la dueña.",
     notOnTeam: "Solo puede ser dueño alguien que ya forma parte del equipo de este restaurante.",
+    ownerOwnsAnother: "El dueño actual también es dueño de otro restaurante, así que no puede quedarse aquí como gerente. Transfiere primero ese otro restaurante.",
     ownerMissing: "Este restaurante no tiene un dueño con correo.",
     restaurantSuspended: "Este restaurante no está tomando pedidos ni cobros por ahora. Lo que ya cobraste se conserva.",
     notAccepting:

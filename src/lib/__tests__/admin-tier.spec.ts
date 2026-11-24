@@ -235,3 +235,11 @@ it("the founding limit counts places held, so a given-back place is free again",
   expect(fn).not.toContain("if v_next > p_limit");
   expect(fn.indexOf("pg_advisory_xact_lock")).toBeLessThan(fn.indexOf("select count(*)"));
 });
+
+it("the founding claim checks for an existing seat under the lock and returns what it wrote (review 1118)", async () => {
+  const { readFileSync } = await import("node:fs");
+  const sql = readFileSync("supabase/schema.sql", "utf8");
+  const fn = sql.split("create or replace function public.claim_founding_price(")[1]?.split("$$;")[0] ?? "";
+  expect(fn.indexOf("pg_advisory_xact_lock")).toBeLessThan(fn.indexOf("select founding_number into v_next"));
+  expect(fn).toContain("returning founding_number into v_next");
+});
