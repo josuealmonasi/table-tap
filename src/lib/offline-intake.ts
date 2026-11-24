@@ -31,14 +31,20 @@ export async function receiveOffline(actor: Actor, body: PosSaleBody & { offline
     .eq("restaurant_id", actor.restaurantId).eq("pos_ref", body.posRef!).maybeSingle();
   if (error) return await apiError("apiErr.orderCreate", 503, undefined, { held: true });
   const blocked = await frozenBlocks(actor.restaurantId) ?? await planBlocks(actor.restaurantId, "pos");
+  // A suspended restaurant rings no sale straight from the device: it waits in
+  // the review queue for a manager, like any sale the server cannot settle
+  // (security sweep 2026-11-24). Unreadable means suspended: nothing is rung.
+  const { data: state, error: stateError } = await db.from("restaurants").select("suspended_at").eq("id", actor.restaurantId).maybeSingle();
+  const suspended = Boolean(stateError || !state || state.suspended_at);
   let reason = "";
-  if (!queueOnly && !queued && !blocked && offlineCharge(body.offline)) {
+  if (!queueOnly && !queued && !blocked && !suspended && offlineCharge(body.offline)) {
     const res = await ringOffline(actor, body);
     if (res.ok || res.status !== 409) return res;
     const data = await res.clone().json();
     if (!["apiErr.offlineCollector", "apiErr.offlineApproval", "recovery.currencyChanged", "apiErr.offlineCurrencyRequired"].includes(data.reviewReason)) return res;
     reason = data.reviewReason;
   } else if (blocked) reason = "recovery.planChanged";
+  else if (suspended) reason = "apiErr.restaurantSuspended";
   // Older receipts still have valid amounts. Their age is a review reason,
   // rather than a reason to leave collected money stranded on a tablet.
   if (!offlineCharge(body.offline)) reason = offlineCharge(body.offline, Date.now(), true)

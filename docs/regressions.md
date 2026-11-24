@@ -8458,3 +8458,13 @@ GHSA-pc58-hwjq-p385 (cross-client response injection) and GHSA-7qx7-33qx-rqx2
 (SVG rejection bypass in the image optimiser), all fixed in 15.5.29. Next and
 eslint-config-next now pin 15.5.29, and the framework floor in
 `security-headers.spec.ts` rises to it, so a downgrade fails the unit tests.
+
+### A suspended restaurant could still ring sales on the device's word (security sweep 2026-11-24)
+
+While suspended, the till recorded a sale whose collection time the device said
+was before the suspension, and that time is the device's own claim: a cashier
+could date a new sale early. The offline intake did not check suspension at
+all and rang sales straight through. Now a pre-suspension date counts only with
+the server's own queue row from before the suspension (otherwise the sale is
+held), and offline sales during a suspension wait in the manager review queue.
+Check: `pos-atomic.spec.tsx`, `sweep-1124-suspension.spec.ts`.
