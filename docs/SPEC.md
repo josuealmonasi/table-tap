@@ -241,8 +241,10 @@ stored in `table_session_members`, with RLS enabled and all public and
 signed-in client access revoked. The server's service role alone reads it.
 
 An empty table stays empty while someone browses. The first phone to order
-opens the sitting and becomes approved in the same database transaction,
-under the physical table's lock. Another phone, including one returning from
+opens the sitting in one database transaction, under the physical table's
+lock. It is approved there only when that order is paid by card; a pay-later
+order at an empty table leaves it pending like any other phone, so a saved
+photo of the QR cannot send unpaid food to the kitchen from anywhere. Another phone, including one returning from
 an earlier party, is pending. It can browse and call the waiter, but cannot
 read the shared bill, order onto it, divide it, request collection or claim
 the table's visit card. It sees its phone code and a waiting message.

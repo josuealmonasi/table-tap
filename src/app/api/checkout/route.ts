@@ -239,7 +239,7 @@ export async function POST(req: NextRequest) {
 
     // Which sitting this order belongs to. A dine-in order needs admission;
     // a counter order has no table and no sitting.
-    const admission = tableId && hash ? await requestTableMember(restaurantId, tableId, hash, true) : null;
+    const admission = tableId && hash ? await requestTableMember(restaurantId, tableId, hash, true, !deferred) : null;
     if (admission && admission.status !== "approved") {
       await held.giveBack();
       if (admission.status === "full") return await apiError("apiErr.tableJoinFull", 429);

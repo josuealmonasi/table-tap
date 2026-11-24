@@ -8468,3 +8468,13 @@ SELECT policy on the `menu` bucket listed every restaurant's uploads; the public
 for hidden dishes and inactive promotions; and `dish_rating_stats` returned
 averages for hidden dishes to anyone. Each is narrowed; the server key keeps
 full access. Check: `sweep-1124-grants.spec.ts`, plus a rolled-back dev probe.
+
+### A saved photo of a table's QR could send unpaid food to the kitchen (security sweep 2026-11-24)
+
+The phone that opened an empty table was let in automatically, and with
+pay-later on, its first order opened the sitting and went to the kitchen
+unpaid, from anywhere the photo of the QR travelled. Now that phone is let in
+automatically only when its order is paid by card; a pay-later order at an
+empty table makes it wait for staff, in the same "let this phone in" list
+every other phone at a table already uses (`request_table_member_v2`,
+`p_first_approved`). Check: checkout `route.spec.ts`, plus a rolled-back dev probe.

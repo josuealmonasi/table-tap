@@ -72,6 +72,7 @@ drop function if exists public.refund_fee_proven_clear(uuid, text);
 drop table if exists table_session_members cascade;
 drop function if exists public.recount_stock(uuid, uuid, int, int, int) cascade;
 drop function if exists public.request_table_member(uuid, uuid, text, boolean);
+drop function if exists public.request_table_member_v2(uuid, uuid, text, boolean, boolean);
 drop function if exists public.decide_table_member(uuid, uuid, uuid, boolean, text, text);
 drop table if exists refund_due_attempts cascade;
 drop table if exists refund_failures cascade;
