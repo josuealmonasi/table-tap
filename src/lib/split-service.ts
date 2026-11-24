@@ -127,7 +127,7 @@ export async function currentSplit(
   const db = createAdminClient();
   const { data: split } = await db
     .from("bill_splits")
-    .select("id, shares, status, amount, proposed_by, locked_at, expires_at, model_version, revision, currency, first_payment_attempt_at, food_principal, order_ids")
+    .select("id, shares, status, amount, proposed_by, locked_at, expires_at, model_version, revision, currency, first_payment_attempt_at, food_principal, food_tip_principal, order_ids")
     .eq("session_id", sessionId)
     .in("status", ["proposed", "locked"])
     .maybeSingle();

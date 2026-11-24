@@ -3,8 +3,10 @@ vi.mock("@/lib/split-page-recovery", () => ({ resolveSelectedSplitPages: recover
 import { beforeEach, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
 const s = vi.hoisted(() => ({ revision: 1, paid: false, held: false, amount: 5500, currency: "MXN", prior: false, winner: false, gross: 12000, expireFails: false,
+  foodPrincipal: 110, foodTipPrincipal: null as number | null,
+  orders: [{ id: "o", total: 120, service_fee: 10, tip: 10 }],
   ordersFail: false, expires: 0, params: null as Record<string, unknown> | null, quote: null as Record<string, unknown> | null, fee: vi.fn(), waiter: vi.fn() }));
-vi.mock("@/lib/diner-checkout-orders", () => ({ dinerCheckoutOrders: async () => { if (s.ordersFail) throw new Error("food unavailable"); return [{ id: "o", total: 120, service_fee: 10, tip: 10 }]; } }));
+vi.mock("@/lib/diner-checkout-orders", () => ({ dinerCheckoutOrders: async () => { if (s.ordersFail) throw new Error("food unavailable"); return s.orders; } }));
 vi.mock("stripe", () => ({ default: class { checkout = { sessions: { expire: async () => { s.expires++; if (s.expireFails) throw new Error("paid"); s.prior = false; s.held = false; return { status: "expired", payment_status: "unpaid" }; } } }; } }));
 vi.mock("@/lib/rate-limit", () => ({ isRoomLimited: async () => false, isTableLimited: async () => false }));
 vi.mock("@/lib/table-membership", () => ({ tableMember: async () => ({ id: "m", sessionId: "session" }) }));
@@ -21,12 +23,17 @@ vi.mock("@/lib/diner-attempt", () => ({
   },
 }));
 vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({ from: (table: string) => {
-  const data = table === "bill_splits" ? { id: "split", restaurant_id: "r", session_id: "session", model_version: 2, status: "locked",
-    revision: s.revision, currency: s.currency, order_ids: ["o"], food_principal: 110, shares: 2 } : table === "restaurants"
+  let data = table === "bill_splits" ? { id: "split", restaurant_id: "r", session_id: "session", model_version: 2, status: "locked",
+    revision: s.revision, currency: s.currency, order_ids: s.orders.map(o => o.id),
+    food_principal: s.foodPrincipal, food_tip_principal: s.foodTipPrincipal, shares: 2 } : table === "restaurants"
     ? { name: "Restaurant", stripe_account_id: "acct", stripe_charges_enabled: true } : table === "bill_split_slots"
       ? [0, 1].map(share_no => ({ share_no, amount_cents: s.amount, fee_slice_cents: 150, payment_id: s.paid ? "p" : null, reserved_checkout_id: s.held ? "other" : null })) : { id: "session" };
   const q: Record<string, unknown> = {};
-  for (const op of ["select", "eq", "in"]) q[op] = () => q;
+  for (const op of ["select", "eq"]) q[op] = () => q;
+  q.in = (_column: string, slots: number[]) => {
+    if (Array.isArray(data)) data = data.filter(row => slots.includes(row.share_no));
+    return q;
+  };
   q.single = q.maybeSingle = async () => ({ data, error: null });
   q.then = (resolve: (value: unknown) => unknown) => Promise.resolve({ data, error: null }).then(resolve);
   return q;
@@ -36,6 +43,7 @@ const body = { restaurantId: "r", tableId: "t", sessionId: "session", splitId: "
   slots: [1, 0], expectedCents: 11000, tipCents: 1000 };
 const req = (data: unknown = body) => new NextRequest("http://localhost/api/split/pay", { method: "POST", body: JSON.stringify(data) });
 beforeEach(() => { recover.mockReset().mockResolvedValue("unverified"); s.revision = 1; s.paid = false; s.held = false; s.amount = 5500; s.currency = "MXN"; s.prior = false; s.winner = false; s.gross = 12000; s.expireFails = false;
+  s.foodPrincipal = 110; s.foodTipPrincipal = null; s.orders = [{ id: "o", total: 120, service_fee: 10, tip: 10 }];
   s.ordersFail = false; s.expires = 0; s.params = null; s.quote = null; s.fee.mockReset().mockResolvedValue({ id: "fee", cents: 125 }); s.waiter.mockReset().mockResolvedValue(true); });
 it("staff-opened model 2 bill charges the selected parts plus new tip and reserves only their fee slices", async () => {
   expect((await POST(req())).status).toBe(200);
@@ -93,6 +101,16 @@ it("F6 percentage slots charge the shared food-only preview and reject an ambigu
   expect(s.params).toMatchObject({ metadata: { settle_tip: String(preview) },
     line_items: [{ price_data: { unit_amount: 11000 + Math.round(preview * 100) } }] });
   expect((await POST(req({ ...body, tipPct: 15 }))).status).toBe(400);
+});
+
+it("charges the frozen food-only tip on a slot after an uneven earlier collection", async () => {
+  s.amount = 8250;
+  s.foodPrincipal = 165;
+  s.foodTipPrincipal = 145;
+  s.orders = [{ id: "a", total: 100, service_fee: 0, tip: 0 }, { id: "b", total: 120, service_fee: 20, tip: 0 }];
+  expect((await POST(req({ ...body, slots: [0], expectedCents: 8250, tipCents: undefined, tipPct: 20 }))).status).toBe(200);
+  expect(s.params).toMatchObject({ metadata: { settle_tip: "14.5" }, line_items: [{ price_data: { unit_amount: 9700 } }] });
+  expect(s.quote).toMatchObject({ foodPrincipal: 165 });
 });
 
 

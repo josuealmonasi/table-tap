@@ -8441,3 +8441,12 @@ restaurants saving one RFC at once both keep a trial: the loser's insert was
 silently dropped. Each now acts first and reads what its own write did.
 Check: `admin-tier.spec.ts`, `admin-owner-transfer.spec.ts`,
 `one-trial-per-rfc.spec.ts`, plus a rolled-back probe on dev.
+## An uneven collection inflated percentage tips on split bills (2026-11-24)
+
+After MX$55 was collected on a MX$100 food-only order, splitting it with a
+second MX$100 food order that carried MX$20 service left MX$145 of food owed.
+The split's table-wide ratio estimated MX$150 and tipped MX$15 per share at
+20%. Both lock paths now save the remaining food per order, so the preview and
+checkout agree on MX$14.50 per share. Earlier locks with a null food-only
+snapshot keep their existing tip behavior. Checks: `tip-base.react-component.spec.tsx`,
+`split-slots-schema.spec.ts`, and `split-slots-pay.spec.ts`.

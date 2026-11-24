@@ -307,6 +307,7 @@ drop function if exists public.guard_return_money() cascade;
 drop function if exists public.order_component_capacity(uuid, uuid);
 drop function if exists public.import_historical_return(uuid, uuid);
 drop function if exists public.join_bill_split_v2(uuid, text, uuid, uuid, uuid);
+drop function if exists public.split_food_tip_principal(uuid, uuid[]);
 drop function if exists public.close_divided_bill_v2(uuid);
 drop function if exists public.collect_on_sitting_v2(uuid, uuid, numeric, numeric, text, text, text);
 drop function if exists public.settle_orders_v2(uuid, uuid[], text, text, jsonb);

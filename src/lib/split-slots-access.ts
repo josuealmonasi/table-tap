@@ -19,7 +19,8 @@ export async function readSlotSplit(scope: SplitScope, splitId: string): Promise
     .eq("id", scope.sessionId).eq("restaurant_id", scope.restaurantId).eq("table_id", scope.tableId).maybeSingle();
   if (sittingError) throw new Error("Could not read the split sitting");
   if (!sitting) return null;
-  const { data, error } = await db.from("bill_splits").select("*")
+  const { data, error } = await db.from("bill_splits")
+    .select("id, restaurant_id, session_id, model_version, revision, status, proposed_by, currency, order_ids, food_principal, food_tip_principal, shares")
     .eq("id", splitId).eq("restaurant_id", scope.restaurantId).eq("session_id", scope.sessionId)
     .eq("model_version", 2).maybeSingle();
   if (error) throw new Error("Could not read the split");

@@ -1,6 +1,6 @@
 import { legacySplitQuote, legacySplitRefusal, retireStaleLegacyPage } from "@/lib/legacy-split-checkout";
 import { dinerCheckoutOrders } from "@/lib/diner-checkout-orders";
-import { frozenTipPrincipal, splitTipBase, tipFromPercent } from "@/lib/tip-base";
+import { splitTipBase, splitTipPrincipal, tipFromPercent } from "@/lib/tip-base";
 import { resolveSelectedSplitPages } from "@/lib/split-page-recovery";
 import Stripe from "stripe";
 import { type NextRequest, NextResponse } from "next/server";
@@ -60,7 +60,9 @@ export async function paySplitSlots(req: NextRequest, body: SlotPayBody, member:
     if (body.tipPct !== undefined) {
       const orders = await dinerCheckoutOrders(split.order_ids);
       if (orders.length !== split.order_ids.length) throw new Error("Could not read frozen food");
-      const base = splitTipBase(frozenTipPrincipal(split.food_principal, orders), split.shares, slots);
+      const principal = splitTipPrincipal(split, orders);
+      if (principal == null) return await apiError("apiErr.splitExactTip", 409);
+      const base = splitTipBase(principal, split.shares, slots);
       tip = Math.round(tipFromPercent(base, body.tipPct) * 100);
     }
     // Never silently reduce a tip the diner chose. Tips are outside both the

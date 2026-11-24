@@ -3560,7 +3560,9 @@ the preview and `/api/split/pay` use the same capped amount. The server refuses
 percentage requests before reserving a fee and retains support for zero-tip
 payment. A retry reuses its original checkout only when its saved tip and total
 match the current exact choice. Saved-principal legacy splits and model-2 slots
-retain percentage tipping. This fallback changes no historical rows or schema.
+retain percentage tipping. New locks save `food_tip_principal` by summing the
+food still owed on each frozen order after collections, and the preview and
+payment route use it for percentage tips when present.
 
 ### Listbox rows in browser audits
 
