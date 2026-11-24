@@ -21,6 +21,8 @@ export interface Mail {
   attachments?: { filename: string; content: Buffer }[];
   /** Stop a provider request when its caller runs out of time. */
   signal?: AbortSignal;
+  /** Keep a caller's send claim when the provider may already have accepted the email. */
+  throwOnUncertainDelivery?: boolean;
   /** Extra headers, such as List-Unsubscribe. */
   headers?: Record<string, string>;
 }
@@ -75,12 +77,16 @@ export async function sendMail(mail: Mail): Promise<MailResult> {
     });
     if (!res.ok) {
       const body = await res.text().catch(() => "");
+      if (mail.throwOnUncertainDelivery && (res.status >= 500 || res.status === 409)) {
+        throw new Error(`mail delivery uncertain (HTTP ${res.status})`);
+      }
       console.error("receipt mail failed", res.status, body);
       return { sent: false, reason: "failed", ...mailFailure(res.status, body) };
     }
     return { sent: true };
   } catch (err) {
     console.error("receipt mail error", err);
+    if (mail.throwOnUncertainDelivery) throw err;
     return { sent: false, reason: "failed", retryable: true };
   }
 }

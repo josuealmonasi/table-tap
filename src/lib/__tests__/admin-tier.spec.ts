@@ -7,6 +7,8 @@ let live: Record<string, unknown>[] = [];
 let sessions: { id: string }[] = [];
 const expired: string[] = [];
 let restaurant: Record<string, unknown>;
+let seatReleaseError: { message: string } | null;
+const record = vi.fn(async () => {});
 
 vi.mock("@/lib/activity-log", () => ({ logEvent: async (e: { detail?: string | null }) => void logged.push(e) }));
 vi.mock("@/lib/public-menu-cache", () => ({ invalidatePublicMenu: () => {} }));
@@ -15,7 +17,7 @@ vi.mock("@/lib/mail", () => ({ sendMail: async (m: { to: string; text: string })
 vi.mock("@/lib/billing-operation", () => ({
   BillingError: class BillingError extends Error { constructor(public key: string, public status = 409) { super(key); } },
   withRestaurantBilling: async (_db: unknown, _id: string, action: (op: unknown) => unknown) =>
-    await action({ token: "tok", record: async () => {}, write: async (f: () => unknown) => await f() }),
+    await action({ token: "tok", record, write: async (f: () => unknown) => await f() }),
 }));
 vi.mock("@/lib/billing-state", () => ({
   restaurantBilling: async () => ({ live, sessions, exists: true, snapshot: {} }),
@@ -33,10 +35,11 @@ vi.mock("@/lib/plan-server", () => ({
   allPlans: async () => ["carta", "caja", "servicio", "casa", "grupo"].map(plan => ({ plan, monthly_price: 999 })),
 }));
 vi.mock("@/lib/admin-plan", () => ({
-  moveRestaurantPlan: async () => ({ ok: true, from: "carta", to: "casa" }),
+  moveRestaurantPlan: vi.fn(async () => ({ ok: true, from: "carta", to: "casa" })),
 }));
 
 import { assignTier, payByDate, tierMail, assignedPayLink } from "@/lib/admin-tier";
+import { moveRestaurantPlan } from "@/lib/admin-plan";
 
 function fakeDb() {
   return {
@@ -53,6 +56,10 @@ function fakeDb() {
         update: (p: Record<string, unknown>) => ((patch = p), q),
         maybeSingle: async () => ({ data: { ...restaurant } }),
         then: (resolve: (v: unknown) => void) => {
+          if (patch?.founding_number === null && seatReleaseError) {
+            resolve({ data: null, error: seatReleaseError });
+            return;
+          }
           const hit = patch && Object.entries(where).every(([k, v]) => restaurant[k] === v)
             && nulls.every(([k, isNull]) => (restaurant[k] == null) === isNull);
           if (hit) Object.assign(restaurant, patch);
@@ -85,6 +92,9 @@ const base = { restaurantId: "r1", origin: "https://tabletap.shop" };
 beforeEach(() => {
   logged.length = 0; mails.length = 0; applied.length = 0; updates.length = 0; expired.length = 0;
   live = []; sessions = [];
+  seatReleaseError = null;
+  vi.mocked(moveRestaurantPlan).mockClear();
+  record.mockClear();
   restaurant = { id: "r1", name: "Demo Bistro", plan: "carta", owner_id: "u1", subscription_sync_revision: 4, stripe_subscription_id: null };
 });
 
@@ -181,11 +191,36 @@ describe("a platform admin assigns a tier with a payment link", () => {
     expect(restaurant.founding_number).toBeNull();
   });
 
-  it("a founder paid by a live subscription keeps its place, even marked as a test account", async () => {
+  it("keeps the founding place if the database already records a subscription", async () => {
     restaurant.founding_number = 2; restaurant.stripe_subscription_id = "sub_live";
     const answer = await assignTier(fakeDb(), { ...base, plan: "servicio", billing: "test" }, "admin@x.dev", fakeStripe);
     expect(answer).toMatchObject({ ok: true, seatReleased: false });
     expect(restaurant.founding_number).toBe(2);
+  });
+
+  it.each(["free", "test"] as const)("refuses a %s move while Stripe bills before the webhook lands", async billing => {
+    restaurant.founding_number = 7;
+    live = [subscription("caja")];
+    sessions = [{ id: "cs_pay_link" }];
+
+    const answer = await assignTier(fakeDb(), { ...base, plan: "casa", billing }, "admin@x.dev", fakeStripe);
+
+    expect(answer).toEqual({ ok: false, error: "apiErr.tierLiveSubscription", status: 409 });
+    expect(record).not.toHaveBeenCalled();
+    expect(expired).toEqual([]);
+    expect(moveRestaurantPlan).not.toHaveBeenCalled();
+    expect(restaurant.founding_number).toBe(7);
+  });
+
+  it("reports a successful test move when releasing the founding place fails", async () => {
+    restaurant.founding_number = 7;
+    seatReleaseError = { message: "write failed" };
+
+    const answer = await assignTier(fakeDb(), { ...base, plan: "casa", billing: "test" }, "admin@x.dev", fakeStripe);
+
+    expect(moveRestaurantPlan).toHaveBeenCalledOnce();
+    expect(answer).toEqual({ ok: true, from: "carta", to: "casa", billing: "test", seatReleased: false });
+    expect(restaurant.founding_number).toBe(7);
   });
 
   it("a plain free move never touches the founding place", async () => {
@@ -234,4 +269,12 @@ it("the founding limit counts places held, so a given-back place is free again",
   expect(fn).toContain("(select count(*) from restaurants where founding_number is not null) >= p_limit then return null");
   expect(fn).not.toContain("if v_next > p_limit");
   expect(fn.indexOf("pg_advisory_xact_lock")).toBeLessThan(fn.indexOf("select count(*)"));
+});
+
+it("the founding claim checks for an existing seat under the lock and returns what it wrote (review 1118)", async () => {
+  const { readFileSync } = await import("node:fs");
+  const sql = readFileSync("supabase/schema.sql", "utf8");
+  const fn = sql.split("create or replace function public.claim_founding_price(")[1]?.split("$$;")[0] ?? "";
+  expect(fn.indexOf("pg_advisory_xact_lock")).toBeLessThan(fn.indexOf("select founding_number into v_next"));
+  expect(fn).toContain("returning founding_number into v_next");
 });

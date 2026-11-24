@@ -158,7 +158,10 @@ accepts "asked for the code" as the console's guard and checks the API refuses.
 that login the restaurant's owner (`POST /api/admin/restaurants/owner`,
 `admin_transfer_ownership`). Only someone already on that restaurant's team
 qualifies; the row is locked, their staff row is removed (an owner's role comes
-from `restaurants.owner_id`), and the former owner stays on as a manager. It is
+from `restaurants.owner_id`), and the former owner stays on as a manager. The staff row's removal is the
+eligibility check, so a member removed at the same moment is refused
+(`not_on_team`), never made owner. A former owner who also owns another
+restaurant is refused (`owns_another`): one login is one restaurant. It is
 audited as `restaurant.owner_transfer` (before: `owner_id`; requested:
 `new_owner_id`) and written in the restaurant's log. Co-owners qualify too.
 
@@ -205,7 +208,9 @@ once (Spanish or English by `user_metadata.locale`): the date, that they then
 move to Carta keeping their menu, tables and orders, and a link to Plan. It
 reads the service-only view `trial_reminders_due` and records the reminded end
 date in `restaurants.trial_reminded_for`, so an extended trial is reminded again
-and none twice; the mail's idempotency key is that date too.
+and none twice; the mail's idempotency key is that date too. The job claims the
+end date before sending only if the restaurant is still on that free trial,
+and releases the claim only if the mail provider definitely refused the send.
 
 **One free trial per RFC.** Once a restaurant that had a trial saves an RFC,
 it is recorded in `trial_rfcs` (service-only, no FK: it outlives the
@@ -473,7 +478,9 @@ dishes on a bill the restaurant has just cancelled.
   columns are removed; changing plans does not hide analytics or activity logs.
 - **Founding price**: the first restaurants on a paid tier keep the price they
   came in at. `claim_founding_price` serialises the assignment with an advisory
-  lock so two simultaneous subscribers cannot take the same place. The limit counts the
+  lock so two simultaneous subscribers cannot take the same place; under the
+  lock it re-reads the restaurant, so a restaurant that already holds a place
+  gets that number back instead of a second one. The limit counts the
   places held, not the highest number, so a place given back by a test account
   is free again; numbers keep rising and still record arrival order.
 - **Coupons and promotions** are reserved and released like stock, for the same

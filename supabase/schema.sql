@@ -1875,20 +1875,23 @@ create or replace function public.claim_founding_price(p_restaurant uuid, p_limi
 returns int language plpgsql security definer set search_path = public as $$
 declare v_next int;
 begin
+  -- Everything under the lock, the existing-seat check included: two retries
+  -- for one restaurant both passed a check made before it, and the second
+  -- returned a number it had computed but never written (review 1118).
+  perform pg_advisory_xact_lock(hashtext('tabletap:founding'));
+
   -- Already a founder: they keep their number, whatever happens.
   select founding_number into v_next from restaurants where id = p_restaurant;
   if v_next is not null then return v_next; end if;
-
-  perform pg_advisory_xact_lock(hashtext('tabletap:founding'));
 
   -- The limit counts places held, not the highest number: a tester's place
   -- given back (admin "cuenta de prueba") is free again at once. Numbers keep
   -- rising, so they still record who arrived in what order.
   if (select count(*) from restaurants where founding_number is not null) >= p_limit then return null; end if;
-  select coalesce(max(founding_number), 0) + 1 into v_next from restaurants;
 
-  update restaurants set founding_number = v_next
-   where id = p_restaurant and founding_number is null;
+  update restaurants set founding_number = (select coalesce(max(founding_number), 0) + 1 from restaurants)
+   where id = p_restaurant and founding_number is null
+  returning founding_number into v_next;
   return v_next;
 end; $$;
 revoke all on function public.claim_founding_price(uuid, int)
@@ -10287,13 +10290,17 @@ language plpgsql security definer set search_path = public as $$
 begin
   if new.rfc is null or new.rfc is not distinct from old.rfc then return new; end if;
   if new.stripe_subscription_id is not null or new.tier_assignment_id is not null then return new; end if;
-  if exists (select 1 from trial_rfcs where rfc = new.rfc and restaurant_id <> new.id) then
-    if new.plan_status = 'trialing' then
-      new.plan := 'carta'; new.plan_status := 'active'; new.trial_ends_at := null;
-      new.subscription_sync_revision := coalesce(new.subscription_sync_revision, 0) + 1;
-    end if;
-  elsif new.trial_ends_at is not null then
+  if new.trial_ends_at is not null and not exists (select 1 from trial_rfcs where rfc = new.rfc and restaurant_id <> new.id) then
+    -- Whoever's insert lands owns the claim. Two restaurants saving the same
+    -- RFC at once both saw no claim; the loser's insert finds the winner's row
+    -- (review 1118), so it falls through and ends its own trial below.
     insert into trial_rfcs (rfc, restaurant_id) values (new.rfc, new.id) on conflict (rfc) do nothing;
+    if found then return new; end if;
+  end if;
+  if new.plan_status = 'trialing'
+     and exists (select 1 from trial_rfcs where rfc = new.rfc and restaurant_id <> new.id) then
+    new.plan := 'carta'; new.plan_status := 'active'; new.trial_ends_at := null;
+    new.subscription_sync_revision := coalesce(new.subscription_sync_revision, 0) + 1;
   end if;
   return new;
 end; $$;
@@ -10336,13 +10343,20 @@ grant select, insert, delete on restaurant_admin_notes to service_role;
 -- and owner_id moves. Refused for anyone not on this team.
 create or replace function public.admin_transfer_ownership(p_restaurant uuid, p_new_owner uuid)
 returns text language plpgsql security definer set search_path = public as $$
-declare v_old uuid; v_email text;
+declare v_old uuid; v_email text; v_member uuid;
 begin
   select owner_id into v_old from restaurants where id = p_restaurant for update;
   if not found then return 'not_found'; end if;
   if v_old = p_new_owner then return 'already_owner'; end if;
-  if not exists (select 1 from staff where restaurant_id = p_restaurant and user_id = p_new_owner) then return 'not_on_team'; end if;
-  delete from staff where restaurant_id = p_restaurant and user_id = p_new_owner;
+  -- A login that also owns another restaurant cannot stay on here as staff: it
+  -- would be owner of one and manager of the other (review 1118).
+  if v_old is not null and exists (select 1 from restaurants where owner_id = v_old and id <> p_restaurant) then
+    return 'owns_another';
+  end if;
+  -- The removal IS the eligibility check: a member removed concurrently after
+  -- an EXISTS test was still promoted (review 1118).
+  delete from staff where restaurant_id = p_restaurant and user_id = p_new_owner returning user_id into v_member;
+  if v_member is null then return 'not_on_team'; end if;
   if v_old is not null then
     select email into v_email from auth.users where id = v_old;
     insert into staff (restaurant_id, user_id, email, role) values (p_restaurant, v_old, coalesce(v_email, ''), 'manager');
