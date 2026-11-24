@@ -38,6 +38,15 @@ it("slots exist at once, add up to the frozen debt, and the fee is capped at 5% 
   expect(start).toContain("if v_debt.debt_cents <> p_expected_cents then");
 });
 
+it("both split locks save a nullable, nonnegative food-only tip base for the frozen orders", () => {
+  expect(sql).toMatch(/alter table bill_splits add column if not exists food_tip_principal numeric\s+check \(food_tip_principal is null or food_tip_principal >= 0\);/);
+  expect(body("join_bill_split_v2")).toMatch(/update bill_splits set status = 'locked',[\s\S]*?food_tip_principal = public\.split_food_tip_principal\(p_restaurant, v_order_ids\),\s+order_ids = v_order_ids/);
+  expect(body("start_bill_split_v2")).toMatch(/insert into bill_splits \([\s\S]*?order_ids, food_principal, food_tip_principal,[\s\S]*?v_debt\.order_ids, v_debt\.food_cents \/ 100\.0,\s+public\.split_food_tip_principal\(p_restaurant, v_debt\.order_ids\)/);
+  const principal = body("split_food_tip_principal");
+  expect(principal).toContain("public.retained_order_coverage(p_restaurant, o.id)");
+  expect(principal).toContain("where o.restaurant_id = p_restaurant and o.id = any(p_orders)");
+});
+
 it("N freezes at the first attempt; a stale revision changes nothing", () => {
   for (const name of ["resize_bill_split_v2", "cancel_bill_split_v2"]) {
     expect(body(name), name).toContain("v_split.first_payment_attempt_at is not null");

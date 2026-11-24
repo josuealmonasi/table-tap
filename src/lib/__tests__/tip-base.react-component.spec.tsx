@@ -34,6 +34,23 @@ it("tips only the food share of a split frozen after part of the bill was collec
   expect(frozenTipPrincipal(55, frozen)).toBe(50);
   expect([0, 1].map(n => tipFromPercent(splitTipBase(50, 2, [n]), 10))).toEqual([2.5, 2.5]);
 });
+it("freezes the food still owed on each order after an uneven collection", () => {
+  const orders = [{ total: 100, collected: 55 }, { total: 120, service_fee: 20 }];
+  const foodTipPrincipal = ordersTipBase(orders);
+  expect(foodTipPrincipal).toBe(145);
+  const principal = splitTipPrincipal({ food_principal: 165, food_tip_principal: foodTipPrincipal }, orders)!;
+  expect(principal).toBe(145);
+  const bases = [0, 1].map(share => splitTipBase(principal, 2, [share]));
+  expect(bases).toEqual([72.50, 72.50]);
+  expect(bases.map(base => tipFromPercent(base, 20))).toEqual([14.50, 14.50]);
+});
+it("keeps the legacy percentage base when the food-only snapshot is null", () => {
+  const orders = [{ total: 100, collected: 55 }, { total: 120, service_fee: 20 }];
+  expect(splitTipPrincipal({ food_principal: 165, food_tip_principal: null }, orders)).toBe(150);
+});
+it("honors a frozen zero food base", () => {
+  expect(splitTipPrincipal({ food_principal: 55, food_tip_principal: 0 }, [{ total: 100 }])).toBe(0);
+});
 it("M4/N14: an old gross split never infers a percentage base from later collections", () => {
   // Two-way split of MX$100 food, locked before food_principal existed: amount froze MX$100.
   const split = { food_principal: null, amount: 100 };

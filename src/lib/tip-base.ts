@@ -25,13 +25,8 @@ export function ordersTipBase(orders: TipOrder[], discount = 0): number {
 }
 
 /**
- * A split's frozen principal is what its orders still owed when the table
- * agreed: food AND service, net of anything already collected. Only its food
- * share is tipped, in the orders' own food-to-service proportion. Subtracting
- * the whole service charge instead took off service that a collection had
- * already paid: MX$100 food + MX$10 service with MX$55 collected froze MX$55,
- * and "minus MX$10" tipped MX$45 where MX$50 of food was owed (Codex review).
- * Its frozen value never grows with later tips.
+ * A split with only a frozen food-and-service principal keeps its original
+ * estimate, based on the table's overall food-to-service proportion.
  */
 export function frozenTipPrincipal(principal: number | null, orders: TipOrder[]): number {
   if (principal == null) return ordersTipBase(orders);
@@ -52,11 +47,12 @@ export function frozenTipPrincipal(principal: number | null, orders: TipOrder[])
  * Only a split never locked falls back to the orders.
  */
 export function splitTipPrincipal(split: TipSplit, orders: TipOrder[]): number | null {
+  if (split.food_tip_principal != null) return Number(split.food_tip_principal);
   if (splitTakesExactTipOnly(split)) return null;
   return frozenTipPrincipal(split.food_principal, orders);
 }
 
-export interface TipSplit { food_principal: number | null; amount?: number | null }
+export interface TipSplit { food_principal: number | null; food_tip_principal?: number | null; amount?: number | null }
 
 /**
  * The one rule for "this share takes an exact tip, never a percentage": a v1
@@ -66,7 +62,7 @@ export interface TipSplit { food_principal: number | null; amount?: number | nul
  * one. A zero or missing amount has nothing gross to be unsure about.
  */
 export function splitTakesExactTipOnly(split: TipSplit): boolean {
-  return split.food_principal == null && Number(split.amount ?? 0) > 0;
+  return split.food_tip_principal == null && split.food_principal == null && Number(split.amount ?? 0) > 0;
 }
 
 /** The screen's side of `splitTakesExactTipOnly`: the server sent no principal. */

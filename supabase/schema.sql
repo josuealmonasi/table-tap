@@ -4264,6 +4264,8 @@ create index if not exists diner_checkouts_open_account_idx
 alter table coupon_redemptions add column if not exists checkout_attempt_id uuid references diner_checkouts(id);
 create index if not exists coupon_checkout_attempt on coupon_redemptions(checkout_attempt_id);
 alter table bill_splits add column if not exists food_principal numeric;
+alter table bill_splits add column if not exists food_tip_principal numeric
+  check (food_tip_principal is null or food_tip_principal >= 0);
 
 -- No currency conversion happens anywhere in diner checkout. Refuse an old
 -- unsupported value rather than silently relabelling somebody's money.
@@ -7207,6 +7209,29 @@ drop trigger if exists guard_return_money on refund_operations;
 create trigger guard_return_money before update on refund_operations for each row execute function public.guard_return_money();
 revoke truncate, references, trigger on all tables in schema public from authenticated;
 
+-- Match ordersTipBase: retained collections cover each order's food and service in proportion.
+create or replace function public.split_food_tip_principal(p_restaurant uuid, p_orders uuid[])
+returns numeric language sql stable set search_path = public as $$
+  select round(coalesce(sum(
+    greatest(b.principal - coalesce(o.service_fee, 0), 0)
+    * (b.principal - least(b.principal, greatest(b.covered_principal, 0)))
+    / nullif(b.principal, 0)
+  ), 0), 2)
+  from orders o
+  cross join lateral (
+    select greatest(o.total - coalesce(o.tip, 0), 0) as principal,
+      public.retained_order_coverage(p_restaurant, o.id) - (
+        select coalesce(sum(a.tip - coalesce(r.tip, 0)), 0)
+        from payment_allocations a
+        left join lateral (select sum(tip) tip from refund_allocations where allocation_id = a.id) r on true
+        where a.restaurant_id = p_restaurant and a.order_id = o.id
+      ) as covered_principal
+  ) b
+  where o.restaurant_id = p_restaurant and o.id = any(p_orders);
+$$;
+revoke all on function public.split_food_tip_principal(uuid, uuid[]) from public, anon, authenticated;
+grant execute on function public.split_food_tip_principal(uuid, uuid[]) to service_role;
+
 -- Versioned writers keep the deployed application working during overlap.
 create or replace function public.join_bill_split_v2(
   p_split uuid, p_diner text, p_restaurant uuid, p_table uuid, p_session uuid
@@ -7218,6 +7243,7 @@ declare
   v_next int;
   v_amount numeric;
   v_freeze timestamptz;
+  v_order_ids uuid[];
 begin
   perform public.lock_restaurant_money(p_restaurant);
   perform set_config('tabletap.allocation_writer', 'v1', true);
@@ -7254,16 +7280,16 @@ begin
   v_next := v_taken;
   insert into bill_split_claims (split_id, share_no, diner) values (p_split, v_next, p_diner);
   if v_taken + 1 = v_split.shares then
+    v_order_ids := array(select id from orders where session_id = v_split.session_id
+      and restaurant_id = v_split.restaurant_id and table_id = v_sitting.table_id
+      and not paid and not written_off and account_id is null
+      and status not in ('cancelled', 'pending_payment') and created_at < v_freeze order by created_at, id);
     update bill_splits set status = 'locked', locked_at = v_freeze, amount = round(v_amount, 2),
       food_principal = (select coalesce(sum(greatest(o.total - public.retained_order_coverage(p_restaurant, o.id)
         - greatest(o.tip - coalesce((select sum(a.tip) from payment_allocations a where a.order_id = o.id), 0), 0), 0)), 0)
-        from orders o where o.session_id = v_split.session_id and o.restaurant_id = v_split.restaurant_id
-          and o.table_id = v_sitting.table_id and not o.paid and not o.written_off and o.account_id is null
-          and o.status not in ('cancelled', 'pending_payment') and o.created_at < v_freeze),
-      order_ids = array(select id from orders where session_id = v_split.session_id
-        and restaurant_id = v_split.restaurant_id and table_id = v_sitting.table_id
-        and not paid and not written_off and account_id is null
-        and status not in ('cancelled', 'pending_payment') and created_at < v_freeze order by created_at, id)
+        from orders o where o.restaurant_id = v_split.restaurant_id and o.id = any(v_order_ids)),
+      food_tip_principal = public.split_food_tip_principal(p_restaurant, v_order_ids),
+      order_ids = v_order_ids
      where id = p_split;
     -- Shares are ready before the lock becomes visible to a paying phone.
     update bill_split_claims
@@ -12729,9 +12755,10 @@ begin
   v_fee := least(p_flat_fee_cents, floor(v_debt.food_cents * 0.05)::int);
 
   insert into bill_splits (restaurant_id, session_id, shares, amount, status, proposed_by, locked_at,
-    expires_at, order_ids, food_principal, model_version, revision, currency, fee_budget_cents, request_ref)
+    expires_at, order_ids, food_principal, food_tip_principal, model_version, revision, currency, fee_budget_cents, request_ref)
   values (p_restaurant, p_session, p_shares, v_debt.debt_cents / 100.0, 'locked', coalesce(p_member::text, 'staff'),
-    v_freeze, 'infinity', v_debt.order_ids, v_debt.food_cents / 100.0, 2, 1, p_currency, v_fee, p_ref)
+    v_freeze, 'infinity', v_debt.order_ids, v_debt.food_cents / 100.0,
+    public.split_food_tip_principal(p_restaurant, v_debt.order_ids), 2, 1, p_currency, v_fee, p_ref)
   returning * into v_split;
   insert into bill_split_slots (restaurant_id, split_id, share_no, amount_cents, fee_slice_cents)
   select p_restaurant, v_split.id, s, public.split_cents(v_debt.debt_cents, p_shares, s), public.split_cents(v_fee, p_shares, s)
@@ -15248,9 +15275,10 @@ begin
   v_fee := least(p_flat_fee_cents, floor(v_debt.food_cents * 0.05)::int);
 
   insert into bill_splits (restaurant_id, session_id, shares, amount, status, proposed_by, locked_at,
-    expires_at, order_ids, food_principal, model_version, revision, currency, fee_budget_cents, request_ref)
+    expires_at, order_ids, food_principal, food_tip_principal, model_version, revision, currency, fee_budget_cents, request_ref)
   values (p_restaurant, p_session, p_shares, v_debt.debt_cents / 100.0, 'locked', coalesce(p_member::text, 'staff'),
-    v_freeze, 'infinity', v_debt.order_ids, v_debt.food_cents / 100.0, 2, 1, p_currency, v_fee, p_ref)
+    v_freeze, 'infinity', v_debt.order_ids, v_debt.food_cents / 100.0,
+    public.split_food_tip_principal(p_restaurant, v_debt.order_ids), 2, 1, p_currency, v_fee, p_ref)
   returning * into v_split;
   insert into bill_split_slots (restaurant_id, split_id, share_no, amount_cents, fee_slice_cents)
   select p_restaurant, v_split.id, s, public.split_cents(v_debt.debt_cents, p_shares, s), public.split_cents(v_fee, p_shares, s)

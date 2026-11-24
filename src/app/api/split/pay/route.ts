@@ -83,7 +83,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
   const { data: split } = await db
     .from("bill_splits")
-    .select("id, status, locked_at, session_id, shares, amount, food_principal, restaurant_id, order_ids, model_version")
+    .select("id, status, locked_at, session_id, shares, amount, food_principal, food_tip_principal, restaurant_id, order_ids, model_version")
     .eq("id", splitId)
     .eq("session_id", sessionId)
     .maybeSingle();

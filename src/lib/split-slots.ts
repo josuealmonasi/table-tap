@@ -6,6 +6,7 @@ export interface SplitSlot {
 export interface SlotSplit {
   id: string; restaurant_id: string; session_id: string; model_version: number; revision: number;
   status: string; proposed_by: string; currency: string; order_ids: string[]; food_principal: number; shares: number;
+  food_tip_principal: number | null;
 }
 export interface SplitOutcome {
   outcome: string; split?: string; revision?: number; amount_cents?: number; fee_cents?: number;
