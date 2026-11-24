@@ -3,18 +3,33 @@ import type { NextResponse } from "next/server";
 import { apiError } from "@/lib/api-error";
 import { resumeDinerAttempt } from "@/lib/diner-attempt";
 import { round2 } from "@/lib/money";
+import { unpackOrderIds } from "@/lib/stripe-limits";
 
 /** How an open page for an old share compares with what this request quotes. */
 export type LegacySplitQuote = "same" | "tip" | "total" | "unverified";
 
-/** Compare a resumed page, or a concurrent winner returned by the opener, with this quote. */
-export function legacySplitQuote(session: Stripe.Checkout.Session, payable: number, tip: number): LegacySplitQuote {
+/**
+ * Compare a resumed page, or a concurrent winner returned by the opener, with this quote.
+ * `orderIds`, when given, are the add-on orders this request pays: a page for a
+ * different set at the same price would settle the wrong orders (review 1124),
+ * so it counts as a changed total.
+ */
+export function legacySplitQuote(
+  session: Stripe.Checkout.Session, payable: number, tip: number, orderIds?: string[],
+): LegacySplitQuote {
   const evidence = session.metadata?.settle_tip;
   const savedTip = Number(evidence);
   if (!evidence?.trim() || !Number.isFinite(savedTip) || savedTip < 0) return "unverified";
   if (savedTip !== tip) return "tip";
   if (session.amount_total !== Math.round(round2(payable + tip) * 100)) return "total";
+  if (orderIds && !sameIds(unpackOrderIds(session.metadata), orderIds)) return "total";
   return "same";
+}
+
+function sameIds(a: string[], b: string[]): boolean {
+  if (a.length !== b.length) return false;
+  const set = new Set(a);
+  return b.every(id => set.has(id));
 }
 
 /**

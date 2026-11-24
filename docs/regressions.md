@@ -91,6 +91,21 @@ The fee ledger and checkout evidence must agree on a currency. The ledger has
 no currency column, so today's restaurant setting cannot relabel an older fee.
 `admin-usage-read.spec.ts` checks the matching restaurant and the unknown bucket.
 
+## Free and test plans respect live Stripe billing
+
+Stripe and the admin's plan assignment must agree on whether a restaurant
+already pays. Stripe can start billing before the webhook saves the
+subscription ID. A free or test move now checks Stripe under the billing lock
+before touching Checkout, the plan or the founding place. `admin-tier.spec.ts`
+checks both choices with a live subscription and an empty local ID.
+
+## The plan move reports the plan that saved
+
+The saved plan and the admin's reply must agree. If giving back the founding
+place fails after the plan saves, the reply confirms the move and reports the
+seat release as unsuccessful. `admin-tier.spec.ts` checks the reply when that
+write fails.
+
 ## What runs on its own
 
 ### Price notice wording names the first bill
@@ -163,6 +178,8 @@ and that a new party cannot see the previous party's waiting phones.
 | A held sale offers paper when its one-sale email may be lost | The first request carried the address but replay did not; `card-email-pos.spec.tsx` checks the warning and printable ticket |
 | Admin usage and returned tips agree | A returned tip must not be deducted from sales; `admin-usage-returns.spec.ts` checks partial pieces |
 | Admin usage and fee currency evidence agree | A fee cannot inherit today's restaurant currency; `admin-usage-read.spec.ts` checks other currencies and missing evidence |
+| Free and test plans respect live Stripe billing | A late webhook could let an admin move a paying restaurant and give away its founding place; `admin-tier.spec.ts` checks both choices |
+| The plan move reports the plan that saved | A founding place write failure could make a saved plan move look like a failure; `admin-tier.spec.ts` checks the reply |
 | Scheduled plan prices keep their eligible notice queue | A scheduled price without its recipients could leave an owner without notice; the route and schema specs pin validation and the atomic queue |
 | One-click ticket unsubscribe retries return the same success | A cleared or unknown token returned 404 to mail providers; `ticket-stop-one-click.spec.ts` checks retries, invalid forms and the separate confirmation response |
 |---|---|
@@ -8326,6 +8343,24 @@ the owner might not open that week, so Carta arrived unannounced. The recovery
 job `trial_reminders` now emails the owner three days before, once per trial
 end. Check: `recovery/__tests__/trial-reminders.spec.ts`.
 
+| Places that must agree | What went wrong | What checks it |
+| --- | --- | --- |
+| The due list and the restaurant's current plan | An owner could get a trial reminder after subscribing | `trial-reminders.spec.ts` |
+| Email delivery and the recorded trial end | A failed write after the send could let the next run send again | `trial-reminders.spec.ts` |
+
+### A trial reminder went out after the owner subscribed
+
+The due list was a snapshot, and the plan lookup did not check whether the
+trial still qualified. The worker now checks the current trial, subscription
+and tier assignment in the same write that claims the reminder.
+
+### A failed write could send the same trial reminder twice
+
+Resend accepted the email before TableTap recorded the trial end. If that write
+failed, a retry after Resend forgot the key could send again. The worker now
+claims the trial end before sending, clears the claim on a definite refusal,
+and keeps it if the provider might already have accepted the email.
+
 ## Another site could sign a visitor into its own account (2026-11-19)
 
 `/auth/callback` accepted a POST from anywhere, so a page elsewhere could
@@ -8385,6 +8420,15 @@ run now always adds every page file the change adds or edits
 (`pagePattern`). Check: `ci-env.spec.ts`.
 
 
+### A split share page reopened for different add-on orders (review 1124)
+
+A diner paying a legacy split share opened a page for their share plus one
+MX$40 add-on order, went back, picked a different MX$40 order, and was handed
+the old page: the resume check compared only the tip and the total, so the
+payment settled the first order and left the chosen one owed. The quote now
+also compares the add-on order ids the page carries in its metadata; a
+different set retires the old page on resume and is refused when a concurrent
+opener returns it. Check: `legacy-split-quote.spec.ts`.
 ### Founding claim, owner transfer and the RFC trial race (review 1118)
 
 Three database functions checked something, then acted on it without the
