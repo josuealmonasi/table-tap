@@ -189,12 +189,15 @@ describe("the shipped framework is a patched one", () => {
     // GHSA-2xp9-vwfh-vxw4 (CVSS 9.5, AVIF image optimisation) and
     // GHSA-p293-qw3h-jr36 are both fixed in 15.5.24; the App Router DoS and
     // the two SSRFs in 15.5.21. A range that can resolve below 15.5.24 puts
-    // an unauthenticated RCE back into a production install.
+    // an unauthenticated RCE back into a production install. 15.5.29 fixes
+    // three more (GHSA-f3mh-rxg3-f5g2 HttpOnly cookie exposure,
+    // GHSA-pc58-hwjq-p385 cross-client response injection, GHSA-7qx7-33qx-rqx2
+    // SVG rejection bypass in the image optimiser).
     const { dependencies } = JSON.parse(fs.readFileSync("package.json", "utf8"));
     const floor = dependencies.next.replace(/^[\^~]/, "");
     const [maj, min, patch] = floor.split(".").map(Number);
     expect(maj).toBeGreaterThanOrEqual(15);
-    if (maj === 15 && min === 5) expect(patch).toBeGreaterThanOrEqual(24);
+    if (maj === 15 && min === 5) expect(patch).toBeGreaterThanOrEqual(29);
   });
 
   it("holds the image decoder above its own advisories", () => {
