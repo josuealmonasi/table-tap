@@ -140,6 +140,7 @@ drop table if exists loyalty_visits      cascade;
 drop table if exists recovery_nonces cascade;
 drop table if exists recovery_runs cascade;
 drop table if exists ticket_email_outbox cascade;
+drop function if exists public.loyalty_delete_card(uuid, text, text);
 -- Dropping the cards also drops their per-card stop-token index.
 drop table if exists loyalty_cards       cascade;
 drop table if exists loyalty_programs    cascade;

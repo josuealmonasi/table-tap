@@ -3480,6 +3480,28 @@ revoke all on loyalty_cards from anon, authenticated;
 revoke all on loyalty_visits from anon, authenticated;
 revoke all on loyalty_redemptions from anon, authenticated;
 
+-- The printed code identifies the card. Only the phone holding the deletion
+-- secret can delete it through /rewards. Older cards keep a null hash.
+alter table public.loyalty_cards add column if not exists owner_secret_hash text;
+
+-- Manager deletion and its activity record are one transaction. The server
+-- derives the restaurant and actor from the owner/manager's membership.
+create or replace function public.loyalty_delete_card(p_restaurant uuid, p_code text, p_actor text)
+returns boolean language sql security invoker set search_path = '' as $$
+  with removed as (
+    delete from public.loyalty_cards
+    where restaurant_id = p_restaurant and code = p_code
+    returning code
+  ), logged as (
+    insert into public.user_logs (restaurant_id, actor_email, entity, action, detail)
+    select p_restaurant, p_actor, 'loyalty', 'deleted', 'card=' || left(code, 4) from removed
+    returning id
+  )
+  select exists (select 1 from logged);
+$$;
+revoke all on function public.loyalty_delete_card(uuid, text, text) from public, anon, authenticated;
+grant execute on function public.loyalty_delete_card(uuid, text, text) to service_role;
+
 -- The reward ladder: several steps on one card — 4 visits a coffee, 8 a
 -- dessert, 12 a meal — each redeemed once per round, in order. The last step's
 -- visits are the round: redeeming it spends them and the card starts over,

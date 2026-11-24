@@ -7,6 +7,7 @@ import { PHONES_PER_ADDRESS, clientKey, isRateLimited } from "@/lib/rate-limit";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getPlan } from "@/lib/plan-server";
 import { newCode } from "@/lib/loyalty/code";
+import { hashOwnerSecret, keepOwnerSecret, newOwnerSecret } from "@/lib/loyalty/owner-secret";
 import { cardFace } from "@/lib/loyalty/face";
 import { qrGrid } from "@/lib/loyalty/qr-grid";
 import { loyaltyOn, programOf } from "@/lib/loyalty/server";
@@ -88,12 +89,14 @@ export async function POST(req: NextRequest) {
   // no reward cannot be kept (the database refuses it); such a card reads the
   // program's reward instead, as every card did before the ladder.
   const steps = program.steps.every(s => s.reward) ? program.steps : null;
+  const secret = newOwnerSecret();
+  const ownerSecretHash = hashOwnerSecret(secret);
 
   // Sixty random bits collide essentially never; three tries is for "never".
   for (let attempt = 0; attempt < 3; attempt++) {
     const code = newCode();
     const { error } = await db
-      .from("loyalty_cards").insert({ restaurant_id: restaurantId, code, goal: program.goal, steps });
+      .from("loyalty_cards").insert({ restaurant_id: restaurantId, code, goal: program.goal, steps, owner_secret_hash: ownerSecretHash });
     if (!error) {
       const face = cardFace(restaurant, { code, progress: 0, ladder: program.steps }, req.nextUrl.origin);
       // An address given with the new card, for its tickets (paperless): only
@@ -103,7 +106,8 @@ export async function POST(req: NextRequest) {
       if (email && body?.consent === true) emailLinked = (await setCardEmail(restaurantId, code, email, "diner").catch(() => null))?.outcome;
       // The answer describes this card only, never another card.
       const emailAnswer = emailLinked === "saved" ? "submitted" : emailLinked;
-      return NextResponse.json({ code, face, qr: qrGrid(face.qrPayload), ...(emailAnswer ? { email: emailAnswer } : {}) });
+      const response = NextResponse.json({ code, face, qr: qrGrid(face.qrPayload), ...(emailAnswer ? { email: emailAnswer } : {}) });
+      return keepOwnerSecret(response, code, secret);
     }
     if (error.code !== "23505") {
       console.error("loyalty card create failed:", error.message);

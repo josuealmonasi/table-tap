@@ -19,13 +19,7 @@ interface RewardsLookupProps {
   back?: string | null;
 }
 
-/**
- * The /rewards page: a code in, where the card stands out.
- *
- * Nothing is remembered here. The code is the card, and the diner already has
- * it on their phone; keeping it in this browser as well would be one more
- * place it could be read from.
- */
+/** The /rewards page: a code in, where the card stands out. */
 export default function RewardsLookup({ initialCode = "", back = null }: RewardsLookupProps) {
   const t = useT();
   const { locale } = useLocale();
@@ -38,7 +32,7 @@ export default function RewardsLookup({ initialCode = "", back = null }: Rewards
   const confirm = useConfirm();
 
   async function forget(): Promise<void> {
-    const normal = normalizeCode(code);
+    const normal = card?.canDelete ? normalizeCode(card.face.printedCode) : null;
     if (!normal) return;
     const ok = await confirm({
       title: t("loyaltyOffer.forgetTitle"),
@@ -103,7 +97,7 @@ export default function RewardsLookup({ initialCode = "", back = null }: Rewards
    */
   function showSave(): void {
     setSaveAgain(true);
-    const normal = normalizeCode(code);
+    const normal = normalizeCode(card?.face.printedCode ?? "");
     if (normal) void fetch(`/api/rewards?c=${normal}`, { method: "PATCH" }).catch(() => undefined);
   }
 
@@ -156,9 +150,13 @@ export default function RewardsLookup({ initialCode = "", back = null }: Rewards
             >
               {t("rewards.another")}
             </button>
-            <button type="button" className="tt-btn tt-btn-ghost tt-btn-sm tt-rewards-forget" onClick={() => void forget()}>
-              {t("loyaltyOffer.forget")}
-            </button>
+            {card.canDelete ? (
+              <button type="button" className="tt-btn tt-btn-ghost tt-btn-sm tt-rewards-forget" onClick={() => void forget()}>
+                {t("loyaltyOffer.forget")}
+              </button>
+            ) : (
+              <p className="tt-muted tt-rewards-forget">{t("rewards.askRestaurantToDelete")}</p>
+            )}
           </div>
         ) : (
           <form
