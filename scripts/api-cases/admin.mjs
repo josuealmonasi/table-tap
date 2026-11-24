@@ -3,6 +3,89 @@ import { adminCases } from "../api-admin-cases.mjs";
 import { loginSecret } from "../login-secrets.mjs";
 import { frozenOfferCases } from "../api-frozen-offers.mjs";
 
+async function removeAdminProbe(f, id) {
+  const { error } = await f.admin.from("restaurants").delete().eq("id", id);
+  if (error) throw new Error(`Admin restaurant fixture cleanup: ${error.message}`);
+}
+
+async function arrangeOwnerRefusal(f, withTeamMember) {
+  const id = randomUUID();
+  const owner = f.restaurant.owner_id;
+  if (!owner) throw new Error("The demo restaurant fixture has no owner");
+  let memberId;
+  const cleanup = async () => {
+    await removeAdminProbe(f, id);
+    if (memberId) {
+      const { error } = await f.admin.auth.admin.deleteUser(memberId);
+      if (error) throw new Error(`Admin owner fixture login cleanup: ${error.message}`);
+    }
+  };
+  try {
+    const { error } = await f.admin.from("restaurants").insert({
+      id, name: "API owner refusal probe", plan: "carta", plan_status: "active",
+      owner_id: withTeamMember ? owner : null,
+    });
+    if (error) throw new Error(`Admin owner fixture: ${error.message}`);
+    if (withTeamMember) {
+      const email = `apicheck-owner-transfer-${id}@example.test`;
+      const login = await f.admin.auth.admin.createUser({ email, password: loginSecret("TEST_PASSWORD"), email_confirm: true });
+      if (login.error) throw new Error(`Admin owner fixture login: ${login.error.message}`);
+      memberId = login.data.user.id;
+      const staff = await f.admin.from("staff").insert({ restaurant_id: id, user_id: memberId, email, role: "kitchen" });
+      if (staff.error) throw new Error(`Admin owner fixture team: ${staff.error.message}`);
+    }
+    f.adminOwnerRefusal = { id, userId: memberId ?? owner };
+    return cleanup;
+  } catch (error) {
+    await cleanup();
+    throw error;
+  }
+}
+
+async function arrangeLiveSubscription(f) {
+  const key = process.env.STRIPE_SECRET_KEY;
+  if (!key?.startsWith("sk_test_")) throw new Error("The admin billing fixture requires a Stripe test secret key");
+  const { default: Stripe } = await import("stripe");
+  const stripe = new Stripe(key, { apiVersion: "2025-08-27.basil" });
+  const id = randomUUID();
+  const name = `API live subscription probe ${id}`;
+  let customer, product;
+  const cleanup = async () => {
+    const results = await Promise.allSettled([
+      removeAdminProbe(f, id),
+      (async () => {
+        const { error } = await f.admin.from("restaurant_billing_operations").delete().eq("restaurant_id", id);
+        if (error) throw new Error(`Admin billing fixture cleanup: ${error.message}`);
+      })(),
+      // Deleting the test customer cancels its subscription.
+      customer && stripe.customers.del(customer.id),
+      product && stripe.products.update(product.id, { active: false }),
+    ]);
+    const failures = results.filter(result => result.status === "rejected");
+    if (failures.length) throw new Error(failures.map(result => result.reason.message).join(", "));
+  };
+  try {
+    customer = await stripe.customers.create({ name });
+    product = await stripe.products.create({ name });
+    const subscription = await stripe.subscriptions.create({
+      customer: customer.id,
+      items: [{ price_data: { currency: "mxn", product: product.id, recurring: { interval: "month" }, unit_amount: 0 } }],
+    });
+    if (subscription.status !== "active") throw new Error(`Admin billing fixture subscription is ${subscription.status}`);
+    // Seed only the customer link. restaurantBilling must find the live
+    // subscription even before a webhook has saved its ID on the restaurant.
+    const { error } = await f.admin.from("restaurants").insert({
+      id, name, plan: "carta", plan_status: "active", stripe_customer_id: customer.id,
+    });
+    if (error) throw new Error(`Admin billing fixture: ${error.message}`);
+    f.adminBillingProbeId = id;
+    return cleanup;
+  } catch (error) {
+    await cleanup();
+    throw error;
+  }
+}
+
 export function adminOpeningCases() {
   return [
     ...adminCases(),
@@ -158,6 +241,13 @@ export function adminOwnerCases(fx) {
       expect: [400], expectError: /fecha|date/i },
     { name: "PATCH /api/admin/restaurants (unknown billing refused)", as: "platformAdmin", method: "PATCH",
       path: "/api/admin/restaurants", body: { id: r, plan: "casa", billing: "forever-free" }, expect: [400] },
+    ...["test", "free"].map(billing => ({
+      name: `PATCH /api/admin/restaurants (${billing} billing refused with a live Stripe subscription)`,
+      as: "platformAdmin", method: "PATCH", path: "/api/admin/restaurants", needsStripe: true,
+      arrange: arrangeLiveSubscription,
+      body: f => ({ id: f.adminBillingProbeId, plan: "casa", billing }),
+      expect: [409], expectError: /ya paga con una suscripción de Stripe|already pays through a Stripe subscription/i,
+    })),
     // The emailed pay link opens Checkout only for a tier that was assigned and
     // is unpaid. Asked for another tier, it lands on the Plan screen instead.
     { name: "GET  /api/billing/assigned (a tier nobody assigned)", as: "owner", method: "GET",
@@ -209,9 +299,14 @@ export function adminOwnerCases(fx) {
         if (team?.some(t => t.user_id === member.user_id)) return "the new owner still has a staff row";
         return team?.some(t => t.user_id === owner && t.role === "manager") || "the former owner did not stay on as a manager";
       } },
+    { name: "POST /api/admin/restaurants/owner (current owner owns another restaurant)", as: "platformAdmin", method: "POST",
+      path: "/api/admin/restaurants/owner", arrange: f => arrangeOwnerRefusal(f, true),
+      body: f => f.adminOwnerRefusal, expect: [409],
+      expectError: /El dueño actual también es dueño de otro restaurante|The current owner also owns another restaurant/i },
     { name: "POST /api/admin/restaurants/owner (someone off the team refused)", as: "platformAdmin", method: "POST",
-      path: "/api/admin/restaurants/owner", body: { id: r, userId: randomUUID() }, expect: [409],
-      expectError: /equipo|team/i },
+      path: "/api/admin/restaurants/owner", arrange: f => arrangeOwnerRefusal(f, false),
+      body: f => f.adminOwnerRefusal, expect: [409],
+      expectError: /ya forma parte del equipo de este restaurante|already on this restaurant's team/i },
     { name: "POST /api/admin/restaurants/owner (malformed ids refused, not uncertain)", as: "platformAdmin", method: "POST",
       path: "/api/admin/restaurants/owner", body: { id: "abc", userId: "x" }, expect: [400] },
     { name: "POST /api/admin/restaurants/owner (an owner refused)", as: "owner", method: "POST",
