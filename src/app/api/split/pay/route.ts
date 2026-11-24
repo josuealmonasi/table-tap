@@ -164,7 +164,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   // since, or a waiter collected part of a later order) needs a fresh page:
   // refusing it left the share unpayable until Stripe expired it.
   if (prior) {
-    const quote = legacySplitQuote(prior, payable, priorTip);
+    const quote = legacySplitQuote(prior, payable, priorTip, own.map(o => o.id));
     if (quote !== "total" && quote !== "tip") return await legacySplitRefusal(quote) ?? NextResponse.json({ url: prior.url });
     const retired = await retireStaleLegacyPage(stripe, prior, restaurant.stripe_account_id, restaurantId, scopeKey);
     if (!retired) return await apiError("apiErr.splitPageChanged", 409);
@@ -275,7 +275,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     // Another request can win after our resume read. The opener returns that
     // winner's durable session; its quote must match before we expose the URL.
     // It was opened moments ago, so it is never closed here: that is a race.
-    const error = await legacySplitRefusal(legacySplitQuote(session, payable, tip));
+    const error = await legacySplitRefusal(legacySplitQuote(session, payable, tip, own.map(o => o.id)));
     if (error) return error;
     // A session with no page is still a session: its fee waits for expiry.
     if (!session.url) return await apiError("apiErr.checkoutFailed", 502);
