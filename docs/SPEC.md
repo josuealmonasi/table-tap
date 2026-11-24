@@ -205,7 +205,9 @@ once (Spanish or English by `user_metadata.locale`): the date, that they then
 move to Carta keeping their menu, tables and orders, and a link to Plan. It
 reads the service-only view `trial_reminders_due` and records the reminded end
 date in `restaurants.trial_reminded_for`, so an extended trial is reminded again
-and none twice; the mail's idempotency key is that date too.
+and none twice; the mail's idempotency key is that date too. The job claims the
+end date before sending only if the restaurant is still on that free trial,
+and releases the claim only if the mail provider definitely refused the send.
 
 **One free trial per RFC.** Once a restaurant that had a trial saves an RFC,
 it is recorded in `trial_rfcs` (service-only, no FK: it outlives the
