@@ -8450,3 +8450,13 @@ The split's table-wide ratio estimated MX$150 and tipped MX$15 per share at
 checkout agree on MX$14.50 per share. Earlier locks with a null food-only
 snapshot keep their existing tip behavior. Checks: `tip-base.react-component.spec.tsx`,
 `split-slots-schema.spec.ts`, and `split-slots-pay.spec.ts`.
+
+## Auth email tokens appeared in request logs (2026-11-24)
+
+The auth email templates put one-time tokens in the query string, which
+appeared in request logs. The legacy callback put them into a second request
+when it redirected. Both legacy entry points now redirect into a fragment,
+and new email links start there. The confirmation page clears the fragment
+and sends the token in the POST body when the user chooses to confirm.
+Checks cover both legacy redirects, the browser form, and all bilingual email
+links in the auth callback, confirm page, and email template specs.

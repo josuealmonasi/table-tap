@@ -10,7 +10,9 @@ emails. These templates:
   to another domain than the sender's is a strong spam signal;
 - open a page with one button. Mail scanners (Outlook Safe Links) open links
   to check them, and a link that spent its token on open was dead before the
-  person clicked.
+  person clicked;
+- put the token and its type after `#` so they stay out of the request URL.
+  The browser clears the fragment before the person confirms with a POST.
 
 ## Paste them (production project → Authentication → Emails → Templates)
 
@@ -21,7 +23,8 @@ emails. These templates:
 | Reset password | `reset-password.html` | `{{ if and .Data.locale (eq .Data.locale "en") }}Reset your TableTap password{{ else }}Restablece tu contraseña de TableTap{{ end }}` |
 | Change email address | `change-email.html` | `{{ if and .Data.locale (eq .Data.locale "en") }}Confirm your new TableTap email{{ else }}Confirma tu nuevo correo de TableTap{{ end }}` |
 
-For each: open the template, replace **Subject** with the text in the table,
+Deploy the fragment-aware confirmation page before replacing the templates.
+For each email, open the template, replace **Subject** with the text in the table,
 replace the **Message body** with the whole file, **Save**.
 
 After saving, send yourself a password reset from `tabletap.shop/login`. If the
