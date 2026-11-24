@@ -8460,3 +8460,20 @@ and new email links start there. The confirmation page clears the fragment
 and sends the token in the POST body when the user chooses to confirm.
 Checks cover both legacy redirects, the browser form, and all bilingual email
 links in the auth callback, confirm page, and email template specs.
+### Next.js 15.5.28 carried three published advisories (security sweep 2026-11-24)
+
+`pnpm audit --prod` reported GHSA-f3mh-rxg3-f5g2 (HttpOnly cookie exposure),
+GHSA-pc58-hwjq-p385 (cross-client response injection) and GHSA-7qx7-33qx-rqx2
+(SVG rejection bypass in the image optimiser), all fixed in 15.5.29. Next and
+eslint-config-next now pin 15.5.29, and the framework floor in
+`security-headers.spec.ts` rises to it, so a downgrade fails the unit tests.
+
+### What the public and staff roles could reach directly (security sweep 2026-11-24)
+
+Four database grants were wider than the app: a leftover table-level UPDATE on
+`notifications` let managers rewrite alerts (not just mark them read); a public
+SELECT policy on the `menu` bucket listed every restaurant's uploads; the public
+`item_addons` / `promotion_items` policies were `using (true)`, exposing links
+for hidden dishes and inactive promotions; and `dish_rating_stats` returned
+averages for hidden dishes to anyone. Each is narrowed; the server key keeps
+full access. Check: `sweep-1124-grants.spec.ts`, plus a rolled-back dev probe.
