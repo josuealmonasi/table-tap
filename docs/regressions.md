@@ -8384,3 +8384,13 @@ it merged, and the next PR (#704) failed layout and dialogs on it. A capped
 run now always adds every page file the change adds or edits
 (`pagePattern`). Check: `ci-env.spec.ts`.
 
+
+### A split share page reopened for different add-on orders (review 1124)
+
+A diner paying a legacy split share opened a page for their share plus one
+MX$40 add-on order, went back, picked a different MX$40 order, and was handed
+the old page: the resume check compared only the tip and the total, so the
+payment settled the first order and left the chosen one owed. The quote now
+also compares the add-on order ids the page carries in its metadata; a
+different set retires the old page on resume and is refused when a concurrent
+opener returns it. Check: `legacy-split-quote.spec.ts`.
