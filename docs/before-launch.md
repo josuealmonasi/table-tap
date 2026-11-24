@@ -82,6 +82,16 @@ owner can: it is their consent, and no script gives it for them.
 - Razón social, RFC, domicilio fiscal.
 - A published contact address for privacy requests.
 - A lawyer's read of the terms and the aviso de privacidad.
+- Since the 2026-11-13 legal review the documents carry marked placeholders
+  that must be replaced before launch (grep `«[` in `src/lib/legal/*.json`):
+  `«[RAZÓN SOCIAL]»`, `«[RFC]»`, `«[DOMICILIO]»`, `«[CORREO DE CONTACTO]»`,
+  `«[TELÉFONO DE CONTACTO]»`, `«[CORREO DE PRIVACIDAD]»`,
+  `«[PERSONA O ÁREA DE DATOS PERSONALES]»`, and `«[CORREO DE FACTURACIÓN]»`. The two restaurant placeholders in the model
+  diner notice (privacy clause 13) are for each restaurant to fill.
+- Decided by the owner on 2026-11-13 and written into the texts: IVA is
+  included in published prices; TableTap keeps its fee on a lost chargeback;
+  a deleted restaurant's accounting records are kept 10 years, then deleted
+  (the purge job is still to be built); courts of Ciudad de México.
 - Regenerate the PDFs after any wording change: `node scripts/legal-pdf.mjs`.
 
 ## 7. The kitchen printer, when a restaurant wants one
