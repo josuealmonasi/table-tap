@@ -8,11 +8,12 @@ import { receiptCents as cents } from "@/lib/receipt-amount";
 import { splitVatRate } from "@/lib/receipt-vat-source";
 import type { createAdminClient } from "@/lib/supabase/admin";
 import type { ReceiptForgiveness, ReceiptOrder, ReceiptVersion, SlotReceiptPayment } from "@/lib/receipt";
+import type { ReceiptOrderOwner } from "@/lib/receipt-access";
 
 type Database = ReturnType<typeof createAdminClient>;
 /** One receipt's orders: a long sitting, not a whole day. Above it the receipt is refused, never cut short. */
 export const MAX_RECEIPT_ORDERS = 100;
-interface StoredOrder extends ReceiptOrder { restaurant_id: string; table_id: string | null; paid: boolean }
+interface StoredOrder extends ReceiptOrder, ReceiptOrderOwner { restaurant_id: string; paid: boolean }
 interface Adjustment extends ReceiptForgiveness { restaurant_id: string; order_id: string; currency: string }
 export interface ReceiptSource {
   orders: ReceiptOrder[];
@@ -79,19 +80,19 @@ async function orderVersion(db: Database, orders: StoredOrder[], version: Receip
   return { orders: result, restaurantId: orders[0].restaurant_id, tableId: orders[0].table_id, version: receiptVersion };
 }
 
-export async function readOrderReceipt(db: Database, ids: string[], complete: boolean, orderIds: unknown, version?: ReceiptVersion): Promise<ReceiptSource> {
+export async function readOrderReceipt(db: Database, ids: string[], complete: boolean, orderIds: unknown, version?: ReceiptVersion,
+  authorize?: (restaurantId: string, orders: ReceiptOrderOwner[]) => Promise<boolean>,
+): Promise<ReceiptSource> {
   const { data: found, error: readError } = await db
     .from("orders")
     .select(
-      "id, restaurant_id, table_id, items, subtotal, discount, service_fee, tip, total, tax_pct, currency, table_label, created_at, pay_method, paid, loyalty_card_id, session_id",
+      "id, restaurant_id, table_id, items, subtotal, discount, service_fee, tip, total, tax_pct, currency, table_label, created_at, pay_method, paid, loyalty_card_id, session_id, diner",
     )
     .in("id", ids)
     .order("created_at", { ascending: true });
   // A failed read is not "no such order".
   if (readError) throw new ReceiptReadError(503);
 
-  // Knowing the order's unguessable id is what proves this is your order —
-  // the same trust boundary the tracker already uses.
   // One receipt is one restaurant's bill. Ids from two restaurants would
   // otherwise be added together and sent out under whichever name came first.
   const first = found?.[0];
@@ -109,6 +110,7 @@ export async function readOrderReceipt(db: Database, ids: string[], complete: bo
     || orders.some(o => !o.paid || o.currency !== order.currency || o.table_id !== order.table_id))) {
     throw new ReceiptReadError(404);
   }
+  if (authorize && !await authorize(order.restaurant_id, orders)) throw new ReceiptReadError(403);
   const source = await orderVersion(db, orders, version);
   const decorated = await withReceiptCards(db, orders);
   source.orders = source.orders.map(order => ({ ...order, loyalty: decorated.find(row => row.id === order.id)?.loyalty }));
@@ -116,9 +118,12 @@ export async function readOrderReceipt(db: Database, ids: string[], complete: bo
 }
 
 /** A slot receipt names money received, even while the other parts are unpaid. */
-export async function readSlotReceipt(db: Database, id: string, restaurantId?: string, version?: ReceiptVersion): Promise<ReceiptSource> {
+export async function readSlotReceipt(db: Database, id: string, restaurantId?: string, version?: ReceiptVersion,
+  authorize?: (payment: { restaurant_id: string; session_id: string | null; stripe_payment_intent: string | null },
+    splitId: string, tableId: string | null) => Promise<boolean>,
+): Promise<ReceiptSource> {
   let query = db.from("payments")
-    .select("id, restaurant_id, session_id, amount, tip, currency, created_at").eq("id", id);
+    .select("id, restaurant_id, session_id, stripe_payment_intent, amount, tip, currency, created_at").eq("id", id);
   if (restaurantId) query = query.eq("restaurant_id", restaurantId);
   const { data: payment, error } = await query.maybeSingle();
   if (error) throw new ReceiptReadError(503);
@@ -137,6 +142,7 @@ export async function readSlotReceipt(db: Database, id: string, restaurantId?: s
   if (sittingError) throw new ReceiptReadError(503);
   if (!split || split.model_version !== 2 || split.session_id !== payment.session_id || split.currency !== payment.currency
     || slots.some(s => s.restaurant_id !== payment.restaurant_id || s.split_id !== split.id)) throw new ReceiptReadError(404);
+  if (authorize && !await authorize(payment, split.id, sitting?.table_id ?? null)) throw new ReceiptReadError(403);
   const frozen = slots.reduce((sum, s) => sum + s.amount_cents, 0);
   const charged = cents(payment.amount), tip = cents(payment.tip);
   // The charge adds only the new tip. The full receipt tip can also include
@@ -145,7 +151,8 @@ export async function readSlotReceipt(db: Database, id: string, restaurantId?: s
     || charged - tip > frozen || slots.some(s => !Number.isInteger(s.share_no) || s.share_no < 0 || s.share_no > 19
       || !Number.isSafeInteger(s.amount_cents) || s.amount_cents <= 0)
     || new Set(slots.map(s => s.share_no)).size !== slots.length) throw new ReceiptReadError(503);
-  let receipt: SlotReceiptPayment = { ...payment, slots: slots.map(s => s.share_no).sort((a, b) => a - b) };
+  let receipt: SlotReceiptPayment = { id: payment.id, amount: payment.amount, tip: payment.tip, currency: payment.currency,
+    created_at: payment.created_at, slots: slots.map(s => s.share_no).sort((a, b) => a - b) };
   if (version?.slotCopy !== undefined) {
     const saved = openSlotVersion(version.slotCopy, payment.restaurant_id, receipt);
     if (!saved) throw new ReceiptReadError(404);

@@ -102,10 +102,9 @@ export function useReceiptOffer(
     if (!bill) return;
     if (!bill.settled) {
       settled.current = false;
-      // Their own orders when they have any; otherwise they are paying for
-      // somebody else's, which is still their receipt to ask for.
-      const mine = bill.mine.orders.map(o => o.id);
-      owed.current = mine.length > 0 ? mine : bill.others.orders.map(o => o.id);
+      // A staff collection has no payer phone; only the phone that ordered
+      // can request each order's receipt.
+      owed.current = bill.mine.orders.map(o => o.id);
       return;
     }
     // Parts have payment receipts. Closing their bill must not offer the whole table again.
