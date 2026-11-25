@@ -42,6 +42,9 @@ describe("the text and the version cannot drift apart", () => {
       .digest("hex")
       .slice(0, 16);
 
+  // 2026-11-25.3, bumped from 2026-11-25.2: signup limits mail per inbox, so
+  // a keyed code is also derived from the confirmation email (deleted within a
+  // day). A new source for an existing kind of data: every restaurant is asked again.
   // 2026-11-25.2, bumped from 2026-11-25: a guest's own change of the card's
   // ticket email waits for confirmation from that inbox (pending address and a
   // hashed code kept up to seven days), and staff changes are logged by name.
@@ -87,15 +90,15 @@ describe("the text and the version cannot drift apart", () => {
   // kept the version as a clarification.)
   it("has terms that match the version in force", () => {
     expect({ version: TERMS_VERSION, text: fingerprint("terms-es") }).toEqual({
-      version: "2026-11-25.2",
+      version: "2026-11-25.3",
       text: "8cce805f4850523f",
     });
   });
 
   it("has a privacy notice that matches the version in force", () => {
     expect({ version: TERMS_VERSION, text: fingerprint("privacy-es") }).toEqual({
-      version: "2026-11-25.2",
-      text: "1b0ca1d02ff4689e",
+      version: "2026-11-25.3",
+      text: "f0c208e5f0531d74",
     });
   });
 });

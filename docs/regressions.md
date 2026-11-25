@@ -8719,3 +8719,21 @@ saved with the audit down. The POST runs through `auditedAdminAction` as
 restaurant id and never the note's text. Checks: `admin-trial.spec.ts`,
 `admin-suspend.spec.ts`, `subscription-sync.spec.ts`,
 `api/admin/restaurants/notes/__tests__/route.spec.ts`.
+### Signup mail ceiling and digest cash/card figures (2026-11-25)
+
+Two pairs that had to agree (bl24 review, findings 2 and 4). First, the limit
+on who asks and the limit on who receives: `/api/signup` and
+`/api/signup/resend` each allowed five requests a minute per network address,
+and nothing counted the destination, so a stranger could keep one inbox
+receiving signup and confirmation mail. Both routes now share one ceiling per
+normalized address (`isSignupMailCapped` in `signup-mail-ceiling.ts`): one
+mail per 10 minutes and three per 24 hours, keyed by a keyed hash of the
+address, never the address itself. Over it, each route answers its usual 200
+body and neither stores a pending row nor schedules mail; a request the
+cooldown refuses does not spend the day's budget. Second, the digest's Cash
+and Card lines and the Analytics corte: the digest passed `corteFrom` its
+payments alone, so MX$100 collected in cash with MX$30 handed back from that
+drawer read MX$100 cash in the mail and MX$70 on the corte. Both now read
+their adjustments (logged write-offs and refunds, plus completed return
+events) from one reader, `readCorteAdjustments` in `corte-adjustments.ts`.
+Check: `signup-mail-ceiling.spec.ts`, `digest-figures.spec.ts`.
