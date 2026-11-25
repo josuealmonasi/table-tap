@@ -3894,10 +3894,21 @@ alter table loyalty_cards add constraint loyalty_cards_email_consented check (em
 drop index if exists loyalty_cards_email_once;
 create unique index if not exists loyalty_cards_email_unsubscribe on loyalty_cards(email_unsubscribe) where email_unsubscribe is not null;
 
+-- A pending address never appears in the active email fields read by the outbox.
+alter table loyalty_cards add column if not exists pending_email text;
+alter table loyalty_cards add column if not exists pending_email_token_hash text;
+alter table loyalty_cards add column if not exists pending_email_expires_at timestamptz;
+alter table loyalty_cards add column if not exists pending_email_notice_version text;
+alter table loyalty_cards add column if not exists pending_email_set_by text;
+create unique index if not exists loyalty_cards_pending_email_token
+  on public.loyalty_cards(pending_email_token_hash) where pending_email_token_hash is not null;
+
 -- A repeated save of the same address keeps its stop link, so a ticket already
 -- delivered can still stop it (review 1117b, finding 5). Consent is given again
 -- with every save, so its time, notice version and author always record the
 -- latest one: a re-save under a newer notice must not keep the older version.
+-- The previous writer stays while deployed code may still call it (new SQL
+-- is added beside the old, never in place of it).
 create or replace function public.set_card_email(p_restaurant uuid, p_code text, p_email text, p_set_by text, p_notice text)
 returns boolean language plpgsql security definer set search_path = public as $$
 begin
@@ -3909,10 +3920,86 @@ begin
     email = p_email
   where restaurant_id = p_restaurant and code = p_code;
   return found;
-end;
-$$;
+end $$;
 revoke all on function public.set_card_email(uuid, text, text, text, text) from public, anon, authenticated;
 grant execute on function public.set_card_email(uuid, text, text, text, text) to service_role;
+create or replace function public.set_card_email_v2(
+  p_restaurant uuid, p_code text, p_email text, p_actor text, p_notice text,
+  p_owner_hash text, p_token_hash text
+)
+returns text language plpgsql security invoker set search_path = '' as $$
+declare
+  card public.loyalty_cards%rowtype;
+  outcome text;
+begin
+  select * into card from public.loyalty_cards
+    where (p_restaurant is null or restaurant_id = p_restaurant) and code = p_code
+    for update;
+  if not found then return 'unknown'; end if;
+  if p_actor is null then
+    if p_owner_hash is null or card.owner_secret_hash is distinct from p_owner_hash then return 'forbidden'; end if;
+  elsif p_restaurant is null then
+    return 'forbidden';
+  end if;
+
+  if p_email is null or p_email = card.email then
+    outcome := case when p_email is null then 'removed' else 'saved' end;
+    update public.loyalty_cards set
+      email = p_email,
+      email_unsubscribe = case when p_email is null then null else card.email_unsubscribe end,
+      email_consent_at = case when p_email is null then null else now() end,
+      email_notice_version = case when p_email is null then null else p_notice end,
+      email_set_by = case when p_email is null then null else coalesce(p_actor, 'diner') end,
+      pending_email = null, pending_email_token_hash = null, pending_email_expires_at = null,
+      pending_email_notice_version = null, pending_email_set_by = null
+    where id = card.id;
+  elsif p_actor is not null then
+    -- Staff type the address the guest gives them at the till: trusted as typed
+    -- (owner decision, card email plan 2026-11-11), logged below.
+    outcome := 'saved';
+    update public.loyalty_cards set
+      email = p_email, email_unsubscribe = gen_random_uuid(), email_consent_at = now(),
+      email_notice_version = p_notice, email_set_by = p_actor,
+      pending_email = null, pending_email_token_hash = null, pending_email_expires_at = null,
+      pending_email_notice_version = null, pending_email_set_by = null
+    where id = card.id;
+  elsif p_email = card.pending_email and card.pending_email_expires_at > clock_timestamp() then
+    return 'pending';
+  else
+    outcome := 'submitted';
+    update public.loyalty_cards set
+      pending_email = p_email, pending_email_token_hash = p_token_hash,
+      pending_email_expires_at = clock_timestamp() + interval '7 days',
+      pending_email_notice_version = p_notice, pending_email_set_by = coalesce(p_actor, 'diner')
+    where id = card.id;
+  end if;
+
+  if p_actor is not null then
+    insert into public.user_logs (restaurant_id, actor_email, entity, action, detail)
+    values (card.restaurant_id, p_actor, 'loyalty', 'updated', 'card_email=' || outcome || ' card_id=' || card.id);
+  end if;
+  return outcome;
+end;
+$$;
+revoke all on function public.set_card_email_v2(uuid, text, text, text, text, text, text) from public, anon, authenticated;
+grant execute on function public.set_card_email_v2(uuid, text, text, text, text, text, text) to service_role;
+
+-- One atomic promotion consumes the inbox token and rotates the stop link.
+create or replace function public.confirm_card_email(p_token_hash text)
+returns boolean language sql security invoker set search_path = '' as $$
+  with confirmed as (
+    update public.loyalty_cards set
+      email = pending_email, email_unsubscribe = gen_random_uuid(), email_consent_at = clock_timestamp(),
+      email_notice_version = pending_email_notice_version, email_set_by = pending_email_set_by,
+      pending_email = null, pending_email_token_hash = null, pending_email_expires_at = null,
+      pending_email_notice_version = null, pending_email_set_by = null
+    where pending_email_token_hash = p_token_hash and pending_email_expires_at > clock_timestamp()
+    returning id
+  )
+  select exists (select 1 from confirmed);
+$$;
+revoke all on function public.confirm_card_email(text) from public, anon, authenticated;
+grant execute on function public.confirm_card_email(text) to service_role;
 
 -- The cashier's choice not to email one sale's ticket, written with it.
 alter table orders add column if not exists ticket_email_skip boolean not null default false;

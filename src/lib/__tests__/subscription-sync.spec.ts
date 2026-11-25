@@ -7,6 +7,8 @@ const rpc = vi.fn();
 const reads: unknown[] = [];
 const writes: unknown[] = [];
 const patches: Record<string, unknown>[] = [];
+const filters: unknown[][] = [];
+const customerId = "cus_r1";
 vi.mock("@/lib/stripe", () => ({ stripe: { subscriptions: { retrieve: (...args: unknown[]) => retrieve(...args) } } }));
 vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({
   rpc: (...args: unknown[]) => rpc(...args),
@@ -14,7 +16,7 @@ vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({
     let writing = false;
     const q = {
       select: () => q,
-      eq: () => q,
+      eq: (...args: unknown[]) => { if (writing) filters.push(args); return q; },
       update: (patch: Record<string, unknown>) => { writing = true; patches.push(patch); return q; },
       maybeSingle: async () => reads.shift(),
       then: (resolve: (value: unknown) => unknown) => Promise.resolve(writing ? writes.shift() : reads.shift()).then(resolve),
@@ -24,17 +26,17 @@ vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({
 }) }));
 const { applySubscription } = await import("@/lib/subscription-sync");
 const sub = (id = "sub_new", created = 200, status = "active") => ({
-  id, created, status, metadata: { restaurant_id: "r1", plan: "casa" },
+  id, created, status, customer: customerId, metadata: { restaurant_id: "r1", plan: "casa" },
   items: { data: [{ price: { unit_amount: 149900 } }] },
 }) as unknown as Stripe.Subscription;
-const current = (id = "sub_new", revision = 0) => ({
-  data: { stripe_subscription_id: id, subscription_sync_revision: revision }, error: null,
+const current = (id: string | null = "sub_new", revision = 0) => ({
+  data: { stripe_subscription_id: id, stripe_customer_id: customerId, subscription_sync_revision: revision }, error: null,
 });
 const down = { data: null, error: { message: "database unavailable" } };
 
 beforeEach(() => {
   vi.resetAllMocks();
-  reads.length = writes.length = patches.length = 0;
+  reads.length = writes.length = patches.length = filters.length = 0;
   rpc.mockResolvedValue({ data: 1, error: null });
   retrieve.mockResolvedValue(sub());
   writes.push({ data: [{ id: "r1" }], error: null });
@@ -78,24 +80,47 @@ describe("subscription synchronization", () => {
   });
 });
 
-it("leaves a platform admin's move alone when a finished subscription's event arrives late", async () => {
+it.each(["canceled", "incomplete_expired"])("only advances the revision for an unlinked %s subscription", async status => {
   // The admin moved the restaurant, which unlinks its cancelled subscription;
   // Stripe then re-delivers that subscription's cancellation.
-  reads.push({ data: { stripe_subscription_id: null, subscription_sync_revision: 3 }, error: null });
-  retrieve.mockResolvedValue(sub("sub_old", 100, "canceled"));
-  await applySubscription(sub("sub_old", 100, "canceled"));
-  expect(patches).toEqual([]);
+  reads.push(current(null, 3));
+  const finished = sub("sub_old", 100, status);
+  retrieve.mockResolvedValue(finished);
+  await applySubscription(finished);
+  expect(patches).toEqual([{ subscription_sync_revision: 4 }]);
+  expect(rpc).not.toHaveBeenCalled();
 });
 
 it("still records a brand-new subscription when none is linked yet", async () => {
-  reads.push({ data: { stripe_subscription_id: null, subscription_sync_revision: 0 }, error: null });
+  reads.push(current(null));
   await applySubscription(sub());
   expect(patches).toHaveLength(1);
   expect(patches[0]).toMatchObject({ stripe_subscription_id: "sub_new", subscription_sync_revision: 1 });
+  expect(filters).toContainEqual(["stripe_customer_id", customerId]);
+});
+
+it("rereads Stripe when cancellation overtakes a first activation", async () => {
+  const canceled = sub("sub_new", 200, "canceled");
+  reads.push(current(null, 12), current(null, 12), current(null, 13));
+  writes.push({ data: [], error: null }, { data: [{ id: "r1" }], error: null });
+  retrieve.mockImplementationOnce(async () => {
+    await applySubscription(canceled);
+    return sub();
+  }).mockResolvedValue(canceled);
+  await applySubscription(sub());
+  expect(retrieve).toHaveBeenCalledTimes(3);
+  expect(patches).toEqual([
+    { subscription_sync_revision: 13 },
+    expect.objectContaining({ stripe_subscription_id: "sub_new", plan: "casa", subscription_sync_revision: 13 }),
+    { subscription_sync_revision: 14 },
+  ]);
+  expect(filters.filter(([column]) => column === "subscription_sync_revision")).toEqual([
+    ["subscription_sync_revision", 12], ["subscription_sync_revision", 12], ["subscription_sync_revision", 13],
+  ]);
 });
 
 it("a scheduled snapshot cannot relink a subscription after an admin move", async () => {
-  reads.push({ data: { stripe_subscription_id: null, subscription_sync_revision: 3 }, error: null });
+  reads.push(current(null, 3));
   await applySubscription(sub(), undefined, undefined, "sub_new");
   expect(patches).toEqual([]);
   expect(retrieve).not.toHaveBeenCalled();
@@ -122,13 +147,10 @@ it("fails after bounded concurrent updates rather than acknowledging unfinished 
 });
 
 it("preserves the local trial and deadline after a failed first payment", async () => {
-  reads.push({ data: { stripe_subscription_id: null, subscription_sync_revision: 0,
-    plan: "servicio", plan_status: "trialing", trial_ends_at: "2026-11-01T00:00:00Z" }, error: null });
+  reads.push(current(null));
   retrieve.mockResolvedValue(sub("sub_new", 200, "incomplete"));
   await applySubscription(sub());
-  expect(patches[0]).not.toHaveProperty("plan");
-  expect(patches[0]).not.toHaveProperty("plan_status");
-  expect(patches[0]).not.toHaveProperty("trial_ends_at");
+  expect(patches).toEqual([{ subscription_sync_revision: 1 }]);
   expect(rpc).not.toHaveBeenCalled();
 });
 it("does not replace a live contract with a newer duplicate", async () => {
@@ -160,26 +182,13 @@ it("clears a resumed cancellation date and an ended subscription price", async (
   expect(patches[1]).toMatchObject({ plan_ends_at: null, subscribed_price: null });
 });
 
-it("does not link the unpaid contract, so the local trial can still expire", async () => {
-  reads.push({ data: { stripe_subscription_id: null, subscription_sync_revision: 0 }, error: null });
-  retrieve.mockResolvedValue(sub("sub_new", 200, "incomplete"));
-  await applySubscription(sub());
-  expect(patches[0]).not.toHaveProperty("stripe_subscription_id");
-  expect(patches[0]).not.toHaveProperty("subscribed_price");
-});
 it("keeps renewal grace for a contract that was already activated", async () => {
   reads.push(current()); retrieve.mockResolvedValue(sub("sub_new", 200, "past_due"));
   await applySubscription(sub());
   expect(patches[0]).toMatchObject({ plan: "casa", plan_status: "past_due", subscribed_price: 1499 });
 });
-it("leaves the local entitlement alone when an unpaid first contract expires", async () => {
-  reads.push({ data: { stripe_subscription_id: null, subscription_sync_revision: 0 }, error: null });
-  retrieve.mockResolvedValue(sub("sub_new", 200, "incomplete_expired"));
-  await applySubscription(sub());
-  expect(patches).toEqual([]);
-});
 it("activates a new tier when Stripe grants a trial", async () => {
-  reads.push({ data: { stripe_subscription_id: null, subscription_sync_revision: 0 }, error: null });
+  reads.push(current(null));
   retrieve.mockResolvedValue(sub("sub_new", 200, "trialing"));
   await applySubscription(sub());
   expect(patches[0]).toMatchObject({ plan: "casa", plan_status: "trialing", stripe_subscription_id: "sub_new" });

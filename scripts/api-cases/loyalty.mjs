@@ -6,48 +6,59 @@ export function loyaltyCases(fx) {
   const sharedCode = randomUUID().replaceAll("-", "").slice(0, 12).toUpperCase().replaceAll("0", "2").replaceAll("1", "3");
   const ownedCode = randomBytes(6).toString("hex").toUpperCase();
   const ownerSecret = randomBytes(32).toString("base64url");
+  const confirmation = randomBytes(32).toString("base64url");
+  const confirmationHash = createHash("sha256").update(confirmation).digest("hex");
+  const ticketEmail = "api-gate@example.invalid";
+  const activeEmail = () => ({
+    email: ticketEmail, email_consent_at: new Date().toISOString(),
+    email_notice_version: "api-gate", email_unsubscribe: randomUUID(),
+  });
+  const pendingEmail = {
+    pending_email: ticketEmail, pending_email_token_hash: confirmationHash, pending_email_notice_version: "api-gate",
+    pending_email_expires_at: new Date(Date.now() + 60 * 60_000).toISOString(), pending_email_set_by: "diner",
+  };
+  const activeCard = (code = sharedCode) => ({ restaurant_id: r, code, goal: 8, ...activeEmail() });
+  const arrangeCards = (...cards) => async f => {
+    const { data, error } = await f.admin.from("loyalty_cards").insert(cards).select("id");
+    if (error) throw new Error(error.message);
+    return async () => {
+      const { error: cleanupError } = await f.admin.from("loyalty_cards").delete().in("id", data.map(card => card.id));
+      if (cleanupError) throw new Error(cleanupError.message);
+    };
+  };
   return [
-    // Tickets by email to the card's address (2026-11-11). An example.invalid
-    // address: nothing these cases link can ever be delivered. The last case
-    // removes it again.
     { name: "POST /api/loyalty/card-email (needs the consent tick)", as: "waiter", method: "POST", path: "/api/loyalty/card-email",
       body: { code: fx.stampableCode ?? "", email: "api-gate@example.invalid", consent: false }, expect: [400] },
     { name: "POST /api/loyalty/card-email (not an address)", as: "waiter", method: "POST", path: "/api/loyalty/card-email",
       body: { code: fx.stampableCode ?? "", email: "nope", consent: true }, expect: [400] },
-    { name: "POST /api/loyalty/card-email (waiter links it, sees it masked)", as: "waiter", method: "POST", path: "/api/loyalty/card-email",
-      body: { code: fx.stampableCode ?? "", email: "API-Gate@Example.invalid", consent: true }, expect: [200],
-      checkText: text => text.includes('"email":"a***@example.invalid"') || `answered ${text.slice(0, 80)}` ,
+    { name: "POST /api/loyalty/card-email (waiter refreshes consent, sees the address masked)", as: "waiter", method: "POST",
+      path: "/api/loyalty/card-email", body: { code: sharedCode, email: "API-Gate@Example.invalid", consent: true }, expect: [200],
+      arrange: arrangeCards(activeCard()),
+      check: data => data.outcome === "saved" && data.email === "a***@example.invalid",
       effect: async f => {
-        const { data } = await f.admin.from("loyalty_cards").select("email, email_consent_at, email_notice_version, email_unsubscribe")
-          .eq("code", fx.stampableCode).maybeSingle();
-        // A boolean: the harness reads any string as the failure message.
-        return (data?.email === "api-gate@example.invalid" && Boolean(data.email_consent_at && data.email_notice_version && data.email_unsubscribe))
-          || `card holds ${JSON.stringify(data)}`;
+        const { data: card } = await f.admin.from("loyalty_cards").select("id, email, email_notice_version").eq("code", sharedCode).single();
+        const { data: log } = await f.admin.from("user_logs").select("actor_email").eq("restaurant_id", r).eq("entity", "loyalty")
+          .eq("action", "updated").eq("detail", `card_email=saved card_id=${card?.id}`).maybeSingle();
+        return (card?.email === ticketEmail && card.email_notice_version !== "api-gate" && Boolean(log?.actor_email))
+          || "consent and the staff audit were not recorded together";
       } },
-    // The first card above already has this address. The disposable second
-    // card must save it too; cleanup runs even when the request fails.
-    { name: "POST /api/loyalty/card-email (two cards share an address)", as: "waiter", method: "POST",
-      path: "/api/loyalty/card-email", body: { code: sharedCode, email: "api-gate@example.invalid", consent: true }, expect: [200],
-      arrange: async f => {
-        const { data, error } = await f.admin.from("loyalty_cards")
-          .insert({ restaurant_id: r, code: sharedCode, goal: 8 }).select("id").single();
-        if (error) throw new Error(error.message);
-        return async () => {
-          const { error: cleanupError } = await f.admin.from("loyalty_cards").delete().eq("id", data.id);
-          if (cleanupError) throw new Error(cleanupError.message);
-        };
-      },
+    { name: "POST /api/loyalty/card-email (a copied code cannot remove an address)", as: "diner", method: "POST",
+      path: "/api/loyalty/card-email", body: { code: sharedCode, email: null }, expect: [403], arrange: arrangeCards(activeCard()) },
+    // Seed the pending request so the gate can exercise the real inbox link without sending test mail.
+    { name: "POST /api/tickets/confirm (two cards can independently confirm the same address)", as: "diner", method: "POST",
+      path: "/api/tickets/confirm", body: { token: confirmation }, expect: [200],
+      arrange: arrangeCards(activeCard(ownedCode), { restaurant_id: r, code: sharedCode, goal: 8, ...pendingEmail }),
       effect: async f => {
-        const { data, error } = await f.admin.from("loyalty_cards").select("code, email, email_unsubscribe")
-          .in("code", [sharedCode, fx.stampableCode]);
-        return (!error && data?.length === 2 && data.every(card => card.email === "api-gate@example.invalid" && card.email_unsubscribe)
+        const { data, error } = await f.admin.from("loyalty_cards").select("email, email_unsubscribe, pending_email_token_hash")
+          .in("code", [sharedCode, ownedCode]);
+        return (!error && data?.length === 2 && data.every(card => card.email === ticketEmail && card.email_unsubscribe && !card.pending_email_token_hash)
           && data[0].email_unsubscribe !== data[1].email_unsubscribe) || "both cards did not keep independent links";
       } },
     { name: "GET /api/loyalty/card-email (cashier: masked)", as: "cashier", method: "GET",
-      path: `/api/loyalty/card-email?code=${fx.stampableCode ?? ""}`, expect: [200],
+      path: `/api/loyalty/card-email?code=${sharedCode}`, expect: [200], arrange: arrangeCards(activeCard()),
       checkText: text => text.includes("a***@example.invalid") || `answered ${text.slice(0, 80)}` },
     { name: "GET /api/loyalty/card-email (owner: full)", as: "owner", method: "GET",
-      path: `/api/loyalty/card-email?code=${fx.stampableCode ?? ""}`, expect: [200],
+      path: `/api/loyalty/card-email?code=${sharedCode}`, expect: [200], arrange: arrangeCards(activeCard()),
       checkText: text => text.includes("api-gate@example.invalid") || `answered ${text.slice(0, 80)}` },
     { name: "GET /api/loyalty/card-email (kitchen cannot read it)", as: "kitchen", method: "GET",
       path: `/api/loyalty/card-email?code=${fx.stampableCode ?? ""}`, expect: [403] },
@@ -58,10 +69,13 @@ export function loyaltyCases(fx) {
     { name: "POST /api/tickets/stop (no card has that link)", as: "diner", method: "POST", path: "/api/tickets/stop",
       body: { token: "00000000-0000-4000-8000-000000000000" }, expect: [404] },
     { name: "POST /api/loyalty/card-email (waiter removes it)", as: "waiter", method: "POST", path: "/api/loyalty/card-email",
-      body: { code: fx.stampableCode ?? "", email: null }, expect: [200],
+      body: { code: sharedCode, email: null }, expect: [200], arrange: arrangeCards({ ...activeCard(), ...pendingEmail, pending_email: "new@example.invalid" }),
       effect: async f => {
-        const { data } = await f.admin.from("loyalty_cards").select("email, email_unsubscribe").eq("code", fx.stampableCode).maybeSingle();
-        return (data && data.email === null && data.email_unsubscribe === null) || `card holds ${JSON.stringify(data)}`;
+        const { data: card } = await f.admin.from("loyalty_cards").select("id, email, email_unsubscribe, pending_email").eq("code", sharedCode).single();
+        const { data: log } = await f.admin.from("user_logs").select("actor_email").eq("restaurant_id", r).eq("entity", "loyalty")
+          .eq("action", "updated").eq("detail", `card_email=removed card_id=${card?.id}`).maybeSingle();
+        return (card && card.email === null && card.email_unsubscribe === null && card.pending_email === null && Boolean(log?.actor_email))
+          || "email, pending link or audit does not match";
       } },
     // A diner checking their visit card by its code. What comes back is what
     // the card itself would show — never who stamped it, never its row id.

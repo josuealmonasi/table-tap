@@ -1,9 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { NextRequest, NextResponse } from "next/server";
+import { hashOwnerSecret } from "@/lib/loyalty/owner-secret";
 
 // Security review 2026-11-17, findings 2 and 4: two rate limits that capped the
 // answer but not the cost, or capped the wrong thing.
 const state = vi.hoisted(() => ({ limited: new Set<string>(), authCalls: 0, saved: [] as unknown[] }));
+const ownerSecret = "A".repeat(43);
 
 vi.mock("@/lib/rate-limit", async importOriginal => ({
   ...(await importOriginal<typeof import("@/lib/rate-limit")>()),
@@ -23,13 +25,13 @@ vi.mock("@/lib/supabase/admin", () => ({
   createAdminClient: () => {
     const q: Record<string, unknown> = {};
     for (const m of ["select", "eq", "is", "in", "order", "limit"]) q[m] = () => q;
-    q.maybeSingle = async () => ({ data: { restaurant_id: "11111111-1111-4111-8111-111111111111" }, error: null });
+    q.maybeSingle = async () => ({ data: { owner_secret_hash: hashOwnerSecret(ownerSecret) }, error: null });
     return { from: () => q, rpc: async () => ({ data: null, error: null }) };
   },
 }));
 vi.mock("@/lib/loyalty/card-email", async importOriginal => ({
   ...(await importOriginal<typeof import("@/lib/loyalty/card-email")>()),
-  setCardEmail: async (_r: string, _c: string, email: string | null) => {
+  setCardEmail: async (_code: string, email: string | null) => {
     state.saved.push(email);
     return email ? { outcome: "saved", email } : { outcome: "removed" };
   },
@@ -56,7 +58,8 @@ describe("a diner's card email", () => {
   const post = async (body: unknown) => {
     const { POST } = await import("@/app/api/loyalty/card-email/route");
     return await POST(new NextRequest("http://x/api/loyalty/card-email", {
-      method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body),
+      method: "POST", headers: { "content-type": "application/json", cookie: `tt-loyalty-email-owner-ABCD2345EFGH=${ownerSecret}` },
+      body: JSON.stringify(body),
     }));
   };
 

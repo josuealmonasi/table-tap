@@ -17,7 +17,9 @@ vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({
     const q = {
       select: () => q, eq: () => q,
       single: async () => ({ data: { stripe_subscription_id: "sub_1" }, error: null }),
-      maybeSingle: async () => ({ data: { stripe_subscription_id: "sub_1", subscription_sync_revision: 0 }, error: null }),
+      maybeSingle: async () => ({ data: {
+        stripe_subscription_id: "sub_1", stripe_customer_id: "cus_r1", subscription_sync_revision: 0,
+      }, error: null }),
       update: (patch: Record<string, unknown>) => { patches.push(patch); return q; },
       then: (resolve: (v: unknown) => unknown) => Promise.resolve({ data: [{ id: "r1" }], error: null }).then(resolve),
     }; return q;
@@ -30,7 +32,7 @@ const run = () => POST(new Request("https://tabletap.test/api/billing/cancel", {
 beforeEach(() => {
   vi.resetAllMocks(); patches.length = 0;
   rpc.mockResolvedValue({ data: true, error: null });
-  const sub = { id: "sub_1", status: "active", metadata: { restaurant_id: "r1", plan: "casa" },
+  const sub = { id: "sub_1", status: "active", customer: "cus_r1", metadata: { restaurant_id: "r1", plan: "casa" },
     items: { data: [{ current_period_end: 1800000000, price: { unit_amount: 149900 } }] } };
   update.mockResolvedValue({ ...sub, cancel_at_period_end: true });
   // A portal resume overtook the cancellation response.

@@ -223,6 +223,7 @@ and that a new party cannot see the previous party's waiting phones.
 | Repeated card saves keep delivered stop links | A retry rotated the token and left the address subscribed; `shared-address.spec.ts` checks the link and per-card scope |
 | A shared card email saves independently | The generic save answer and rewards read disagreed when another card used the address; `shared-address.spec.ts` compares both paths and stops each card independently |
 | Loyalty card deletion requires the guest's key or a manager of the card's restaurant | The printed QR code was enough to delete the card and its history. `loyalty-owner-secret.spec.ts` checks issuance, saves, guest deletion, and the manager guard. The API gate checks the manager deletion and its audit row together. |
+| A new card email needs inbox confirmation | A copied card code could redirect tickets. The card-email specs check the owner secret, confirmation, staff audit, and continued delivery to the active address while a replacement is pending. |
 | Ticket retries run before tickets expire (review N10) | Daily recovery missed the backoff window; `ticket-email-schedule.spec.ts` models recovery without payment traffic |
 | A table payment check names the actual table relation (review N3) | `payment-check-route.spec.ts` rejects unknown relations and checks the tenant and table before Stripe |
 | Held approval keeps the kitchen's saved instructions (review N4) | `offline-sale.spec.ts` keeps notes and component extras without duplicating flattened extras |
