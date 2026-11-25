@@ -17,6 +17,12 @@ import { readOfflineContext, contextCoveredSale } from "@/lib/offline-authority"
 import { currentOfflinePrice, sameOfflinePrice, offlineRevenueLines } from "@/lib/offline-pricing";
 import { RESTAURANT_CLOSING_CODE } from "@/lib/restaurant-suspension";
 
+/** The menu's pricing revision (offline_pricing_revision_v1); undefined when unreadable. */
+async function pricingRevision(db: ReturnType<typeof createAdminClient>, restaurantId: string): Promise<string | undefined> {
+  const { data, error } = await db.rpc("offline_pricing_revision_v1", { p_restaurant: restaurantId });
+  return error || typeof data !== "string" ? undefined : data;
+}
+
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 export interface OfflineApproval { reason: string; collector?: string; at?: string; currency?: string }
 
@@ -77,7 +83,12 @@ export async function ringOffline(actor: Actor, body: PosSaleBody & { offline?: 
   // parts, so stock came off the deal instead of the burger and the fries.
   const savedLines = offlineLines(body.items);
   if (!savedLines.length || savedLines.length !== body.items.length) return await apiError("apiErr.invalidRequest", 400);
-  const current = await currentOfflinePrice(db, actor.restaurantId, body, restaurant).catch(() => undefined);
+  // The menu's pricing as of before the comparison below. The writer checks it
+  // again under the money lock: a price changed in between sends the receipt
+  // to a manager instead of posting it with zero drift (bl39 finding 3).
+  const revision = approval ? null : await pricingRevision(db, actor.restaurantId);
+  if (revision === undefined) return await apiError("apiErr.verifyOrders", 503, undefined, { held: true });
+  const current =await currentOfflinePrice(db, actor.restaurantId, body, restaurant).catch(() => undefined);
   if (current === undefined && !approval) return await apiError("apiErr.verifyOrders", 503, undefined, { held: true });
   if (!approval && !sameOfflinePrice(charge, savedLines, current ?? null)) {
     return await apiError("apiErr.offlineApproval", 409, undefined, { held: true, reviewReason: "apiErr.offlineApproval" });
@@ -89,7 +100,8 @@ export async function ringOffline(actor: Actor, body: PosSaleBody & { offline?: 
   const preparationPending = interrupted && (!plan || can(plan.limits, "kitchenBoard")) && stationsOf({ items: lines }).length > 0;
   const loyalty = await saleCard(actor.restaurantId, body.loyaltyCode, true);
   if (loyalty.error) return loyalty.error;
-  const { data: ticket, error } = await db.rpc("record_offline_sale", {
+  const { data: ticket, error } = await db.rpc("record_offline_sale_v2", {
+    p_pricing_revision: revision,
     p_restaurant: actor.restaurantId, p_ref: posRef, p_method: body.method, p_actor: collector,
     p_at: charge.at, p_terminal: body.method === "card" ? terminalRef(body.terminalRef) : null,
     p_demand: toDemandPayload(stockDemand(lines)),
@@ -112,6 +124,9 @@ export async function ringOffline(actor: Actor, body: PosSaleBody & { offline?: 
     return await apiError("apiErr.restaurantClosing", 409, undefined, { held: true, reviewReason: "apiErr.restaurantClosing" });
   }
   if (error || !ticket) return await apiError("apiErr.orderCreate", 503, undefined, { held: true });
+  if (ticket.outcome === "pricing_changed") {
+    return await apiError("apiErr.offlineApproval", 409, undefined, { held: true, reviewReason: "apiErr.offlineApproval" });
+  }
   if (ticket.outcome !== "settled") return await apiError("apiErr.posUnsettled", 409, undefined, { held: true });
   invalidatePublicMenu(actor.restaurantId);
   return NextResponse.json({ ...ticket, currency, method: body.method, code: orderCode(ticket.orderId), offline: true });

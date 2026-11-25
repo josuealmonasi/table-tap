@@ -91,7 +91,7 @@ describe("every route that settles an order records the payment", () => {
   it("calls recordPayment wherever it sets paid", () => {
     for (const [file, complaint] of SETTLES) {
       const lines = read(file).split("\n").filter(l => !l.trimStart().startsWith("import"));
-      const marksPaid = lines.filter(l => /paid:\s*true|"ring_pos_sale_v2"|"settle_(orders|card_orders|sale)_v2"|"close_divided_bill_v2"/.test(l)).length;
+      const marksPaid = lines.filter(l => /paid:\s*true|"ring_pos_sale_v[23]"|"settle_(orders|card_orders|sale)_v2"|"close_divided_bill_v2"/.test(l)).length;
       // `recordPayment`, or the SQL that does the same job under a lock. The
       // calculator moved to `collect_on_sitting` so that reading the balance,
       // capping against it and inserting happen atomically — two waiters on
@@ -99,7 +99,7 @@ describe("every route that settles an order records the payment", () => {
       // route that settles orders and still has to record the money; this
       // invariant just had to learn the second spelling.
       const records = lines.filter(
-        l => /\brecordPayments?\s*\(/.test(l) || /collect_on_sitting|"ring_pos_sale_v2"|"settle_(orders|card_orders|split_share|sale)_v2"/.test(l),
+        l => /\brecordPayments?\s*\(/.test(l) || /collect_on_sitting|"ring_pos_sale_v[23]"|"settle_(orders|card_orders|split_share|sale)_v2"/.test(l),
       ).length;
       expect(marksPaid, `${file}: nothing marks an order paid any more`).toBeGreaterThan(0);
       expect(records, `${file}: ${complaint}`).toBeGreaterThan(0);
@@ -146,12 +146,12 @@ describe("every route that settles an order records the payment", () => {
     // The till inserted the order paid and then wrote the ledger: a failed
     // second write was a sale with no money in the corte.
     const src = read("src/app/api/pos/order/route.ts");
-    expect(src).toMatch(/rpc\("ring_pos_sale_v2"/);
+    expect(src).toMatch(/rpc\("ring_pos_sale_v3"/);
     expect(src, "the till marks a sale paid outside settle_sale").not.toMatch(/paid:\s*true/);
     expect(src, "the till writes the ledger outside settle_sale").not.toMatch(/recordPayments?\(/);
     expect(src, "the till inserts outside its transaction").not.toMatch(/\.insert\(/);
     const offline = read("src/lib/pos-offline.ts");
-    expect(offline).toMatch(/rpc\("record_offline_sale"/);
+    expect(offline).toMatch(/rpc\("record_offline_sale_v2"/);
     expect(offline, "offline stock is still a second request").not.toMatch(/rpc\("take_stock_floor"/);
     const schema = read("supabase/schema.sql");
     expect(schema).toContain("v_ticket := public.ring_pos_sale_v2(p_restaurant");

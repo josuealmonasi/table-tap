@@ -875,8 +875,18 @@ dishes on a bill the restaurant has just cancelled.
   creation and withdrawal deletion share the restaurant money lock and check
   the exact open shift inside the transaction that writes the change.
   Online receipts are dated after their money lock, so a collection waiting
-  behind a close is dated after that close. Offline receipts retain the date
-  the cash was taken. Closing rechecks unapproved offline cash under the same
+  behind a close is dated after that close. A till cash sale is also bound to
+  the shift open when the route received it (`payments.cash_shift_id`, set
+  once by `ring_pos_sale_v3`): it counts in that shift whatever its date, and
+  one posted after that shift closed shows on the shift's record as cash that
+  arrived after the count, never in the next shift. Unbound receipts (older
+  rows, offline sales, sales with no shift open) count by their date. Offline
+  receipts retain the date the cash was taken. An offline receipt is posted
+  automatically only if the menu's pricing (`offline_pricing_revision_v1`) is
+  unchanged under the money lock since the route compared it; otherwise it
+  waits in Held sales. An opening carries the dialog's reference
+  (`open_cash_shift_v2`), so a retry returns the shift it opened. A close
+  retry is answered with its saved, signed result before the held-cash check. Closing rechecks unapproved offline cash under the same
   lock as queue submission and refuses to sign until it is reviewed. A
   difference ("Sobrante" / "Faltante") is
   explained once, by the closer or a manager. Withdrawals (`cash_movements`)
