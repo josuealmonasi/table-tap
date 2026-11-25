@@ -144,7 +144,7 @@ export default function OrdersBoard({
         toast(plan, "error");
         return;
       }
-      const words = cancelWording(plan, n => formatMoney(n, order.currency ?? restaurant.currency), t);
+      const words = cancelWording(plan, (n, currency) => formatMoney(n, currency ?? order.currency ?? restaurant.currency), t);
       const ok = await confirm({
         title: t("orders.cancelConfirm", { code: boardOrderCode(order) }),
         message: words.message,

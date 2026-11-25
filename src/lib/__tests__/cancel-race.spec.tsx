@@ -4,11 +4,13 @@ const rpc = vi.fn();
 const resolve = vi.hoisted(() => vi.fn());
 vi.mock("@/lib/whole-bill-pages", () => ({ resolveCheckoutPages: resolve }));
 const refunds = vi.fn();
+const invalidate = vi.fn();
+vi.mock("@/lib/public-menu-cache", () => ({ invalidatePublicMenu: invalidate }));
 const execute = vi.fn();
 const previous = vi.fn();
 const snapshot = {
   order: { id: "o1", paid: false, account_id: "a1", stripe_refund_id: null },
-  plan: { refunds: [], handBack: [] }, hold: null as string | null, holdId: "checkout-a",
+  summary: { paid: false, refund: 0, cash: 0, terminal: 0, withTable: 0 }, hold: null as string | null, holdId: "checkout-a",
 };
 vi.mock("@/lib/api-guard", () => ({ actingManager: async () => ({ restaurantId: "r1", email: "ana" }) }));
 vi.mock("@/lib/api-error", () => ({ apiError: async (error: string, status: number) => NextResponse.json({ error }, { status }) }));
@@ -30,6 +32,7 @@ describe("cancellation and collection agree on the plan's state", () => {
       p_expected_paid: false, p_expected_account: "a1", p_expected_hold: null, p_expected_checkout: "checkout-a",
     }));
     expect(execute).not.toHaveBeenCalled();
+    expect(invalidate).not.toHaveBeenCalled();
   });
   it("passes the hold read with the plan, rather than a fresh hold", async () => {
     snapshot.hold = "2026-10-01T12:00:00Z";
@@ -41,6 +44,9 @@ describe("cancellation and collection agree on the plan's state", () => {
     rpc.mockResolvedValue({ data: { outcome: "cancelled", adjustment: "a1" }, error: null });
     expect((await cancel()).status).toBe(200);
     expect(refunds).toHaveBeenCalledWith("r1", "a1");
+    expect(invalidate).toHaveBeenCalledExactlyOnceWith("r1");
+    expect(invalidate.mock.invocationCallOrder[0]).toBeGreaterThan(rpc.mock.invocationCallOrder[0]);
+    expect(invalidate.mock.invocationCallOrder[0]).toBeLessThan(refunds.mock.invocationCallOrder[0]);
   });
 });
 

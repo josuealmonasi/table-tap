@@ -182,6 +182,8 @@ drop function if exists public.loyalty_delete_card(uuid, text, text);
 -- Dropping the cards also drops their per-card stop-token index.
 drop table if exists loyalty_cards       cascade;
 drop table if exists loyalty_programs    cascade;
+drop function if exists public.rearm_kitchen_print_v1(uuid, uuid) cascade;
+drop function if exists public.account_statement_v1(uuid, uuid) cascade;
 drop table if exists print_jobs          cascade;
 drop table if exists bill_split_checkout_slots cascade;
 drop table if exists bill_split_slots    cascade;

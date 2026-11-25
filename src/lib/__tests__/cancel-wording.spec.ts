@@ -51,6 +51,18 @@ describe("the cancel dialog says what will really happen", () => {
     expect(w.done).toBe("orders.cancelledHandBack(MX$40.00)");
   });
 
+  it("shows the review amount alongside any Stripe request and uses the review currency", () => {
+    const w = cancelWording(summary({ pending: true, refund: 60, review: [{ amount: 350, currency: "USD" }] }),
+      (amount, currency) => currency ? `${currency} ${amount}` : money(amount), t);
+    expect(w).toEqual({
+      message: "orders.refundMsg(MX$60.00) orders.reviewCancelMsg(USD 350)",
+      confirmKey: "orders.cancelOrder",
+      done: "orders.refundPendingDone",
+    });
+    expect(en.orders.reviewCancelMsg).toContain("{amount}");
+    expect(es.orders.reviewCancelMsg).toContain("{amount}");
+  });
+
   it("just cancels an order nobody paid", () => {
     expect(cancelWording(summary({ paid: false }), money, t)).toEqual({
       message: "orders.unpaidCancelMsg",
