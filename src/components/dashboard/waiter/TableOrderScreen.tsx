@@ -219,6 +219,8 @@ export default function TableOrderScreen({
                 item={openItem}
                 currency={restaurant.currency}
                 extras={extrasFor(openItem)}
+                promos={promos}
+                cartLines={lines}
                 onBack={() => setOpenItem(null)}
                 onAdd={line => {
                   if (!sending) cart.add(line);
@@ -237,6 +239,8 @@ export default function TableOrderScreen({
                 currency={restaurant.currency}
                 extras={extrasFor(edited)}
                 initialLine={editing}
+                promos={promos}
+                cartLines={lines.filter(l => l.cartId !== editing.cartId)}
                 onBack={() => setEditing(null)}
                 onAdd={line => {
                   if (!sending) cart.replace(editing.cartId, line);

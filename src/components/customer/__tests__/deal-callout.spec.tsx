@@ -14,10 +14,13 @@ vi.stubGlobal("React", React);
 const item = { id: "rice", name: "Rice", emoji: "", price: 3, modifiers: [], dietary: [] } as unknown as MenuItem;
 const promo: CartPromo = { id: "deal", name: "2x1", kind: "bogo", buyQty: 2, payQty: 1, itemIds: ["rice"] };
 
+const rice = (qty: number): OrderLineItem =>
+  ({ itemId: "rice", name: "Rice", emoji: "", price: 3, qty, mods: {}, extras: [] }) as OrderLineItem;
+
 function screen(qty: number, locale: "en" | "es", otherQty = 0): string {
-  const line = { itemId: "rice", name: "Rice", emoji: "", price: 3, qty, mods: {}, extras: [] } as OrderLineItem;
+  const others = otherQty ? [rice(otherQty)] : [];
   return renderToStaticMarkup(<LocaleProvider locale={locale}><ItemDetailScreen item={item} extras={[]} currency="MXN"
-    onBack={() => {}} onAdd={() => {}} initialLine={line} inCartQty={qty + otherQty} promo={promo} /></LocaleProvider>);
+    onBack={() => {}} onAdd={() => {}} initialLine={rice(qty)} cartLines={others} promos={[promo]} /></LocaleProvider>);
 }
 
 describe("dish deal callout and price", () => {
