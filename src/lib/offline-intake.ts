@@ -7,6 +7,7 @@ import { readOfflineContext } from "@/lib/offline-authority";
 import { offlineCharge, offlineLines } from "@/lib/offline-sale";
 import type { PosSaleBody } from "@/lib/pos-sale";
 import { ringOffline } from "@/lib/pos-offline";
+import { MAX_CART_LINES, MAX_TILL_LINES } from "@/lib/cart-limits";
 
 /** Receiving collected money is separate from allowing a new sale. A durable
  * queue entry lets the device sign out while a manager reviews the exception. */
@@ -20,7 +21,7 @@ export async function receiveOffline(actor: Actor, body: PosSaleBody & { offline
   if (!charge || (body.note != null && typeof body.note !== "string")
     || (body.customerName != null && typeof body.customerName !== "string")
     || !/^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(body.posRef ?? "")
-    || !Array.isArray(body.items) || !body.items.length || body.items.length > 100
+    || !Array.isArray(body.items) || !body.items.length || body.items.length > MAX_CART_LINES
     || offlineLines(body.items).length !== body.items.length) {
     return await apiError("apiErr.offlineSale", 400, undefined, { held: true });
   }
@@ -36,8 +37,12 @@ export async function receiveOffline(actor: Actor, body: PosSaleBody & { offline
   // (security sweep 2026-11-24). Unreadable means suspended: nothing is rung.
   const { data: state, error: stateError } = await db.from("restaurants").select("suspended_at").eq("id", actor.restaurantId).maybeSingle();
   const suspended = Boolean(stateError || !state || state.suspended_at);
+  // More lines than a till sale may carry: held before the till capped its
+  // cart. Never rung on its own; queued whole so a manager approves or
+  // resolves it, instead of refused and stranded on the tablet (bl39 #4).
+  const oversized = body.items!.length > MAX_TILL_LINES;
   let reason = "";
-  if (!queueOnly && !queued && !blocked && !suspended && offlineCharge(body.offline)) {
+  if (!queueOnly && !queued && !oversized && !blocked && !suspended && offlineCharge(body.offline)) {
     const res = await ringOffline(actor, body);
     if (res.ok || res.status !== 409) return res;
     const data = await res.clone().json();
@@ -49,6 +54,7 @@ export async function receiveOffline(actor: Actor, body: PosSaleBody & { offline
   // rather than a reason to leave collected money stranded on a tablet.
   if (!offlineCharge(body.offline)) reason = offlineCharge(body.offline, Date.now(), true)
     ? "apiErr.offlineTooOld" : "recovery.clockCheck";
+  if (oversized && !blocked && !suspended) reason = "apiErr.offlineTooManyLines";
   const context = readOfflineContext(body.collectorContext, actor.restaurantId);
   const { data, error: writeError } = await db.rpc("queue_offline_sale", {
     p_restaurant: actor.restaurantId, p_ref: body.posRef, p_body: body,

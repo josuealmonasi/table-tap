@@ -1523,6 +1523,7 @@ foundingLeftBody: "Quien contrata ahora conserva este precio de suscripción mie
 
   pos: {
     offlineNoAccount: "Sin conexión no se puede cargar a una cuenta: cobra en efectivo o con tu terminal.",
+    tooManyLines: "Una venta admite hasta {n} líneas. Suma a una línea que ya esté en ella o cobra el resto como otra venta.",
     saleNeedsReview: "La venta sigue guardada en este dispositivo. Pide a un gerente que la revise.",
     saleMismatch: "Cobraste {collected}; el sistema registró {settled}. La venta sigue en este dispositivo: pide a un gerente que cuadre las dos cifras.",
     saleUnsettled: "Aún sin confirmar: la venta sigue en este dispositivo y se enviará de nuevo sola.",
@@ -1658,6 +1659,7 @@ foundingLeftBody: "Quien contrata ahora conserva este precio de suscripción mie
     currencyLockedMonth: "Este mes ya hay comisiones por pagos con tarjeta en tu moneda actual. Puedes cambiarla a partir del día 1 del próximo mes.",
     mixedCurrencies: "Estos pedidos están en monedas distintas. Pide ayuda a tu mesero para pagar cada moneda por separado.",
     offlineTooOld: "Esta venta tiene más de 30 días. Un gerente debe revisar cuándo se cobró.",
+    offlineTooManyLines: "Esta venta tiene más de 100 líneas, más de las que la caja registra sola. Un gerente debe revisarla en Ventas guardadas.",
     offlineQueueRequired: "Envía primero esta venta guardada y luego revisa la copia recibida aquí.",
     offlineCollector: "Actualiza la caja antes de una venta nueva. Un gerente debe verificar quién hizo el cobro de esta venta guardada.",
     offlineApproval: "Los precios guardados difieren del menú. Un gerente debe aprobar el importe cobrado en Ventas guardadas.",

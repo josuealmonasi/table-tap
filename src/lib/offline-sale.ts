@@ -1,6 +1,7 @@
 import { round2 } from "@/lib/money";
 import { cashAmount } from "@/lib/cash-drawer";
 import type { ComboComponent, OrderExtra, OrderLineItem } from "@/lib/types";
+import { MAX_CART_LINES } from "@/lib/cart-limits";
 
 /**
  * A sale the till rang without a connection, as it arrives once one returns.
@@ -121,10 +122,14 @@ function offlineExtras(raw: unknown): OrderExtra[] {
  * The till's own lines, kept as the record of a sale whose dishes the menu no
  * longer has. Names and prices as the till had them, bounded; nothing in them
  * moves money, which is the collected total.
+ *
+ * Bounded by the cap every other order route has. Intake rings at most
+ * `MAX_TILL_LINES` on its own; a held receipt with more is queued, and a
+ * manager's approval records all of its lines.
  */
 export function offlineLines(items: unknown): OrderLineItem[] {
   if (!Array.isArray(items)) return [];
-  return items.slice(0, 100).flatMap((raw): OrderLineItem[] => {
+  return items.slice(0, MAX_CART_LINES).flatMap((raw): OrderLineItem[] => {
     if (!raw || typeof raw !== "object") return [];
     const l = raw as Record<string, unknown>;
     const qty = Math.trunc(Number(l.qty));

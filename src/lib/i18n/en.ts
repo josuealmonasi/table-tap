@@ -1526,6 +1526,7 @@ foundingLeftBody: "Subscribe now and keep this subscription price for as long as
 
   pos: {
     offlineNoAccount: "Without a connection a sale cannot go on an account: take cash or use your terminal.",
+    tooManyLines: "A sale holds up to {n} lines. Add to a line already in it, or ring the rest as another sale.",
     saleNeedsReview: "The sale is kept on this device. Ask a manager to check it.",
     saleMismatch: "You charged {collected}; the system recorded {settled}. The sale stays on this device: ask a manager to match the two.",
     saleUnsettled: "Not confirmed yet: the sale stays on this device and is sent again by itself.",
@@ -1661,6 +1662,7 @@ foundingLeftBody: "Subscribe now and keep this subscription price for as long as
     currencyLockedMonth: "This month already has card fees in your current currency. You can change it from the 1st of next month.",
     mixedCurrencies: "These orders use different currencies. Please ask your waiter to help you pay each currency separately.",
     offlineTooOld: "This sale is over 30 days old. A manager must review when the money was collected.",
+    offlineTooManyLines: "This sale has more than 100 lines, more than the till records on its own. A manager must review it in Held sales.",
     offlineQueueRequired: "Send this saved sale first, then review the copy received here.",
     offlineCollector: "Refresh the till before making a new sale. A manager must verify the original collector of this saved sale.",
     offlineApproval: "The saved prices differ from the menu. A manager must approve the collected amount in Held sales.",

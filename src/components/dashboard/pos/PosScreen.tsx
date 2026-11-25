@@ -17,7 +17,8 @@ import { ConfirmProvider } from "@/components/ui/ConfirmDialog";
 import type { CartItem } from "@/hooks/useCart";
 import { DietaryTagsProvider } from "@/components/DietaryTagsContext";
 import type { StoredDietaryTag } from "@/lib/dietary";
-import type { Category, MenuItem, Order, Restaurant } from "@/lib/types";
+import type { Category, MenuItem, Order, OrderLineItem, Restaurant } from "@/lib/types";
+import { MAX_TILL_LINES } from "@/lib/cart-limits";
 import type { CartPromo } from "@/lib/pricing";
 import { usePosCart } from "@/hooks/usePosCart";
 import { usePosSaleDetails } from "@/hooks/usePosSaleDetails";
@@ -110,7 +111,13 @@ export default function PosScreen({
   // Two tills sell at once; the counts on the tiles follow the kitchen.
   useLiveStock(restaurant.id);
 
-  const cart = usePosCart(restaurant.id);
+  const cart = usePosCart(restaurant.id, true, MAX_TILL_LINES);
+  /** A line into the sale, or the reason it does not fit (bl39 #4). */
+  function addLine(line: OrderLineItem, one = false): boolean {
+    const fits = one ? cart.addOne(line) : cart.add(line);
+    if (!fits) toast(t("pos.tooManyLines", { n: MAX_TILL_LINES }), "error");
+    return fits;
+  }
   const { lines } = cart;
   const details = usePosSaleDetails();
   // The connection, and the sales this device is holding until it returns.
@@ -198,7 +205,7 @@ export default function PosScreen({
   /** One tap: in at once when there is nothing to choose, else its screen. */
   function tap(dish: MenuItem): void {
     const line = quickLine(dish, extrasFor(dish).length);
-    if (line) cart.addOne(line);
+    if (line) addLine(line, true);
     else setOpenItem(dish);
   }
 
@@ -209,7 +216,7 @@ export default function PosScreen({
     const rebuilt = lastSale
       .map(l => rebuildLine(l, itemById, extraById, extrasByProduct))
       .filter((l): l is NonNullable<typeof l> => l !== null);
-    rebuilt.forEach(cart.add);
+    rebuilt.every(line => addLine(line));
     const dropped = lastSale.length - rebuilt.length;
     if (dropped > 0) toast(t("pos.repeatDropped", { n: dropped }), "error");
   }
@@ -322,7 +329,7 @@ export default function PosScreen({
                 extrasByProduct={extrasByProduct}
                 onBack={() => setOpenCombo(null)}
                 onAdd={line => {
-                  if (!sending) cart.add(line);
+                  if (!sending) addLine(line);
                   setOpenCombo(null);
                 }}
               />
@@ -356,7 +363,7 @@ export default function PosScreen({
                     if (!sending) cart.replace(editing.cartId, line);
                     setEditing(null);
                   } else {
-                    if (!sending) cart.add(line);
+                    if (!sending) addLine(line);
                     setOpenItem(null);
                   }
                 }}
