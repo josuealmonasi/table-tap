@@ -224,6 +224,7 @@ drop function if exists public.loyalty_redeem_once(uuid, text, text, int, int, u
 drop function if exists public.loyalty_redeem(uuid, text, text);
 drop function if exists public.loyalty_redeem(uuid, text, text, int);
 drop function if exists public.loyalty_stamp(uuid, text, text);
+drop function if exists public.loyalty_stamp_v2(uuid, text, text, uuid);
 drop function if exists public.loyalty_unstamp(uuid, uuid, date);
 drop function if exists public.loyalty_progress(uuid);
 drop function if exists public.loyalty_steps_ok(jsonb);
@@ -455,6 +456,7 @@ drop function if exists public.settled_by_write_off(uuid, uuid);
 drop function if exists public.fix_loyalty_card_on_payment() cascade;
 drop function if exists public.queue_ticket_email() cascade;
 drop function if exists public.claim_ticket_emails(int);
+drop function if exists public.ticket_email_address_for_send(uuid, uuid, uuid, uuid[]);
 drop function if exists public.set_card_email(uuid, text, text, text, text);
 drop function if exists public.set_card_email_v2(uuid, text, text, text, text, text, text);
 drop function if exists public.confirm_card_email(text);

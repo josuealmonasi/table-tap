@@ -186,6 +186,12 @@ export default function PosScreen({
 
   // The sale this till rang last, to ring again. Read after mounting (it is
   // this device's), and again each time a sale is rung.
+  // The paid sale "Sellar tarjeta" stamps against: the last one this till
+  // charged, until it stamps a card (review 2026-11-25).
+  const [stampSale, setStampSale] = useState<string | null>(null);
+  useEffect(() => {
+    if (ticket?.orderId) setStampSale(ticket.orderId);
+  }, [ticket]);
   const [lastSale, setLastSale] = useState<RememberedLine[]>([]);
   useEffect(() => setLastSale(readLastSale(restaurant.id)), [restaurant.id, ticket]);
 
@@ -244,7 +250,7 @@ export default function PosScreen({
               <ScanToCollect
                 onFound={id => router.push(`/dashboard/bills?order=${id}`)}
               />
-              {loyalty && <StampCard />}
+              {loyalty && <StampCard saleId={stampSale} canOverride={canRecover} onSaleUsed={() => setStampSale(null)} />}
               <PosCashDrawer shiftId={shiftId} shiftOpen={shiftOpen} shiftCurrency={shiftCurrency} currency={restaurant.currency} heldSales={offline.held.length} heldCash={heldCashWaiting} />
             </div>
           </header>

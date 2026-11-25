@@ -4036,6 +4036,11 @@ alter table ticket_email_outbox add column if not exists failure_reason text;
 -- the identical body under the same idempotency key, which the provider
 -- answers with the original email instead of refusing a changed payload.
 alter table ticket_email_outbox add column if not exists mail_body jsonb;
+-- The settlement a ticket belongs to: card, sitting (or the sale itself) and
+-- address generation, written when it is queued. A claim takes every waiting
+-- row of a group together, so a table of 21 orders settled at once is one
+-- email, never 20 and then 1 (review 2026-11-25, finding 3).
+alter table ticket_email_outbox add column if not exists group_key text;
 create index if not exists ticket_email_outbox_pending on ticket_email_outbox(created_at) where finished_at is null;
 alter table ticket_email_outbox enable row level security;
 revoke all on ticket_email_outbox from anon, authenticated;
@@ -4048,8 +4053,10 @@ begin
     or public.settled_by_write_off(new.restaurant_id, new.id) then
     return null;
   end if;
-  insert into ticket_email_outbox (restaurant_id, card_id, order_id, session_id, address_key)
-  select new.restaurant_id, c.id, new.id, new.session_id, c.email_unsubscribe from loyalty_cards c
+  insert into ticket_email_outbox (restaurant_id, card_id, order_id, session_id, address_key, group_key)
+  select new.restaurant_id, c.id, new.id, new.session_id, c.email_unsubscribe,
+         c.id::text || ':' || coalesce(new.session_id, new.id)::text || ':' || c.email_unsubscribe::text
+    from loyalty_cards c
    where c.id = new.loyalty_card_id and c.restaurant_id = new.restaurant_id and c.email is not null
   on conflict (order_id) do nothing;
   return null;
@@ -4075,8 +4082,8 @@ begin
   -- sender holds part of it.
   update ticket_email_outbox o set finished_at = now(), outcome = 'expired', mail_body = null
    where o.finished_at is null
-     and coalesce(o.batch_key, o.id::text) in (
-       select coalesce(t.batch_key, t.id::text) from ticket_email_outbox t
+     and coalesce(o.batch_key, o.group_key, o.id::text) in (
+       select coalesce(t.batch_key, t.group_key, t.id::text) from ticket_email_outbox t
         where t.finished_at is null
         group by 1
        having min(t.created_at) < now() - interval '24 hours'
@@ -4084,17 +4091,23 @@ begin
   -- A keyed batch is claimed whole: the limit must not split it, or its retry
   -- would reuse the key with fewer orders. A failed send waits out its
   -- backoff, and fresh tickets come before retries, so rows that keep failing
-  -- never fill every claim ahead of newer ones.
+  -- never fill every claim ahead of newer ones. A fresh row brings every
+  -- waiting row of its settlement (`group_key`) with it, past the limit if
+  -- need be, so one payment is one email; a retrying batch never takes new
+  -- rows in.
   return query
   with seed as (
-    select t.id, t.batch_key from ticket_email_outbox t
+    select t.id, t.batch_key, t.group_key from ticket_email_outbox t
      where t.finished_at is null and (t.claimed_at is null or t.claimed_at < now() - interval '5 minutes')
        and (t.next_attempt_at is null or t.next_attempt_at <= now())
      order by t.attempts, t.created_at limit greatest(1, least(p_limit, 50))
      for update
   ), mates as (
     select t.id from ticket_email_outbox t
-     where t.finished_at is null and t.batch_key in (select s.batch_key from seed s where s.batch_key is not null)
+     where t.finished_at is null
+       and (t.batch_key in (select s.batch_key from seed s where s.batch_key is not null)
+         or (t.batch_key is null
+             and t.group_key in (select s.group_key from seed s where s.batch_key is null and s.group_key is not null)))
        and (t.claimed_at is null or t.claimed_at < now() - interval '5 minutes')
      for update
   )
@@ -4163,8 +4176,12 @@ begin
   if public.loyalty_progress(v_card.id) < v_visits then return; end if;
 
   v_used := case when v_visits = v_last then v_last else 0 end;
-  insert into loyalty_redemptions (card_id, restaurant_id, visits_used, reward, actor_email, step, round_no)
-  values (v_card.id, p_restaurant, v_used, coalesce(v_next->>'reward', ''), p_actor, v_visits, v_card.round_no);
+  -- Timed after the card lock, not at the transaction's start: a redemption
+  -- that waited on the lock behind a stamp would otherwise carry a time before
+  -- that visit, and the undo guard (r.created_at >= visit's created_at) would
+  -- let the spent visit be taken back (review 2026-11-25, finding 4).
+  insert into loyalty_redemptions (card_id, restaurant_id, visits_used, reward, actor_email, step, round_no, created_at)
+  values (v_card.id, p_restaurant, v_used, coalesce(v_next->>'reward', ''), p_actor, v_visits, v_card.round_no, clock_timestamp());
 
   -- The last step closes the round: the card starts the next one on the
   -- program's ladder as it is now.
@@ -4259,6 +4276,126 @@ end;
 $$;
 revoke all on function public.loyalty_redeem_once(uuid, text, text, int, int, uuid) from public, anon, authenticated;
 grant execute on function public.loyalty_redeem_once(uuid, text, text, int, int, uuid) to service_role;
+
+-- ============================================================================
+-- The address a ticket goes to, read again right before the provider is called
+-- (review 2026-11-25, finding 2). The sender used to read the card once, then
+-- render the PDF, then send: an address removed meanwhile still got the email.
+-- This takes a share lock on the card, which `set_card_email`'s update waits
+-- on and which waits on it: a removal that commits first answers `no_email`
+-- here and nothing is sent. It also confirms this sender still owns every row
+-- of the group under its claim (`lost` otherwise) and renews the lease, so the
+-- group is not reclaimed while the provider call is in flight.
+-- ============================================================================
+create or replace function public.ticket_email_address_for_send(
+  p_restaurant uuid, p_card uuid, p_claim uuid, p_ids uuid[]
+) returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  v_email text;
+  v_key   uuid;
+  v_owned int;
+begin
+  if p_claim is null or coalesce(cardinality(p_ids), 0) = 0 then
+    return jsonb_build_object('outcome', 'lost');
+  end if;
+  select c.email, c.email_unsubscribe into v_email, v_key from loyalty_cards c
+   where c.id = p_card and c.restaurant_id = p_restaurant
+   for share;
+  select count(*) into v_owned from (
+    select 1 from ticket_email_outbox o
+     where o.id = any(p_ids) and o.restaurant_id = p_restaurant and o.card_id = p_card
+       and o.claim = p_claim and o.finished_at is null
+     for update) owned;
+  if v_owned <> cardinality(p_ids) then return jsonb_build_object('outcome', 'lost'); end if;
+  if v_email is null or v_key is null or exists (
+    select 1 from ticket_email_outbox o where o.id = any(p_ids) and o.address_key is distinct from v_key) then
+    return jsonb_build_object('outcome', 'no_email');
+  end if;
+  update ticket_email_outbox o set claimed_at = now() where o.id = any(p_ids) and o.claim = p_claim;
+  return jsonb_build_object('outcome', 'ready', 'email', v_email);
+end;
+$$;
+revoke all on function public.ticket_email_address_for_send(uuid, uuid, uuid, uuid[]) from public, anon, authenticated;
+grant execute on function public.ticket_email_address_for_send(uuid, uuid, uuid, uuid[]) to service_role;
+
+-- ============================================================================
+-- "Sellar tarjeta" is tied to a sale (review 2026-11-25, finding 1). The old
+-- stamp took a card code and nothing else, so a waiter could give a two-visit
+-- card its visits on two days with no purchase and redeem the reward. A waiter
+-- or a cashier now names a paid sale: this restaurant's, not cancelled or
+-- written off, paid today in the restaurant's zone, and not already behind a
+-- stamp on another card — including the card the sale carried when it was
+-- paid, which the payment itself stamped. The route lets a manager or the
+-- owner stamp without a sale (null `p_order`) and records it as an override.
+-- `loyalty_stamp` keeps its signature for the deployed route during rollout.
+-- Answers nothing when the card is not here or the program is off, as before;
+-- `refusal` names why a sale did not qualify (saleNotPaid, saleNotToday,
+-- saleUsed).
+-- ============================================================================
+alter table loyalty_visits add column if not exists order_id uuid references orders(id) on delete set null;
+create unique index if not exists loyalty_visits_order_once on loyalty_visits(order_id) where order_id is not null;
+
+create or replace function public.loyalty_stamp_v2(p_restaurant uuid, p_code text, p_actor text, p_order uuid)
+returns table (card_id uuid, progress int, goal int, stamped boolean, refusal text)
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_card     loyalty_cards%rowtype;
+  v_order    orders%rowtype;
+  v_zone     text;
+  v_day      date;
+  v_refusal  text;
+  v_inserted int;
+begin
+  if not public.loyalty_open(p_restaurant) then return; end if;
+  select coalesce(r.timezone, 'America/Mexico_City') into v_zone from restaurants r where r.id = p_restaurant;
+  v_day := (now() at time zone v_zone)::date;
+
+  -- The sale before the card: a payment holds the order and then touches the
+  -- card (its visit's key), so this order of locks cannot deadlock with it.
+  -- Two stamps naming one sale are served one after the other.
+  if p_order is not null then
+    select * into v_order from orders o where o.id = p_order and o.restaurant_id = p_restaurant for update;
+  end if;
+  select * into v_card from loyalty_cards c
+   where c.code = p_code and c.restaurant_id = p_restaurant
+   for update;
+  if not found then return; end if;
+
+  if p_order is not null then
+    if v_order.id is null or not v_order.paid or v_order.status = 'cancelled' or v_order.written_off
+       or public.settled_by_write_off(p_restaurant, p_order) then
+      v_refusal := 'saleNotPaid';
+    elsif (coalesce(v_order.offline_at, v_order.created_at) at time zone v_zone)::date <> v_day and not exists (
+      select 1 from payments p
+       where p.restaurant_id = p_restaurant
+         and (p.order_id = p_order or (v_order.session_id is not null and p.session_id = v_order.session_id))
+         and (p.created_at at time zone v_zone)::date = v_day) then
+      v_refusal := 'saleNotToday';
+    elsif (v_order.loyalty_card_id is not null and v_order.loyalty_card_id <> v_card.id)
+       or exists (select 1 from loyalty_visits v where v.order_id = p_order and v.card_id <> v_card.id) then
+      v_refusal := 'saleUsed';
+    end if;
+    if v_refusal is not null then
+      return query select v_card.id, public.loyalty_progress(v_card.id), v_card.goal, false, v_refusal;
+      return;
+    end if;
+  end if;
+
+  -- Timed after the lock, like a redemption, so the undo guard compares
+  -- the order things really happened in.
+  insert into loyalty_visits (card_id, restaurant_id, visit_day, actor_email, order_id, created_at)
+  values (v_card.id, p_restaurant, v_day, p_actor, p_order, clock_timestamp())
+  on conflict do nothing;
+  get diagnostics v_inserted = row_count;
+
+  return query select v_card.id, public.loyalty_progress(v_card.id), v_card.goal, v_inserted = 1, null::text;
+end;
+$$;
+revoke all on function public.loyalty_stamp_v2(uuid, text, text, uuid) from public, anon, authenticated;
+grant execute on function public.loyalty_stamp_v2(uuid, text, text, uuid) to service_role;
 
 -- ── Customer accounts ("cuenta abierta") ───────────────────────────────────
 -- A customer the restaurant trusts to pay later: food goes out now and is paid

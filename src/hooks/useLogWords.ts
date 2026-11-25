@@ -55,9 +55,11 @@ export function useLogWords(currency: string): {
     for (const key of MONEY_FIELDS) {
       if (fields[key]) parts.push(`${t(`log.cashField.${key}`)} ${formatMoney(Number(fields[key]), currency)}`);
     }
+    // A visit stamped by a manager with no sale behind it (review 2026-11-25).
+    if (fields.override === "no sale") parts.push(t("dash.logOverride"));
     if (fields.note) parts.push(fields.note);
     if (fields.explained) parts.push(fields.explained);
-    const shown = ["stock", "currency", "table", "code", "orders", "amount", "method", "order", "left", "note", "explained", ...MONEY_FIELDS];
+    const shown = ["stock", "currency", "table", "code", "orders", "amount", "method", "order", "left", "override", "note", "explained", ...MONEY_FIELDS];
     for (const [key, value] of Object.entries(fields)) {
       if (!shown.includes(key)) parts.push(`${key}: ${value}`);
     }

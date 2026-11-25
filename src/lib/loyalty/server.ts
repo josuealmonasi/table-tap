@@ -118,7 +118,13 @@ export interface CardResult {
   round: number | null;
 }
 
-export type StampResult = (CardResult & { stamped: boolean }) | { error: "notHere" | "failed" };
+/** Why the sale named for a stamp did not qualify (`loyalty_stamp_v2`). */
+export type StampRefusal = "saleNotPaid" | "saleNotToday" | "saleUsed";
+
+export type StampResult =
+  | (CardResult & { stamped: boolean })
+  | { error: "notHere" | "failed" }
+  | { refused: StampRefusal };
 
 /**
  * Today's visit on a card, for this restaurant only.
@@ -126,19 +132,23 @@ export type StampResult = (CardResult & { stamped: boolean }) | { error: "notHer
  * `stamped: false` is not a failure: the card already has today's visit, and
  * saying so is the answer. The database function refuses a card of another
  * restaurant's by returning nothing, which is the one case worth an error.
+ * `saleId` is the paid sale the visit stands on; null only for a manager's
+ * override, which the route alone may decide (review 2026-11-25).
  */
-export async function stamp(restaurantId: string, code: string, actor: string): Promise<StampResult> {
+export async function stamp(restaurantId: string, code: string, actor: string, saleId: string | null): Promise<StampResult> {
   const db = createAdminClient();
-  const { data, error } = await db.rpc("loyalty_stamp", {
+  const { data, error } = await db.rpc("loyalty_stamp_v2", {
     p_restaurant: restaurantId,
     p_code: code,
     p_actor: actor,
+    p_order: saleId,
   });
   if (error) {
     console.error("loyalty stamp failed:", error.message);
     return { error: "failed" };
   }
-  const row = (data as { progress: number; goal: number; stamped: boolean }[] | null)?.[0];
+  const row = (data as { progress: number; goal: number; stamped: boolean; refusal: StampRefusal | null }[] | null)?.[0];
   if (!row) return { error: "notHere" };
+  if (row.refusal) return { refused: row.refusal };
   return { ...await standingAfter(restaurantId, code, row), stamped: row.stamped };
 }
