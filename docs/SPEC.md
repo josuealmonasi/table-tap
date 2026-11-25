@@ -3718,5 +3718,7 @@ Every digest carries that address's own stop link (`/digest/stop`, a button,
 so mail scanners change nothing). Unconfirmed addresses are deleted after 7
 days by an hourly pg_cron job. Stored in `digest_recipients` (server only; the
 confirm token is kept hashed; the limit is counted under the restaurant's row
-lock in `add_digest_recipient_v1`). The digest sender reads confirmed addresses
-with `confirmedRecipients()`. Privacy notice version 2026-11-25.
+lock in `add_digest_recipient_v1`). Confirmed addresses receive the digest in the
+owner's saved language under the same daily claim, even when the owner has
+opted out. A mail client can also submit the one-click unsubscribe form for
+that address. Privacy notice version 2026-11-25.

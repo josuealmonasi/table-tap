@@ -1,5 +1,6 @@
 import { digestStopToken } from "@/lib/digest-stop-token";
-import { DEFAULT_LOCALE, isLocale } from "@/lib/i18n";
+import { confirmedRecipients } from "@/lib/digest-recipients";
+import { DEFAULT_LOCALE, isLocale, type Locale } from "@/lib/i18n";
 import { MAIL_BATCH_SIZE, sendMail, type MailBatch } from "@/lib/mail";
 import { everyRow } from "@/lib/paged";
 import { readDigestFigures } from "./digest-figures";
@@ -31,7 +32,9 @@ export async function recoverDailyDigests(context: RecoveryContext) {
     const people = await everyRow<Recipient>((a, b) => db.from("daily_digest_recipients")
       .select("user_id, email, is_owner, locale").eq("restaurant_id", row.restaurant_id)
       .order("is_owner", { ascending: false }).order("user_id").range(a, b), "the digest recipients");
-    if (!people.length) return false;
+    // The owner's extra addresses, confirmed from their own inboxes (owner 2026-11-25).
+    const outside = await confirmedRecipients(row.restaurant_id, db);
+    if (!people.length && !outside.length) return false;
     const origin = process.env.NEXT_PUBLIC_SITE_URL ?? "https://tabletap.shop";
     const dashboard = new URL("/dashboard", origin).href;
     // Finish building every message before taking the claim.
@@ -42,6 +45,14 @@ export async function recoverDailyDigests(context: RecoveryContext) {
         stop: new URL(`/digest/opt-out?t=${token}`, origin).href,
         oneClick: new URL(`/api/digest/opt-out?t=${token}`, origin).href }) };
     });
+    if (outside.length) {
+      const locale = await readOutsideLocale(db, row.owner_id, people);
+      for (const r of outside) {
+        mails.push({ to: r.email, ...digestMail(figures, { ...row, locale, owner: false, guest: true, dashboard,
+          stop: new URL(`/digest/stop?t=${r.stopToken}`, origin).href,
+          oneClick: new URL(`/api/digest/stop?t=${r.stopToken}`, origin).href }) });
+      }
+    }
 
     if (!hasTime(context)) return false;
     const claim = db.from("restaurants").update({ digest_sent_for: row.digest_day })
@@ -54,6 +65,18 @@ export async function recoverDailyDigests(context: RecoveryContext) {
     await deliver(context, row, mails);
     return true;
   }, "restaurant local 07:00");
+}
+
+async function readOutsideLocale(db: RecoveryContext["db"], ownerId: string | null, people: Recipient[]): Promise<Locale> {
+  if (!ownerId) return DEFAULT_LOCALE;
+  const owner = people.find(person => person.user_id === ownerId);
+  if (owner) return isLocale(owner.locale) ? owner.locale : DEFAULT_LOCALE;
+
+  // An owner can opt out without changing the language of their outside recipients.
+  const { data, error } = await db.auth.admin.getUserById(ownerId);
+  if (error && error.code !== "user_not_found") throw new Error("Could not read the digest owner's locale", { cause: error });
+  const locale: unknown = data?.user?.user_metadata.locale;
+  return isLocale(locale) ? locale : DEFAULT_LOCALE;
 }
 
 async function deliver(context: RecoveryContext, row: Due, mails: MailBatch["messages"]): Promise<void> {

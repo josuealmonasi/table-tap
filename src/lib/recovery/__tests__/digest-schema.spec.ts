@@ -17,6 +17,9 @@ it("limits digest discovery and confirmed recipient addresses to service-role re
 
 it("discovers work at local 07:00 and matches only paid orders inside the completed local day", () => {
   const due = schema.split("create or replace view daily_digests_due")[1]?.split(";")[0];
+  expect(schema.indexOf("create table if not exists digest_recipients ("))
+    .toBeLessThan(schema.indexOf("create or replace view daily_digests_due"));
+  expect(due).toContain("or exists (select 1 from digest_recipients x where x.restaurant_id = r.id and x.status = 'confirmed')");
   expect(due).toContain("now() at time zone r.timezone");
   expect(due).toContain("clock.local_now::time >= time '07:00'");
   expect(due).toContain("r.digest_sent_for < clock.local_now::date - 1");

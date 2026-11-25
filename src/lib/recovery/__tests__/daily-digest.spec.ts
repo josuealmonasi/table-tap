@@ -23,10 +23,11 @@ const figures: DigestFigures = {
   attention: { discounts: 0, writeOffs: 0, offline: 0, due: 0, accounts: { count: 0, balances: [] }, stockouts: [] },
 };
 
-function fixture(people = users, startingClaim: string | null = null) {
-  let claimed = startingClaim;
+function fixture(people = users, outside: { email: string; stop_token: string; status: string }[] = []) {
+  let claimed: string | null = null;
   const events: string[] = [];
-  const db = { from(table: string) {
+  const getUserById = vi.fn(async () => ({ data: { user: { user_metadata: { locale: "en" } } }, error: null }));
+  const db = { auth: { admin: { getUserById } }, from(table: string) {
     if (table === "daily_digests_due") {
       const data = claimed === null ? [restaurant] : [];
       const q = { select: () => q, order: () => q, range: () => q,
@@ -38,6 +39,15 @@ function fixture(people = users, startingClaim: string | null = null) {
         expect([key, id]).toEqual(["restaurant_id", restaurant.restaurant_id]); return q;
       }, order: () => q, range: async (from: number) => ({ data: people.slice(from), error: null }) };
       return q;
+    }
+    if (table === "digest_recipients") {
+      return { select: () => ({ eq: (key: string, id: string) => {
+        expect([key, id]).toEqual(["restaurant_id", restaurant.restaurant_id]);
+        return { eq: async (column: string, status: string) => {
+          expect(column).toBe("status");
+          return { data: outside.filter(row => row.status === status), error: null };
+        } };
+      } }) };
     }
     if (table !== "restaurants") throw new Error(`Unexpected table ${table}`);
     return { update: (patch: { digest_sent_for: string | null }) => {
@@ -62,7 +72,7 @@ function fixture(people = users, startingClaim: string | null = null) {
       return q;
     } };
   } };
-  return { context: { db, deadline: Date.now() + 10_000 } as unknown as RecoveryContext, events, claim: () => claimed };
+  return { context: { db, deadline: Date.now() + 10_000 } as unknown as RecoveryContext, events, claim: () => claimed, getUserById };
 }
 
 beforeEach(() => {
@@ -108,6 +118,24 @@ it("skips when a recipient opts out after discovery", async () => {
   expect(await recoverDailyDigests(f.context)).toMatchObject({ done: 0, failed: 0 });
   expect(f.events).toEqual([]);
   expect(sendMail).not.toHaveBeenCalled();
+});
+
+it("sends only to confirmed outside addresses and uses the opted-out owner's language", async () => {
+  const token = "c".repeat(43);
+  const f = fixture([], [
+    { email: "outside@example.test", stop_token: token, status: "confirmed" },
+    { email: "pending@example.test", stop_token: "p".repeat(43), status: "pending" },
+  ]);
+  expect((await recoverDailyDigests(f.context)).done).toBe(1);
+  expect(f.getUserById).toHaveBeenCalledExactlyOnceWith(owner);
+  const [{ messages }] = vi.mocked(sendMail).mock.calls[0] as [MailBatch];
+  expect(messages).toHaveLength(1);
+  expect(messages[0]).toMatchObject({
+    to: "outside@example.test", subject: "How yesterday went · Bistro",
+    text: expect.stringContaining(`https://test.example/digest/stop?t=${token}`),
+    headers: { "List-Unsubscribe": `<https://test.example/api/digest/stop?t=${token}>` },
+  });
+  expect(f.events).toEqual(["claim"]);
 });
 
 it("releases a confirmed refusal and retries the same day with the same key", async () => {

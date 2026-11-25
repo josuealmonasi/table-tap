@@ -10452,24 +10452,6 @@ create or replace view daily_digest_recipients as
 revoke all on daily_digest_recipients from anon, authenticated, public, service_role;
 grant select on daily_digest_recipients to service_role;
 
-create or replace view daily_digests_due with (security_invoker = true) as
-  select r.id as restaurant_id, r.owner_id, r.name, r.currency, r.timezone,
-    clock.local_now::date - 1 as digest_day,
-    (clock.local_now::date + time '07:00') at time zone r.timezone as created_at
-  from restaurants r
-  cross join lateral (select now() at time zone r.timezone as local_now) clock
-  where clock.local_now::time >= time '07:00'
-    and (r.digest_sent_for is null or r.digest_sent_for < clock.local_now::date - 1)
-    and exists (select 1 from daily_digest_recipients d where d.restaurant_id = r.id)
-    and exists (
-      select 1 from orders o where o.restaurant_id = r.id and o.currency = r.currency
-        and o.paid and o.status <> 'cancelled'
-        and o.created_at >= ((clock.local_now::date - 1)::timestamp at time zone r.timezone)
-        and o.created_at < (clock.local_now::date::timestamp at time zone r.timezone)
-    );
-revoke all on daily_digests_due from anon, authenticated, public, service_role;
-grant select on daily_digests_due to service_role;
-
 -- One free trial per RFC. A restaurant's RFC is recorded here once it has had
 -- a trial (no FK: it outlives the restaurant, which is the point). Saving an
 -- RFC that another restaurant already used for a trial ends this one's trial
@@ -15845,3 +15827,23 @@ grant execute on function public.add_digest_recipient_v1(uuid, text, text, text,
 -- promises it).
 select cron.schedule('tabletap-expire-digest-recipients', '17 * * * *',
   $$delete from public.digest_recipients where status = 'pending' and confirm_sent_at < now() - interval '7 days'$$);
+
+-- Discover digests only after both recipient sources have been created.
+create or replace view daily_digests_due with (security_invoker = true) as
+  select r.id as restaurant_id, r.owner_id, r.name, r.currency, r.timezone,
+    clock.local_now::date - 1 as digest_day,
+    (clock.local_now::date + time '07:00') at time zone r.timezone as created_at
+  from restaurants r
+  cross join lateral (select now() at time zone r.timezone as local_now) clock
+  where clock.local_now::time >= time '07:00'
+    and (r.digest_sent_for is null or r.digest_sent_for < clock.local_now::date - 1)
+    and (exists (select 1 from daily_digest_recipients d where d.restaurant_id = r.id)
+      or exists (select 1 from digest_recipients x where x.restaurant_id = r.id and x.status = 'confirmed'))
+    and exists (
+      select 1 from orders o where o.restaurant_id = r.id and o.currency = r.currency
+        and o.paid and o.status <> 'cancelled'
+        and o.created_at >= ((clock.local_now::date - 1)::timestamp at time zone r.timezone)
+        and o.created_at < (clock.local_now::date::timestamp at time zone r.timezone)
+    );
+revoke all on daily_digests_due from anon, authenticated, public, service_role;
+grant select on daily_digests_due to service_role;

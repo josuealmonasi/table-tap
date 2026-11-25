@@ -22,7 +22,9 @@ export const digestCopy = {
     due: (n: number) => n === 1 ? "1 refund still needs to be issued" : `${n} refunds still need to be issued`,
     dishes: "Most ordered",
     dashboard: "Open the dashboard",
-    footer: (name: string, owner: boolean) => owner
+    footer: (name: string, owner: boolean, guest = false) => guest
+      ? `You get this digest because the owner of ${name} added your address and you confirmed it.`
+      : owner
       ? `You get this digest because you own ${name}.`
       : `You get this digest because you opted in as a manager at ${name}.`,
     stop: "Stop receiving this digest",
@@ -48,7 +50,9 @@ export const digestCopy = {
     due: (n: number) => n === 1 ? "1 reembolso sigue pendiente" : `${n} reembolsos siguen pendientes`,
     dishes: "Lo que más se pidió",
     dashboard: "Abrir el panel",
-    footer: (name: string, owner: boolean) => owner
+    footer: (name: string, owner: boolean, guest = false) => guest
+      ? `Recibes este resumen porque el dueño de ${name} agregó tu correo y tú lo confirmaste.`
+      : owner
       ? `Recibes este resumen porque eres dueño de ${name}.`
       : `Recibes este resumen porque lo activaste como gerente de ${name}.`,
     stop: "Dejar de recibir este resumen",

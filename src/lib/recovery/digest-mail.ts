@@ -11,6 +11,8 @@ interface DigestMailOptions {
   timezone: string;
   locale: Locale;
   owner: boolean;
+  /** An outside address the owner added and its holder confirmed. */
+  guest?: boolean;
   dashboard: string;
   stop: string;
   oneClick: string;
@@ -31,7 +33,7 @@ function rows(values: string[][], padding: number, color: string, borders = fals
 }
 
 export function digestMail(f: DigestFigures, options: DigestMailOptions): Omit<Mail, "to"> {
-  const { name, currency, timezone: timeZone, locale, owner, dashboard, stop, oneClick } = options;
+  const { name, currency, timezone: timeZone, locale, owner, guest, dashboard, stop, oneClick } = options;
   const copy = digestCopy[locale];
   const date = new Intl.DateTimeFormat(dateLocale(locale), { timeZone, weekday: "long", day: "numeric", month: "long" }).format(f.day);
   const weekday = new Intl.DateTimeFormat(dateLocale(locale), { timeZone, weekday: "long" }).format(f.day);
@@ -55,7 +57,7 @@ export function digestMail(f: DigestFigures, options: DigestMailOptions): Omit<M
     a.due && copy.due(a.due),
   ].filter((line): line is string => Boolean(line));
   const dishes = f.dishes.map(d => [d.name, number.format(d.qty)]);
-  const footer = copy.footer(name, owner);
+  const footer = copy.footer(name, owner, guest);
   const heading = (title: string) => `<p style="margin:0 0 8px;font-size:15px;font-weight:700;color:${INK};">${h(title)}</p>`;
   const highlight = (label: string, value: string, detail: string, accent: boolean) =>
     `<td width="50%" style="padding:14px;${accent ? "background:#e7f1f1;" : "border:1px solid #e4e4e7;"}border-radius:10px;">

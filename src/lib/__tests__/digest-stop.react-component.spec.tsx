@@ -4,11 +4,15 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { digestEnabled } from "@/lib/digest-preference";
 import { digestStopToken } from "@/lib/digest-stop-token";
 import { POST } from "@/app/api/digest/opt-out/route";
+import { POST as stopOutsideDigest } from "@/app/api/digest/stop/route";
 import StopDigestPage from "@/app/digest/opt-out/page";
 
-const { updateUserById } = vi.hoisted(() => ({ updateUserById: vi.fn() }));
+const { updateUserById, stopRecipient } = vi.hoisted(() => ({ updateUserById: vi.fn(), stopRecipient: vi.fn() }));
 vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({ auth: { admin: { updateUserById } } }) }));
-vi.mock("@/lib/rate-limit", () => ({ isRoomLimited: async () => false }));
+vi.mock("@/lib/digest-recipients", async importOriginal => ({
+  ...await importOriginal<typeof import("@/lib/digest-recipients")>(), stopRecipient,
+}));
+vi.mock("@/lib/rate-limit", () => ({ clientKey: () => "fixture", isRateLimited: async () => false, isRoomLimited: async () => false }));
 vi.mock("@/lib/i18n/server", () => ({ getLocale: async () => "es" }));
 
 const user = "11111111-1111-4111-8111-111111111111";
@@ -18,6 +22,7 @@ const request = (token: string, body: string) => new NextRequest(`https://test.e
 beforeEach(() => {
   vi.stubEnv("SUPABASE_SECRET_KEY", "digest-fixture-secret");
   updateUserById.mockReset().mockResolvedValue({ error: null });
+  stopRecipient.mockReset().mockResolvedValue("Bistro");
 });
 afterEach(() => vi.unstubAllEnvs());
 
@@ -63,4 +68,23 @@ it("rejects a different login, a changed locale, and a malformed POST", async ()
   expect((await POST(request(token.replace(".en.", ".es."), "List-Unsubscribe=One-Click"))).status).toBe(400);
   expect((await POST(request(token, "List-Unsubscribe=No"))).status).toBe(400);
   expect(updateUserById).not.toHaveBeenCalled();
+});
+
+it("accepts the outside recipient's footer button and the mail client's one-click form", async () => {
+  const url = "https://test.example/api/digest/stop";
+  const token = "a".repeat(43);
+  const fromButton = new NextRequest(url, {
+    method: "POST", body: JSON.stringify({ token }), headers: { "content-type": "application/json" },
+  });
+  const fromMail = new NextRequest(`${url}?t=${token}`, {
+    method: "POST", body: new URLSearchParams({ "List-Unsubscribe": "One-Click" }),
+  });
+  for (const req of [fromButton, fromMail]) expect((await stopOutsideDigest(req)).status).toBe(200);
+  expect(stopRecipient.mock.calls).toEqual([[token], [token]]);
+});
+
+it("requires the one-click form when the outside stop token is in the URL", async () => {
+  const req = new NextRequest(`https://test.example/api/digest/stop?t=${"a".repeat(43)}`, { method: "POST" });
+  expect((await stopOutsideDigest(req)).status).toBe(400);
+  expect(stopRecipient).not.toHaveBeenCalled();
 });
