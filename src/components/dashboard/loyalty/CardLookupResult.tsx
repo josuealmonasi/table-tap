@@ -25,6 +25,7 @@ interface CardLookupResultProps {
   active: boolean;
   /** Read the card again after anything changed it. */
   onChanged: (code: string) => Promise<void>;
+  onDeleted: (code: string) => void;
 }
 
 /**
@@ -33,7 +34,7 @@ interface CardLookupResultProps {
  * live only behind "Sellar tarjeta" on Cuentas and Caja, so a manager holding
  * a card they had just looked up had to go somewhere else to stamp it.
  */
-export default function CardLookupResult({ card, active, onChanged }: CardLookupResultProps) {
+export default function CardLookupResult({ card, active, onChanged, onDeleted }: CardLookupResultProps) {
   const t = useT();
   const confirm = useConfirm();
   const toast = useToast();
@@ -61,6 +62,23 @@ export default function CardLookupResult({ card, active, onChanged }: CardLookup
       danger: true,
     });
     if (ok) await act("/api/loyalty/visit", "DELETE", { id: visitId }, () => t("loyaltyAdmin.undone"));
+  }
+
+  async function deleteCard(): Promise<void> {
+    const ok = await confirm({
+      title: t("loyaltyOffer.forgetTitle"),
+      message: t("loyaltyOffer.forgetBody"),
+      confirmLabel: t("loyaltyAdmin.deleteCard"),
+      danger: true,
+    });
+    if (!ok) return;
+    const answer = await run({ path: `/api/loyalty/lookup?c=${card.code}`, method: "DELETE", body: {} });
+    if (answer.status === "done") {
+      onDeleted(card.code);
+      toast(t("loyaltyAdmin.cardDeleted"));
+    } else if (answer.status !== "busy") {
+      toast(answer.error, "error");
+    }
   }
 
   const s = card.standing;
@@ -128,6 +146,9 @@ export default function CardLookupResult({ card, active, onChanged }: CardLookup
           </ul>
         </>
       )}
+      <button type="button" className="tt-btn tt-btn-ghost tt-btn-sm" disabled={busy} onClick={() => void deleteCard()}>
+        {t("loyaltyAdmin.deleteCard")}
+      </button>
     </div>
   );
 }

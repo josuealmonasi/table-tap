@@ -63,6 +63,10 @@ export default function CardLookup({ active }: CardLookupProps) {
 
   const code = normalizeCode(typed);
 
+  function clearDeleted(code: string): void {
+    setCard(current => current?.code === code ? null : current);
+  }
+
   return (
     <section className="tt-section">
       <div className="tt-section-head">
@@ -116,7 +120,7 @@ export default function CardLookup({ active }: CardLookupProps) {
       {error && <p className="tt-field-error" role="alert">{error}</p>}
 
       {!card && !error && !scanning && <p className="tt-muted" style={{ fontSize: 13 }}>{t("loyaltyAdmin.lookupHint")}</p>}
-      {card && <CardLookupResult card={card} active={active} onChanged={look} />}
+      {card && <CardLookupResult card={card} active={active} onChanged={look} onDeleted={clearDeleted} />}
     </section>
   );
 }
