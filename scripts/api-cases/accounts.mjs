@@ -26,7 +26,10 @@ export function accountsCases(root) {
     // put on it, a charge past the ceiling refused, a sale rung onto it at the
     // till, collected in person, and its statement read by the customer.
     { name: "GET  /api/accounts", as: "cashier", method: "GET", path: "/api/accounts", expect: [200],
-      check: d => (Array.isArray(d.accounts) && d.accounts.some(a => a.id === fx.accountId)) || "the gate's account is not listed" },
+      check: d => !Array.isArray(d.accounts) ? "no accounts listed"
+        : !d.accounts.some(a => a.id === fx.accountId) ? "the gate's account is not listed"
+        // The list never carries a customer's reusable link (security sweep 2026-11-24).
+        : d.accounts.some(a => "code" in a) ? "the list carries account codes" : true },
     { name: "POST /api/accounts (open one)", as: "waiter", method: "POST", path: "/api/accounts",
       body: { name: `${MARK} customer`, limit: 500, email: "cliente@example.com" }, expect: [200],
       effect: async f => {

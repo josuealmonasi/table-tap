@@ -8537,6 +8537,16 @@ for hidden dishes and inactive promotions; and `dish_rating_stats` returned
 averages for hidden dishes to anyone. Each is narrowed; the server key keeps
 full access. Check: `sweep-1124-grants.spec.ts`, plus a rolled-back dev probe.
 
+### A removed member kept the links they had copied (security sweep 2026-11-24)
+
+Removing a login did not take back the kitchen printer's link (it reads and
+clears tickets) or customer-account links (they read statements), and every
+waiter's account list carried every customer's reusable link. The list no
+longer carries codes; one account's link is opened on purpose and logged; and
+the owner's removal dialog offers to reset the printer link (on by default for
+a manager or owner) and the links of the accounts that person opened, showing
+the new values once. Check: `sweep-1124-staff-links.spec.ts`, the api gate's
+`GET /api/accounts` and `GET /api/staff?removal` cases.
 ### A saved photo of a table's QR could send unpaid food to the kitchen (security sweep 2026-11-24)
 
 The phone that opened an empty table was let in automatically, and with

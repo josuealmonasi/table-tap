@@ -8,7 +8,8 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { logEvent } from "@/lib/activity-log";
 import { logDetail } from "@/lib/log-detail";
 import { cleanEmail, cleanLimit, cleanName, newCode } from "@/lib/accounts";
-import { accountById, listAccounts, statementOf } from "@/lib/accounts-server";
+import { accountByCode, accountById, listAccounts, statementOf } from "@/lib/accounts-server";
+import { logAccountLinkViewed } from "@/lib/staff-removal";
 import { formatMoney } from "@/lib/format";
 import { currencyOf } from "@/lib/account-charge";
 
@@ -27,11 +28,31 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   if (!actor) return await apiError("apiErr.forbidden", 403);
   // Listed on any tier: an account opened on a paid plan still owes after a
   // move down, and the till must be able to find it to collect.
+  // The list carries no account's link: a waiter used to receive every
+  // customer's reusable QR code in one response and kept them after leaving
+  // (security sweep 2026-11-24). One account's link is opened on purpose,
+  // below, and that opening is logged so a removal can reset what they saw.
+  const code = req.nextUrl.searchParams.get("code");
+  if (code) {
+    // A scanned card: whoever scanned it already holds its code.
+    const found = await accountByCode(code.trim().toUpperCase()).catch(() => undefined);
+    if (found === undefined) return await apiError("apiErr.generic", 503);
+    if (!found || found.restaurant_id !== actor.restaurantId) return await apiError("apiErr.notFound", 404);
+    return NextResponse.json({ id: found.id });
+  }
   const id = req.nextUrl.searchParams.get("id");
-  if (!id) return NextResponse.json({ accounts: await listAccounts(actor.restaurantId) });
+  if (!id) {
+    const accounts = await listAccounts(actor.restaurantId);
+    return NextResponse.json({ accounts: accounts.map(account => {
+      const listed: Partial<typeof account> = { ...account };
+      delete listed.code;
+      return listed;
+    }) });
+  }
 
   const account = await accountById(actor.restaurantId, id);
   if (!account) return await apiError("apiErr.notFound", 404);
+  await logAccountLinkViewed(actor.restaurantId, actor.email, account.id, account.name);
   const timeZone = createAdminClient()
     .from("restaurants").select("timezone").eq("id", actor.restaurantId).maybeSingle()
     .then(({ data: restaurant }) => restaurant?.timezone);

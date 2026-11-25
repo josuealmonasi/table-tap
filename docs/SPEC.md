@@ -1047,6 +1047,13 @@ with a QR staff can scan, receipts by email, dish ratings, "lo de siempre", the
 visit card and its page, a customer account's statement (`/cuenta/<code>`) to
 check and pay, a scan button for TableTap's own codes, ES/EN.
 
+Staff never receive every customer account's link at once: the account list
+carries no codes, one account's link comes with its statement when someone
+opens it (logged as `account`/`opened`), and a scanned card is resolved by the
+server. Removing a login, the owner may also reset the kitchen printer's link
+(on by default for a manager or owner) and the links of the accounts that
+person opened; the new printer link and account codes are shown once.
+
 Restaurant: multiple menus with schedules, full menu editing, dietary tags and
 icon groups, tables with printable QR codes, the orders board, open bills,
 discounts and write-offs with approval, promotions and coupons, inventory with
