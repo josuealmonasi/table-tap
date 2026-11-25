@@ -120,44 +120,6 @@ export function nextPromoStep(
 }
 
 /**
- * What adding `qty` more of a product actually costs, given `otherQty` of it
- * already in the cart.
- *
- * A quantity deal applies across every line of the product, so a line's cost
- * is not `qty * unit` — the second unit of a 2x1 is free only because the
- * first one is there. Pricing the cart before and after and taking the
- * difference is the only figure that matches what checkout will charge.
- *
- * `base` is the unit price after the item's own % discount and `extrasPerUnit`
- * is folded into it, because a quantity deal applies to the whole unit: the
- * free half of a 2x1 is free as ordered, extras included.
- */
-export function addedLineCost(
-  promo: QuantityPromo | null | undefined,
-  otherQty: number,
-  qty: number,
-  base: number,
-  extrasPerUnit = 0,
-): number {
-  const unit = base + extrasPerUnit;
-  const before = promo ? promoCost(promo, otherQty, unit) : otherQty * unit;
-  const after = promo ? promoCost(promo, otherQty + qty, unit) : (otherQty + qty) * unit;
-  return round2(after - before);
-}
-
-/** The selected line and its hint share the same saving, so they cannot disagree. */
-export function detailPromoPrice(
-  promo: QuantityPromo | null | undefined, otherQty: number, qty: number,
-  base: number, extrasPerUnit = 0,
-): { total: number; full: number; applied: boolean; step: ReturnType<typeof nextPromoStep> } {
-  const unit = base + extrasPerUnit;
-  const total = addedLineCost(promo, otherQty, qty, base, extrasPerUnit);
-  const full = round2(unit * qty);
-  const applied = total < full;
-  return { total, full, applied, step: promo && !applied ? nextPromoStep(promo, otherQty + qty, unit) : null };
-}
-
-/**
  * The price breaks as an owner typed them, and whether every row is a real
  * break. A row with no price is not a break at MX$0: Number("") is 0, and a
  * number field the browser could not read ("12,50" on some phones) reports ""

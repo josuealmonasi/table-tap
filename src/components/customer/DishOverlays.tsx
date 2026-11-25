@@ -61,10 +61,10 @@ export default function DishOverlays({
             extras={selectedExtras}
             currency={currency}
             initialLine={screen === "edit" && editingLine ? editingLine : undefined}
-            promo={promos.find(p => p.itemIds.includes(selected.id))}
-            inCartQty={cartItems
-              .filter(i => i.itemId === selected.id && !i.comboId)
-              .reduce((n, i) => n + i.qty, 0)}
+            promos={promos}
+            cartLines={screen === "edit" && editingLine
+              ? cartItems.filter(i => i.cartId !== editingLine.cartId)
+              : cartItems}
             onBack={closeDetail}
             onAdd={screens.saveDish}
           />

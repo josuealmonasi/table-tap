@@ -8719,6 +8719,25 @@ with more is queued whole for manager review (`apiErr.offlineTooManyLines`)
 and an approval records every line, up to `MAX_CART_LINES`. Check:
 `pos-charge-reload.spec.tsx`, `pos-cart-charging.spec.ts`,
 `held-intake.spec.ts`.
+### Promotions price the same on the till and the phone (2026-11-25)
+
+Three pairs that had to agree. First, the order the deals arrive in and the
+deal a product gets: the loader sorted by `sort_order` only and `priceCart`
+took the first deal covering a product, even one that saved nothing, so two
+MX$100 dishes under a tied 2x1 and 3x2 cost MX$100 on one screen and MX$200 on
+another. `fetchPromotions` now orders by `sort_order` then `id`, and
+`bestPromoFor` gives each product the deal that saves the most for the cart
+(ties by that order); the phone, the till, the waiter's order, checkout and
+offline pricing all reach it through `priceCart`. Second, the dish screen's
+quote and the cart: with a plain MX$10 dish in the cart under 2x1, a second
+with a MX$5 extra was quoted MX$0 while the cart went up by MX$5. The quote is
+now `quoteItemLine` (`src/lib/item-quote.ts`), the cart priced by `priceCart`
+before and after the line, and the till and waiter screens get the same quote
+and deal callout. Third, the quantity charged and the quantity discounted: the
+charge read the 99-unit cap and the deal maths the raw quantity, so a 100-unit
+line was charged MX$990 and discounted MX$1,000; every step now reads one
+capped `lineQty`. Check: `promo-selection.spec.ts`, `item-quote.spec.ts`,
+`deal-callout.spec.tsx`.
 ### Daily digest eligibility, retries and stop links (2026-11-25)
 
 A removed manager or stopped outside address could remain in a queued batch.
@@ -8798,3 +8817,47 @@ drawer read MX$100 cash in the mail and MX$70 on the corte. Both now read
 their adjustments (logged write-offs and refunds, plus completed return
 events) from one reader, `readCorteAdjustments` in `corte-adjustments.ts`.
 Check: `signup-mail-ceiling.spec.ts`, `digest-figures.spec.ts`.
+
+### Stripe refund race, early refund fee, early dispute (2026-11-25)
+
+Three pairs that had to agree with nothing checking (bl43 review, findings 1,
+4 and 5). First, the charge TableTap read and the charge it refunded: a
+MX$100 duplicate-payment due on a MX$200 charge, MX$40 returned by hand in
+Stripe after TableTap listed the refunds, and Stripe still accepted MX$100 —
+MX$140 back to the diner. Each attempt now freezes the charge's live refund
+ids (`start_refund_due_attempt_v3`), and `guardRefundSend` lists the charge
+again right before every POST, replacements included. A new refund that is
+pending holds the send; one that succeeded is counted by
+`reconcile_refund_due_send_v1`, which retires the unsent attempt and opens a
+new one, with its own idempotency key, for only what is still owed. Owed with
+nothing refundable left writes `refund_due_reviews` and leaves the due open,
+so an owed refund is never silently dropped. Second and third, Stripe's
+event order and our books: a refund or a dispute that beat its checkout's
+completion webhook matched no sale, so the fee return was never queued and
+the dispute stayed in review, out of the restaurant's totals. Unmatched
+refunds are kept in `unmatched_refund_notices`, and one hook in verified
+settlement (`adoptSettledIntent` → `adopt_settled_intent_v1`) queues their
+fee reconciliation and sends the intent's review disputes back to the
+worker. Checks: `refund-due-race.spec.ts`, `refund-due-resume.spec.ts`,
+`settled-intent.spec.ts`, `fee-queue-scope.spec.ts`.
+### Diner data a copied link or code could reach (2026-11-25)
+
+Three places where a bearer value was read as more authority than it carried
+(Codex bl40 review, findings 1, 7 and 8). First, `/api/receipt/payments`
+named every order on a completed split in `splitOrderIds`, and the public
+tracker treats an order id as its whole credential, so a former guest who paid
+one part could read the other diners' lines and notes after the sitting
+closed. It now names only orders this phone placed (`orders.diner`) or its own
+payments were recorded against; the receipt offer only ever compared the list
+with the phone's own orders. Second, `/api/rewards` returned the card's masked
+email to anyone holding the printed code, and its PATCH let that holder advance
+`saved_at`, clearing the owner's "save it again" prompt while their image was
+stale. The address now goes only to the phone with the owner cookie, and PATCH
+records the save only for it (others get `{ ok: true, saved: false }`); a
+code-only holder still sees the card. Third, deleting a table cleared
+`orders.table_id` and, through its sittings, `session_id`, so
+`memberRatingOrders` treated the paid order as a counter order and any copied
+order link could overwrite its ratings. The `table_label` copied onto the
+order at insert is never cleared, and now keeps it on the dine-in path, where
+with no sitting left it is refused. Check: `slot-receipt-payments-route.spec.ts`,
+`loyalty-owner-secret.spec.ts`, `rating-membership.spec.ts`.

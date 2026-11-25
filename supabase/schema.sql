@@ -16626,4 +16626,194 @@ create or replace view daily_digests_due_v2 with (security_invoker = true) as
   where b.status = 'pending';
 revoke all on daily_digests_due_v2 from public, anon, authenticated, service_role;
 grant select on daily_digests_due_v2 to service_role;
+-- Codex bl43 finding 1: a refund made by hand in Stripe while TableTap is
+-- between reading the charge and sending its own refund. A MX$100 due on a
+-- MX$200 charge, MX$40 returned in the dashboard in that gap: Stripe still
+-- accepted MX$100 and the diner got MX$140 back. Every attempt now freezes
+-- the refunds the charge had when its amount was decided; right before the
+-- POST the charge is listed again, and a refund that was not there stops it.
+alter table refund_due_attempts add column if not exists charge_refund_ids text[];
+
+-- start_refund_due_attempt_v2, plus the refunds the charge had when the
+-- attempt's amount was decided. Only an attempt opened by this call is
+-- stamped (created_at = now() is this transaction's start): a resumed one was
+-- decided earlier, against a charge nobody recorded, so it keeps null and the
+-- send guard treats every refund not yet counted for the due as new.
+create or replace function public.start_refund_due_attempt_v3(
+  p_restaurant uuid, p_due uuid, p_refundable_cents int, p_refund_ids text[]
+) returns jsonb language plpgsql security definer set search_path = public as $$
+declare v jsonb;
+begin
+  if p_refund_ids is null then raise exception 'charge refunds required'; end if;
+  v := public.start_refund_due_attempt_v2(p_restaurant, p_due, p_refundable_cents);
+  if v is null or v ? 'outcome' then return v; end if;
+  update refund_due_attempts set charge_refund_ids = p_refund_ids
+    where id = (v->>'id')::uuid and restaurant_id = p_restaurant and charge_refund_ids is null and created_at = now();
+  select to_jsonb(a) into v from refund_due_attempts a where a.id = (v->>'id')::uuid;
+  return v;
+end;
+$$;
+revoke all on function public.start_refund_due_attempt_v3(uuid, uuid, int, text[]) from public, anon, authenticated;
+grant execute on function public.start_refund_due_attempt_v3(uuid, uuid, int, text[]) to service_role;
+
+-- A due whose refund was stopped because nothing is left to send while the
+-- diner is still owed: a person has to look (Stripe dashboard, cash).
+create table if not exists refund_due_reviews (
+  restaurant_id uuid not null,
+  due_id uuid primary key,
+  reason text not null,
+  outstanding_cents int not null check (outstanding_cents >= 0),
+  created_at timestamptz not null default now(),
+  foreign key (restaurant_id, due_id) references refunds_due(restaurant_id, id) on delete cascade
+);
+alter table refund_due_reviews enable row level security;
+revoke all on refund_due_reviews from anon, authenticated, public;
+grant select, insert, update, delete on refund_due_reviews to service_role;
+
+-- Refunds that appeared on the charge since the unsent attempt froze its
+-- amount. p_new carries only those (untagged, or this due's own from another
+-- attempt), each with its provider status.
+--   send      none of them is new to this due: send the attempt as frozen
+--   hold      one is still pending: it may yet be this due's money; wait
+--   completed the succeeded ones cover the due; nothing is sent
+--   retry     the attempt is retired unsent and a new one opens for what is
+--             still owed, capped at what Stripe has left
+--   review    the diner is still owed but Stripe has nothing left to send
+--   stale     the attempt is no longer the unsent latest one
+create or replace function public.reconcile_refund_due_send_v1(
+  p_restaurant uuid, p_due uuid, p_attempt uuid, p_actor text, p_new jsonb, p_refundable_cents int, p_refund_ids text[]
+) returns jsonb language plpgsql security definer set search_path = public as $$
+declare d refunds_due; a refund_due_attempts; e jsonb; v_unknown jsonb := '[]'::jsonb;
+  v_due int; v_covered int; v_send int;
+begin
+  if p_new is null or jsonb_typeof(p_new) <> 'array' then raise exception 'provider evidence required'; end if;
+  if p_refund_ids is null then raise exception 'charge refunds required'; end if;
+  if p_refundable_cents is null or p_refundable_cents < 0 then raise exception 'invalid refundable amount'; end if;
+  perform public.lock_restaurant_money(p_restaurant);
+  select * into d from refunds_due where id = p_due and restaurant_id = p_restaurant for update;
+  if d.id is null then return jsonb_build_object('outcome', 'missing'); end if;
+  select * into a from refund_due_attempts where due_id = d.id order by attempt_no desc limit 1;
+  if a.id is distinct from p_attempt or a.stripe_refund_id is not null or a.provider_status is not null
+      or d.refunded_at is not null then
+    return jsonb_build_object('outcome', 'stale');
+  end if;
+  for e in select * from jsonb_array_elements(p_new) loop
+    if coalesce(e->>'id', '') = '' or (e->>'amount_cents')::int is null or (e->>'amount_cents')::int <= 0 then
+      raise exception 'invalid refund evidence';
+    end if;
+    -- A return's refund, a failed one, or one this due already counts.
+    continue when public.refund_owned_by_return_v1(p_restaurant, e->>'id');
+    continue when exists (select 1 from refund_failures f where f.restaurant_id = p_restaurant and f.stripe_refund_id = e->>'id');
+    continue when exists (select 1 from refund_due_coverage c where c.due_id = d.id and c.stripe_refund_id = e->>'id');
+    v_unknown := v_unknown || jsonb_build_array(e);
+  end loop;
+  if jsonb_array_length(v_unknown) = 0 then
+    update refund_due_attempts set charge_refund_ids = p_refund_ids, updated_at = now() where id = a.id;
+    return jsonb_build_object('outcome', 'send');
+  end if;
+  if exists (select 1 from jsonb_array_elements(v_unknown) x where x->>'status' is distinct from 'succeeded') then
+    return jsonb_build_object('outcome', 'hold');
+  end if;
+  -- Never sent (the caller found no refund tagged with it): retire it, count
+  -- what the restaurant already gave back, and reopen for the rest.
+  update refund_due_attempts set provider_status = 'canceled', updated_at = now() where id = a.id;
+  for e in select * from jsonb_array_elements(v_unknown) loop
+    insert into refund_due_coverage (restaurant_id, due_id, attempt_id, stripe_refund_id, amount_cents, active)
+      values (p_restaurant, d.id, null, e->>'id', (e->>'amount_cents')::int, true)
+      on conflict (due_id, stripe_refund_id) do nothing;
+  end loop;
+  v_due := round(d.amount * 100);
+  select coalesce(sum(amount_cents), 0) into v_covered from refund_due_coverage where due_id = d.id and active;
+  if v_covered >= v_due then
+    update refunds_due set refunded_at = now(), refunded_by = p_actor,
+      stripe_refund_id = coalesce(d.stripe_refund_id, v_unknown->0->>'id'), fee_verification_pending = true
+      where id = d.id;
+    return jsonb_build_object('outcome', 'completed', 'marked', true, 'outstanding_cents', 0);
+  end if;
+  v_send := least(v_due - v_covered, p_refundable_cents);
+  if v_send <= 0 then
+    insert into refund_due_reviews (restaurant_id, due_id, reason, outstanding_cents)
+      values (p_restaurant, d.id, 'nothing_refundable', v_due - v_covered)
+      on conflict (due_id) do update set reason = excluded.reason, outstanding_cents = excluded.outstanding_cents, created_at = now();
+    return jsonb_build_object('outcome', 'review', 'outstanding_cents', v_due - v_covered);
+  end if;
+  insert into refund_due_attempts(restaurant_id, due_id, attempt_no, idempotency_key, amount, stripe_account_id,
+      stripe_payment_intent, charge_refund_ids)
+    values (p_restaurant, d.id, a.attempt_no + 1, 'refund-due-' || d.id || '-' || (a.attempt_no + 1), v_send / 100.0,
+      a.stripe_account_id, a.stripe_payment_intent, p_refund_ids)
+    returning * into a;
+  return jsonb_build_object('outcome', 'retry', 'attempt', to_jsonb(a));
+end;
+$$;
+revoke all on function public.reconcile_refund_due_send_v1(uuid, uuid, uuid, text, jsonb, int, text[]) from public, anon, authenticated;
+grant execute on function public.reconcile_refund_due_send_v1(uuid, uuid, uuid, text, jsonb, int, text[]) to service_role;
+
+-- Codex bl43 findings 4 and 5: Stripe's events arrive in any order. A refund
+-- or a dispute reported before the checkout that owns its PaymentIntent
+-- settled found no local sale: the refund's fee return was never queued, and
+-- the dispute was set aside as review with its event done. Unmatched refund
+-- notices are kept here; settlement, once it binds the intent, adopts them.
+create table if not exists unmatched_refund_notices (
+  restaurant_id uuid not null references restaurants(id) on delete cascade,
+  stripe_account_id text not null,
+  livemode boolean not null,
+  stripe_payment_intent text not null,
+  first_seen_at timestamptz not null default now(),
+  primary key (stripe_account_id, livemode, stripe_payment_intent)
+);
+alter table unmatched_refund_notices enable row level security;
+revoke all on unmatched_refund_notices from anon, authenticated, public;
+grant select, insert, update, delete on unmatched_refund_notices to service_role;
+
+create or replace function public.note_unmatched_refund_v1(
+  p_restaurant uuid, p_account text, p_live boolean, p_intent text
+) returns void language plpgsql security definer set search_path = public as $$
+begin
+  if p_account is null or p_live is null or p_intent is null then raise exception 'invalid refund notice'; end if;
+  if not exists (select 1 from restaurants where id = p_restaurant and stripe_account_id = p_account) then
+    raise exception 'refund notice account does not match the restaurant';
+  end if;
+  insert into unmatched_refund_notices (restaurant_id, stripe_account_id, livemode, stripe_payment_intent)
+    values (p_restaurant, p_account, p_live, p_intent)
+    on conflict (stripe_account_id, livemode, stripe_payment_intent) do nothing;
+end;
+$$;
+revoke all on function public.note_unmatched_refund_v1(uuid, text, boolean, text) from public, anon, authenticated;
+grant execute on function public.note_unmatched_refund_v1(uuid, text, boolean, text) to service_role;
+
+-- Called once verified settlement has bound the intent to this restaurant's
+-- checkout. Queues the fee reconciliation an early refund could not, and
+-- sends the latest event of each early dispute set aside as review back to
+-- the dispute worker, which now finds the sale.
+create or replace function public.adopt_settled_intent_v1(
+  p_restaurant uuid, p_account text, p_live boolean, p_intent text
+) returns jsonb language plpgsql security definer set search_path = public as $$
+declare v_fee boolean := false; v_disputes int := 0;
+begin
+  if p_account is null or p_live is null or p_intent is null then raise exception 'invalid settled intent'; end if;
+  if not exists (select 1 from diner_checkouts where restaurant_id = p_restaurant and stripe_account_id = p_account
+      and livemode = p_live and stripe_payment_intent = p_intent) then
+    raise exception 'intent is not settled by this restaurant';
+  end if;
+  delete from unmatched_refund_notices where restaurant_id = p_restaurant and stripe_account_id = p_account
+    and livemode = p_live and stripe_payment_intent = p_intent;
+  if found then
+    perform public.enqueue_fee_reconcile(p_restaurant, p_intent);
+    v_fee := true;
+  end if;
+  update stripe_dispute_events e set state = 'pending', attempts = 0, last_error = null, claim_token = null, lease_until = null
+    where e.id in (
+      select distinct on (x.stripe_dispute_id) x.id from stripe_dispute_events x
+        join stripe_disputes s on s.stripe_account_id = x.stripe_account_id and s.livemode = x.livemode
+          and s.stripe_dispute_id = x.stripe_dispute_id
+        where s.stripe_account_id = p_account and s.livemode = p_live and s.stripe_payment_intent = p_intent
+          and s.reconciliation_state = 'review'
+        order by x.stripe_dispute_id, x.provider_created_at desc, x.created_at desc)
+      and e.state = 'done';
+  get diagnostics v_disputes = row_count;
+  return jsonb_build_object('fee_queued', v_fee, 'disputes_requeued', v_disputes);
+end;
+$$;
+revoke all on function public.adopt_settled_intent_v1(uuid, text, boolean, text) from public, anon, authenticated;
+grant execute on function public.adopt_settled_intent_v1(uuid, text, boolean, text) to service_role;
 revoke truncate, references, trigger on all tables in schema public from authenticated;

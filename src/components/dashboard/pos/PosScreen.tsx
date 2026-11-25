@@ -367,9 +367,8 @@ export default function PosScreen({
                     setOpenItem(null);
                   }
                 }}
-                inCartQty={lines
-                  .filter(l => l.itemId === (editing?.itemId ?? openItem?.id))
-                  .reduce((n, l) => n + l.qty, 0)}
+                promos={promos}
+                cartLines={editing ? lines.filter(l => l.cartId !== editing.cartId) : lines}
               />
             </DietaryTagsProvider>
           </DetailOverlay>
