@@ -77,6 +77,25 @@ export function localDay(iso: string | Date, timeZone: string): string {
   return localDayKey(new Date(iso), timeZone);
 }
 
+/**
+ * Each payment a signed deposit holds, and that deposit's day. A payment signed
+ * on one day stays on it: after a time-zone change moved a MX$100 payment from
+ * Nov 23 to Nov 24, the report offered it again and two deposits held it
+ * (2026-11-25).
+ */
+export function signedDays(deposits: Pick<DepositRecord, "sales_day" | "payment_ids">[]): Map<string, string> {
+  const days = new Map<string, string>();
+  for (const d of [...deposits].sort((a, b) => a.sales_day.localeCompare(b.sales_day))) {
+    for (const id of d.payment_ids ?? []) if (!days.has(id)) days.set(id, d.sales_day);
+  }
+  return days;
+}
+
+/** The day a payment, or a return of it, belongs to: its signed deposit's, else its local calendar day. */
+export function saleDayOf(p: TerminalPayment, timeZone: string, signed: Map<string, string>): string {
+  return signed.get(p.payment_id ?? p.id ?? "") ?? localDay(p.created_at, timeZone);
+}
+
 /** `n` business days after a calendar day: Saturdays and Sundays do not count. */
 export function addBusinessDays(day: string, n: number): string {
   const d = new Date(`${day}T12:00:00Z`);
@@ -132,10 +151,11 @@ export function depositDays(
     return row;
   };
   const marked = new Map(deposits.map(d => [d.sales_day, d]));
-  const returns = terminalReturns(payments, timeZone);
+  const signed = signedDays(deposits);
+  const returns = terminalReturns(payments, timeZone, signed);
   for (const p of payments) {
     if (p.returned_at) continue;
-    const day = localDay(p.created_at, timeZone);
+    const day = saleDayOf(p, timeZone, signed);
     const deposit = marked.get(day);
     const sameDay = returns.filter(r => p.id && r.paymentId === p.id && r.day === day
       && (!deposit || deposit.return_ids?.includes(r.id) || (deposit.return_ids == null && r.at <= deposit.created_at)));

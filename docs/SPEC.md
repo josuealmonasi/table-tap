@@ -1258,9 +1258,12 @@ on the costs screen, and one screen for the whole team:
   to the staff's browser. A manager can take back an
   entry made by mistake (the stock is not given back — it is corrected on the
   menu, where it is kept).
-- **A delivery** (`record_purchase`) adds what came in, and the price per
+- **A delivery** (`record_purchase_v2`) adds what came in, and the price per
   pack it came at becomes the ingredient's price — so a supplier's rise is
   noticed where it happens, and the price trigger keeps it for the margins.
+  The pack size the form showed rides with it and is compared under the
+  ingredient row lock; changed meanwhile, the delivery is refused and the
+  manager is asked to reload.
 - **A count** of the shelf is blind, like the drawer's: the counter sees the
   names and empty boxes, the expected figures are worked out at the moment
   the count lands and kept beside it, and only then shown. An ingredient's
@@ -1272,7 +1275,9 @@ on the costs screen, and one screen for the whole team:
   (`src/lib/costs/stock.ts`). Each sale and waste entry freezes its ingredient
   quantities in server-only `ingredient_consumption`; later recipe edits or
   removals never change them. `ingredient_movements` records their signed
-  quantities and any later corrections. An order takes ingredients when it
+  quantities and any later corrections. A correction of a waste or purchase
+  record takes that record's place among counts (`count_position`), so
+  deleting a pre-count entry does not move post-count stock. An order takes ingredients when it
   reaches a made state whether or not it is paid yet — the food was made.
   A pending checkout accepted after a count moves that count even if the
   checkout started earlier. Never counted, the answer is unknown rather than
@@ -1568,6 +1573,9 @@ to know what should reach the bank and when.
   was reconciled is kept. Calculation and insertion share the restaurant
   money lock with settlement. New marks save exact payment and return IDs,
   the cutoff time and fee rate; old marks retain their timestamp rule.
+  A payment a signed deposit holds stays on that deposit's day, even after
+  the restaurant's time zone changes, and no deposit signs a payment another
+  one holds.
   Returns after sign-off carry to the next unsigned day with net sales. If
   none exists yet, each return owns its own day (the next unsigned calendar
   day if its day is already signed) as a return-only bank movement. The bank
@@ -1727,7 +1735,14 @@ minute, then 10, then an hour before it is claimed again, and the fourth
 failure, or a refusal no retry changes, finishes it as `failed` with
 `failure_reason`; fresh tickets are claimed before retries. The email is
 rendered once and kept on its rows (`mail_body`) until the batch finishes,
-so a retry resends the identical body under the same idempotency key. A sale
+so a retry resends the identical body under the same idempotency key. Each
+row records its settlement when queued (`group_key`: card, sitting or sale,
+address generation) and a claim takes every waiting row of a settlement
+together, so one payment is one email whatever the claim size. Right before
+the provider call the sender reads the address again under the card's share
+lock (`ticket_email_address_for_send`), which also confirms its claim and
+renews the lease: an address removed or changed while the PDF rendered is not
+sent to (review 2026-11-25). A sale
 closed by forgiving a walkout queues no ticket and stamps no visit (owner's
 decision, 2026-11-12). Orders of one card
 and one sitting claimed together are one email: the receipt, the 80 mm PDF
@@ -2136,6 +2151,17 @@ email or phone.
   so a double tap, two waiters or a race add nothing. `loyalty_stamp()` locks
   the card and refuses when the program is off or the plan does not include
   loyalty, as well as the route refusing it.
+- **A stamp stands on a sale** (review 2026-11-25): `POST /api/loyalty/stamp`
+  takes `{ code, saleId }`. A waiter or cashier must name a paid sale;
+  `loyalty_stamp_v2` locks it before the card and refuses (409) one that is not
+  this restaurant's or not paid (cancelled, written off), was not paid today in
+  the restaurant's zone (created today, or a payment of it or its sitting
+  today), or already stands behind another card's stamp (the card it carried
+  when paid, or `loyalty_visits.order_id`, unique). The till passes the sale it
+  just charged; a waiter with no sale is told a manager can stamp. An owner or
+  manager may stamp with no sale: an override, logged with `override=no_sale`
+  and noted beside the button. `loyalty_stamp()` keeps its signature for the
+  rollout.
 - **Presented before payment** (owner request, 2026-11-11): front-of-house
   staff (owner, manager, cashier, waiter) may attach a scanned or typed bearer
   code to an unpaid sale or an open sitting through `POST /api/loyalty/attach`.
@@ -2904,7 +2930,8 @@ completed refunds whose rounded fee share remains owed. Approved offline queue
 rows survive deletion with the accounting books. Reference purchases save the
 original pack count, compare ingredient/packs/total before replay, and write
 one paid log transactionally through the additive `record_purchase_once_v2`
-RPC (the old route and signature remain deployable); other referenced cost and drawer writes compare
+RPC, reached through `record_purchase_once_v3`, which answers a saved retry
+before comparing the form's pack size (the old signatures remain deployable); other referenced cost and drawer writes compare
 the complete original request too. Legacy references without enough evidence
 are refused for review. Ingredient movement writers lock movement before any
 ingredient row lock or foreign-key insert; product locks still come first as
@@ -3560,14 +3587,19 @@ effective client/service roles alongside catalog privileges.
 
 ## Visit-card ticket email screens (11 November 2026)
 
-A diner can optionally link an email while making their visit card or later
-from `/rewards`. Each link or replacement asks for explicit consent and links
-to the privacy notice. There is no confirmation-link step. The diner's own
-card read supplies their full `email`; the staff-only card-email read supplies
-the server's role-filtered address (masked for waiter/cashier, full for
-owner/manager). Staff can change or remove it after scanning, stamping,
-looking up or attaching a card. The same address can be saved on several cards
-without identifying any other card.
+A diner can optionally request to link an email while making a visit card.
+Later changes and removal from `/rewards` require the phone's card-owner
+secret. Front-of-house staff can still make changes after scanning, stamping,
+looking up or attaching a card in their restaurant. Each staff change is
+recorded in the activity log.
+
+Each link or replacement asks for explicit consent and links to the privacy
+notice. A new address receives one confirmation email per pending request.
+The link lasts seven days and requires a button press from the opened page.
+The previous active address keeps receiving tickets until confirmation. Removing
+the email from the card also cancels its pending request. Card reads report
+the active address, masked for diners and waiter/cashier and full for owner
+and manager. Cards can independently link the same address.
 A bill need not expose the full bearer code: staff can scan the card to edit.
 
 An attached card's email makes tickets automatic. The till and whole-table
@@ -3589,12 +3621,9 @@ to that public link; it removes the same saved address and consent. Page loads d
 nothing, so mail scanners cannot unsubscribe a diner by opening a link. Missing links and failed requests have distinct
 messages. All new copy is available in Spanish and English.
 
-These client screens consume the card-email server contract implemented in
-parallel. In particular, `/api/rewards` must return the bearer's full `email`,
-and `/api/loyalty/attach` should include the role-filtered `card.email` for an
-immediate collection notice. An absent projection remains unread in the UI;
-it does not claim the card has no email. Server grants, consent enforcement
-and delivery are outside this client change.
+The card-email and attach endpoints report the active address for collection.
+An absent projection remains unread in the UI. Pending addresses stay out of
+the ticket outbox.
 
 ### Second-pass collection consistency (2026-11-13)
 

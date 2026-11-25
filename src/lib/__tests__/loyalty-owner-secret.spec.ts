@@ -7,7 +7,7 @@ import { GET, PATCH, DELETE } from "@/app/api/rewards/route";
 import { DELETE as managerDelete } from "@/app/api/loyalty/lookup/route";
 
 const db = vi.hoisted(() => ({
-  insert: vi.fn(), update: vi.fn(), delete: vi.fn(), rpc: vi.fn(), getMember: vi.fn(),
+  insert: vi.fn(), update: vi.fn(), delete: vi.fn(), rpc: vi.fn(), getMember: vi.fn(), sendConfirmation: vi.fn(),
   select: vi.fn(), eq: vi.fn(), maybeSingle: vi.fn(), single: vi.fn(), order: vi.fn(), limit: vi.fn(),
 }));
 vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({ from: () => db, rpc: db.rpc }) }));
@@ -15,6 +15,7 @@ vi.mock("@/lib/membership", async original => ({ ...await original<typeof import
 vi.mock("@/lib/plan-server", () => ({ getPlan: async () => null }));
 vi.mock("@/lib/rate-limit", () => ({ PHONES_PER_ADDRESS: 20, clientKey: () => "ip", isRateLimited: async () => false }));
 vi.mock("@/lib/table-membership", () => ({}));
+vi.mock("@/lib/loyalty/card-email-confirmation", () => ({ sendCardEmailConfirmation: db.sendConfirmation }));
 vi.mock("@/lib/loyalty/pass", () => ({ readVisitPass: () => ({ place: "counter" }), placeLimit: () => ({}), PASS_SECONDS: 1 }));
 const steps = [{ visits: 8, reward: "Coffee" }];
 vi.mock("@/lib/loyalty/server", () => ({
@@ -27,6 +28,7 @@ vi.mock("@/lib/i18n/server", () => ({ getLocale: async () => "en" }));
 
 const code = "K7QM3XW9K7P2";
 const cookieName = `tt-loyalty-owner-${code}`;
+const emailCookieName = `tt-loyalty-email-owner-${code}`;
 const secret = "A".repeat(43);
 const hash = (value: string) => createHash("sha256").update(value).digest("hex");
 const restaurant = "10000000-0000-4000-8000-000000000001";
@@ -56,6 +58,8 @@ it("shows whether this browser can delete the card without exposing its key or h
   expect(owner.headers.get("cache-control")).toBe("private, no-store");
   const body = await owner.json();
   expect(body.canDelete).toBe(true);
+  expect(owner.cookies.get(emailCookieName)).toMatchObject({ value: secret, path: "/api/loyalty/card-email", httpOnly: true, sameSite: "strict" });
+  expect(guest.cookies.get(emailCookieName)).toBeUndefined();
   expect(JSON.stringify(body)).not.toContain(secret);
   expect(JSON.stringify(body)).not.toContain(hash(secret));
   expect((await guest.json()).canDelete).toBe(false);
@@ -73,6 +77,9 @@ it("creates a different random HttpOnly deletion key for each card and stores ju
     const body = await response.json();
     const cookie = response.cookies.get(`tt-loyalty-owner-${body.code}`);
     expect(cookie).toMatchObject({ httpOnly: true, sameSite: "strict", path: "/api/rewards" });
+    expect(response.cookies.get(`tt-loyalty-email-owner-${body.code}`)).toMatchObject({
+      value: cookie?.value, httpOnly: true, sameSite: "strict", path: "/api/loyalty/card-email",
+    });
     expect(cookie?.value).toMatch(/^[A-Za-z0-9_-]{43}$/);
     const key = cookie!.value;
     expect(db.insert).toHaveBeenLastCalledWith({
@@ -84,6 +91,25 @@ it("creates a different random HttpOnly deletion key for each card and stores ju
     keys.push(key);
   }
   expect(keys[0]).not.toBe(keys[1]);
+});
+
+it("uses the new card's owner secret to stage an optional email and sends its confirmation", async () => {
+  db.maybeSingle.mockResolvedValue({ data: { name: "Cafe" }, error: null });
+  db.insert.mockResolvedValue({ error: null });
+  db.rpc.mockResolvedValue({ data: "submitted", error: null });
+  const response = await createCard(new NextRequest("https://test/api/loyalty/card", {
+    method: "POST", body: JSON.stringify({ restaurantId: restaurant, email: "owner@example.invalid", consent: true }),
+  }));
+  const body = await response.json();
+  const cookie = response.cookies.get(`tt-loyalty-owner-${body.code}`)!;
+  const token = db.sendConfirmation.mock.calls[0][3] as string;
+  expect(body.email).toBe("submitted");
+  expect(db.rpc).toHaveBeenCalledWith("set_card_email_v2", expect.objectContaining({
+    p_restaurant: restaurant, p_code: body.code, p_email: "owner@example.invalid",
+    p_owner_hash: hash(cookie.value), p_actor: null, p_token_hash: hash(token),
+  }));
+  expect(db.sendConfirmation).toHaveBeenCalledWith(expect.any(NextRequest), body.code, "owner@example.invalid", token);
+  expect(JSON.stringify(body)).not.toContain(token);
 });
 
 it("renews the owner's cookie when the card is saved again", async () => {
@@ -108,6 +134,7 @@ it("checks the code and cookie hash in the same delete and clears the cookie on 
   expect(response.status).toBe(200);
   expect(db.eq.mock.calls).toEqual([["code", code], ["owner_secret_hash", hash(secret)]]);
   expect(response.cookies.get(cookieName)).toMatchObject({ value: "", maxAge: 0, path: "/api/rewards" });
+  expect(response.cookies.get(emailCookieName)).toMatchObject({ value: "", maxAge: 0, path: "/api/loyalty/card-email" });
 });
 
 it.each([undefined, `tt-loyalty-owner-000000000000=${secret}`])("a code without its own cookie cannot delete a card", async cookie => {

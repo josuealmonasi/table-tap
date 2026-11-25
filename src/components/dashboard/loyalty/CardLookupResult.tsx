@@ -96,6 +96,9 @@ export default function CardLookupResult({ card, active, onChanged, onDeleted }:
           diner earned is honoured after a pause — the route says so, and so
           does the diner's own page — so the one screen where a paused card
           can still be found keeps the button that honours it. */}
+      {/* This screen is the managers': a stamp here has no sale behind it,
+          and is recorded as their override (review 2026-11-25). */}
+      {active && <p className="tt-muted" style={{ fontSize: 12, margin: 0 }}>{t("loyalty.overrideNote")}</p>}
       {(active || s.ready) && (
         <div className="tt-loyalty-actions">
           {active && (

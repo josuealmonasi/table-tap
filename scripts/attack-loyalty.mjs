@@ -7,6 +7,7 @@
 //
 //   - another restaurant's card, scanned at ours: no visit, anywhere
 //   - the kitchen: no visit
+//   - a waiter with no sale behind the stamp: no visit (review 2026-11-25)
 //   - the same card twice in the same instant: one visit, not two
 //   - a ready reward spent by two people at once: spent once
 //   - on a ladder with every reward ready, the same button pressed twice at
@@ -69,8 +70,8 @@ export async function attackLoyalty({ admin, post, who, home, ok, bad }) {
       .select("id").single();
     planted.push(ours.id, theirs.id);
 
-    // Their card, at our till.
-    await post("/api/loyalty/stamp", { code: NEIGHBOUR_CARD }, who.waiter);
+    // Their card, at our till — by a manager, who needs no sale to stamp.
+    await post("/api/loyalty/stamp", { code: NEIGHBOUR_CARD }, who.manager);
     const theirVisits = await count("loyalty_visits", theirs.id);
     if (theirVisits === 0) ok("another restaurant's card, scanned here, gains no visit");
     else bad(`another restaurant's card gained ${theirVisits} visit(s) from our waiter`);
@@ -80,11 +81,17 @@ export async function attackLoyalty({ admin, post, who, home, ok, bad }) {
     if ((await count("loyalty_visits", ours.id)) === 0) ok("the kitchen cannot stamp a card");
     else bad("the kitchen stamped a visit card");
 
-    // Two waiters, one card, the same instant.
+    // A waiter naming no sale: the two-visit card stamped on two days with
+    // no purchase was the finding.
+    await post("/api/loyalty/stamp", { code: CARD }, who.waiter);
+    if ((await count("loyalty_visits", ours.id)) === 0) ok("a waiter with no sale behind it cannot stamp a card");
+    else bad("a waiter stamped a visit card with no sale behind it");
+
+    // Three stamps of one card, the same instant (a manager's, needing no sale).
     await Promise.all([
-      post("/api/loyalty/stamp", { code: CARD }, who.waiter),
-      post("/api/loyalty/stamp", { code: CARD }, who.waiter),
-      post("/api/loyalty/stamp", { code: CARD }, who.waiter),
+      post("/api/loyalty/stamp", { code: CARD }, who.manager),
+      post("/api/loyalty/stamp", { code: CARD }, who.manager),
+      post("/api/loyalty/stamp", { code: CARD }, who.manager),
     ]);
     const visits = await count("loyalty_visits", ours.id);
     if (visits === 1) ok("three scans of one card at once record one visit");
