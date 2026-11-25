@@ -72,7 +72,14 @@ runs:
             echo "::warning::ports 5432x are taken on this runner; using $((base+1))-$((base+2))"
             sed -i -E "s/^port = 54321$/port = $((base+1))/; s/^port = 54322$/port = $((base+2))/; s/^shadow_port = 54320$/shadow_port = $base/" ci/supabase/config.toml
           fi
-          supabase start --workdir ci -x studio,imgproxy,edge-runtime,logflare,vector,supavisor,postgres-meta,mailpit && exit 0
+          # public.ecr.aws (the CLI's default) answered "Data limit exceeded" to
+          # every pull on 2026-11-25 after a day of gate runs. From the second
+          # try, pull the same images from Docker Hub instead.
+          if [ "$attempt" -gt 1 ]; then export SUPABASE_INTERNAL_IMAGE_REGISTRY=docker.io; echo "::warning::pulling Supabase images from docker.io"; fi
+          # Under the step's -e and pipefail, only an `if` keeps a failed start from ending the step.
+          if supabase start --workdir ci -x studio,imgproxy,edge-runtime,logflare,vector,supavisor,postgres-meta,mailpit 2>&1 | tee /tmp/supabase-start.log; then exit 0; fi
+          # A spent registry is not worth the wait: go straight to the next try.
+          grep -q "Data limit exceeded\|toomanyrequests" /tmp/supabase-start.log && export SUPABASE_INTERNAL_IMAGE_REGISTRY=docker.io
           echo "::warning::supabase start failed (attempt $attempt); stopping and retrying"
           supabase stop --no-backup --workdir ci || true
           git checkout -- ci/supabase/config.toml
