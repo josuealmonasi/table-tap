@@ -5,11 +5,16 @@ import { jsonBody } from "@/lib/json-body";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { logEvent } from "@/lib/activity-log";
 import { logDetail } from "@/lib/log-detail";
+import { frozenBlocks, planBlocks } from "@/lib/plan-guard";
 
 /** Only a checked bank receipt can supply a currency the old writer omitted. */
 export async function POST(req: NextRequest) {
   const actor = await actingManager();
   if (!actor) return await apiError("apiErr.forbidden", 403);
+  // The same guard as the rest of /api/terminal/deposits: a locked
+  // subscription or a tier without the till edits no deposit (security sweep 2026-11-24).
+  const blocked = (await frozenBlocks(actor.restaurantId)) ?? (await planBlocks(actor.restaurantId, "pos"));
+  if (blocked) return blocked;
   const body = await jsonBody<{ id?: unknown; currency?: unknown; confirmed?: unknown; reason?: unknown }>(req);
   if (!body || typeof body.id !== "string" || (body.currency !== "MXN" && body.currency !== "USD") || body.confirmed !== true
     || typeof body.reason !== "string" || body.reason.trim().length < 8 || body.reason.length > 500) return await apiError("apiErr.invalidRequest", 400);

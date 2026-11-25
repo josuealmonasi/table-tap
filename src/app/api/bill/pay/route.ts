@@ -137,6 +137,10 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   if (couponCode && orders.some(o => Number(o.collected ?? 0) > 0)) return await apiError("apiErr.couponAlreadyUsed", 409);
   const food = round2(orders.reduce((sum, o) => sum + Number(o.total) - Number(o.collected ?? 0), 0));
   const principal = remainingPrincipal(orders);
+  // A coupon is judged on the dishes alone, as the cart and the bill screen
+  // judge it: service never counts toward a minimum (security sweep 2026-11-24).
+  // Coupons are refused once anything was collected, so nothing is netted here.
+  const dishes = Math.max(0, round2(principal - orders.reduce((sum, o) => sum + Number(o.service_fee ?? 0), 0)));
 
   // A coupon here discounts the share being settled, which is what lets two
   // people at one table each use their own on their own food. Two rules keep
@@ -157,11 +161,11 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     if (found === undefined) return await apiError("apiErr.couponLookupFailed", 503);
     coupon = found;
     if (!coupon || coupon.staff_only) return await apiError("apiErr.couponNotFound", 400);
-    if (couponProblem(coupon, principal)) return await apiError("apiErr.couponNotValid", 400);
+    if (couponProblem(coupon, dishes)) return await apiError("apiErr.couponNotValid", 400);
 
     // The attempt transaction reserves the last use together with its scope,
     // before a payable page exists; a losing request never owns another use.
-    discount = applyCoupon(toAppliedCoupon(coupon), principal);
+    discount = applyCoupon(toAppliedCoupon(coupon), dishes);
   }
 
   const payable = round2(food - discount);

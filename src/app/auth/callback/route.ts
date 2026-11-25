@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import type { EmailOtpType } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
 import { sameSitePost } from "@/lib/same-site-post";
+import { authConfirmRedirect } from "@/lib/auth-confirm-redirect";
 
 export const runtime = "nodejs";
 
@@ -29,8 +30,10 @@ async function confirm(
 
   if (method === "GET" && !code && tokenHash && type) {
     const page = new URL("/auth/confirm", origin);
-    page.search = new URLSearchParams({ token_hash: tokenHash, type, next }).toString();
-    return NextResponse.redirect(page, 303);
+    page.searchParams.set("next", next);
+    const lang = params.get("lang");
+    if (lang !== null) page.searchParams.set("lang", lang);
+    return authConfirmRedirect(page, tokenHash, type, 303);
   }
 
   const supabase = await createClient();
