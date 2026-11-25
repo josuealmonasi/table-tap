@@ -46,6 +46,14 @@ it("E4 freezes net entitlements and the coupon in the attempt before asking Stri
   expect(create).toHaveBeenCalledWith(params, expect.objectContaining({ idempotencyKey: state.attempts[0].idempotency_key }));
   expect(record).toHaveBeenCalled();
 });
+it("records the whole-bill payer before opening a payable page", async () => {
+  create.mockImplementationOnce(async () => {
+    expect(state.attempts[0].payer_member_id).toBe("payer");
+    return session;
+  });
+  await openDinerAttempt(stripe, params, { ...quote, payerMemberId: "payer" });
+  expect(create).toHaveBeenCalledOnce();
+});
 it("E8 concurrent zero-fee requests share one persisted Stripe idempotency key", async () => {
   const free = { ...params, metadata: { restaurant_id: "r" } };
   const results = await Promise.all([openDinerAttempt(stripe, free, quote), openDinerAttempt(stripe, free, quote)]);

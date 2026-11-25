@@ -9,6 +9,14 @@ import { useT } from "@/lib/i18n/context";
 export type StaffRole = "owner" | "manager" | "waiter" | "cashier" | "kitchen";
 
 /** A staff login row as the owner sees it. */
+/** What a removal reset, when asked to: shown once so it can be handed on. */
+export interface RemovalResult {
+  printerToken?: string | null;
+  printerReset?: boolean;
+  accounts?: { id: string; name: string; code: string }[];
+  accountsReset?: boolean;
+}
+
 export interface StaffMember {
   id: string;
   email: string;
@@ -116,23 +124,27 @@ export function useStaff(restaurantId: string) {
     }
   }
 
-  async function removeMember(id: string): Promise<void> {
+  async function removeMember(
+    id: string, options: { resetPrinter?: boolean; resetAccounts?: boolean } = {},
+  ): Promise<RemovalResult | null> {
     setBusy(true);
     try {
       const res = await fetch("/api/staff", {
         method: "DELETE",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id }),
+        body: JSON.stringify({ id, ...options }),
       });
       const data = await res.json();
       if (!res.ok) {
         toast(data.error ?? t("apiErr.loginRemove"), "error");
-        return;
+        return null;
       }
       toast(t("done.loginRemoved"));
       await mutate(prev => prev?.filter(m => m.id !== id), { revalidate: false });
+      return data as RemovalResult;
     } catch {
       toast(t("done.networkError"), "error");
+      return null;
     } finally {
       setBusy(false);
     }

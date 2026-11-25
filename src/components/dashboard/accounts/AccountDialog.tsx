@@ -51,12 +51,15 @@ export default function AccountDialog({ account, onClose, currency, timeZone, ca
   const [error, setError] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);
 
-  const link = account && typeof window !== "undefined" ? accountLink(window.location.origin, account.code) : "";
+  // The list carries no account's link; this account's comes with its statement.
+  const [code, setCode] = useState<string | null>(null);
+  const link = account && code && typeof window !== "undefined" ? accountLink(window.location.origin, code) : "";
 
   useEffect(() => {
     if (!account) return;
     let live = true;
     setStatement(null);
+    setCode(null);
     setCrediting(null);
     setFailed(false);
     setLimit(String(account.credit_limit));
@@ -64,7 +67,7 @@ export default function AccountDialog({ account, onClose, currency, timeZone, ca
       .then(async r => {
         if (!r.ok) throw new Error(String(r.status));
         const d = await r.json();
-        if (live) setStatement(d.statement);
+        if (live) { setStatement(d.statement); setCode(d.account?.code ?? null); }
       })
       .catch(() => live && setFailed(true));
     return () => {
@@ -166,11 +169,13 @@ export default function AccountDialog({ account, onClose, currency, timeZone, ca
             <div className="tt-account-qr-img" aria-hidden="true" />
           )}
           <div>
-            <p className="tt-card-code">{formatCode(account.code)}</p>
+            <p className="tt-card-code">{code ? formatCode(code) : "\u2026"}</p>
             <p className="tt-muted" style={{ fontSize: 13 }}>{t("accounts.qrHint")}</p>
-            <a className="tt-btn tt-btn-ghost tt-btn-sm" href={`/cuenta/${account.code}`} target="_blank" rel="noopener">
-              {t("accounts.openStatement")}
-            </a>
+            {code && (
+              <a className="tt-btn tt-btn-ghost tt-btn-sm" href={`/cuenta/${code}`} target="_blank" rel="noopener">
+                {t("accounts.openStatement")}
+              </a>
+            )}
           </div>
         </section>
 

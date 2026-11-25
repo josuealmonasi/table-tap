@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useStaff, type StaffRole } from "@/hooks/useStaff";
-import { useConfirm } from "@/components/ui/ConfirmDialog";
+import RemoveStaffDialog from "@/components/dashboard/staff/RemoveStaffDialog";
 import { useT } from "@/lib/i18n/context";
 import { useToast } from "@/components/ui/Toast";
 import Breadcrumb from "@/components/layout/Breadcrumb";
@@ -57,7 +57,7 @@ export default function StaffPanel({ restaurantId, children, roles = [...ALL_ROL
   // The first role on offer: a cook where there is a kitchen board, a cashier on Caja.
   const firstRole = roles[0] ?? "cashier";
   const [role, setRole] = useState<StaffRole>(firstRole);
-  const confirm = useConfirm();
+  const [removing, setRemoving] = useState<{ id: string; name: string } | null>(null);
 
   /** Returns whether the invite landed, so a failure keeps the dialog open. */
   async function handleAdd(e: React.FormEvent): Promise<boolean> {
@@ -148,20 +148,7 @@ export default function StaffPanel({ restaurantId, children, roles = [...ALL_ROL
                       className="tt-iconbtn"
                       title={t("dash.removeLogin")}
                       disabled={busy}
-                      onClick={async () => {
-                        if (
-                          await confirm({
-                            title: t("dash.removeConfirm", {
-                              name: m.full_name || m.email,
-                            }),
-                            message: t("dash.removeConfirmMsg"),
-                            confirmLabel: t("common.remove"),
-                            danger: true,
-                          })
-                        ) {
-                          removeMember(m.id);
-                        }
-                      }}
+                      onClick={() => setRemoving({ id: m.id, name: m.full_name || m.email })}
                     >
                       <DeleteIcon size={16} />
                     </button>
@@ -227,6 +214,7 @@ export default function StaffPanel({ restaurantId, children, roles = [...ALL_ROL
           {children}
         </div>
       </div>
+      <RemoveStaffDialog member={removing} busy={busy} onRemove={removeMember} onClose={() => setRemoving(null)} />
     </div>
   );
 }
