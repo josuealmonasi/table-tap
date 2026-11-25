@@ -14,7 +14,6 @@ import {
 } from "@/lib/analytics";
 import AnalyticsView, { type RatedDish } from "@/components/dashboard/analytics/AnalyticsView";
 import { saleReturnSummary } from "@/lib/refunds/reporting";
-import { returnedAdjustments } from "@/lib/refunds/adjustments";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { unwrap } from "@/lib/ordering-data";
 import { getPlan } from "@/lib/plan-server";
@@ -25,7 +24,7 @@ import { DEFAULT_TIME_ZONE } from "@/lib/open-menus";
 import { startOfLocalDay, startOfNextLocalDay } from "@/lib/day-window";
 import { otherCurrencyTakings } from "@/lib/other-currency-takings";
 import { corteFrom } from "@/lib/corte";
-import { corteLogs, type CorteLog } from "@/lib/corte-log";
+import { readCorteAdjustments } from "@/lib/corte-adjustments";
 import { todaysShiftViews } from "@/lib/cash-shift-server";
 import { readTerminalReport } from "@/lib/terminal-report";
 import { everyRow } from "@/lib/paged";
@@ -79,17 +78,11 @@ export default async function AnalyticsPage({
   const admin = createAdminClient();
   const since = dayStart.toISOString();
 
-  const [paidRows, givenUp, owedRows, returns, chargedRows, otherCurrencies, discounted] = await Promise.all([
+  const [paidRows, adjustments, owedRows, chargedRows, otherCurrencies, discounted] = await Promise.all([
     readCortePayments(admin, membership.restaurant.id, membership.restaurant.currency, since),
-    everyRow<CorteLog>((a, b) => admin
-      .from("user_logs")
-      .select("entity, action, detail")
-      .eq("restaurant_id", membership.restaurant.id)
-      // "refunded" is money handed back after it arrived. It comes out of the
-      // drawer of whoever took it, which is why the corte needs to see it.
-      .in("action", ["written_off", "refunded"])
-      .gte("created_at", since)
-      .order("id").range(a, b), "today's write-offs and refunds"),
+    // Write-offs, logged refunds and completed returns: the reader the daily
+    // digest shares, so its cash and card lines match this corte.
+    readCorteAdjustments(admin, membership.restaurant.id, membership.restaurant.currency, since),
     // What customers owe on their accounts right now, however old, in this
     // currency only. An old MX$100 debt cannot become US$100 after settings change.
     everyRow<{ total: number }>((a, b) => admin
@@ -100,7 +93,6 @@ export default async function AnalyticsPage({
       .eq("paid", false).eq("written_off", false)
       .neq("status", "cancelled")
       .order("id").range(a, b), "what customer accounts owe"),
-    returnedAdjustments(membership.restaurant.id, since, undefined, membership.restaurant.currency),
     // Food put on a customer's account today: out of the kitchen, owed, and in
     // nobody's drawer. Read from the orders the charge stamped, not from its
     // log line, which a failed insert loses for good (sweep 8, finding 6).
@@ -114,14 +106,13 @@ export default async function AnalyticsPage({
     otherCurrencyTakings(membership.restaurant.id, membership.restaurant.currency, since),
     reportDiscounts(admin, membership.restaurant.id, membership.restaurant.currency, since, startOfNextLocalDay(dayStart, timeZone).toISOString()),
   ]);
-  const log = corteLogs(givenUp, membership.restaurant.currency);
   const corte = {
-    ...corteFrom(paidRows, [...log.verified, ...returns]),
+    ...corteFrom(paidRows, adjustments.verified),
     otherCurrencies,
     discounted,
     onAccount: Math.round(chargedRows.reduce((s, o) => s + Number(o.total), 0) * 100) / 100,
     accountsOwed: Math.round(owedRows.reduce((s, o) => s + Number(o.total), 0) * 100) / 100,
-    unverifiedAdjustments: log.unverified,
+    unverifiedAdjustments: adjustments.unverified,
   };
   // The drawer it is counted against, shift by shift: today's, and the one
   // still open. A failed read throws to the error screen — a drawer shown as

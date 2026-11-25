@@ -2,6 +2,7 @@ import { readOpenAccountDebt } from "@/lib/account-balances-read";
 import { readAnalyticsOrders, readCortePayments } from "@/lib/analytics-read";
 import { computeAnalytics } from "@/lib/analytics";
 import { corteFrom } from "@/lib/corte";
+import { readCorteAdjustments } from "@/lib/corte-adjustments";
 import { localDayKey, startOfLocalDay, subtractLocalDays } from "@/lib/day-window";
 import { round2 } from "@/lib/money";
 import { everyRow } from "@/lib/paged";
@@ -31,16 +32,18 @@ export async function readDigestFigures(db: Db, restaurant: RestaurantDay, now: 
   const analytics = computeAnalytics(await withReturnComponents(db, id, current), "today", timezone, day);
   if (analytics.revenue <= 0) return null;
 
-  const [previous, payments, discounts, refunds, attention] = await Promise.all([
+  const [previous, payments, adjustments, discounts, refunds, attention] = await Promise.all([
     readAnalyticsOrders(db, id, currency, comparisonDay.toISOString(), comparisonEnd.toISOString())
       .then(rows => withReturnComponents(db, id, rows)),
     readCortePayments(db, id, currency, from, to),
+    readCorteAdjustments(db, id, currency, from, to),
     reportDiscounts(db, id, currency, from, to),
     readCompletedReturns(db, id, currency, from, to, true),
     readAttention(db, id, from, to),
   ]);
   const previousRevenue = computeAnalytics(previous, "today", timezone, comparisonDay).revenue;
-  const takings = corteFrom(payments);
+  // The Analytics corte's own adjustments, so cash and card read as it does.
+  const takings = corteFrom(payments, adjustments.verified);
   const dineIn = current.filter(o => o.table_id || o.table_label).length;
   return {
     day,
