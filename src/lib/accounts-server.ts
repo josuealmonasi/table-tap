@@ -7,6 +7,7 @@ import { DEFAULT_TIME_ZONE } from "@/lib/open-menus";
 import { byDay, linesOf, type StatementCharge, type StatementDay } from "@/lib/accounts";
 import { round2 } from "@/lib/money";
 import { currencyBalances, type CurrencyBalance } from "@/lib/currency-balances";
+import { readAccountBalances } from "@/lib/account-balances-read";
 
 // Customer accounts, read with the secret key: the table has no policy at all,
 // so nothing reaches one except through a route that has checked who is asking.
@@ -49,27 +50,14 @@ export async function listAccounts(restaurantId: string): Promise<AccountSummary
   const db = createAdminClient();
   // Every row: an account's balance summed from the first thousand unpaid
   // orders is a balance that stops growing while the customer keeps eating.
-  const [accounts, owedRows] = await Promise.all([
+  const [accounts, owed] = await Promise.all([
     everyRow<AccountRow>((a, b) => db.from("customer_accounts").select(ACCOUNT_COLUMNS).eq("restaurant_id", restaurantId)
       .order("status").order("name").order("id").range(a, b), "the accounts"),
-    everyRow<{ account_id: string; total: number; currency: string; created_at: string; charged_at: string | null }>((a, b) => db
-      .from("orders").select("account_id, total, currency, created_at, charged_at")
-      .eq("restaurant_id", restaurantId).not("account_id", "is", null)
-      .eq("paid", false).eq("written_off", false).neq("status", "cancelled")
-      .order("id").range(a, b), "what the accounts owe"),
+    readAccountBalances(db, restaurantId),
   ]);
-  const owed = new Map<string, { last: string | null; sums: Map<string, number> }>();
-  for (const o of owedRows) {
-    const accountId = o.account_id;
-    const at = o.charged_at ?? o.created_at;
-    const balance = owed.get(accountId) ?? { last: null, sums: new Map<string, number>() };
-    balance.last = !balance.last || at > balance.last ? at : balance.last;
-    balance.sums.set(o.currency, round2((balance.sums.get(o.currency) ?? 0) + Number(o.total)));
-    owed.set(accountId, balance);
-  }
   const unresolved = await unresolvedAccounts(restaurantId, accounts.map(a => a.id));
   return accounts.map(a => {
-    const balances = [...(owed.get(a.id)?.sums ?? [])].map(([currency, amount]) => ({ currency, amount }));
+    const balances = owed.get(a.id)?.balances ?? [];
     return {
       ...a,
       payingOnline: unresolved.has(a.id),

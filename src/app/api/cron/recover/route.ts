@@ -14,6 +14,7 @@ import { recoverPriceNotices } from "@/lib/recovery/price-notices";
 import { recoverPriceMoves, recoverPriceCatalogue } from "@/lib/recovery/price-moves";
 import { recoverPriceRecipients } from "@/lib/recovery/price-recipients";
 import { recoverTrialReminders } from "@/lib/recovery/trial-reminders";
+import { recoverDailyDigests } from "@/lib/recovery/daily-digest";
 import { signedRecoveryAuthorized } from "@/lib/recovery/signed-auth";
 import { schedulerHealth } from "@/lib/recovery/health.mjs";
 import { purgeAccounting } from "@/lib/recovery/accounting-purge";
@@ -63,6 +64,7 @@ async function recover(request: Request) {
   const priceMoves = priceNotices.then(() => isolateJob("price_moves", () => recoverPriceMoves(recoveryContext())));
   const priceCatalogue = isolateJob("price_catalogue", () => recoverPriceCatalogue(recoveryContext()));
   const accounting = isolateJob("accounting", () => purgeAccounting(recoveryContext()));
+  const digest = isolateJob("daily_digest", () => recoverDailyDigests(recoveryContext()));
   const jobs: Record<string, RecoveryJob> = { stock: recoverStock, refunds: recoverRefunds, fees: recoverFees, subscriptions: recoverSubscriptions, disputes: recoverDisputes,
     trial_reminders: recoverTrialReminders };
   const results: Record<string, RecoveryResult> = {};
@@ -82,6 +84,8 @@ async function recover(request: Request) {
   // The purge counts toward a healthy run like every other job.
   results.accounting = await accounting;
   console.info("Scheduled recovery", { job: "accounting", ...results.accounting });
+  results.daily_digest = await digest;
+  console.info("Scheduled recovery", { job: "daily_digest", ...results.daily_digest });
   const drained = await tickets;
   console.info("Scheduled recovery", { job: "tickets", ...drained });
   const ok = Object.values(results).every(r => r.failed === 0 && !r.observation_failed && r.pending !== null) &&

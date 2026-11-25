@@ -20,7 +20,7 @@ export async function recoverProduction(env = process.env, send = fetch) {
     redirect: "error", signal: AbortSignal.timeout(75_000) });
   if (!response.ok) throw new Error(`Production recovery returned HTTP ${response.status}.`);
   const answer = await response.json().catch(() => null);
-  for (const name of ["stock", "refunds", "fees", "subscriptions", "disputes", "accounting", "price_notices"]) {
+  for (const name of ["stock", "refunds", "fees", "subscriptions", "disputes", "accounting", "price_notices", "daily_digest"]) {
     const job = answer?.jobs?.[name];
     if (!job || job.failed !== 0 || job.observation_failed || !Number.isInteger(job.pending) || job.pending < 0) {
       throw new Error("Production recovery reported unfinished checks; inspect the protected recovery logs.");

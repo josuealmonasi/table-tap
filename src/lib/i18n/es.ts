@@ -32,6 +32,14 @@ export const es: Messages = {
     warning_closed: "Consulta cerrada",
     prevented: "Prevenido",
   },
+  digest: {
+    preference: "Resumen diario de ventas",
+    preferenceHint: "Recibe las ventas de ayer por correo a las 7:00 a. m. en el horario del restaurante.",
+    stopTitle: "Resumen diario de ventas",
+    stopAction: "Dejar de recibir este resumen",
+    stopped: "Ya no recibirás el resumen diario de ventas.",
+    invalidLink: "Este enlace del resumen no es válido.",
+  },
   cardEmail: {
     ownReadFailed: "No pudimos consultar el correo de tu tarjeta. Puedes escribir uno nuevo.",
     submittedDiner: "Correo guardado para esta tarjeta.",

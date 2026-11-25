@@ -10,10 +10,17 @@ export const runtime = "nodejs";
 // open links, so only this POST changes anything. Answers the restaurant's name.
 export async function POST(req: NextRequest): Promise<NextResponse> {
   if (await isRateLimited(`digest-stop:${clientKey(req)}`, 10, 60)) return await apiError("apiErr.tooManyWait", 429);
-  const body = await jsonBody<{ token?: unknown }>(req);
-  if (!validToken(body?.token)) return await apiError("apiErr.notFound", 404);
+  // The page's button sends JSON; a mail app's one-click unsubscribe POSTs a
+  // form to the List-Unsubscribe URL, which carries the token in the query.
+  const fromQuery = req.nextUrl.searchParams.get("t");
+  if (fromQuery !== null) {
+    const form = await req.formData().catch(() => null);
+    if (form?.get("List-Unsubscribe") !== "One-Click") return await apiError("apiErr.invalidRequest", 400);
+  }
+  const token = fromQuery ?? (await jsonBody<{ token?: unknown }>(req))?.token;
+  if (!validToken(token)) return await apiError("apiErr.notFound", 404);
   try {
-    const restaurant = await stopRecipient(body.token);
+    const restaurant = await stopRecipient(token);
     if (restaurant === null) return await apiError("apiErr.notFound", 404);
     return NextResponse.json({ ok: true, restaurant });
   } catch {

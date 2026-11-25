@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { useToast } from "@/components/ui/Toast";
 import { useT } from "@/lib/i18n/context";
@@ -59,5 +59,20 @@ export function useProfile(userId: string) {
     return true;
   }
 
-  return { saving, saveName, saveEmail, savePassword };
+  const saveDigest = useCallback(async (digest: boolean): Promise<boolean> => {
+    setSaving(true);
+    try {
+      const { error } = await supabase.auth.updateUser({ data: { digest } });
+      if (error) throw error;
+      toast(t("done.profileSaved"));
+      return true;
+    } catch {
+      toast(t("write.saveProfile"), "error");
+      return false;
+    } finally {
+      setSaving(false);
+    }
+  }, [supabase, t, toast]);
+
+  return { saving, saveName, saveEmail, savePassword, saveDigest };
 }

@@ -92,6 +92,7 @@ const NOT_BOOKS: Record<string, string> = {
   plan_price_notices: "notice delivery queue, not money collected or owed",
   service_requests: "calls for a waiter", ticket_email_outbox: "email delivery, holds diner addresses",
   stock_reservations: "in-flight stock holds", fee_reconcile_queue: "work queue; deletion waits for it to empty",
+  menu_stockouts: "when a menu item sold out, for the daily digest",
   ingredients: "inventory catalogue", ingredient_prices: "inventory catalogue", recipe_lines: "inventory catalogue",
   ingredient_counts: "stock counts", ingredient_movements: "stock movements", ingredient_consumption: "stock use",
   waste_entries: "stock written off, not money collected or owed",

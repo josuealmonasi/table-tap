@@ -30,6 +30,14 @@ export const en = {
     warning_closed: "Inquiry closed",
     prevented: "Prevented",
   },
+  digest: {
+    preference: "Daily sales digest",
+    preferenceHint: "Get yesterday’s sales by email at 7:00 a.m. restaurant time.",
+    stopTitle: "Daily sales digest",
+    stopAction: "Stop receiving this digest",
+    stopped: "You won’t receive the daily sales digest anymore.",
+    invalidLink: "This digest link is invalid.",
+  },
   cardEmail: {
     ownReadFailed: "We could not check your card's email. You can enter a new one.",
     submittedDiner: "Email saved for this card.",
