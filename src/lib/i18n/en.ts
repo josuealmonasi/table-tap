@@ -1907,6 +1907,7 @@ foundingLeftBody: "Subscribe now and keep this subscription price for as long as
     restaurantSuspended: "This restaurant isn't taking orders or payments right now. Anything already collected is kept.",
     notAccepting: "The restaurant isn't taking orders right now. Please try again later.",
     checkoutFailed: "Checkout failed",
+    billBeingPaid: "Someone at the table is already paying the bill. Wait for them to finish or ask them to cancel it.",
     verifyItems: "Could not verify items",
     pricesChanged: "Some prices changed. Your order now shows today's prices — check it and send it again.",
     verifyOrders: "Could not verify orders",

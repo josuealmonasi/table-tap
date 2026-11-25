@@ -156,3 +156,14 @@ it("still resends legacy Auth links and preserves the resend rate limit", async 
   mock.isRateLimited.mockResolvedValueOnce(true);
   expect((await resend(request("/resend", { email: payload.email }))).status).toBe(429);
 });
+it("the signup trigger provisions once: an already-confirmed user's later update returns before anything runs", async () => {
+  const { readFileSync } = await import("node:fs");
+  const schema = readFileSync("supabase/schema.sql", "utf8");
+  const start = schema.indexOf("create or replace function public.provision_pending_signup_v1()");
+  const body = schema.slice(start, schema.indexOf("$$;", start));
+  const guard = body.indexOf("if tg_op = 'UPDATE' and old.email_confirmed_at is not null then return new; end if;");
+  expect(start).toBeGreaterThan(-1);
+  expect(guard).toBeGreaterThan(-1);
+  expect(guard).toBeLessThan(body.indexOf("delete from public.pending_signups"));
+  expect(guard).toBeLessThan(body.indexOf("signup_restaurant_with_terms_v1"));
+});

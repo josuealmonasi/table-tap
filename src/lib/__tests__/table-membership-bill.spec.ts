@@ -18,6 +18,10 @@ vi.mock("@/lib/supabase/admin", () => ({
         predicates.push(row => values.includes(row[field]));
         return q;
       };
+      q.overlaps = (field: string, values: unknown[]) => {
+        predicates.push(row => ((row[field] ?? []) as unknown[]).some(value => values.includes(value)));
+        return q;
+      };
       q.then = (resolve: (value: unknown) => unknown) => Promise.resolve({
         data: (tables[table] ?? []).filter(row => predicates.every(predicate => predicate(row))), error: null,
       }).then(resolve);

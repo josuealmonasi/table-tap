@@ -24,6 +24,8 @@ vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({ from: (tabl
   const q = { select: () => q, update: () => q,
     eq: (key: string, value: unknown) => { filters.push(row => row[key] === value); return q; },
     in: (key: string, values: unknown[]) => { filters.push(row => values.includes(row[key])); return q; },
+    is: (key: string, value: unknown) => { filters.push(row => (row[key] ?? null) === value); return q; },
+    overlaps: (key: string, values: unknown[]) => { filters.push(row => ((row[key] ?? []) as unknown[]).some(v => values.includes(v))); return q; },
     range: (start: number) => { offset = start; return q; }, order: () => q, single: async () => answer(true), maybeSingle: async () => answer(true),
     then: (resolve: (value: unknown) => unknown) => Promise.resolve(answer()).then(resolve) };
   return q;
