@@ -8719,6 +8719,18 @@ with more is queued whole for manager review (`apiErr.offlineTooManyLines`)
 and an approval records every line, up to `MAX_CART_LINES`. Check:
 `pos-charge-reload.spec.tsx`, `pos-cart-charging.spec.ts`,
 `held-intake.spec.ts`.
+### Daily digest eligibility, retries and stop links (2026-11-25)
+
+A removed manager or stopped outside address could remain in a queued batch.
+The worker now checks membership, opt-in and confirmation again before every
+send. With 101 addresses, an accepted first batch used to hide the refused
+last address. Delivery state now follows each batch and report date, so the
+worker can retry that address after midnight. An uncertain submission keeps
+its claim. Staff and outside subscriptions to the same normalized mailbox
+share one copy and one restaurant-scoped stop. Opting in renews the staff link
+version, and equivalent UUID spellings share one recipient resend quota.
+Check: `daily-digest.spec.ts`, `digest-schema.spec.ts`,
+`digest-stop.react-component.spec.tsx`, and `digest-resend.spec.ts`.
 ### Restaurant deletion raced transfers, collectible bills, and refunds (2026-11-25)
 
 The old route cached staff logins before deletion, skipped completed unpaid
