@@ -8773,3 +8773,26 @@ drawer read MX$100 cash in the mail and MX$70 on the corte. Both now read
 their adjustments (logged write-offs and refunds, plus completed return
 events) from one reader, `readCorteAdjustments` in `corte-adjustments.ts`.
 Check: `signup-mail-ceiling.spec.ts`, `digest-figures.spec.ts`.
+
+### Stripe refund race, early refund fee, early dispute (2026-11-25)
+
+Three pairs that had to agree with nothing checking (bl43 review, findings 1,
+4 and 5). First, the charge TableTap read and the charge it refunded: a
+MX$100 duplicate-payment due on a MX$200 charge, MX$40 returned by hand in
+Stripe after TableTap listed the refunds, and Stripe still accepted MX$100 —
+MX$140 back to the diner. Each attempt now freezes the charge's live refund
+ids (`start_refund_due_attempt_v3`), and `guardRefundSend` lists the charge
+again right before every POST, replacements included. A new refund that is
+pending holds the send; one that succeeded is counted by
+`reconcile_refund_due_send_v1`, which retires the unsent attempt and opens a
+new one, with its own idempotency key, for only what is still owed. Owed with
+nothing refundable left writes `refund_due_reviews` and leaves the due open,
+so an owed refund is never silently dropped. Second and third, Stripe's
+event order and our books: a refund or a dispute that beat its checkout's
+completion webhook matched no sale, so the fee return was never queued and
+the dispute stayed in review, out of the restaurant's totals. Unmatched
+refunds are kept in `unmatched_refund_notices`, and one hook in verified
+settlement (`adoptSettledIntent` → `adopt_settled_intent_v1`) queues their
+fee reconciliation and sends the intent's review disputes back to the
+worker. Checks: `refund-due-race.spec.ts`, `refund-due-resume.spec.ts`,
+`settled-intent.spec.ts`, `fee-queue-scope.spec.ts`.

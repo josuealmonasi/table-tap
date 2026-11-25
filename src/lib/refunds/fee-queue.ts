@@ -28,7 +28,7 @@ async function chargeAccount(db: Db, restaurant: string, intent: string): Promis
 }
 
 /** A successful provider refund must be durable before Stripe hears 200. */
-export async function enqueueRefundFee(object: Stripe.Refund | Stripe.Charge, account: string | undefined): Promise<void> {
+export async function enqueueRefundFee(object: Stripe.Refund | Stripe.Charge, account: string | undefined, livemode: boolean): Promise<void> {
   if (!account) return;
   const intent = typeof object.payment_intent === "string" ? object.payment_intent : object.payment_intent?.id;
   if (!intent) return;
@@ -38,8 +38,15 @@ export async function enqueueRefundFee(object: Stripe.Refund | Stripe.Charge, ac
   if (error) throw new Error(`Could not find the restaurant for a returned fee: ${error.message}`);
   if (!restaurant) return;
   // A charge the restaurant made outside TableTap carries no fee of ours, and
-  // a queue row nothing can resolve used to stay forever (review bg4).
-  if (!(await chargeAccount(db, restaurant.id, intent))) return;
+  // a queue row nothing can resolve used to stay forever (review bg4). But a
+  // refund can also arrive before the checkout that owns the charge settles
+  // (bl43 finding 4): the notice is kept, and settlement queues it.
+  if (!(await chargeAccount(db, restaurant.id, intent))) {
+    const { error: noteError } = await db.rpc("note_unmatched_refund_v1",
+      { p_restaurant: restaurant.id, p_account: account, p_live: livemode, p_intent: intent });
+    if (noteError) throw new Error(`Could not keep an unmatched refund: ${noteError.message}`);
+    return;
+  }
   const { data, error: enqueueError } = await db.rpc("enqueue_fee_reconcile", { p_restaurant: restaurant.id, p_intent: intent });
   if (enqueueError || !Number.isSafeInteger(data)) throw new Error(`Could not enqueue the returned fee: ${enqueueError?.message ?? "no generation"}`);
 }
