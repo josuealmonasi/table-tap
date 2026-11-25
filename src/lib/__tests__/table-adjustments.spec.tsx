@@ -5,6 +5,7 @@ interface Row { [key: string]: unknown }
 const tables: Record<string, Row[]> = {};
 const actor = { restaurantId: "r1", email: "ana", role: "waiter" };
 const applied: Row[][] = [];
+vi.mock("@/lib/staff-request-guard", () => ({ staffWriteLimited: async () => false, repeatedStaffRequest: async () => null }));
 vi.mock("@/lib/api-guard", () => ({ actingFrontOfHouse: async () => actor, actingManager: async () => actor }));
 vi.mock("@/lib/api-error", () => ({ apiError: async (error: string, status: number) => NextResponse.json({ error }, { status }) }));
 vi.mock("@/lib/plan-guard", () => ({ planBlocks: async () => null }));

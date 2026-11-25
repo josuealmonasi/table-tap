@@ -8480,6 +8480,16 @@ GHSA-pc58-hwjq-p385 (cross-client response injection) and GHSA-7qx7-33qx-rqx2
 eslint-config-next now pin 15.5.29, and the framework floor in
 `security-headers.spec.ts` rises to it, so a downgrade fails the unit tests.
 
+### Requests that could be repeated without end (security sweep 2026-11-24)
+
+A waiter could tap "ask for a discount" or "ask for a write-off" over and over,
+each tap a new pending row in the managers' queue, and send table orders with
+no retry reference, each a new kitchen ticket. A diner from a closed sitting
+kept the membership it needed to pay what it owed, and with it could call for
+the bill at a table the next party now sits at. Requests now reuse the pending
+one per table (`repeatedStaffRequest`), and all three have a 30-a-minute
+per-person ceiling (`staffWriteLimited`), and bill and payment calls need the
+current sitting. Check: `sweep-1124-requests.spec.ts`.
 ### Three guards that did not match their siblings (security sweep 2026-11-24)
 
 `PATCH /api/staff` changed roles while the subscription was locked (invitations

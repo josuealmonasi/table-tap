@@ -1,6 +1,7 @@
 import { beforeEach, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
 const f = vi.hoisted(() => ({ role: "manager", calls: [] as { name: string; args: Record<string, unknown> }[], requestAmount: 100 }));
+vi.mock("@/lib/staff-request-guard", () => ({ staffWriteLimited: async () => false, repeatedStaffRequest: async () => null }));
 vi.mock("@/lib/api-guard", () => ({
   actingFrontOfHouse: async () => ({ restaurantId: "r", role: f.role, email: "staff" }),
   actingManager: async () => ({ restaurantId: "r", role: "manager", email: "staff" }),
