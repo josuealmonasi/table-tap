@@ -51,20 +51,22 @@ the restaurant. A dialog asks how the tier is paid (`billing`):
   nothing is charged or credited today, the period already paid stays as paid,
   and the next invoice is at the new price. The tier changes at once
   (`applySubscription`). Refused for an overdue subscription (settle first),
-  one already set to end (there is no next bill), and a non-monthly one
-  (Stripe would bill at once); under the same billing lock as the owner's own
-  checkout.
+  one already set to end, a non-monthly one, or a price change on classic
+  billing mode. Flexible billing bases later credits on what Stripe billed.
+  The change runs under the same billing lock as the owner's checkout.
 - `payment_link` — no subscription. The tier starts now as the app's own trial
   ending on a pay-by date (default 7 days, at most 60), so whatever ends trials
   drops an unpaid one to Carta. Assigning runs under the billing lock and
   closes any Checkout the owner left open. The owner gets an email linking to
   `GET /api/billing/assigned?plan=<tier>&a=<assignment id>`, which opens
   Stripe Checkout only for that exact assignment, checked again inside the
-  billing lock (`assertStillAssigned`): same tier and `tier_assignment_id`,
-  unpaid, not expired, nothing live (Grupo included, though it is not self-serve); anything
-  else lands on the Plan screen. Signed out, sign-in returns to the link
-  (`/login?next=`, that link shape only). Paying replaces the trial with the
-  subscription.
+  billing lock: same tier and `tier_assignment_id`, unpaid, before the
+  deadline, and without a live subscription. Checkout from the link or the
+  Plan screen carries the assignment ID and expires by its pay-by time.
+  With fewer than 30 minutes left, the owner is told to ask for a new pay-by
+  date. A stale link lands on the Plan screen. Signed out, sign-in returns
+  to the link (`/login?next=`, that link shape only). Paying replaces the
+  trial with the subscription.
 - `free` — the original assignment (`moveRestaurantPlan`), under the billing
   lock after closing open Checkouts: `active`, trial and assignment id cleared,
   nothing charged; refused while a live subscription would write
@@ -506,6 +508,9 @@ dishes on a bill the restaurant has just cancelled.
   registers generated Prices before offering a URL or changing a subscription.
   Sync resolves the actual subscription item Price and reports stale metadata;
   unknown Prices are retried for reconciliation without replacing entitlements.
+  Reopening Checkout requires the session to have the same currency and
+  recurring Price as the current server-side quote. A mismatched session
+  expires before its replacement opens.
   The plan screen lets an owner subscribe to the tier of their local trial.
 - **Reporting history stays readable on every tier.** The plan cards promise
   no reporting lookback window. The unused `analytics_days` and `log_days`

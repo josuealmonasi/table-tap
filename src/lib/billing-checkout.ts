@@ -7,19 +7,21 @@ import { restaurantBilling } from "@/lib/billing-state";
 import { BILLING_CURRENCY, checkoutPrice } from "@/lib/billing-price";
 import type { PlanLimits } from "@/lib/plan";
 import type { createAdminClient } from "@/lib/supabase/admin";
-import { assertStillAssigned, type AssignedTier } from "@/lib/billing-assigned";
+import { assignmentCheckoutExpiry, checkoutAssignment } from "@/lib/billing-assigned";
 
 export async function startRestaurantBilling(
   db: ReturnType<typeof createAdminClient>,
   owner: { restaurantId: string; email: string },
   limits: PlanLimits, taken: number, origin: string,
   /** Set by the emailed pay link: only the exact assignment it was sent for may open Checkout. */
-  assigned?: AssignedTier,
+  requestedAssignmentId?: string,
 ): Promise<{ url: string }> {
-  return await withRestaurantBilling(db, owner.restaurantId, async operation => {
+  const result = await withRestaurantBilling(db, owner.restaurantId, async operation => {
     const { restaurant, live, sessions, snapshot, exists } = await restaurantBilling(db, owner.restaurantId);
     if (!exists) throw new BillingError("apiErr.restaurantNotFound", 404);
     await operation.record(snapshot);
+    const assignment = await checkoutAssignment(db, owner.restaurantId, limits.plan, live.length, requestedAssignmentId);
+    if (assignment && assignmentCheckoutExpiry(assignment.payBy) === null) return null;
     if (!restaurant.stripe_customer_id && snapshot.customers.length === 1) {
       const recovered = snapshot.customers[0];
       const { error } = await operation.write(async () => await db.from("restaurants")
@@ -27,7 +29,6 @@ export async function startRestaurantBilling(
       if (error) throw new Error(`Billing customer recovery failed: ${error.message}`);
       restaurant.stripe_customer_id = recovered;
     }
-    if (assigned) await assertStillAssigned(db, owner.restaurantId, assigned, live.length);
     if (live.length > 1) throw new BillingError("apiErr.billingConflict");
     const subscription = live[0];
     if (subscription) {
@@ -76,12 +77,21 @@ export async function startRestaurantBilling(
       await applySubscription(subscription);
       return { url: `${origin}/dashboard?subscribed=1` };
     }
-    if (sessions.length) {
-      if (sessions.length === 1 && sessions[0].metadata?.plan === limits.plan && sessions[0].url) return { url: sessions[0].url };
-      // Choosing a different tier closes the earlier link before opening one.
-      for (const session of sessions) await operation.write(() => stripe.checkout.sessions.expire(session.id));
-    }
     const line = await checkoutPrice(limits, taken);
+    const [open] = sessions;
+    if (sessions.length === 1 && open.url && open.metadata?.plan === limits.plan
+      && (open.metadata?.tier_assignment_id || undefined) === assignment?.id
+      && (!assignment || open.expires_at <= assignment.payBy)
+      && open.currency === BILLING_CURRENCY && line.price) {
+      const items = await stripe.checkout.sessions.listLineItems(open.id, { limit: 1 });
+      const [item] = items.data;
+      if (!items.has_more && item?.quantity === line.quantity && item?.currency === BILLING_CURRENCY
+        && item.price?.id === line.price && item.price.recurring) {
+        if (assignment && assignmentCheckoutExpiry(assignment.payBy) === null) return null;
+        return { url: open.url };
+      }
+    }
+    for (const session of sessions) await operation.write(() => stripe.checkout.sessions.expire(session.id));
     // One customer per restaurant, reused for every later change of plan, so
     // Stripe keeps one billing history rather than one per subscription.
     let customer = (restaurant.stripe_customer_id as string | null) ?? snapshot.customers[0];
@@ -99,16 +109,27 @@ export async function startRestaurantBilling(
     }
     // The only trusted signal about who bought what: the webhook reads these
     // back rather than believing anything the browser returns with.
-    const metadata = { restaurant_id: owner.restaurantId, plan: limits.plan };
-    const session = await operation.write(() => stripe.checkout.sessions.create({
-      mode: "subscription", customer, line_items: [line],
-      client_reference_id: owner.restaurantId, subscription_data: { metadata }, metadata,
-      // The dashboard, until there is a plan screen to land on. Somebody who
-      // has just paid must never arrive at a 404.
-      success_url: `${origin}/dashboard?subscribed=1`, cancel_url: `${origin}/dashboard`,
-    }, { timeout: 30000, maxNetworkRetries: 1, idempotencyKey: `billing-checkout-${operation.token}` }));
+    const metadata = {
+      restaurant_id: owner.restaurantId, plan: limits.plan,
+      ...(assignment && { tier_assignment_id: assignment.id }),
+    };
+    const session = await operation.write(async () => {
+      const expiresAt = assignment ? assignmentCheckoutExpiry(assignment.payBy) : undefined;
+      if (expiresAt === null) return null;
+      return await stripe.checkout.sessions.create({
+        mode: "subscription", customer, line_items: [line], expires_at: expiresAt,
+        client_reference_id: owner.restaurantId, subscription_data: { metadata }, metadata,
+        // The dashboard, until there is a plan screen to land on. Somebody who
+        // has just paid must never arrive at a 404.
+        success_url: `${origin}/dashboard?subscribed=1`, cancel_url: `${origin}/dashboard`,
+      }, { timeout: 30000, maxNetworkRetries: 1, idempotencyKey: `billing-checkout-${operation.token}` });
+    });
+    if (!session) return null;
     await operation.record({ sessions: [session.id] });
     if (!session.url) throw new Error("Billing checkout has no URL");
     return { url: session.url };
   });
+  // A local expiry refusal is definitive, including after saving a customer.
+  if (!result) throw new BillingError("apiErr.tierPayByTooSoon");
+  return result;
 }
