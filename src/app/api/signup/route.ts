@@ -7,6 +7,7 @@ import { TERMS_VERSION } from "@/lib/legal";
 import { newSignupToken, signupHash } from "@/lib/pending-signup";
 import { clientKey, isRateLimited } from "@/lib/rate-limit";
 import { sendSignupMail } from "@/lib/signup-confirmation";
+import { isSignupMailCapped } from "@/lib/signup-mail-ceiling";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { TERMS_TEXT_HASH } from "@/lib/terms-evidence";
 
@@ -23,6 +24,8 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   const restaurantName = typeof body.restaurantName === "string" ? body.restaurantName.trim() : "";
   const email = typeof body.email === "string" ? normalizeEmail(body.email) : "";
   if (!restaurantName || !isValidEmail(email)) return await apiError("apiErr.signupFields", 400);
+  // Over the inbox's ceiling: the same answer, and nothing stored or sent.
+  if (await isSignupMailCapped(email)) return NextResponse.json({ ok: true, pendingVerification: true });
 
   const token = newSignupToken();
   const locale = requestLocale(req);

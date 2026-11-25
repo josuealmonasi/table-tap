@@ -1942,6 +1942,7 @@ foundingLeftBody: "Quien contrata ahora conserva este precio de suscripción mie
     loyaltyVisitSpent: "Ya se canjeó una recompensa después de este sello, así que no se puede quitar.",
     alreadySuspended: "Este restaurante ya está suspendido.",
     notSuspended: "Este restaurante no está suspendido.",
+    suspensionChangedMeanwhile: "La suspensión de este restaurante cambió mientras tanto. Vuelve a cargar la página y revísala antes de levantarla.",
     trialDateInvalid: "Elige una fecha entre mañana y dentro de 90 días.",
     notOnTrial: "Este restaurante no está en periodo de prueba.",
     alreadyOwner: "Esa persona ya es la dueña.",

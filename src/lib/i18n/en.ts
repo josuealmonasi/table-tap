@@ -1945,6 +1945,7 @@ foundingLeftBody: "Subscribe now and keep this subscription price for as long as
     loyaltyVisitSpent: "A reward was redeemed after this stamp, so it can't be taken back.",
     alreadySuspended: "This restaurant is already suspended.",
     notSuspended: "This restaurant is not suspended.",
+    suspensionChangedMeanwhile: "This restaurant's suspension changed in the meantime. Reload the page and check it before lifting it.",
     trialDateInvalid: "Pick a date between tomorrow and 90 days from now.",
     notOnTrial: "This restaurant is not on a trial.",
     alreadyOwner: "That person already owns it.",
