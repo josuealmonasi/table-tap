@@ -8579,3 +8579,12 @@ and its orders unsettled under the order lock; `close_session_if_clear` keeps a
 sitting open for a pay-now order younger than a checkout page's life; and
 `admin_delete_restaurant` refuses with `accountsOwed`. Check:
 `sweep-1125-settle-purge.spec.ts`, plus a rolled-back dev probe.
+
+### Six-figure takings wrapped mid-number on production (2026-11-25)
+
+The analytics and costs tiles size their figure at a share of the tile's width
+(container units). At 14% a busy restaurant's month, MX$190,692.10, needed
+about 1.1× the tile on a phone and on the 820px tablet band, and wrapped
+mid-number; the seed's small numbers never showed it, only `layout:prod` did.
+Now 10% with a 12px floor: "MX$1,906,921.00" fits at 360, 390 and 820px
+(checked in the browser). Check: the layout gates, and `layout:prod`.
