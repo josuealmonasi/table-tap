@@ -11,7 +11,7 @@ import AttachCard from "../AttachCard.react-component";
 const f = vi.hoisted(() => ({ scan: null as null | ((raw: string) => string) }));
 vi.mock("@/lib/i18n/context", () => ({ useT: () => (key: string, vars?: Record<string, string | number>) => translate(messagesFor("es"), key, vars) }));
 vi.mock("@/components/ui/Toast", () => ({ useToast: () => vi.fn() }));
-vi.mock("@/components/ui/ConfirmDialog", () => ({ useConfirm: () => vi.fn() }));
+vi.mock("@/components/ui/ConfirmDialog", () => ({ useConfirm: () => async () => true }));
 vi.mock("@/components/dashboard/QrScanner", () => ({ default: ({ onRead }: { onRead: typeof f.scan }) => { f.scan = onRead; return <span data-scanner />; } }));
 let root: Root, host: HTMLDivElement;
 const code = "K7QM3XW9K7P2";
@@ -28,10 +28,18 @@ async function render(children: React.ReactNode) {
 }
 it.each(["stamp", "lookup", "attach"])("%s exposes the shared masked email editor", async screen => {
   await render(screen === "stamp" ? <StampOutcome outcome={{ code, standing: progress, round: 1, kind: "stamp", stamped: true }} busy={false} error={null} onRedeem={vi.fn()} onAnother={vi.fn()} />
-    : screen === "lookup" ? <CardLookupResult card={{ code, standing: progress, round: 1, since: "2026-11-11", visits: [], redeemed: [] }} active onChanged={vi.fn()} />
+    : screen === "lookup" ? <CardLookupResult card={{ code, standing: progress, round: 1, since: "2026-11-11", visits: [], redeemed: [] }} active onChanged={vi.fn()} onDeleted={vi.fn()} />
       : <AttachCard active target={{ preview: true }} selection={{ code, suffix: "K7P2", progress: 1, goal: 8 }} />);
   expect(host.textContent).toContain("j***@hotmail.com"); expect(host.textContent).toContain("Agregar/cambiar correo");
   expect(vi.mocked(fetch).mock.calls.some(([url]) => url === `/api/loyalty/card-email?code=${code}`)).toBe(true);
+});
+it("a manager can delete a looked-up card while its program is paused", async () => {
+  const onDeleted = vi.fn();
+  await render(<CardLookupResult card={{ code, standing: progress, round: 1, since: "2026-11-11", visits: [], redeemed: [] }}
+    active={false} onChanged={vi.fn()} onDeleted={onDeleted} />);
+  await act(async () => [...host.querySelectorAll("button")].find(b => b.textContent === "Borrar tarjeta")!.click());
+  expect(fetch).toHaveBeenCalledWith(`/api/loyalty/lookup?c=${code}`, expect.objectContaining({ method: "DELETE" }));
+  expect(onDeleted).toHaveBeenCalledWith(code);
 });
 it("an existing bill can scan its card to edit without receiving its bearer code from the bill", async () => {
   await render(<AttachCard active target={{ tableId: "table" }} />);
