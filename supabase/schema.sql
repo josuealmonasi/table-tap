@@ -15701,6 +15701,9 @@ create or replace function public.provision_pending_signup_v1()
 returns trigger language plpgsql security definer set search_path = '' as $$
 declare v_signup public.pending_signups;
 begin
+  -- A later email_confirmed_at change on an already-confirmed user (an admin
+  -- edit, a re-confirmation) must never provision a second restaurant.
+  if tg_op = 'UPDATE' and old.email_confirmed_at is not null then return new; end if;
   delete from public.pending_signups
     where id = (new.raw_app_meta_data->>'pending_signup_id')::uuid
       and email_hash = encode(sha256(convert_to(new.email, 'UTF8')), 'hex')

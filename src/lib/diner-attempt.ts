@@ -16,6 +16,8 @@ export interface AttemptQuote {
 }
 /** A SQL rejection proves that this request never acquired a payable scope. */
 export class DinerAttemptRejected extends Error {}
+/** Another phone's page already holds these orders (`checkout_scope_busy`). */
+export class DinerScopeBusy extends DinerAttemptRejected {}
 class DinerAttemptExpired extends Error {}
 interface AttemptRecord {
   id: string; restaurant_id: string; stripe_account_id: string; currency: string;
@@ -86,14 +88,16 @@ export async function openDinerAttempt(stripe: Stripe, params: Stripe.Checkout.S
     // The quote acquired no scope. Sending it to Stripe would open a page
     // that the database refused to own, alongside the unresolved first one.
     await releaseFee(String(params.metadata?.fee_id ?? ""));
-    throw new DinerAttemptRejected("Could not open checkout attempt: paying");
+    // Another phone's page on these orders is being paid: the same answer as a busy scope.
+    throw new DinerScopeBusy("Could not open checkout attempt: paying");
   }
   if (error) {
     // A database timeout can also have committed. Only a SQL error proves
     // rollback; releasing an uncertain fee could reopen the monthly ceiling.
     if (/^(22|23|40|42|P0)/.test(error.code ?? "")) {
       await releaseFee(String(params.metadata?.fee_id ?? ""));
-      throw new DinerAttemptRejected(`Could not open checkout attempt: ${error.message}`);
+      const Rejection = error.message === "checkout_scope_busy" ? DinerScopeBusy : DinerAttemptRejected;
+      throw new Rejection(`Could not open checkout attempt: ${error.message}`);
     }
     throw new Error(`Could not open checkout attempt: ${error.message}`);
   }

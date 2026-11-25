@@ -8580,6 +8580,26 @@ sitting open for a pay-now order younger than a checkout page's life; and
 `admin_delete_restaurant` refuses with `accountsOwed`. Check:
 `sweep-1125-settle-purge.spec.ts`, plus a rolled-back dev probe.
 
+### Follow-ups from the cross-review of the 2026-11-24 sweep
+
+Four gaps the second look at the sweep found. First, a settled table could stay
+open for hours: the rest of the table paid, the close was refused because one
+diner still had a pay-now card page open, and when that diner walked away the
+abandoned order was deleted but nothing closed the sitting again. Now the expiry
+(`abandonCheckout`) re-closes that sitting, but only when it already has a paid
+order, so a table still browsing with nothing paid stays open. Second, a second
+phone trying to pay the whole bill while another phone's page was open got a
+bare "Checkout failed" (502); the database's `checkout_scope_busy` now comes back
+as `DinerScopeBusy` and the route answers 409 "Someone at the table is already
+paying the bill" (`apiErr.billBeingPaid`). Third, the phone that paid the whole
+bill could be refused its receipt when one order on it had nothing left to
+charge, because that order gets no payments row; `ownPaidOrderIds` now also
+accepts orders on that member's paid, non-split page in the same restaurant and
+sitting. Fourth, the signup trigger could run provisioning again if an
+already-confirmed user's `email_confirmed_at` changed; `provision_pending_signup_v1`
+now returns straight away on that update. Check:
+`checkout-abandon-reclose.spec.ts`, `bill-being-paid.spec.ts`,
+`receipt-zero-order-owner.spec.ts`, `signup-verification.spec.ts`.
 ### Extra recipients of the daily digest (owner decisions 2026-11-25)
 
 The owner can add up to five outside addresses to the daily digest. Two things

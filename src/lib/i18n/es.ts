@@ -1905,6 +1905,7 @@ foundingLeftBody: "Quien contrata ahora conserva este precio de suscripción mie
     notAccepting:
       "El restaurante no está recibiendo pedidos en este momento. Inténtalo más tarde.",
     checkoutFailed: "El pago falló",
+    billBeingPaid: "Alguien de la mesa ya está pagando la cuenta. Espera a que termine o pídele que la cancele.",
     verifyItems: "No se pudieron verificar los productos",
     pricesChanged: "Cambiaron algunos precios. Tu pedido ya muestra los de hoy; revísalo y envíalo otra vez.",
     verifyOrders: "No se pudieron verificar los pedidos",
