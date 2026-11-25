@@ -1,4 +1,4 @@
-import { suspensionRefusal } from "@/lib/restaurant-suspension";
+import { RESTAURANT_CLOSING_CODE, suspensionRefusal } from "@/lib/restaurant-suspension";
 import { orderRequestScope } from "@/lib/order-request";
 import { NextRequest, NextResponse } from "next/server";
 import { apiError } from "@/lib/api-error";
@@ -84,7 +84,7 @@ export async function POST(req: NextRequest) {
     const { data: restaurant, error: rErr } = await supabase
       .from("restaurants")
       .select(
-        "id, currency, service_pct, service_enabled, accepting_orders, suspended_at, tax_pct, stripe_account_id, stripe_charges_enabled, allow_pay_later, low_stock_alerts_enabled, low_stock_threshold",
+        "id, currency, service_pct, service_enabled, accepting_orders, suspended_at, closing_at, tax_pct, stripe_account_id, stripe_charges_enabled, allow_pay_later, low_stock_alerts_enabled, low_stock_threshold",
       )
       .eq("id", restaurantId)
       .single();
@@ -102,6 +102,7 @@ export async function POST(req: NextRequest) {
     }
 
     // A pause or suspension may have started after the diner opened the menu.
+    if (restaurant.closing_at) return await apiError("apiErr.restaurantClosing", 409);
     const suspended = await suspensionRefusal(restaurant.suspended_at);
     if (suspended) return suspended;
     if (!restaurant.accepting_orders) {
@@ -274,6 +275,10 @@ export async function POST(req: NextRequest) {
         threshold: Number(restaurant.low_stock_threshold) || 0,
         coupon: coupon ? couponQuote(coupon, base.subtotal) : null,
       });
+      if ("closing" in result) {
+        await held.giveBack();
+        return await apiError("apiErr.restaurantClosing", 409);
+      }
       if (result.conflict) return await apiError("apiErr.retryConflict", 409);
       if (result.counterFull) {
         await held.giveBack();
@@ -342,6 +347,7 @@ export async function POST(req: NextRequest) {
 
     if (oErr || !order) {
       await held.giveBack();
+      if (oErr?.code === RESTAURANT_CLOSING_CODE) return await apiError("apiErr.restaurantClosing", 409);
       // Both requests can see no order. The unique reference picks one; give
       // back only this loser's claims before returning the winner's page.
       if (cardRetry && oErr?.code === "23505" && oErr.message.includes("orders_request_once")) {

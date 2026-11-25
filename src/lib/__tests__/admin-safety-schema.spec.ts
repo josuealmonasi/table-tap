@@ -4,6 +4,44 @@ import { expect, it } from "vitest";
 const sql = readFileSync("supabase/schema.sql", "utf8");
 const drop = readFileSync("supabase/drop.sql", "utf8");
 const body = sql.split("create or replace function public.admin_delete_restaurant(")[1]?.split("$$;")[0] ?? "";
+
+it("checks this restaurant's completed, unpaid and unwritten-off non-account orders under the deletion locks", () => {
+  const debt = /if exists \(select 1 from orders where restaurant_id = p_restaurant and account_id is null\s+and status = 'completed' and not paid and not written_off\) then\s+return jsonb_build_object\('outcome', 'ordersOwed'\)/;
+  expect(body).toMatch(debt);
+  expect(body.search(debt)).toBeGreaterThan(body.indexOf("for update"));
+  expect(body.search(debt)).toBeLessThan(body.indexOf("if p_check_only"));
+});
+
+it("saves final locked staff outside the cascade and hard-deletes only logins still orphaned at cleanup", () => {
+  const capture = body.slice(body.indexOf("update restaurant_billing_operations set state"));
+  expect(capture).toMatch(/'deleted_staff_ids'[\s\S]+s\.restaurant_id = p_restaurant and s\.role <> 'owner'/);
+  expect(capture).toContain("not exists (select 1 from restaurants r where r.owner_id = s.user_id)");
+  expect(capture).toMatch(/for update of s[\s\S]+delete from restaurants/);
+  const cleanup = sql.split("create or replace function public.admin_cleanup_restaurant_logins_v1(")[1].split("$$;")[0];
+  expect(cleanup).toMatch(/select state->'deleted_staff_ids'[\s\S]+token = p_token[\s\S]+if not found or exists/);
+  expect(cleanup).toMatch(/from auth\.users[\s\S]+order by id for update;[\s\S]+delete from auth\.users u/);
+  expect(cleanup).toContain("not exists (select 1 from public.restaurants r where r.owner_id = u.id)");
+  expect(cleanup).toContain("not exists (select 1 from public.staff s where s.user_id = u.id)");
+  expect(cleanup).toMatch(/delete from auth\.users[\s\S]+set state = \(state - 'staff_ids'\)/);
+});
+
+it("starts closing under the money lock and blocks inserts while letting retained offline receipts settle", () => {
+  const close = sql.split("create or replace function public.admin_close_restaurant_v1(")[1].split("$$;")[0];
+  expect(close).toMatch(/lock_restaurant_money\(p_restaurant\)[\s\S]+token = p_token[\s\S]+for update/);
+  expect(close).toMatch(/admin_delete_restaurant\(p_restaurant, true\)[\s\S]+->>'outcome' = 'ready'[\s\S]+closing_at = coalesce\(closing_at, clock_timestamp\(\)\)/);
+  expect(close).toMatch(/closing_at is null[\s\S]+admin_delete_restaurant\(p_restaurant, false\)/);
+  const guard = sql.split("create or replace function public.guard_order_during_restaurant_closure(")[1].split("$$;")[0];
+  expect(guard).toMatch(/closing_at[\s\S]+where id = new\.restaurant_id for key share/);
+  expect(guard).toMatch(/current_setting\('tabletap\.offline_queue_writer', true\) = new\.pos_ref::text[\s\S]+q\.restaurant_id = new\.restaurant_id and q\.pos_ref = new\.pos_ref[\s\S]+q\.approved_at is null and q\.resolved_at is null/);
+  expect(guard).toContain("errcode = 'PT423'");
+  expect(sql).toContain("create trigger a_guard_order_during_restaurant_closure before insert on orders");
+  for (const signature of ["admin_close_restaurant_v1(uuid, uuid, boolean)", "admin_cleanup_restaurant_logins_v1(uuid, uuid)"]) {
+    expect(sql).toContain("revoke all on function public." + signature + " from public, anon, authenticated;");
+    expect(sql).toContain("grant execute on function public." + signature + " to service_role;");
+    expect(drop).toContain("drop function if exists public." + signature + ";");
+  }
+});
+
 it("blocks only unresolved money and copies settled accounting before the cascade", () => {
   expect(body.indexOf("lock_restaurant_money(p_restaurant)")).toBeLessThan(body.indexOf("for update"));
   for (const table of ["refund_operations", "refunds_due", "refund_attempts", "refund_due_attempts",
@@ -97,6 +135,8 @@ const NOT_BOOKS: Record<string, string> = {
   ingredient_counts: "stock counts", ingredient_movements: "stock movements", ingredient_consumption: "stock use",
   waste_entries: "stock written off, not money collected or owed",
   restaurant_admin_notes: "the platform team's support notes, not money collected or owed",
+  digest_staff_stops: "mailbox opt-outs for the daily digest",
+  daily_digest_batches: "email delivery state for the daily digest",
   digest_recipients: "outside contact addresses for the daily digest; deleted with the restaurant (privacy notice)",
   cash_withdrawal_retired_refs: "retry references of removed withdrawals; the removal itself is in user_logs",
 };

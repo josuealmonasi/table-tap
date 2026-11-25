@@ -11036,6 +11036,8 @@ update refund_operations r set fee_verification_pending = false
     and (r.source <> 'stripe' or r.fee_reconciled_at is not null
       or public.refund_fee_proven_clear(r.restaurant_id, r.stripe_payment_intent));
 
+alter table restaurants add column if not exists closing_at timestamptz;
+
 create or replace function public.admin_delete_restaurant(p_restaurant uuid, p_check_only boolean default true)
 returns jsonb language plpgsql security definer set search_path = public as $$
 declare
@@ -11157,6 +11159,16 @@ begin
       and not paid and not written_off and status not in ('cancelled', 'pending_payment')) then
     return jsonb_build_object('outcome', 'accountsOwed');
   end if;
+  if exists (select 1 from orders where restaurant_id = p_restaurant and account_id is null
+      and status = 'completed' and not paid and not written_off) then
+    return jsonb_build_object('outcome', 'ordersOwed');
+  end if;
+  -- A pay-now order exists before its provider checkout is recorded. Give
+  -- that checkout the same 35-minute window as table close to finish binding.
+  if exists (select 1 from orders where restaurant_id = p_restaurant and status = 'pending_payment'
+      and created_at > clock_timestamp() - interval '35 minutes') then
+    return jsonb_build_object('outcome', 'provider');
+  end if;
   if p_check_only is distinct from false then return jsonb_build_object('outcome', 'ready'); end if;
   foreach v_table in array array[
     'stripe_disputes', 'stripe_dispute_movements', 'stripe_dispute_events',
@@ -11220,12 +11232,104 @@ begin
     select p_restaurant, 'bill_split_claims', md5(concat_ws(':', t.split_id, t.share_no))::uuid, to_jsonb(t)
     from (select c.* from bill_split_claims c join bill_splits s on s.id = c.split_id
       where s.restaurant_id = p_restaurant for update of c) t;
+  -- Capture the final staff rows while ownership transfer is locked out.
+  -- Use a new key so a retry never consumes the old route's pre-delete list.
+  update restaurant_billing_operations set state = state || jsonb_build_object(
+    'deleted_staff_ids', coalesce((
+      select jsonb_agg(m.user_id) from (
+        select s.user_id from staff s where s.restaurant_id = p_restaurant and s.role <> 'owner'
+          and not exists (select 1 from restaurants r where r.owner_id = s.user_id)
+        for update of s
+      ) m
+    ), '[]'::jsonb))
+    where restaurant_id = p_restaurant;
   delete from restaurants where id = p_restaurant;
   return jsonb_build_object('outcome', 'deleted');
 end;
 $$;
 revoke all on function public.admin_delete_restaurant(uuid, boolean) from public, anon, authenticated;
 grant execute on function public.admin_delete_restaurant(uuid, boolean) to service_role;
+
+-- Claim closing under the same locks as the checks, then commit before Stripe.
+-- The final check may still see provider events about an existing sale.
+create or replace function public.admin_close_restaurant_v1(p_restaurant uuid, p_token uuid, p_finalize boolean)
+returns jsonb language plpgsql security definer set search_path = '' as $$
+declare v_result jsonb;
+begin
+  perform public.lock_restaurant_money(p_restaurant);
+  perform 1 from public.restaurant_billing_operations
+    where restaurant_id = p_restaurant and token = p_token
+      and started_at > now() - interval '15 minutes' for update;
+  if not found then return jsonb_build_object('outcome', 'billingBusy'); end if;
+
+  if p_finalize is true then
+    if exists (select 1 from public.restaurants where id = p_restaurant and closing_at is null) then
+      return jsonb_build_object('outcome', 'notClosing');
+    end if;
+    return public.admin_delete_restaurant(p_restaurant, false);
+  end if;
+
+  v_result := public.admin_delete_restaurant(p_restaurant, true);
+  if v_result->>'outcome' = 'ready' then
+    update public.restaurants set closing_at = coalesce(closing_at, clock_timestamp())
+      where id = p_restaurant;
+  end if;
+  return v_result;
+end;
+$$;
+revoke all on function public.admin_close_restaurant_v1(uuid, uuid, boolean) from public, anon, authenticated;
+grant execute on function public.admin_close_restaurant_v1(uuid, uuid, boolean) to service_role;
+
+create or replace function public.admin_cleanup_restaurant_logins_v1(p_restaurant uuid, p_token uuid)
+returns boolean language plpgsql security definer set search_path = '' as $$
+declare v_staff jsonb;
+begin
+  select state->'deleted_staff_ids' into v_staff from public.restaurant_billing_operations
+    where restaurant_id = p_restaurant and token = p_token
+      and started_at > now() - interval '15 minutes' for update;
+  if not found or exists (select 1 from public.restaurants where id = p_restaurant) then return false; end if;
+
+  -- Lock each Auth row against new memberships/ownership via their FKs. Recheck
+  -- in a new statement so a relationship committed while waiting is visible.
+  perform 1 from auth.users where id in (select value::uuid from jsonb_array_elements_text(v_staff))
+    order by id for update;
+  delete from auth.users u where u.id in (select value::uuid from jsonb_array_elements_text(v_staff))
+    and not exists (select 1 from public.restaurants r where r.owner_id = u.id)
+    and not exists (select 1 from public.staff s where s.user_id = u.id)
+    and not exists (select 1 from public.platform_admins a where a.user_id = u.id);
+
+  update public.restaurant_billing_operations set state = (state - 'staff_ids')
+    || jsonb_build_object('deleted', true, 'deleted_staff_ids', '[]'::jsonb)
+    where restaurant_id = p_restaurant;
+  return true;
+end;
+$$;
+revoke all on function public.admin_cleanup_restaurant_logins_v1(uuid, uuid) from public, anon, authenticated;
+grant execute on function public.admin_cleanup_restaurant_logins_v1(uuid, uuid) to service_role;
+
+create or replace function public.guard_order_during_restaurant_closure()
+returns trigger language plpgsql security definer set search_path = '' as $$
+declare v_closing_at timestamptz;
+begin
+  -- Conflicts with the close's FOR UPDATE, including for legacy direct inserts.
+  select closing_at into v_closing_at from public.restaurants where id = new.restaurant_id for key share;
+  if v_closing_at is not null then
+    -- Manager approval can still settle an already-retained offline receipt.
+    if new.pos_ref is not null and current_setting('tabletap.offline_queue_writer', true) = new.pos_ref::text
+      and exists (select 1 from public.offline_sale_queue q
+        where q.restaurant_id = new.restaurant_id and q.pos_ref = new.pos_ref
+          and q.approved_at is null and q.resolved_at is null) then
+      return new;
+    end if;
+    raise exception 'restaurant is closing' using errcode = 'PT423';
+  end if;
+  return new;
+end;
+$$;
+revoke all on function public.guard_order_during_restaurant_closure() from public, anon, authenticated, service_role;
+drop trigger if exists a_guard_order_during_restaurant_closure on orders;
+create trigger a_guard_order_during_restaurant_closure before insert on orders
+  for each row execute function public.guard_order_during_restaurant_closure();
 
 revoke truncate, references, trigger on all tables in schema public from authenticated;
 -- S14: an offer's terms and products commit together. Additive for old callers.
@@ -16513,3 +16617,192 @@ end;
 $$;
 revoke all on function public.ring_pos_account_v3(uuid, uuid, jsonb, uuid, text, text, jsonb, boolean, int) from public, anon, authenticated;
 grant execute on function public.ring_pos_account_v3(uuid, uuid, jsonb, uuid, text, text, jsonb, boolean, int) to service_role;
+-- Digest consent belongs to a normalized mailbox at one restaurant. Keep the
+-- address fingerprint instead of a copy of the address after it unsubscribes.
+create or replace function public.digest_address_key(p_email text) returns text
+language sql immutable strict set search_path = '' as $$
+  select encode(sha256(convert_to(lower(btrim(p_email)), 'UTF8')), 'hex');
+$$;
+revoke all on function public.digest_address_key(text) from public, anon, authenticated;
+grant execute on function public.digest_address_key(text) to service_role;
+
+create table if not exists digest_staff_stops (
+  restaurant_id uuid not null references restaurants(id) on delete cascade,
+  address_key text not null,
+  primary key (restaurant_id, address_key)
+);
+alter table digest_staff_stops enable row level security;
+revoke all on digest_staff_stops from anon, authenticated, public, service_role;
+grant select, delete on digest_staff_stops to service_role;
+
+-- Also rotate the version when an older client opts in through Auth directly.
+-- App metadata gives the user no way to restore a previous signing version.
+create or replace function public.advance_digest_preference_version() returns trigger
+language plpgsql set search_path = '' as $$
+begin
+  new.raw_app_meta_data := coalesce(new.raw_app_meta_data, '{}'::jsonb)
+    || jsonb_build_object('digest_version', gen_random_uuid());
+  return new;
+end;
+$$;
+revoke all on function public.advance_digest_preference_version() from public, anon, authenticated, service_role;
+drop trigger if exists advance_digest_preference_version on auth.users;
+create trigger advance_digest_preference_version before update of raw_user_meta_data on auth.users
+  for each row when (new.raw_user_meta_data->'digest' = 'true'::jsonb
+    and old.raw_user_meta_data->'digest' is distinct from 'true'::jsonb)
+  execute function public.advance_digest_preference_version();
+
+create or replace function public.digest_staff_stopped_v1(p_restaurant uuid, p_user uuid) returns boolean
+language sql stable security definer set search_path = '' as $$
+  select exists (
+    select 1 from public.digest_staff_stops s join auth.users u on u.id = p_user
+    where s.restaurant_id = p_restaurant and s.address_key = public.digest_address_key(u.email)
+  );
+$$;
+revoke all on function public.digest_staff_stopped_v1(uuid, uuid) from public, anon, authenticated;
+grant execute on function public.digest_staff_stopped_v1(uuid, uuid) to service_role;
+
+create or replace function public.set_digest_preference_v1(p_restaurant uuid, p_user uuid, p_enabled boolean)
+returns boolean language plpgsql security definer set search_path = '' as $$
+declare v_address text;
+begin
+  perform 1 from public.restaurants where id = p_restaurant and (owner_id = p_user or exists (
+    select 1 from public.staff where restaurant_id = p_restaurant and user_id = p_user and role in ('owner', 'manager')
+  )) for update;
+  if not found then return false; end if;
+
+  update auth.users set
+    raw_user_meta_data = coalesce(raw_user_meta_data, '{}'::jsonb) || jsonb_build_object('digest', p_enabled),
+    raw_app_meta_data = case when p_enabled then coalesce(raw_app_meta_data, '{}'::jsonb)
+      || jsonb_build_object('digest_version', gen_random_uuid()) else raw_app_meta_data end
+  where id = p_user returning public.digest_address_key(email) into v_address;
+  if not found then return false; end if;
+
+  if p_enabled then
+    delete from public.digest_staff_stops where restaurant_id = p_restaurant and address_key = v_address;
+  end if;
+  return true;
+end;
+$$;
+revoke all on function public.set_digest_preference_v1(uuid, uuid, boolean) from public, anon, authenticated;
+grant execute on function public.set_digest_preference_v1(uuid, uuid, boolean) to service_role;
+
+-- Both link types write the same staff stop and remove the outside entry.
+-- Only trusted link routes call these functions. Serialize them with opt-in
+-- and with additions to the outside recipient list at this restaurant.
+create or replace function public.stop_digest_staff_v2(p_restaurant uuid, p_user uuid, p_address text, p_version text)
+returns boolean language plpgsql security definer set search_path = '' as $$
+begin
+  perform 1 from public.restaurants where id = p_restaurant for update;
+  if not found then return false; end if;
+
+  perform 1 from auth.users where id = p_user
+    and coalesce(raw_app_meta_data->>'digest_version', '0') = p_version for update;
+  if not found then return false; end if;
+
+  insert into public.digest_staff_stops (restaurant_id, address_key) values (p_restaurant, p_address)
+    on conflict do nothing;
+  -- A replay must leave a subsequently reconfirmed outside address alone.
+  if found then
+    delete from public.digest_recipients
+      where restaurant_id = p_restaurant and public.digest_address_key(email) = p_address;
+  end if;
+  return true;
+end;
+$$;
+revoke all on function public.stop_digest_staff_v2(uuid, uuid, text, text) from public, anon, authenticated;
+grant execute on function public.stop_digest_staff_v2(uuid, uuid, text, text) to service_role;
+
+create or replace function public.stop_digest_outside_v2(p_token text)
+returns text language plpgsql security definer set search_path = '' as $$
+declare v_restaurant uuid; v_address text; v_name text;
+begin
+  select restaurant_id into v_restaurant from public.digest_recipients where stop_token = p_token;
+  if not found then return null; end if;
+  select name into v_name from public.restaurants where id = v_restaurant for update;
+  if not found then return null; end if;
+
+  delete from public.digest_recipients where restaurant_id = v_restaurant
+    and stop_token = p_token and status = 'confirmed' returning public.digest_address_key(email) into v_address;
+  if not found then return null; end if;
+  insert into public.digest_staff_stops (restaurant_id, address_key) values (v_restaurant, v_address)
+    on conflict do nothing;
+  return v_name;
+end;
+$$;
+revoke all on function public.stop_digest_outside_v2(text) from public, anon, authenticated;
+grant execute on function public.stop_digest_outside_v2(text) to service_role;
+
+-- Fresh eligibility from both sources in one snapshot. Prefer staff copy
+-- when both qualify, then pick a stable representative within each mailbox.
+create or replace view daily_digest_mailboxes as
+  with candidates as (
+    select d.restaurant_id, public.digest_address_key(d.email) as address_key, lower(btrim(d.email)) as email,
+      d.user_id, d.is_owner, d.locale, coalesce(u.raw_app_meta_data->>'digest_version', '0') as preference_version,
+      null::text as stop_token
+    from public.daily_digest_recipients d join auth.users u on u.id = d.user_id
+    where not exists (select 1 from public.digest_staff_stops s
+      where s.restaurant_id = d.restaurant_id and s.address_key = public.digest_address_key(d.email))
+    union all
+    select x.restaurant_id, public.digest_address_key(x.email), lower(btrim(x.email)),
+      null::uuid, false, u.raw_user_meta_data->>'locale', null::text, x.stop_token
+    from public.digest_recipients x join public.restaurants r on r.id = x.restaurant_id
+      left join auth.users u on u.id = r.owner_id
+    where x.status = 'confirmed'
+  )
+  select distinct on (restaurant_id, address_key) *
+  from candidates order by restaurant_id, address_key, is_owner desc, user_id nulls last, stop_token;
+revoke all on daily_digest_mailboxes from public, anon, authenticated, service_role;
+grant select on daily_digest_mailboxes to service_role;
+
+create table if not exists daily_digest_batches (
+  id uuid primary key default gen_random_uuid(),
+  restaurant_id uuid not null references restaurants(id) on delete cascade,
+  digest_day date not null,
+  created_at timestamptz not null,
+  currency text not null,
+  timezone text not null,
+  batch_number bigint not null,
+  address_keys text[] not null,
+  status text not null default 'pending' check (status in ('pending', 'submitting', 'accepted', 'uncertain', 'skipped')),
+  unique (restaurant_id, digest_day, batch_number)
+);
+create index if not exists daily_digest_batches_pending on daily_digest_batches (created_at) where status = 'pending';
+alter table daily_digest_batches enable row level security;
+revoke all on daily_digest_batches from anon, authenticated, public, service_role;
+grant select, update (status, address_keys) on daily_digest_batches to service_role;
+
+-- Keep the old daily marker and views for a rolling application deployment.
+-- Claim the report and snapshot its mailbox keys in the same transaction.
+create or replace function public.claim_daily_digest_v2(
+  p_restaurant uuid, p_day date, p_owner uuid, p_currency text, p_timezone text, p_created_at timestamptz, p_batch_size int
+) returns void language plpgsql security definer set search_path = '' as $$
+begin
+  update public.restaurants set digest_sent_for = p_day where id = p_restaurant
+    and owner_id is not distinct from p_owner and currency = p_currency and timezone = p_timezone
+    and (digest_sent_for is null or digest_sent_for < p_day);
+  if not found then return; end if;
+
+  insert into public.daily_digest_batches (restaurant_id, digest_day, created_at, currency, timezone, batch_number, address_keys)
+  select p_restaurant, p_day, p_created_at, p_currency, p_timezone, numbered.batch_number,
+    array_agg(numbered.address_key order by numbered.address_key)
+  from (
+    select address_key, (row_number() over (order by address_key) - 1) / p_batch_size as batch_number
+    from public.daily_digest_mailboxes where restaurant_id = p_restaurant
+  ) numbered
+  group by numbered.batch_number;
+end;
+$$;
+revoke all on function public.claim_daily_digest_v2(uuid, date, uuid, text, text, timestamptz, int) from public, anon, authenticated;
+grant execute on function public.claim_daily_digest_v2(uuid, date, uuid, text, text, timestamptz, int) to service_role;
+
+create or replace view daily_digests_due_v2 with (security_invoker = true) as
+  select d.*, false as retry from public.daily_digests_due d
+    where exists (select 1 from public.daily_digest_mailboxes m where m.restaurant_id = d.restaurant_id)
+  union all
+  select distinct b.restaurant_id, r.owner_id, r.name, b.currency, b.timezone, b.digest_day, b.created_at, true
+  from public.daily_digest_batches b join public.restaurants r on r.id = b.restaurant_id
+  where b.status = 'pending';
+revoke all on daily_digests_due_v2 from public, anon, authenticated, service_role;
+grant select on daily_digests_due_v2 to service_role;
+revoke truncate, references, trigger on all tables in schema public from authenticated;

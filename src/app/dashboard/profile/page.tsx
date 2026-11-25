@@ -1,9 +1,11 @@
 import { unwrap } from "@/lib/ordering-data";
 import { redirect } from "next/navigation";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import ProfileForm from "@/components/dashboard/profile/ProfileForm";
 import { getMember, MANAGES } from "@/lib/membership";
 import { digestEnabled } from "@/lib/digest-preference";
+import { saveDigestPreference } from "./digest-actions";
 
 export const dynamic = "force-dynamic";
 
@@ -24,12 +26,25 @@ export default async function ProfilePage() {
     "your profile",
   );
 
+  let initialDigest: boolean | null = null;
+  if (membership && MANAGES(membership.role)) {
+    initialDigest = digestEnabled(membership.role, user.user_metadata.digest);
+    if (initialDigest) {
+      const stopped = await createAdminClient().rpc("digest_staff_stopped_v1", {
+        p_restaurant: membership.restaurant.id, p_user: user.id,
+      });
+      if (stopped.error) throw new Error("Could not read the digest preference", { cause: stopped.error });
+      initialDigest = !stopped.data;
+    }
+  }
+
   return (
     <ProfileForm
       userId={user.id}
       initialName={profile?.full_name ?? ""}
       initialEmail={user.email ?? ""}
-      initialDigest={membership && MANAGES(membership.role) ? digestEnabled(membership.role, user.user_metadata.digest) : null}
+      initialDigest={initialDigest}
+      saveDigestAction={saveDigestPreference}
     />
   );
 }

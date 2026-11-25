@@ -8694,6 +8694,30 @@ to 2 L turned two packs for MX$100 into 4 L at MX$25/L. `record_purchase_v2` and
 `apiErr.purchasePackChanged`, which now asks to reload), after answering a retry
 already saved. Check: `terminal-waste-pack-races.spec.ts`.
 
+### Daily digest eligibility, retries and stop links (2026-11-25)
+
+A removed manager or stopped outside address could remain in a queued batch.
+The worker now checks membership, opt-in and confirmation again before every
+send. With 101 addresses, an accepted first batch used to hide the refused
+last address. Delivery state now follows each batch and report date, so the
+worker can retry that address after midnight. An uncertain submission keeps
+its claim. Staff and outside subscriptions to the same normalized mailbox
+share one copy and one restaurant-scoped stop. Opting in renews the staff link
+version, and equivalent UUID spellings share one recipient resend quota.
+Check: `daily-digest.spec.ts`, `digest-schema.spec.ts`,
+`digest-stop.react-component.spec.tsx`, and `digest-resend.spec.ts`.
+### Restaurant deletion raced transfers, collectible bills, and refunds (2026-11-25)
+
+The old route cached staff logins before deletion, skipped completed unpaid
+orders outside customer accounts, and could cancel Stripe while the restaurant
+was still taking orders. The locked deletion now refuses collectible bills and
+records the final staff list with the archive. Auth cleanup locks those users
+and rechecks their current ownership and memberships. The first locked check
+commits Closing before Stripe cancellation. New orders and subscriptions are
+refused, and staff can still settle existing obligations. A later refund hold
+keeps the restaurant in Closing and visible to the admin. Check:
+`admin-safety-schema.spec.ts`, `billing-delete.spec.ts`,
+`restaurant-delete-refund-window.spec.ts`, and `admin-billing-summary.spec.ts`.
 ### Coupon claims could use old terms or spend past the cutoff (2026-11-25)
 
 A diner could price MX$100 of food with a public 50% coupon, then spend it
@@ -8774,3 +8798,25 @@ currency (or the restaurant's when it owes nothing) under the money lock
 (`limit_unapproved`, 409 `apiErr.accountLimitUnapproved`) until a manager saves
 it again. Check: `backlog35-account-money.spec.ts`,
 `settle-account-review.spec.tsx`, the api gate's account cases.
+
+### Diner data a copied link or code could reach (2026-11-25)
+
+Three places where a bearer value was read as more authority than it carried
+(Codex bl40 review, findings 1, 7 and 8). First, `/api/receipt/payments`
+named every order on a completed split in `splitOrderIds`, and the public
+tracker treats an order id as its whole credential, so a former guest who paid
+one part could read the other diners' lines and notes after the sitting
+closed. It now names only orders this phone placed (`orders.diner`) or its own
+payments were recorded against; the receipt offer only ever compared the list
+with the phone's own orders. Second, `/api/rewards` returned the card's masked
+email to anyone holding the printed code, and its PATCH let that holder advance
+`saved_at`, clearing the owner's "save it again" prompt while their image was
+stale. The address now goes only to the phone with the owner cookie, and PATCH
+records the save only for it (others get `{ ok: true, saved: false }`); a
+code-only holder still sees the card. Third, deleting a table cleared
+`orders.table_id` and, through its sittings, `session_id`, so
+`memberRatingOrders` treated the paid order as a counter order and any copied
+order link could overwrite its ratings. The `table_label` copied onto the
+order at insert is never cleared, and now keeps it on the dine-in path, where
+with no sitting left it is refused. Check: `slot-receipt-payments-route.spec.ts`,
+`loyalty-owner-secret.spec.ts`, `rating-membership.spec.ts`.

@@ -153,6 +153,18 @@ are refused. `GET /api/admin/audit` checks platform membership and returns
 uncached keyset pages of 100. The API checks intentionally retain their genuine
 admin audit events after removing disposable business fixtures.
 
+**Restaurant deletion.** The platform admin starts deletion under the
+restaurant's money lock. Outstanding refunds, provider work, account debt,
+or completed unpaid orders that have not been written off block deletion.
+When the checks pass, the restaurant enters Closing before Stripe
+cancellation. New orders and subscriptions are refused, and existing bills,
+refunds and held receipts can still be resolved. If the final locked check
+finds new evidence that needs attention, the admin console keeps showing
+Closing so staff can resolve it and the admin can retry. The final transaction
+archives the books and saves the staff cleanup list before deleting live data.
+Auth cleanup uses the saved list and preserves logins that still belong to a
+restaurant or the platform admin team.
+
 **Two-step verification for the platform admin.** `/dashboard/admin/mfa`
 enrols an authenticator app (TOTP, Supabase MFA) and later asks for its code.
 The admin guard reads the assurance claim from the exact access token that
@@ -242,8 +254,12 @@ local calendar day's digest if there were sales. Owners receive it by default.
 Managers can opt in. The profile switch sets the login's `user_metadata.digest`
 boolean, and the email uses that login's saved `user_metadata.locale` with a
 Spanish fallback. The signed footer link opens a stop button. Mail providers
-can also POST the one-click unsubscribe form. Both update only the digest
-preference on that login.
+can also POST the one-click unsubscribe form. Eligible staff and confirmed
+outside recipients share one copy per normalized mailbox at each restaurant.
+Both kinds of stop link stop that mailbox's staff delivery and remove its
+outside-recipient entry for that restaurant. Opting in from the profile clears
+the restaurant's staff stop and renews the staff link version. An outside
+address can subscribe again through a fresh confirmation.
 
 Sales, average ticket, tips, and the top three dishes by quantity use Analytics'
 paid, non-cancelled order reader. The digest compares sales with the same
@@ -256,11 +272,11 @@ who owe money on open accounts, and refunds due to customers. Accounts uses
 saved currencies, which the digest lists separately. The stock section uses
 transitions to zero recorded during that local day, even with bell alerts off.
 
-The service-only recovery and recipient views select the due restaurant and its
-eligible logins. A conditional write to `restaurants.digest_sent_for` claims the
-day before the job submits localized HTML and text to Resend. A confirmed
-refusal reopens an unaccepted digest for retry. An uncertain response keeps
-the claim.
+The service-only recovery views find new reports and pending batches. A
+conditional write to `restaurants.digest_sent_for` claims the day and snapshots
+its normalized mailbox keys. The job rechecks eligibility just before every
+Resend submission. Each accepted or uncertain batch keeps its claim, and a
+definitively refused batch stays pending for the original report day.
 
 ## The two ways in
 
@@ -2249,7 +2265,9 @@ email or phone.
   walking towards. `/rewards` says so: rewards the program has that the card
   does not yet are listed as the next round's, and a card whose own ladder
   moved on after its diner last saved the picture of it (`ladder_at` after
-  `saved_at`) asks for the picture to be saved again. The page links back to
+  `saved_at`) asks for the picture to be saved again. Only the phone holding
+  the card's key records a save or sees its masked ticket address; a copied
+  code still shows the card. The page links back to
   the menu the diner came from (`back`, accepted only as `/r/…`) or to the
   card's restaurant, and shows the card's shape while it looks it up.
 - **A reward is spent once**, under the same card lock, by
