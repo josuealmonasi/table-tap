@@ -12,5 +12,5 @@ export async function enqueueCreatedFee(fee: Stripe.ApplicationFee): Promise<voi
   // back. Enqueueing them all cost Stripe calls per sale and held a queued fee
   // against deleting the restaurant until recovery ran.
   if (!charge.amount_refunded) return;
-  await enqueueRefundFee(charge, account);
+  await enqueueRefundFee(charge, account, fee.livemode);
 }
