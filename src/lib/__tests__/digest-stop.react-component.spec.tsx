@@ -2,13 +2,14 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
 import { renderToStaticMarkup } from "react-dom/server";
 import { digestEnabled } from "@/lib/digest-preference";
-import { digestStopToken } from "@/lib/digest-stop-token";
+import { digestStopToken, readDigestStopToken } from "@/lib/digest-stop-token";
 import { POST } from "@/app/api/digest/opt-out/route";
 import { POST as stopOutsideDigest } from "@/app/api/digest/stop/route";
+import type { Locale } from "@/lib/i18n";
 import StopDigestPage from "@/app/digest/opt-out/page";
 
-const { updateUserById, stopRecipient } = vi.hoisted(() => ({ updateUserById: vi.fn(), stopRecipient: vi.fn() }));
-vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({ auth: { admin: { updateUserById } } }) }));
+const { rpc, stopRecipient } = vi.hoisted(() => ({ rpc: vi.fn(), stopRecipient: vi.fn() }));
+vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({ rpc }) }));
 vi.mock("@/lib/digest-recipients", async importOriginal => ({
   ...await importOriginal<typeof import("@/lib/digest-recipients")>(), stopRecipient,
 }));
@@ -16,12 +17,21 @@ vi.mock("@/lib/rate-limit", () => ({ clientKey: () => "fixture", isRateLimited: 
 vi.mock("@/lib/i18n/server", () => ({ getLocale: async () => "es" }));
 
 const user = "11111111-1111-4111-8111-111111111111";
+const restaurant = "33333333-3333-4333-8333-333333333333";
+const version = "44444444-4444-4444-8444-444444444444";
+const address = "b".repeat(64);
+const tokenFor = (locale: Locale, preferenceVersion = version) => digestStopToken({
+  restaurantId: restaurant, userId: user, locale, version: preferenceVersion, addressKey: address,
+});
+const stopArgs = ["stop_digest_staff_v2", {
+  p_restaurant: restaurant, p_user: user, p_address: address, p_version: version,
+}];
 const request = (token: string, body: string) => new NextRequest(`https://test.example/api/digest/opt-out?t=${token}`, {
   method: "POST", body, headers: { "content-type": "application/x-www-form-urlencoded" },
 });
 beforeEach(() => {
   vi.stubEnv("SUPABASE_SECRET_KEY", "digest-fixture-secret");
-  updateUserById.mockReset().mockResolvedValue({ error: null });
+  rpc.mockReset().mockResolvedValue({ data: true, error: null });
   stopRecipient.mockReset().mockResolvedValue("Bistro");
 });
 afterEach(() => vi.unstubAllEnvs());
@@ -34,40 +44,41 @@ it.each([
 });
 
 it("renders the localized confirmation without changing a preference on link open", async () => {
-  const t = digestStopToken(user, "en");
+  const t = tokenFor("en");
   const page = await StopDigestPage({ searchParams: Promise.resolve({ t }) });
   const html = renderToStaticMarkup(page);
   expect(html).toContain("Stop receiving this digest");
   expect(html).toContain("/api/digest/opt-out?t=" + t);
-  expect(updateUserById).not.toHaveBeenCalled();
+  expect(rpc).not.toHaveBeenCalled();
 });
 
 it("opts out through the footer button and returns a confirmation in the signed language", async () => {
-  const answer = await POST(request(digestStopToken(user, "es"), "stopDigest=1"));
+  const answer = await POST(request(tokenFor("es"), "stopDigest=1"));
   expect(answer.status).toBe(303);
   expect(answer.headers.get("location")).toBe("https://test.example/digest/opt-out?stopped=1&lang=es");
-  expect(updateUserById).toHaveBeenCalledExactlyOnceWith(user, { user_metadata: { digest: false } });
+  expect(rpc).toHaveBeenCalledExactlyOnceWith(...stopArgs);
   const page = await StopDigestPage({ searchParams: Promise.resolve({ stopped: "1", lang: "es" }) });
   expect(renderToStaticMarkup(page)).toContain("Ya no recibirás el resumen diario de ventas");
 });
 
 it("accepts an idempotent one-click mail provider POST without requiring a session", async () => {
-  const token = digestStopToken(user, "en");
+  const token = tokenFor("en");
   for (let i = 0; i < 2; i++) {
     const answer = await POST(request(token, "List-Unsubscribe=One-Click"));
     expect(answer.status).toBe(200);
     expect(await answer.json()).toEqual({ ok: true });
   }
-  expect(updateUserById).toHaveBeenCalledTimes(2);
-  for (const call of updateUserById.mock.calls) expect(call).toEqual([user, { user_metadata: { digest: false } }]);
+  expect(rpc).toHaveBeenCalledTimes(2);
+  for (const call of rpc.mock.calls) expect(call).toEqual(stopArgs);
 });
 
 it("rejects a different login, a changed locale, and a malformed POST", async () => {
-  const token = digestStopToken(user, "en");
-  expect((await POST(request(token.replace(/^1/, "2"), "List-Unsubscribe=One-Click"))).status).toBe(400);
+  const token = tokenFor("en");
+  expect((await POST(request(token.replace(user, restaurant), "List-Unsubscribe=One-Click"))).status).toBe(400);
+  expect((await POST(request(token.replace(restaurant, user), "List-Unsubscribe=One-Click"))).status).toBe(400);
   expect((await POST(request(token.replace(".en.", ".es."), "List-Unsubscribe=One-Click"))).status).toBe(400);
   expect((await POST(request(token, "List-Unsubscribe=No"))).status).toBe(400);
-  expect(updateUserById).not.toHaveBeenCalled();
+  expect(rpc).not.toHaveBeenCalled();
 });
 
 it("accepts the outside recipient's footer button and the mail client's one-click form", async () => {
@@ -87,4 +98,14 @@ it("requires the one-click form when the outside stop token is in the URL", asyn
   const req = new NextRequest(`https://test.example/api/digest/stop?t=${"a".repeat(43)}`, { method: "POST" });
   expect((await stopOutsideDigest(req)).status).toBe(400);
   expect(stopRecipient).not.toHaveBeenCalled();
+});
+
+it("rejects a signed link whose preference version was superseded by a new opt-in", async () => {
+  rpc.mockImplementation(async (_name: string, args: { p_version: string }) => ({
+    data: args.p_version === version, error: null,
+  }));
+  const stale = tokenFor("en", "0");
+  expect(readDigestStopToken(stale)?.version).toBe("0");
+  expect((await POST(request(stale, "List-Unsubscribe=One-Click"))).status).toBe(400);
+  expect((await POST(request(tokenFor("en"), "List-Unsubscribe=One-Click"))).status).toBe(200);
 });

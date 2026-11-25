@@ -11,6 +11,7 @@ interface ProfileFormProps {
   initialName: string;
   initialEmail: string;
   initialDigest: boolean | null;
+  saveDigestAction: (enabled: boolean) => Promise<boolean>;
 }
 
 /** The user's own profile: name, login email, and a password change. */
@@ -19,9 +20,10 @@ export default function ProfileForm({
   initialName,
   initialEmail,
   initialDigest,
+  saveDigestAction,
 }: ProfileFormProps) {
   const t = useT();
-  const { saving, saveName, saveEmail, savePassword, saveDigest } = useProfile(userId);
+  const { saving, saveName, saveEmail, savePassword, saveDigest } = useProfile(userId, saveDigestAction);
   const [digest, setDigest] = useState(initialDigest);
   const [name, setName] = useState(initialName);
   const [email, setEmail] = useState(initialEmail);

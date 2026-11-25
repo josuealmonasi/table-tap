@@ -135,6 +135,8 @@ const NOT_BOOKS: Record<string, string> = {
   ingredient_counts: "stock counts", ingredient_movements: "stock movements", ingredient_consumption: "stock use",
   waste_entries: "stock written off, not money collected or owed",
   restaurant_admin_notes: "the platform team's support notes, not money collected or owed",
+  digest_staff_stops: "mailbox opt-outs for the daily digest",
+  daily_digest_batches: "email delivery state for the daily digest",
   digest_recipients: "outside contact addresses for the daily digest; deleted with the restaurant (privacy notice)",
   cash_withdrawal_retired_refs: "retry references of removed withdrawals; the removal itself is in user_logs",
 };

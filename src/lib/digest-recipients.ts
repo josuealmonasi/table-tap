@@ -42,16 +42,6 @@ export async function listRecipients(restaurantId: string): Promise<DigestRecipi
   return (data ?? []) as DigestRecipient[];
 }
 
-/** Confirmed addresses with their stop links, for the digest sender. */
-export async function confirmedRecipients(
-  restaurantId: string, db: Pick<ReturnType<typeof createAdminClient>, "from"> = createAdminClient(),
-): Promise<{ email: string; stopToken: string }[]> {
-  const { data, error } = await db.from("digest_recipients")
-    .select("email, stop_token").eq("restaurant_id", restaurantId).eq("status", "confirmed");
-  if (error) throw new Error(`Could not read the digest recipients: ${error.message}`);
-  return (data ?? []).map(r => ({ email: r.email as string, stopToken: r.stop_token as string }));
-}
-
 export type AddOutcome = "added" | "exists" | "full" | "not_found";
 
 export async function addRecipient(restaurantId: string, email: string, actor: string): Promise<{ outcome: AddOutcome; token?: string }> {
@@ -94,10 +84,9 @@ export async function confirmRecipient(token: string): Promise<string | null> {
 
 /** The holder stops: the address is deleted. Answers the restaurant's name, or null. */
 export async function stopRecipient(token: string): Promise<string | null> {
-  const { data, error } = await createAdminClient().from("digest_recipients")
-    .delete().eq("stop_token", token).select("restaurant_id").maybeSingle();
+  const { data, error } = await createAdminClient().rpc("stop_digest_outside_v2", { p_token: token });
   if (error) throw new Error(`Could not stop the digest: ${error.message}`);
-  return data ? await restaurantName(data.restaurant_id as string) : null;
+  return data as string | null;
 }
 
 async function restaurantName(id: string): Promise<string> {
