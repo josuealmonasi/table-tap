@@ -222,6 +222,7 @@ and that a new party cannot see the previous party's waiting phones.
 | Missing mail configuration is visible to recovery | The outbox discarded tickets while health stayed green; `card-email.spec.ts` and `recovery-route-health.spec.ts` check retry and health |
 | Repeated card saves keep delivered stop links | A retry rotated the token and left the address subscribed; `shared-address.spec.ts` checks the link and per-card scope |
 | A shared card email saves independently | The generic save answer and rewards read disagreed when another card used the address; `shared-address.spec.ts` compares both paths and stops each card independently |
+| Loyalty card deletion requires the guest's key or a manager of the card's restaurant | The printed QR code was enough to delete the card and its history. `loyalty-owner-secret.spec.ts` checks issuance, saves, guest deletion, and the manager guard. The API gate checks the manager deletion and its audit row together. |
 | Ticket retries run before tickets expire (review N10) | Daily recovery missed the backoff window; `ticket-email-schedule.spec.ts` models recovery without payment traffic |
 | A table payment check names the actual table relation (review N3) | `payment-check-route.spec.ts` rejects unknown relations and checks the tenant and table before Stripe |
 | Held approval keeps the kitchen's saved instructions (review N4) | `offline-sale.spec.ts` keeps notes and component extras without duplicating flattened extras |
@@ -8451,6 +8452,15 @@ checkout agree on MX$14.50 per share. Earlier locks with a null food-only
 snapshot keep their existing tip behavior. Checks: `tip-base.react-component.spec.tsx`,
 `split-slots-schema.spec.ts`, and `split-slots-pay.spec.ts`.
 
+## Auth email tokens appeared in request logs (2026-11-24)
+
+The auth email templates put one-time tokens in the query string, which
+appeared in request logs. The legacy callback put them into a second request
+when it redirected. Both legacy entry points now redirect into a fragment,
+and new email links start there. The confirmation page clears the fragment
+and sends the token in the POST body when the user chooses to confirm.
+Checks cover both legacy redirects, the browser form, and all bilingual email
+links in the auth callback, confirm page, and email template specs.
 ### Next.js 15.5.28 carried three published advisories (security sweep 2026-11-24)
 
 `pnpm audit --prod` reported GHSA-f3mh-rxg3-f5g2 (HttpOnly cookie exposure),
@@ -8468,3 +8478,31 @@ counted every poll against the caller's address, so anyone sharing the
 restaurant's public IP could use up the printer's allowance. Each now matches:
 the freeze check, the deposit guard, and a per-restaurant printer allowance
 counted after the token is verified. Check: `sweep-1124-guards.spec.ts`.
+### Coupon minimum counted the service charge; offline tips had no real ceiling (security sweep 2026-11-24)
+
+Paying a bill, a coupon's minimum spend and its discount were judged on the
+dishes plus the service charge, while the cart judges them on the dishes alone:
+MX$90 of food and MX$15 of service passed a MX$100 minimum. The bill screen and
+`bill/pay` now both use the dishes (`BillAmounts.dishes`). Separately, an
+offline receipt's tip was only checked against a total that already contains
+it, so a manager approving one could record a tip above the food; it now obeys
+the till's ceiling (the discounted subtotal). Check: `bill-principal.spec.ts`,
+`offline-sale.spec.ts`.
+## A GitHub recovery token could start more than one run (2026-11-24)
+
+The route now claims the verified token's `jti` with a unique insert before
+starting recovery. Missing token IDs and duplicate claims return the usual
+401. A failed claim write returns 503 before any recovery jobs start. A
+successful claim also attempts to delete claims that expired over a day ago.
+Checks in `github-cron-auth.spec.ts` and `recovery/__tests__/route.spec.ts`
+cover claim handling and the route response.
+
+### What the public and staff roles could reach directly (security sweep 2026-11-24)
+
+Four database grants were wider than the app: a leftover table-level UPDATE on
+`notifications` let managers rewrite alerts (not just mark them read); a public
+SELECT policy on the `menu` bucket listed every restaurant's uploads; the public
+`item_addons` / `promotion_items` policies were `using (true)`, exposing links
+for hidden dishes and inactive promotions; and `dish_rating_stats` returned
+averages for hidden dishes to anyone. Each is narrowed; the server key keeps
+full access. Check: `sweep-1124-grants.spec.ts`, plus a rolled-back dev probe.
