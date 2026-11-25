@@ -8761,3 +8761,29 @@ drawer read MX$100 cash in the mail and MX$70 on the corte. Both now read
 their adjustments (logged write-offs and refunds, plus completed return
 events) from one reader, `readCorteAdjustments` in `corte-adjustments.ts`.
 Check: `signup-mail-ceiling.spec.ts`, `digest-figures.spec.ts`.
+
+### Table admission and waiter calls (2026-11-25)
+
+Codex review bl40, findings 2–6, each two places that had to agree. The
+admission queue and the phones in it: five pending slots and no expiry, so a
+copied QR could hold them all for the sitting. A waiting phone now refreshes
+`table_session_members.seen_at` on each poll, and `request_table_member_v3`
+purges one unseen for ten minutes before counting; `pendingPhones` hides it by
+the same `PENDING_PHONE_MINUTES`. One row per cookie per sitting was already
+the table's unique key. The printed QR and the table it names: a renamed table
+kept answering an old sticker's waiter call. Tables now carry `qr_key`, put in
+the dashboard's QR as `?k=`, rotated by a trigger on rename or move, and
+required for a waiter call from a phone not let in (`apiErr.tableQrStale`);
+tables made before the key have none and keep working until renamed. The
+duplicate check and the insert: two taps at once both read "no open call".
+`raise_service_request_v1` does both under the table's lock. The rate limiter
+and the database: an upper-case spelling of a table id opened a second
+counter; the route validates and lower-cases the UUID first, and `tableKey`
+lower-cases too. The sitting and its calls: `ownBillAccess` read a sitting past
+eight hours without `closed_at` as live, and dedupe matched only table and
+kind, so the last party's open call swallowed the next one's. Calls now need
+live membership (`tableMember`), record `service_requests.session_id`, and
+dedupe within that sitting. Checks: `table-calls-bl40.spec.ts`,
+`service-request-expiry.spec.ts`, `dine-in-entitlement.spec.ts`,
+`rate-limit-table.spec.ts`, `scan-target` tests, and the api gate's stale-key
+case.

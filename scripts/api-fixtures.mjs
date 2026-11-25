@@ -62,7 +62,7 @@ export async function setup(env, base) {
   const { data: restaurant } = await admin
     .from("restaurants").select("*").eq("name", "Demo Bistro").maybeSingle();
   const { data: tables } = await admin
-    .from("restaurant_tables").select("id, label").eq("restaurant_id", restaurant.id);
+    .from("restaurant_tables").select("id, label, qr_key").eq("restaurant_id", restaurant.id);
   // The demo's visit cards: one for the rewards lookup, one on its way that
   // has no visit today, and one whose next reward is ready — and whose reward
   // after that is not, so spending it leaves a card that is plainly not ready.

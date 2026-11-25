@@ -175,6 +175,12 @@ export type RestaurantTable = {
   id: string;
   restaurant_id: string;
   label: string;
+  /**
+   * The key the diner's QR carried (`?k=`), echoed back on a waiter call. It
+   * is what the phone brought, never read from the table: handing the stored
+   * key to every page view would let a stale QR learn the new one.
+   */
+  qrKey?: string;
 };
 
 export type OrderStatus =

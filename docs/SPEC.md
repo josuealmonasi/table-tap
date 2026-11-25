@@ -276,8 +276,12 @@ the claim.
 
 ## The two ways in
 
-- **A table QR** → `/r/<restaurantId>/t/<tableId>`. The order knows its table,
-  the bill can stay open, and a waiter collects at the end.
+- **A table QR** → `/r/<restaurantId>/t/<tableId>?k=<qr_key>`. The order knows
+  its table, the bill can stay open, and a waiter collects at the end. The key
+  (`restaurant_tables.qr_key`) lets a phone not yet let in call the waiter;
+  renaming or moving the table rotates it, and the dashboard's QR changes with
+  it. Tables created before keys existed have none, and their printed QRs keep
+  calling the waiter until the table is renamed.
 - **The general QR** → `/r/<restaurantId>`. No table: the diner pays online, or
   walks to the till with a code. Counter orders can carry a name so the cashier
   can call it out.
@@ -331,7 +335,18 @@ the verified member id; a browser-supplied `diner` never proves identity.
 At most five new phones may wait for approval in a sitting. The table lock
 serializes admission; existing pending, approved and rejected phones keep
 their rows and polling. A sixth phone gets a 429 asking it to speak to the
-waiter, with no pending row. Approving or rejecting a phone frees a place.
+waiter, with no pending row. Approving or rejecting a phone frees a place, and
+so does leaving: a waiting phone refreshes `seen_at` on every poll, and one
+unseen for `PENDING_PHONE_MINUTES` (ten) is hidden from the lists and purged
+by the next admission at that table (`request_table_member_v3`).
+
+A call for the waiter, the bill or collection (`/api/service-requests`) is
+written by `raise_service_request_v1`, which checks for an open call and
+inserts under the table's lock, so two taps make one alert. The call records
+the sitting of the phone that raised it (`service_requests.session_id`), and
+only an approved phone of the LIVE sitting (open, under eight hours) may ask
+for the bill or collection; a pending phone may call the waiter only with the
+table's current QR key. Duplicates are matched within that sitting.
 
 Membership ends with the sitting. An approved phone retains read/payment
 access to its own closed sitting's orders without an age cutoff, never the

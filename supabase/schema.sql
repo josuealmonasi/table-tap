@@ -16437,3 +16437,125 @@ create or replace view daily_digests_due with (security_invoker = true) as
     );
 revoke all on daily_digests_due from anon, authenticated, public, service_role;
 grant select on daily_digests_due to service_role;
+
+-- ── Table calls and admission (Codex review bl40, findings 2–6) ─────────────
+-- A waiting phone holds one of the five admission slots only while it keeps
+-- asking. A copied QR could fill all five and walk away; the party then waited
+-- for staff to clear them or for the sitting to end. `seen_at` moves on every
+-- poll; a pending row unseen for ten minutes no longer counts and is purged.
+alter table table_session_members add column if not exists seen_at timestamptz default now();
+
+-- The key printed in a table's QR (`?k=`). Existing tables keep none, so the
+-- stickers already on them keep working; new tables get one, and renaming or
+-- moving a table rotates it, so a QR printed for "Mesa 4" stops summoning
+-- staff to the same record once it becomes "Patio 2".
+alter table restaurant_tables add column if not exists qr_key text;
+alter table restaurant_tables alter column qr_key set default replace(gen_random_uuid()::text, '-', '');
+
+create or replace function public.rotate_table_qr_key()
+returns trigger language plpgsql set search_path = public as $$
+begin
+  if new.label is distinct from old.label or new.restaurant_id is distinct from old.restaurant_id then
+    new.qr_key := replace(gen_random_uuid()::text, '-', '');
+  end if;
+  return new;
+end; $$;
+revoke all on function public.rotate_table_qr_key() from public, anon, authenticated;
+grant execute on function public.rotate_table_qr_key() to service_role;
+drop trigger if exists restaurant_tables_rotate_qr_key on restaurant_tables;
+create trigger restaurant_tables_rotate_qr_key before update on restaurant_tables
+  for each row execute function public.rotate_table_qr_key();
+
+-- v3: v2 plus the ten-minute life of a waiting phone (see `seen_at` above).
+create or replace function public.request_table_member_v3(
+  p_restaurant uuid, p_table uuid, p_hash text, p_open boolean, p_first_approved boolean
+) returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  v_session uuid;
+  v_created boolean := false;
+  v_known boolean;
+  v_member table_session_members%rowtype;
+begin
+  if p_hash is null or p_hash !~ '^[0-9a-f]{64}$' then raise exception 'Invalid member credential'; end if;
+  perform 1 from restaurant_tables where id = p_table and restaurant_id = p_restaurant for update;
+  if not found then raise exception 'Table not found'; end if;
+  if p_open then
+    update table_sessions set closed_at = now(), close_reason = 'expired'
+      where table_id = p_table and restaurant_id = p_restaurant and closed_at is null
+        and opened_at < now() - interval '8 hours';
+  end if;
+  select id into v_session from table_sessions
+    where table_id = p_table and restaurant_id = p_restaurant and closed_at is null
+      and opened_at >= now() - interval '8 hours';
+  if v_session is null and not p_open then
+    return jsonb_build_object('status', 'empty', 'sessionId', null, 'diner', null);
+  end if;
+  if v_session is null then
+    insert into table_sessions(restaurant_id, table_id) values (p_restaurant, p_table)
+      on conflict do nothing returning id into v_session;
+    v_created := v_session is not null;
+    if v_session is null then
+      select id into v_session from table_sessions
+        where table_id = p_table and restaurant_id = p_restaurant and closed_at is null;
+    end if;
+  end if;
+  if v_session is null then raise exception 'Could not open sitting'; end if;
+  -- This phone is still here: refresh its own wait before purging abandoned ones.
+  update table_session_members set seen_at = now()
+    where session_id = v_session and token_hash = p_hash and status = 'pending';
+  delete from table_session_members
+    where session_id = v_session and status = 'pending'
+      and coalesce(seen_at, created_at) < now() - interval '10 minutes';
+  select * into v_member from table_session_members where session_id = v_session and token_hash = p_hash;
+  v_known := found;
+  -- Existing phones keep their admission and polling even when five wait.
+  -- New phones share the table lock above, so they cannot overfill the list.
+  if not v_known and not v_created and
+    (select count(*) from table_session_members where session_id = v_session and status = 'pending') >= 5 then
+    return jsonb_build_object('status', 'full', 'sessionId', v_session, 'diner', null);
+  end if;
+  insert into table_session_members(session_id, token_hash, status, decided_at, seen_at)
+    values (v_session, p_hash, case when v_created and p_first_approved then 'approved' else 'pending' end,
+      case when v_created and p_first_approved then now() else null end, now())
+    on conflict (session_id, token_hash) do nothing;
+  select * into strict v_member from table_session_members where session_id = v_session and token_hash = p_hash;
+  return jsonb_build_object('status', v_member.status, 'sessionId', v_session, 'diner', v_member.id);
+end; $$;
+revoke all on function public.request_table_member_v3(uuid, uuid, text, boolean, boolean) from public, anon, authenticated;
+grant execute on function public.request_table_member_v3(uuid, uuid, text, boolean, boolean) to service_role;
+
+-- A call belongs to the sitting that raised it. Without this an open "bring
+-- the bill" from the last party answered "already asked" to the next one.
+alter table service_requests add column if not exists session_id uuid references table_sessions(id) on delete set null;
+
+-- The duplicate check and the insert, under the table's lock: two taps at once
+-- both read "no open call" and the floor saw two alerts. A named sitting must
+-- still be live (open, under eight hours) when the call is written.
+create or replace function public.raise_service_request_v1(
+  p_restaurant uuid, p_table uuid, p_kind text, p_session uuid
+) returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  v_label text;
+  v_id uuid;
+begin
+  if p_kind is null or p_kind not in ('waiter', 'bill', 'pay') then raise exception 'Invalid request kind'; end if;
+  select label into v_label from restaurant_tables
+    where id = p_table and restaurant_id = p_restaurant for update;
+  if not found then return jsonb_build_object('status', 'no_table'); end if;
+  if p_session is not null and not exists (
+    select 1 from table_sessions where id = p_session and restaurant_id = p_restaurant
+      and table_id = p_table and closed_at is null and opened_at >= now() - interval '8 hours'
+  ) then
+    return jsonb_build_object('status', 'closed');
+  end if;
+  select id into v_id from service_requests
+    where restaurant_id = p_restaurant and table_id = p_table and kind = p_kind and status = 'open'
+      and created_at >= now() - interval '8 hours' and session_id is not distinct from p_session
+    limit 1;
+  if v_id is not null then return jsonb_build_object('status', 'duplicate', 'id', v_id); end if;
+  insert into service_requests(restaurant_id, table_id, table_label, kind, session_id)
+    values (p_restaurant, p_table, v_label, p_kind, p_session) returning id into v_id;
+  return jsonb_build_object('status', 'created', 'id', v_id);
+end; $$;
+revoke all on function public.raise_service_request_v1(uuid, uuid, text, uuid) from public, anon, authenticated;
+grant execute on function public.raise_service_request_v1(uuid, uuid, text, uuid) to service_role;

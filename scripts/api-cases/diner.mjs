@@ -33,7 +33,13 @@ export function dinerCases(fx) {
       },
       expect: [200] },
     { name: "POST /api/service-requests", as: "diner", method: "POST", path: "/api/service-requests",
-      body: { restaurantId: r, tableId: table.id, kind: "waiter" }, expect: [200] },
+      body: { restaurantId: r, tableId: table.id, kind: "waiter", qrKey: table.qr_key ?? undefined }, expect: [200] },
+    // A QR printed before the table was renamed carries the old key. A phone
+    // not let in must not summon staff with it (Codex review bl40, finding 3).
+    { name: "POST /api/service-requests (a stale QR key)", as: "diner", method: "POST", path: "/api/service-requests",
+      body: { restaurantId: r, tableId: table.id, kind: "waiter", qrKey: "0".repeat(32) },
+      expect: table.qr_key ? [403] : [200],
+      ...(table.qr_key ? { expectError: /ya no corresponde|no longer matches/i } : {}) },
     { name: "PATCH /api/service-requests (kitchen answers a call without a table id)", as: "kitchen",
       method: "PATCH", path: "/api/service-requests",
       arrange: async f => {
