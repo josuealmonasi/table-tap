@@ -5,6 +5,7 @@ import { isValidEmail, normalizeEmail } from "@/lib/email";
 import { clientKey, isRateLimited } from "@/lib/rate-limit";
 import { newSignupToken, signupHash, type PendingSignup } from "@/lib/pending-signup";
 import { resendLegacySignupConfirmation, sendSignupMail } from "@/lib/signup-confirmation";
+import { isSignupMailCapped } from "@/lib/signup-mail-ceiling";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 export const runtime = "nodejs";
@@ -15,6 +16,8 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   const body = await jsonBody<{ email?: unknown }>(req);
   if (typeof body?.email !== "string" || !isValidEmail(body.email)) return await apiError("apiErr.signupFields", 400);
   const email = normalizeEmail(body.email);
+  // Over the inbox's ceiling: the same answer, and nothing stored or sent.
+  if (await isSignupMailCapped(email)) return NextResponse.json({ ok: true });
   const admin = createAdminClient();
   const { data: pending, error } = await admin.from("pending_signups").select("payload, expires_at")
     .eq("email_hash", signupHash(email)).gt("expires_at", new Date().toISOString())
