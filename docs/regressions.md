@@ -8463,6 +8463,16 @@ failed final listing aborts the request. A manager can use Check to retire the
 attempt after 24 hours if a fresh listing still shows no refund for it, then
 attribute the manual refund. A Stripe refund made after the final listing can
 still race the POST. Check: `src/lib/refunds/__tests__/operations.spec.tsx`.
+## Signup waited for email after creating the account (2026-11-24)
+
+An unverified signup reserved the address and created a restaurant. Anyone
+could choose its password, then the mailbox owner could confirm that account
+by following the email. The public response also revealed registered addresses.
+Signup now stores an expiring request and returns the same answer for new
+and registered addresses. The mailbox owner chooses the password from a one-time link.
+The signup verification specs exercise the request, resend and confirmation
+paths, and the API gate checks the Auth and restaurant records before and after.
+
 ## Auth email tokens appeared in request logs (2026-11-24)
 
 The auth email templates put one-time tokens in the query string, which

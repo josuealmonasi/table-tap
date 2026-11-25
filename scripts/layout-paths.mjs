@@ -90,6 +90,8 @@ export const PUBLIC = [
   "/login",
   "/signup",
   "/signup/verify",
+  "/signup/confirm",
+  `/signup/confirm#token=${"a".repeat(64)}`,
   "/forgot-password",
   "/reset-password",
   "/terminos",

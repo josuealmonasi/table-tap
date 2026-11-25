@@ -23,7 +23,7 @@ it.each(Object.entries(links))("puts the token in both language links' fragments
 });
 
 it("signup, invites and admin-created logins record the language the emails use", () => {
-  for (const f of ["src/app/api/signup/route.ts", "src/lib/staff-invite.ts", "src/app/api/admin/users/route.ts"]) {
+  for (const f of ["src/app/api/signup/confirm/route.ts", "src/lib/staff-invite.ts", "src/app/api/admin/users/route.ts"]) {
     expect(readFileSync(f, "utf8"), f).toMatch(/user_metadata: \{ locale/);
   }
 });

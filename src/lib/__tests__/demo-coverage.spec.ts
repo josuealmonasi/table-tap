@@ -40,6 +40,7 @@ const NOT_DEMO_DATA = new Set([
   "recovery_nonces", // replay protection for real scheduled calls
   "recovery_runs", // health of the real scheduler, never seeded
   "cron_token_claims", // replay protection for verified GitHub tokens
+  "pending_signups", // real mailbox confirmation requests, before a restaurant exists
   "menus",
   "categories",
   "menu_items",

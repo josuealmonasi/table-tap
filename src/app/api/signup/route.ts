@@ -1,104 +1,45 @@
-import { NextRequest, NextResponse } from "next/server";
+import { after, NextRequest, NextResponse } from "next/server";
 import { apiError } from "@/lib/api-error";
+import { isValidEmail, normalizeEmail } from "@/lib/email";
+import { requestLocale } from "@/lib/i18n";
 import { jsonBody } from "@/lib/json-body";
 import { TERMS_VERSION } from "@/lib/legal";
-import { TERMS_TEXT_HASH } from "@/lib/terms-evidence";
-import { createAdminClient } from "@/lib/supabase/admin";
+import { newSignupToken, signupHash } from "@/lib/pending-signup";
 import { clientKey, isRateLimited } from "@/lib/rate-limit";
-import { sendSignupConfirmation } from "@/lib/signup-confirmation";
-import { normalizeEmail, isValidEmail } from "@/lib/email";
-import { passwordTooShort } from "@/lib/password";
-import { requestLocale } from "@/lib/i18n";
+import { sendSignupMail } from "@/lib/signup-confirmation";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { TERMS_TEXT_HASH } from "@/lib/terms-evidence";
 
 export const runtime = "nodejs";
 
-/**
- * What a new restaurant gets, and for how long, before a card is needed.
- *
- * Servicio, not Casa. The trial exists to show that ordering from the table
- * works, which is what a restaurant is deciding about — not to hand out the
- * top tier for a month and then take it away, which teaches them the product
- * as the version they will not be paying for and makes every upgrade feel
- * like a downgrade.
- */
-const TRIAL_PLAN = "servicio";
-const TRIAL_DAYS = 30;
-
-// POST /api/signup
-// Body: { restaurantName, email, password }
-// Creates an unconfirmed auth user and their pending restaurant, atomically-ish:
-// if the restaurant insert fails we remove the just-created user so a retry works.
-export async function POST(req: NextRequest) {
-  // Cap account-creation attempts per IP to blunt signup spam.
+export async function POST(req: NextRequest): Promise<NextResponse> {
   if (await isRateLimited(`signup:${clientKey(req)}`, 5, 60)) {
     return await apiError("apiErr.tooManyAttempts", 429);
   }
 
-  const body = await jsonBody<{
-    restaurantName?: string;
-    email?: string;
-    password?: string;
-    acceptedTerms?: boolean;
-  }>(req);
+  const body = await jsonBody<{ restaurantName?: unknown; email?: unknown; acceptedTerms?: unknown }>(req);
   if (!body) return await apiError("apiErr.invalidRequest", 400);
-  const { restaurantName, password, acceptedTerms } = body;
+  if (body.acceptedTerms !== true) return await apiError("auth.termsRequired", 400);
+  const restaurantName = typeof body.restaurantName === "string" ? body.restaurantName.trim() : "";
   const email = typeof body.email === "string" ? normalizeEmail(body.email) : "";
+  if (!restaurantName || !isValidEmail(email)) return await apiError("apiErr.signupFields", 400);
 
-  // Checked on the server too. The box in the browser is the honest place to
-  // ask; this is the place that makes the answer mean something.
-  if (!acceptedTerms) return await apiError("auth.termsRequired", 400);
-
-  // Strings, or nothing: a number for a name once reached `.trim()` and answered 500.
-  if (typeof restaurantName !== "string" || !restaurantName.trim() || !isValidEmail(email)) {
-    return await apiError("apiErr.signupFields", 400);
-  }
-  // Held to the same length as every other password in the app. This account
-  // holds the Stripe connection, the staff list and the settings, and it used
-  // to be the one with the weakest rule.
-  if (passwordTooShort(password)) return await apiError("apiErr.password8", 400);
-
-  const admin = createAdminClient();
-
-  // Only the email link proves ownership; signup must never confirm itself.
-  const { data: created, error: userErr } = await admin.auth.admin.createUser({
-    email,
-    password,
-    email_confirm: false,
-    // The language they signed up in: the confirmation, reset and later Auth
-    // emails switch on it (docs/auth-email-templates/).
-    user_metadata: { locale: requestLocale(req) },
-  });
-
-  if (userErr || !created?.user) {
-    // Supabase's own message is English and phrased for a developer; it goes to
-    // the log, and the person signing up gets a sentence in their language.
-    console.error("signup failed", userErr?.message);
-    return await apiError("apiErr.signupFailed", 400);
-  }
-
-  // A month of everything, no card. Sold on the top self-serve tier
-  // because a restaurant deciding whether this is worth paying for should
-  // be deciding about the product, not about a cut-down version of it.
-  // Confirmation starts these 30 days afresh: mail delays must not spend the trial.
-  // What they agreed to and when. Versioned, because "they accepted" is
-  // only worth something if we can say which document they accepted.
-  const { error: restaurantErr } = await admin.rpc("signup_restaurant_with_terms_v1", {
-    p_name: restaurantName.trim(),
-    p_user: created.user.id,
+  const token = newSignupToken();
+  const locale = requestLocale(req);
+  const { data: existing, error } = await createAdminClient().rpc("request_pending_signup_v1", {
     p_email: email,
-    p_version: TERMS_VERSION,
-    p_text_hash: TERMS_TEXT_HASH,
-    p_plan: TRIAL_PLAN,
-    p_trial_ends_at: new Date(Date.now() + TRIAL_DAYS * 86_400_000).toISOString(),
+    p_token_hash: signupHash(token),
+    p_restaurant_name: restaurantName,
+    p_locale: locale,
+    p_terms_version: TERMS_VERSION,
+    p_terms_text_hash: TERMS_TEXT_HASH,
   });
-
-  if (restaurantErr) {
-    // Roll back the orphaned user so the email is free to try again.
-    await admin.auth.admin.deleteUser(created.user.id);
-    console.error("signup restaurant insert failed:", restaurantErr.message);
-    return await apiError("apiErr.signupFailed", 400);
+  if (error) {
+    console.error("signup preparation failed", error.code);
+    return await apiError("apiErr.signupFailed", 503);
   }
 
-  const verificationSent = await sendSignupConfirmation(req, email);
-  return NextResponse.json({ ok: true, pendingVerification: true, verificationSent });
+  // Mail delivery and provider failures stay out of the public response.
+  after(() => sendSignupMail(req, email, locale, existing ? null : token));
+  return NextResponse.json({ ok: true, pendingVerification: true });
 }
