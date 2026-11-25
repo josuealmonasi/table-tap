@@ -1,4 +1,4 @@
-import { localDay, type DepositRecord, type TerminalPayment } from "./terminal";
+import { localDay, saleDayOf, type DepositRecord, type TerminalPayment } from "./terminal";
 import { round2 } from "./money";
 
 export interface TerminalReturn {
@@ -11,13 +11,14 @@ export interface TerminalReturn {
   tip: number;
 }
 
-/** Keep the allocation's original sale date: only a same-day void returns the fee. */
-export function terminalReturns(payments: TerminalPayment[], timeZone: string): TerminalReturn[] {
+/** Keep the allocation's original sale date: only a same-day void returns the fee.
+ * A receipt held by a signed deposit keeps that deposit's day (`signed`). */
+export function terminalReturns(payments: TerminalPayment[], timeZone: string, signed = new Map<string, string>()): TerminalReturn[] {
   return payments.flatMap(p => {
     const at = p.returned_at || p.voided_at;
     if (!at) return [];
     return [{ id: p.returned_at ? p.id ?? "" : `void:${p.id}`, paymentId: p.payment_id ?? p.id,
-      saleDay: p.returned_at && !p.payment_id ? "" : localDay(p.created_at, timeZone), day: localDay(at, timeZone), at, amount: Number(p.amount), tip: Number(p.tip) || 0 }];
+      saleDay: p.returned_at && !p.payment_id ? "" : saleDayOf(p, timeZone, signed), day: localDay(at, timeZone), at, amount: Number(p.amount), tip: Number(p.tip) || 0 }];
   });
 }
 

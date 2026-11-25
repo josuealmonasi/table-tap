@@ -51,6 +51,8 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   });
   if (error?.code === "23505" || data?.error === "marked") return await apiError("apiErr.depositMarked", 409);
   if (data?.error === "no_sales") return await apiError("apiErr.depositNoSales", 404);
+  // One payment, one deposit: the writer refuses a receipt another deposit holds.
+  if (data?.error === "already_signed") return await apiError("apiErr.depositPaymentSigned", 409);
   if (error?.code === "22007" || error?.code === "22008") return await apiError("apiErr.depositDay", 400);
   if (error || typeof data?.expected !== "number") return await apiError("apiErr.generic", 500);
   await logEvent({
