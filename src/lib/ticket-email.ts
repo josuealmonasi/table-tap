@@ -19,8 +19,11 @@ import { outboxPatch, ticketOutcome, type TicketOutcome } from "@/lib/ticket-ema
 
 interface OutboxRow {
   id: string; restaurant_id: string; card_id: string; order_id: string; session_id: string | null; attempts: number;
-  address_key: string | null; batch_key: string | null; claim: string; mail_body?: StoredTicketMail | null;
+  address_key: string | null; batch_key: string | null; group_key?: string | null; claim: string; mail_body?: StoredTicketMail | null;
 }
+
+/** `ticket_email_address_for_send`: the card's address, read under its lock. */
+interface SendReady { outcome: "ready" | "no_email" | "lost"; email?: string }
 type Db = ReturnType<typeof createAdminClient>;
 
 /** One email for a group of orders paid together on one card; "lost" when
@@ -52,7 +55,17 @@ async function sendGroup(db: Db, rows: OutboxRow[]): Promise<TicketOutcome | "lo
     // sends the group whole (Codex review of the delta, 2026-11-12).
     if (error || kept?.length !== ids.length) return "lost";
   }
-  return ticketOutcome(await sendMail(ticketMail(body, card.email, key)));
+  // Read the address again right before the provider, under the card's lock:
+  // rendering takes time, and an address removed meanwhile must not get the
+  // email. A removal that commits first wins (review 2026-11-25, finding 2).
+  const { data: ready, error: readyError } = await db.rpc("ticket_email_address_for_send", {
+    p_restaurant: restaurantId, p_card: cardId, p_claim: claim, p_ids: ids,
+  });
+  if (readyError) throw new Error(readyError.message);
+  const answer = ready as SendReady | null;
+  if (answer?.outcome === "lost") return "lost";
+  if (answer?.outcome !== "ready" || !answer.email) return { outcome: "no_email" };
+  return ticketOutcome(await sendMail(ticketMail(body, answer.email, key)));
 }
 
 let lastDrain = 0;
@@ -121,9 +134,11 @@ async function drainOnce(limit: number, deadline = Infinity, tally = emptyDrain(
     const groups = new Map<string, OutboxRow[]>();
     for (const row of data as OutboxRow[]) {
       // A retry keeps the group it was first sent in; new tickets group by
-      // card, sitting and address generation, so a ticket queued for an old
-      // address never takes a current one down with it.
-      const key = row.batch_key ?? `${row.card_id}:${row.session_id ?? row.order_id}:${row.address_key}`;
+      // the settlement recorded when they were queued (card, sitting and
+      // address generation), which the claim takes whole, so a ticket queued
+      // for an old address never takes a current one down with it. Rows
+      // queued before `group_key` existed are grouped the same way here.
+      const key = row.batch_key ?? row.group_key ?? `${row.card_id}:${row.session_id ?? row.order_id}:${row.address_key}`;
       groups.set(key, [...(groups.get(key) ?? []), row]);
     }
     for (const rows of groups.values()) {

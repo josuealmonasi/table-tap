@@ -1722,7 +1722,14 @@ minute, then 10, then an hour before it is claimed again, and the fourth
 failure, or a refusal no retry changes, finishes it as `failed` with
 `failure_reason`; fresh tickets are claimed before retries. The email is
 rendered once and kept on its rows (`mail_body`) until the batch finishes,
-so a retry resends the identical body under the same idempotency key. A sale
+so a retry resends the identical body under the same idempotency key. Each
+row records its settlement when queued (`group_key`: card, sitting or sale,
+address generation) and a claim takes every waiting row of a settlement
+together, so one payment is one email whatever the claim size. Right before
+the provider call the sender reads the address again under the card's share
+lock (`ticket_email_address_for_send`), which also confirms its claim and
+renews the lease: an address removed or changed while the PDF rendered is not
+sent to (review 2026-11-25). A sale
 closed by forgiving a walkout queues no ticket and stamps no visit (owner's
 decision, 2026-11-12). Orders of one card
 and one sitting claimed together are one email: the receipt, the 80 mm PDF
@@ -2131,6 +2138,17 @@ email or phone.
   so a double tap, two waiters or a race add nothing. `loyalty_stamp()` locks
   the card and refuses when the program is off or the plan does not include
   loyalty, as well as the route refusing it.
+- **A stamp stands on a sale** (review 2026-11-25): `POST /api/loyalty/stamp`
+  takes `{ code, saleId }`. A waiter or cashier must name a paid sale;
+  `loyalty_stamp_v2` locks it before the card and refuses (409) one that is not
+  this restaurant's or not paid (cancelled, written off), was not paid today in
+  the restaurant's zone (created today, or a payment of it or its sitting
+  today), or already stands behind another card's stamp (the card it carried
+  when paid, or `loyalty_visits.order_id`, unique). The till passes the sale it
+  just charged; a waiter with no sale is told a manager can stamp. An owner or
+  manager may stamp with no sale: an override, logged with `override=no_sale`
+  and noted beside the button. `loyalty_stamp()` keeps its signature for the
+  rollout.
 - **Presented before payment** (owner request, 2026-11-11): front-of-house
   staff (owner, manager, cashier, waiter) may attach a scanned or typed bearer
   code to an unpaid sale or an open sitting through `POST /api/loyalty/attach`.

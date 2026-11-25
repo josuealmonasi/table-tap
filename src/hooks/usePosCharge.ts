@@ -292,6 +292,9 @@ export function usePosCharge({ collector, collectorContext, restaurant, cart, de
         // Offered on the confirmation whether or not it printed: paperless, or
         // a print the browser blocked, leaves one tap to the ticket.
         receiptHtml: data.receiptHtml ?? undefined,
+        // Paid now, so it can stand behind a visit-card stamp; a sale put on
+        // an account is not paid yet.
+        orderId: !data.onAccount && typeof data.orderId === "string" ? data.orderId : undefined,
       });
       // Kept on this device, so the next "same again" is one tap.
       rememberLastSale(restaurant.id, cart.lines);

@@ -110,21 +110,37 @@ export function loyaltyCases(fx) {
     { name: "GET  /api/rewards (not a code)", as: "diner", method: "GET",
       path: "/api/rewards?c=abc", expect: [400], expectError: /no parece|doesn't look/i },
     // ── the visit card, stamped and spent by the floor ────────────────────
+    // A visit stands on a paid sale (review 2026-11-25). A waiter with no
+    // sale is refused and told a manager can stamp without one.
+    { name: "POST /api/loyalty/stamp (a waiter with no sale)", as: "waiter", method: "POST",
+      path: "/api/loyalty/stamp", body: { code: fx.stampableCode ?? "no-card-in-the-seed" },
+      expect: [403], expectError: /gerente|manager/i },
+    { name: "POST /api/loyalty/stamp (a sale that is not paid)", as: "waiter", method: "POST",
+      path: "/api/loyalty/stamp", body: { code: fx.stampableCode ?? "no-card-in-the-seed", saleId: fx.unpaidOrder },
+      expect: [409], expectError: /no está cobrada|isn't paid/i },
     // A card on its way with no visit today: the first scan counts, the
     // second the same day says so and adds nothing.
-    { name: "POST /api/loyalty/stamp (a card, first visit today)", as: "waiter", method: "POST",
-      path: "/api/loyalty/stamp", body: { code: fx.stampableCode ?? "no-card-in-the-seed" }, expect: [200],
+    { name: "POST /api/loyalty/stamp (a card, first visit today, on a paid sale)", as: "waiter", method: "POST",
+      path: "/api/loyalty/stamp", body: { code: fx.stampableCode ?? "no-card-in-the-seed", saleId: fx.stampSale }, expect: [200],
       check: d => d.stamped === true || `answered ${JSON.stringify(d)}` },
     { name: "POST /api/loyalty/stamp (the same card again today)", as: "cashier", method: "POST",
-      path: "/api/loyalty/stamp", body: { code: fx.stampableCode ?? "no-card-in-the-seed" }, expect: [200],
+      path: "/api/loyalty/stamp", body: { code: fx.stampableCode ?? "no-card-in-the-seed", saleId: fx.stampSale }, expect: [200],
       check: d => d.stamped === false || "a second scan the same day added a visit" },
+    // One sale, one card: it cannot stamp a second diner's card.
+    { name: "POST /api/loyalty/stamp (a sale already behind another card)", as: "waiter", method: "POST",
+      path: "/api/loyalty/stamp", body: { code: fx.readyCode ?? "no-ready-card-in-the-seed", saleId: fx.stampSale },
+      expect: [409], expectError: /ya selló otra tarjeta|already stamped another card/i },
+    // A manager may stamp without a sale; recorded as an override.
+    { name: "POST /api/loyalty/stamp (a manager with no sale)", as: "manager", method: "POST",
+      path: "/api/loyalty/stamp", body: { code: fx.stampableCode ?? "no-card-in-the-seed" }, expect: [200],
+      check: d => d.stamped === false || "a second stamp the same day added a visit" },
     { name: "POST /api/loyalty/stamp (kitchen refused)", as: "kitchen", method: "POST",
-      path: "/api/loyalty/stamp", body: { code: fx.stampableCode ?? "" }, expect: [403] },
+      path: "/api/loyalty/stamp", body: { code: fx.stampableCode ?? "", saleId: fx.stampSale }, expect: [403] },
     { name: "POST /api/loyalty/stamp (no such card here)", as: "waiter", method: "POST",
-      path: "/api/loyalty/stamp", body: { code: "0000-0000-0000" },
+      path: "/api/loyalty/stamp", body: { code: "0000-0000-0000", saleId: fx.stampSale },
       expect: [404], expectError: /no es de este restaurante|isn't one of this restaurant's/i },
     { name: "POST /api/loyalty/stamp (program switched off)", as: "waiter", method: "POST",
-      path: "/api/loyalty/stamp", arrange: f => f.withLoyaltyOff(), body: { code: fx.stampableCode ?? "" },
+      path: "/api/loyalty/stamp", arrange: f => f.withLoyaltyOff(), body: { code: fx.stampableCode ?? "", saleId: fx.stampSale },
       expect: [409], expectError: /apagada|switched off/i },
     { name: "POST /api/loyalty/redeem (not ready yet)", as: "waiter", method: "POST",
       path: "/api/loyalty/redeem", body: { code: fx.stampableCode ?? "", step: fx.stampableStep, round: fx.stampableRound, requestKey: randomUUID() },

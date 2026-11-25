@@ -8617,3 +8617,24 @@ and the privacy notice's promise that an unconfirmed address is deleted after
 seven days (an hourly pg_cron job deletes them). The limit is counted under the
 restaurant's row lock, so two tabs cannot reach six. Check:
 `digest-recipients.spec.ts`, the api gate's `digest` cases.
+### Loyalty stamps, ticket sends and redemption timing (2026-11-25)
+
+Four places that had to agree. First, "Sellar tarjeta" recorded a visit from a
+card code alone, so a waiter could stamp a two-visit card on two days with no
+purchase and redeem the reward. Now a waiter or cashier names a paid sale and
+`loyalty_stamp_v2` checks it is this restaurant's, paid today and behind no
+other card's stamp (`loyalty_visits.order_id`, unique); the till passes the sale
+it just charged, and a waiter with none is told a manager can stamp. A manager
+or the owner may stamp with no sale, logged as an override. Second, the ticket
+sender read the card's address before rendering the PDF, so an address removed
+meanwhile still got the email; it now reads it again under the card's share
+lock right before the provider (`ticket_email_address_for_send`), so a removal
+that commits first wins. Third, settling 21 orders at once claimed 20 rows and
+a later drain sent the 21st as a second email; each row now records its
+settlement (`group_key`) when queued and a claim takes the whole settlement.
+Fourth, a redemption carried its transaction's start time, which could fall
+before a visit stamped while it waited on the card lock, so the undo guard let
+the spent visit be taken back; the redemption is now timed with
+`clock_timestamp()` after the lock. Check: `loyalty-stamp-sale.spec.ts`,
+`card-email.spec.ts`, the api gate's `loyalty` stamp cases, `pnpm attack`
+(a waiter with no sale cannot stamp).

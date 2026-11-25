@@ -4,14 +4,26 @@ type Row = Record<string, unknown> & { id: string };
 const state = vi.hoisted(() => ({
   claimed: [] as Row[], updates: [] as unknown[], sent: [] as unknown[], steps: [] as string[], claims: 0, cardError: false,
   mail: "sent" as "sent" | "failed", result: null as unknown, renders: 0, sendMs: 0, crashAfterSend: false, batches: [] as Row[][],
-  finishError: false, loseFinish: false, configured: true,
+  finishError: false, loseFinish: false, configured: true, rechecks: [] as unknown[],
+  // The card as read under its lock right before the provider; undefined: as `card`.
+  cardAtSend: undefined as unknown,
   card: { email: "ana@example.invalid", email_unsubscribe: "11111111-1111-4111-8111-111111111111" } as unknown,
 }));
 vi.mock("@/lib/supabase/admin", () => ({
   createAdminClient: () => ({
     // The outbox: `claimed` holds the rows a claim returns; updates write to them,
     // so a key persisted by one drain is what the next claim reads.
-    rpc: async () => {
+    rpc: async (name: string, args: { p_claim: string; p_ids: string[] }) => {
+      // The address read again under the card's lock, right before sending.
+      if (name === "ticket_email_address_for_send") {
+        state.rechecks.push(args);
+        state.steps.push("recheck");
+        const card = (state.cardAtSend === undefined ? state.card : state.cardAtSend) as { email: string | null; email_unsubscribe: string | null };
+        const rows = args.p_ids.map(id => state.claimed.find(r => r.id === id));
+        if (rows.some(r => r && r.claim !== args.p_claim)) return { data: { outcome: "lost" }, error: null };
+        if (!card.email || rows.some(r => r && r.address_key !== card.email_unsubscribe)) return { data: { outcome: "no_email" }, error: null };
+        return { data: { outcome: "ready", email: card.email }, error: null };
+      }
       state.claims++;
       const batch = state.batches.length ? state.batches.shift()! : state.claimed;
       return { data: batch.map(r => ({ ...r })), error: null };
@@ -81,7 +93,7 @@ const drain = async () => { vi.advanceTimersByTime(5000); await drainTicketEmail
 
 beforeEach(() => {
   vi.useFakeTimers({ toFake: ["Date"] });
-  Object.assign(state, { claimed: [], updates: [], sent: [], steps: [], claims: 0, cardError: false, mail: "sent", result: null, renders: 0, sendMs: 0, crashAfterSend: false, batches: [], finishError: false, loseFinish: false, configured: true });
+  Object.assign(state, { claimed: [], updates: [], sent: [], steps: [], claims: 0, cardError: false, mail: "sent", result: null, renders: 0, sendMs: 0, crashAfterSend: false, batches: [], finishError: false, loseFinish: false, configured: true, rechecks: [], cardAtSend: undefined });
 });
 const keys = () => (state.sent as { idempotencyKey: string }[]).map(m => m.idempotencyKey);
 const finished = () => (state.updates as { patch: Record<string, unknown>; ids: string[] }[]).filter(u => "finished_at" in u.patch);
@@ -154,7 +166,7 @@ it("retries a failed group with the same idempotency key (Codex review of #622)"
 it("writes the group's key before calling the provider, derived from its rows (Codex review of #622)", async () => {
   state.claimed = [row("2", "o2", "s"), row("1", "o1", "s")];
   await drain();
-  expect(state.steps).toEqual(["persist", "send", "finish"]);
+  expect(state.steps).toEqual(["persist", "recheck", "send", "finish"]);
   expect(keys()).toEqual([batchKeyFor(["1", "2"])]);
   expect(batchKeyFor(["2", "1"])).toBe(batchKeyFor(["1", "2"]));
   expect(state.updates[0]).toEqual({ patch: { batch_key: batchKeyFor(["1", "2"]), mail_body: expect.objectContaining({ subject: "Tu recibo" }) },
@@ -328,4 +340,54 @@ it("missing configuration finishes as failed after the bounded retries", async (
   expect(await drainTicketEmailQueue(1)).toMatchObject({ failed: 1, errors: 1 });
   expect(finished()).toEqual([{ patch: expect.objectContaining({ outcome: "failed",
     failure_reason: "retries exhausted: unconfigured" }), ids: ["1"] }]);
+});
+
+// Review 2026-11-25, finding 2: the address is read again under the card's lock
+// right before the provider, after the PDF is rendered.
+it("an address removed while the ticket was rendering is not sent to", async () => {
+  state.claimed = [row("1", "o1", "s")];
+  state.cardAtSend = { email: null, email_unsubscribe: null };
+  await drainTicketEmailQueue(1);
+  expect(state.sent).toHaveLength(0);
+  expect(state.steps.indexOf("persist")).toBeLessThan(state.steps.indexOf("recheck"));
+  expect(finished()).toEqual([{ patch: expect.objectContaining({ outcome: "no_email" }), ids: ["1"] }]);
+});
+
+it("an address changed while the ticket was rendering is not sent to the new one", async () => {
+  state.claimed = [row("1", "o1", "s")];
+  state.cardAtSend = { email: "new@example.invalid", email_unsubscribe: "33333333-3333-4333-8333-333333333333" };
+  await drainTicketEmailQueue(1);
+  expect(state.sent).toHaveLength(0);
+  expect(finished()).toEqual([{ patch: expect.objectContaining({ outcome: "no_email" }), ids: ["1"] }]);
+});
+
+it("sends to the address read under the lock, and checks it for every row of the group", async () => {
+  state.claimed = [row("1", "o1", "s"), row("2", "o2", "s")];
+  await drainTicketEmailQueue(1);
+  expect(state.rechecks).toEqual([{ p_restaurant: "r", p_card: "c", p_claim: "claim-1", p_ids: ["1", "2"] }]);
+  expect(state.steps.slice(-3)).toEqual(["recheck", "send", "finish"]);
+  expect((state.sent[0] as { to: string }).to).toBe("ana@example.invalid");
+});
+
+it("a lease lost before the provider call sends nothing and finishes nothing", async () => {
+  const kept = { batch_key: "ticket-x", mail_body: { subject: "s", text: "t", html: "h", attachments: [] } };
+  // This sender's claim reads "claim-1"; another sender has taken the row since.
+  state.batches = [[row("1", "o1", "s", kept)]];
+  state.claimed = [row("1", "o1", "s", { ...kept, claim: "claim-2" })];
+  expect(await drainTicketEmailQueue(1)).toMatchObject({ sent: 0, errors: 1 });
+  expect(state.rechecks).toHaveLength(1);
+  expect(state.sent).toHaveLength(0);
+  expect(finished()).toEqual([]);
+});
+
+// Review 2026-11-25, finding 3: one settlement, one email, whatever the claim size.
+it("groups by the settlement recorded when queued, even across sittings' legacy keys", async () => {
+  state.claimed = [
+    row("1", "o1", null, { group_key: "c:settle-1:" + KEY }),
+    row("2", "o2", null, { group_key: "c:settle-1:" + KEY }),
+    row("3", "o3", null, { group_key: "c:settle-2:" + KEY }),
+  ];
+  await drainTicketEmailQueue(1);
+  expect(state.sent).toHaveLength(2);
+  expect(finished().map(f => f.ids)).toEqual([["1", "2"], ["3"]]);
 });
