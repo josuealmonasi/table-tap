@@ -16099,7 +16099,7 @@ alter table platform_admin_audit add constraint platform_admin_audit_target_type
 alter table platform_admin_audit drop constraint if exists platform_admin_audit_action_check;
 alter table platform_admin_audit add constraint platform_admin_audit_action_check
   check (action in ('login.create', 'login.update', 'login.delete', 'restaurant.delete', 'restaurant.plan', 'plan.price',
-    'restaurant.suspend', 'restaurant.unsuspend', 'restaurant.trial', 'restaurant.owner_reset',
+    'restaurant.suspend', 'restaurant.unsuspend', 'restaurant.trial', 'restaurant.owner_reset', 'restaurant.note',
     'restaurant.owner_transfer', 'restaurant.view'));
 
 revoke truncate, references, trigger on all tables in schema public from authenticated;

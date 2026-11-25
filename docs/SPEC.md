@@ -95,11 +95,18 @@ line reads "Suspendido · <reason>".
 A platform admin can also **extend or end a trial** (`PATCH
 /api/admin/restaurants/trial { id, endsAt | null }`): extend to a date at most
 90 days out, or end it now, which drops to Carta exactly as an expired trial
-does. Refused for a restaurant paying through Stripe or not on a trial.
+does. Refused for a restaurant paying through Stripe or not on a trial. It runs
+under the restaurant billing lock: ending or shortening a tier assignment first
+expires every open Checkout bound to it (`tier_assignment_id`), and a checkout
+already paid but not yet synced refuses the change. A subscription from an
+ended or replaced assignment's Checkout grants no tier. A lift (`DELETE
+/api/admin/restaurants/suspend { id, suspendedAt }`) clears only the suspension
+the admin saw; a newer one answers 409 and asks to reload.
 
 **Support tools** live in each restaurant's usage dialog: private notes by the
 platform team (`restaurant_admin_notes`, author and time, never shown to the
-restaurant; `GET/POST /api/admin/restaurants/notes`), and a button that emails
+restaurant; `GET/POST /api/admin/restaurants/notes`, each POST audited first as
+`restaurant.note` with the restaurant id, never the text), and a button that emails
 the owner the standard password-reset link (`POST
 /api/admin/restaurants/owner-reset`, audited `restaurant.owner_reset`). The admin
 never sees or sets a password.

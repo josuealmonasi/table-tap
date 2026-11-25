@@ -9,7 +9,8 @@ type Facts = Record<string, string | boolean | number | null>;
 type Action = "login.create" | "login.update" | "login.delete" | "restaurant.delete" | "restaurant.plan" | "plan.price"
   | "restaurant.suspend" | "restaurant.unsuspend" | "restaurant.trial"
   | "restaurant.owner_transfer"
-  | "restaurant.owner_reset";
+  | "restaurant.owner_reset"
+  | "restaurant.note";
 type AuditBody = Record<string, unknown>;
 export interface AdminAuditContext<Body extends AuditBody = AuditBody> {
   targetId?: string;

@@ -23,7 +23,8 @@ interface AdminRestaurantsProps {
   onMovePlan: (id: string, plan: string, doneMsg: string, choice: TierAssignment) => Promise<boolean>;
   onDelete: (id: string) => void;
   onSuspend: (id: string, reason: SuspendReason, doneMsg: string) => Promise<boolean>;
-  onLift: (id: string, doneMsg: string) => Promise<boolean>;
+  /** suspendedAt: the suspension on screen, so a newer one is never lifted by mistake. */
+  onLift: (id: string, doneMsg: string, suspendedAt?: string | null) => Promise<boolean>;
   onTrial: (id: string, endsAt: string | null, doneMsg: string) => Promise<boolean>;
 }
 
@@ -60,7 +61,7 @@ export default function AdminRestaurants({ restaurants, plans, busy, onMovePlan,
     const r = suspending;
     setSuspending(null);
     if (reason) await onSuspend(r.id, reason, t("adminSuspend.done", { name: r.name }));
-    else await onLift(r.id, t("adminSuspend.lifted", { name: r.name }));
+    else await onLift(r.id, t("adminSuspend.lifted", { name: r.name }), r.billing.suspended_at);
   }
 
   // The tier picked in a row, waiting for the admin to say how it is paid.

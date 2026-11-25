@@ -8706,3 +8706,46 @@ share one copy and one restaurant-scoped stop. Opting in renews the staff link
 version, and equivalent UUID spellings share one recipient resend quota.
 Check: `daily-digest.spec.ts`, `digest-schema.spec.ts`,
 `digest-stop.react-component.spec.tsx`, and `digest-resend.spec.ts`.
+### Admin console: open checkouts, suspension lifts and note audits (2026-11-25)
+
+Three pairs that had to agree (review bl26, findings 5, 6 and 8). First, an
+admin's tier assignment and the Checkout pages opened for it: ending a
+payment-link assignment moved the restaurant to Carta, but a MX$699 Checkout the
+owner still had open stayed payable and its subscription brought the paid tier
+back. `changeTrial` (`admin-trial.ts`) now runs under `withRestaurantBilling`,
+refuses when a checkout already completed before its webhook (`live`), and on
+ending or shortening expires every open session carrying a
+`tier_assignment_id` before it writes; extending leaves them payable, and a
+failed expiry changes nothing. Replacing an assignment (`assignTier`) already
+expired every session under the lock. As a backstop, `applySubscription`
+grants no tier from an unlinked subscription whose `tier_assignment_id` is no
+longer the restaurant's current one; it logs the contract for the platform team
+to cancel or refund. Second, a lift and the suspension it read: a delayed lift
+could clear suspension B applied after it read A, because its update only
+checked that some suspension existed. The lift now matches the exact
+`suspended_at` it read, and the admin screen sends the one it showed
+(`suspendedAt`); a different one answers 409 `apiErr.suspensionChangedMeanwhile`,
+which asks to reload. Third, support notes and the audit stream: a note was
+saved with the audit down. The POST runs through `auditedAdminAction` as
+`restaurant.note` (added to `platform_admin_audit_action_check`), recording the
+restaurant id and never the note's text. Checks: `admin-trial.spec.ts`,
+`admin-suspend.spec.ts`, `subscription-sync.spec.ts`,
+`api/admin/restaurants/notes/__tests__/route.spec.ts`.
+### Signup mail ceiling and digest cash/card figures (2026-11-25)
+
+Two pairs that had to agree (bl24 review, findings 2 and 4). First, the limit
+on who asks and the limit on who receives: `/api/signup` and
+`/api/signup/resend` each allowed five requests a minute per network address,
+and nothing counted the destination, so a stranger could keep one inbox
+receiving signup and confirmation mail. Both routes now share one ceiling per
+normalized address (`isSignupMailCapped` in `signup-mail-ceiling.ts`): one
+mail per 10 minutes and three per 24 hours, keyed by a keyed hash of the
+address, never the address itself. Over it, each route answers its usual 200
+body and neither stores a pending row nor schedules mail; a request the
+cooldown refuses does not spend the day's budget. Second, the digest's Cash
+and Card lines and the Analytics corte: the digest passed `corteFrom` its
+payments alone, so MX$100 collected in cash with MX$30 handed back from that
+drawer read MX$100 cash in the mail and MX$70 on the corte. Both now read
+their adjustments (logged write-offs and refunds, plus completed return
+events) from one reader, `readCorteAdjustments` in `corte-adjustments.ts`.
+Check: `signup-mail-ceiling.spec.ts`, `digest-figures.spec.ts`.
