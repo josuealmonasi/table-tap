@@ -1,7 +1,7 @@
 import { beforeEach, expect, it, vi } from "vitest";
 const m = vi.hoisted(() => ({ signed: false, bearer: false, github: false, fail: false, ticketErrors: 0, rows: [] as string[] }));
 vi.mock("@/lib/cron-auth", () => ({ cronAuthorized: () => m.bearer }));
-vi.mock("@/lib/github-cron-auth", () => ({ githubCronAuthorized: async () => m.github }));
+vi.mock("@/lib/github-cron-auth", () => ({ githubCronAuthorized: async () => m.github ? "authorized" : "unauthorized" }));
 vi.mock("@/lib/recovery/signed-auth", () => ({ signedRecoveryAuthorized: async () => m.signed }));
 vi.mock("@/lib/ticket-email", () => ({ drainTicketEmailQueue: async () => ({ claimed: 0, sent: 0, retrying: 0, failed: 0, released: 0, errors: m.ticketErrors }) }));
 vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({ from: (table: string) => {

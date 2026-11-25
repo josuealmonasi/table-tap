@@ -1,9 +1,11 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomBytes, randomUUID } from "node:crypto";
 
 export function loyaltyCases(fx) {
   const { restaurant, paidOrder } = fx;
   const r = restaurant.id;
   const sharedCode = randomUUID().replaceAll("-", "").slice(0, 12).toUpperCase().replaceAll("0", "2").replaceAll("1", "3");
+  const ownedCode = randomBytes(6).toString("hex").toUpperCase();
+  const ownerSecret = randomBytes(32).toString("base64url");
   return [
     // Tickets by email to the card's address (2026-11-11). An example.invalid
     // address: nothing these cases link can ever be delivered. The last case
@@ -202,12 +204,20 @@ export function loyaltyCases(fx) {
       expect: [409], expectError: /apagada|switched off/i },
     { name: "POST /api/loyalty/card (not a restaurant)", as: "diner", method: "POST",
       path: "/api/loyalty/card", body: { restaurantId: "not-an-id" }, expect: [400] },
-    { name: "DELETE /api/rewards (a diner deletes their card)", as: "diner", method: "DELETE",
-      path: `/api/rewards?c=${fx.throwawayCode}`, expect: [200],
-      check: async (_d, f) => {
-        const { count } = await f.admin.from("loyalty_cards").select("id", { count: "exact", head: true }).eq("code", f.throwawayCode);
+    { name: "DELETE /api/rewards (a diner deletes their card with its key)", as: "diner", method: "DELETE",
+      path: `/api/rewards?c=${ownedCode}`, expect: [200], headers: { cookie: `tt-loyalty-owner-${ownedCode}=${ownerSecret}` },
+      arrange: async f => {
+        const owner_secret_hash = createHash("sha256").update(ownerSecret).digest("hex");
+        const { error } = await f.admin.from("loyalty_cards").insert({ restaurant_id: r, code: ownedCode, goal: 8, owner_secret_hash });
+        if (error) throw new Error(error.message);
+        return async () => { await f.admin.from("loyalty_cards").delete().eq("code", ownedCode); };
+      },
+      effect: async f => {
+        const { count } = await f.admin.from("loyalty_cards").select("id", { count: "exact", head: true }).eq("code", ownedCode);
         return count === 0 || "the card is still there";
       } },
+    { name: "DELETE /api/rewards (a legacy card needs the restaurant)", as: "diner", method: "DELETE",
+      path: `/api/rewards?c=${fx.throwawayCode}`, expect: [403], expectError: /pide al restaurante|ask the restaurant/i },
     { name: "DELETE /api/rewards (no such card)", as: "diner", method: "DELETE",
       path: "/api/rewards?c=0000-0000-0000", expect: [404], expectError: /encontramos|couldn't find/i },
     // ── the visit card, run by the owner and the managers ─────────────────
@@ -217,6 +227,18 @@ export function loyaltyCases(fx) {
         || `the lookup did not name who stamped: ${JSON.stringify(d).slice(0, 120)}` },
     { name: "GET  /api/loyalty/lookup (waiter refused)", as: "waiter", method: "GET",
       path: `/api/loyalty/lookup?c=${fx.stampableCode ?? ""}`, expect: [403] },
+    { name: "DELETE /api/loyalty/lookup (waiter refused)", as: "waiter", method: "DELETE",
+      path: `/api/loyalty/lookup?c=${fx.throwawayCode}`, expect: [403] },
+    { name: "DELETE /api/loyalty/lookup (manager deletes a legacy card and records it)", as: "manager", method: "DELETE",
+      path: `/api/loyalty/lookup?c=${fx.throwawayCode}`, expect: [200],
+      effect: async f => {
+        const { count } = await f.admin.from("loyalty_cards").select("id", { count: "exact", head: true }).eq("code", f.throwawayCode);
+        if (count !== 0) return "the card is still there";
+        const { data } = await f.admin.from("user_logs").select("id, actor_email").eq("restaurant_id", r)
+          .eq("entity", "loyalty").eq("action", "deleted").eq("detail", `card=${f.throwawayCode.slice(0, 4)}`);
+        const added = data?.filter(log => !f.billLogsBefore.includes(log.id));
+        return (added?.length === 1 && added[0].actor_email.includes("@")) || "the manager's deletion was not logged once";
+      } },
     // Today's stamp — the one the first stamp case above made — can be taken
     // back; one from before today cannot.
     { name: "DELETE /api/loyalty/visit (a visit from before today)", as: "manager", method: "DELETE",

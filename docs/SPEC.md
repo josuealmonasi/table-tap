@@ -185,10 +185,12 @@ Supabase dashboard. Each is written in Spanish and English, switched on
 `user_metadata.locale`, which signup, staff invites and admin-created logins
 save from the request's language cookie (`requestLocale`); without it,
 Spanish. Links go to `tabletap.shop/auth/confirm`, never to the Supabase host.
-That page only shows a button that POSTs the token to `/auth/callback`, so a
-mail scanner that opens the link cannot spend it. Older email-token links
-that point to the callback open the same confirmation page. The callback
-still exchanges PKCE authorization codes when the browser opens it.
+The token and type travel in the link fragment. The browser clears it and
+shows a button that POSTs the token to `/auth/callback`, so a mail scanner
+that opens the link cannot spend it. Older email links with query tokens
+redirect to a fragment on the confirmation page, whether they first land on
+the confirmation page or the callback. The callback still exchanges PKCE
+authorization codes when the browser opens it.
 The POST is accepted only from our own pages
 (`sameSitePost`), so another site cannot sign a visitor into its account.
 
@@ -2178,8 +2180,8 @@ what is left and for what, every reward on the ladder and whether it is
 redeemed, ready or how far off (`LadderSteps`, the same list the staff see), the
 last visit and the rewards spent — what the card
 itself would show, never who stamped it or the card's row id. `GET
-/api/rewards` answers it, public and limited to ten looks a minute per address:
-a code is the only key a card has. The page is `noindex`, since a code in its
+/api/rewards` answers it, public and limited to ten looks a minute per address.
+The printed code grants lookup. The page is `noindex`, since a code in its
 address is the card. "What the card needs next" is one function, `nextStep()`,
 so this page and the staff scanner cannot word it differently.
 
@@ -2264,10 +2266,13 @@ the ladder grows, never under the rewards), the code in groups of four — becau
 its mark and a server has no emoji font. The QR library stays on the server:
 `POST /api/loyalty/card` and `GET /api/rewards` send the QR as a grid of modules
 (`qrGrid()`) and the canvas paints the squares. `/rewards` can draw the card
-again for a diner who lost the picture, and delete it: the code is the card's
-only key, so whoever holds it may end it, visits and rewards with it — the
-privacy notice's promise of cancellation, kept without asking for a name the
-card never had.
+again for a diner who lost the picture. Deleting a card with its visits and
+rewards requires the printed code and the phone's deletion key. Card creation
+sets a per-card HttpOnly cookie and stores its SHA-256 hash on the card. Saving
+the picture again renews that cookie when it matches the card. Guests with an
+older card or without the key can ask the restaurant to delete it. An owner or
+manager can delete a card of their own restaurant from the dashboard card
+lookup, which records the deletion in the activity log in the same transaction.
 
 The privacy notice says what the card keeps (a random code, the days it was
 stamped and by whom, the rewards spent), what the phone keeps, for how long,

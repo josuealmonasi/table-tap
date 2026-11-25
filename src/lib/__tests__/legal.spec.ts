@@ -42,6 +42,10 @@ describe("the text and the version cannot drift apart", () => {
       .digest("hex")
       .slice(0, 16);
 
+  // 2026-11-24, bumped from 2026-11-18.2: deleting a visit card from its page
+  // now needs the phone that created it (staff see the printed code when they
+  // scan it); from elsewhere the restaurant deletes it on request. A change to
+  // how a diner exercises cancellation, so every restaurant is asked again.
   // 2026-11-18.2: the privacy notice promised the fiscal data is "not shown on
   // the menu", but the menu and checkout show the legal name and address
   // (PlaceIdentity). It now says exactly which two are shown and why.
@@ -75,15 +79,15 @@ describe("the text and the version cannot drift apart", () => {
   // kept the version as a clarification.)
   it("has terms that match the version in force", () => {
     expect({ version: TERMS_VERSION, text: fingerprint("terms-es") }).toEqual({
-      version: "2026-11-18.2",
+      version: "2026-11-24",
       text: "8cce805f4850523f",
     });
   });
 
   it("has a privacy notice that matches the version in force", () => {
     expect({ version: TERMS_VERSION, text: fingerprint("privacy-es") }).toEqual({
-      version: "2026-11-18.2",
-      text: "9f3d8fc2a2344491",
+      version: "2026-11-24",
+      text: "31703e339a554123",
     });
   });
 });

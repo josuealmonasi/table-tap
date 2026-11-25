@@ -145,3 +145,16 @@ it("N4: keeps preparation notes and component extras without adding flattened ex
   expect(line.extras).toEqual([extra]);
   expect(offlineLines([{ itemId: "x", qty: 1, notes: "x".repeat(1000) }])[0].notes?.length).toBeLessThanOrEqual(500);
 });
+
+describe("the tip ceiling is the till's (security sweep 2026-11-24)", () => {
+  const sale = (tip: number) => ({ at: new Date().toISOString(), subtotal: 100, serviceFee: 10, tip, discount: 0, total: 110 + tip });
+  it("takes a tip up to the discounted subtotal, offline or approved", () => {
+    expect(offlineCharge(sale(100))?.tip).toBe(100);
+    expect(heldApprovalCharge(sale(100))?.tip).toBe(100);
+  });
+  it("refuses a tip above it, even with a manager's approval", () => {
+    // MX$100 of food, MX$150 tip: total MX$260 passed the old "tip <= total" check.
+    expect(offlineCharge(sale(150))).toBeNull();
+    expect(heldApprovalCharge(sale(150))).toBeNull();
+  });
+});

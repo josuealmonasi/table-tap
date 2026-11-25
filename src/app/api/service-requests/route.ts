@@ -63,7 +63,10 @@ export async function POST(req: NextRequest) {
   // for this sitting's bill or collection requires approved membership.
   if (kind !== "waiter") {
     const member = await ownBillAccess(req, restaurantId, tableId, body.sessionId, Array.isArray(body.ownOrderIds) ? body.ownOrderIds : []).catch(() => null);
-    if (!member) return await apiError("apiErr.tableJoin", 403);
+    // Only the CURRENT sitting calls for its bill: a phone from a closed
+    // sitting kept its membership (to pay what it owed) and could summon
+    // collection for the next party at that table (security sweep 2026-11-24).
+    if (!member || member.closed) return await apiError("apiErr.tableJoin", 403);
   }
 
   // Don't stack duplicates: one open request per table+kind is enough.

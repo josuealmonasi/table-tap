@@ -39,12 +39,16 @@ async function drainTickets(): Promise<TicketDrain & { expired: number }> {
 /**
  * Callers, all checked here: Vercel's daily cron and the database's
  * five-minute pg_cron job (a one-time signature), and GitHub's best-effort
- * backup schedule (a signed OIDC identity). Vercel uses `Bearer CRON_SECRET`.
+ * backup schedule (a one-time OIDC token). Vercel uses `Bearer CRON_SECRET`.
  * Everything else is refused.
  */
 async function recover(request: Request) {
   const scheduled = request.headers.has("x-recover-signature") && await signedRecoveryAuthorized(request, createAdminClient());
-  if (!scheduled && !cronAuthorized(request) && !await githubCronAuthorized(request)) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!scheduled && !cronAuthorized(request)) {
+    const github = await githubCronAuthorized(request);
+    if (github === "unavailable") return NextResponse.json({ error: "Service unavailable" }, { status: 503 });
+    if (github !== "authorized") return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
   const db = createAdminClient();
   // Ticket emails left waiting since the last payment request drained them:
   // claimed until the queue is empty or the budget runs out (Codex review of
