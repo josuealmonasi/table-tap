@@ -8452,6 +8452,17 @@ checkout agree on MX$14.50 per share. Earlier locks with a null food-only
 snapshot keep their existing tip behavior. Checks: `tip-base.react-component.spec.tsx`,
 `split-slots-schema.spec.ts`, and `split-slots-pay.spec.ts`.
 
+## A manual Stripe refund appeared while TableTap prepared a return (review 1124)
+
+TableTap listed a MX$100 charge before preparing a MX$40 return. A manager
+could return that MX$40 in Stripe before TableTap sent its own MX$40 request.
+TableTap now lists all refunds for the same payment intent and account again
+immediately before sending. A new refund without TableTap attempt evidence
+leaves the return in review and records the reason on the saved attempt. A
+failed final listing aborts the request. A manager can use Check to retire the
+attempt after 24 hours if a fresh listing still shows no refund for it, then
+attribute the manual refund. A Stripe refund made after the final listing can
+still race the POST. Check: `src/lib/refunds/__tests__/operations.spec.tsx`.
 ## Auth email tokens appeared in request logs (2026-11-24)
 
 The auth email templates put one-time tokens in the query string, which
