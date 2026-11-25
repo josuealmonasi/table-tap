@@ -7,8 +7,15 @@ do $$ begin
     if exists (select 1 from cron.job where jobname = 'tabletap-recover') then
       perform cron.unschedule('tabletap-recover');
     end if;
+    if exists (select 1 from cron.job where jobname = 'tabletap-expire-pending-signups') then
+      perform cron.unschedule('tabletap-expire-pending-signups');
+    end if;
   end if;
 end $$;
+drop trigger if exists provision_pending_signup on auth.users;
+drop function if exists public.provision_pending_signup_v1();
+drop function if exists public.request_pending_signup_v1(text, text, text, text, text, text);
+drop table if exists pending_signups cascade;
 drop table if exists terms_acceptances cascade;
 drop function if exists public.capture_legacy_terms_v1() cascade;
 drop function if exists public.keep_terms_acceptance_v1();

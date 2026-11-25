@@ -178,8 +178,8 @@ as refused. If an audit write fails, the page withholds the result.
 
 ## Auth emails
 
-Supabase sends the sign-up confirmation, staff invitation, password reset and
-email-change emails, from `no-reply@tabletap.shop` through Resend. Their
+Supabase sends legacy sign-up confirmations, staff invitations, password resets
+and email-change emails from `no-reply@tabletap.shop` through Resend. Their
 templates live in `docs/auth-email-templates/` and are pasted into the
 Supabase dashboard. Each is written in Spanish and English, switched on
 `user_metadata.locale`, which signup, staff invites and admin-created logins
@@ -191,6 +191,9 @@ that opens the link cannot spend it. Older email links with query tokens
 redirect to a fragment on the confirmation page, whether they first land on
 the confirmation page or the callback. The callback still exchanges PKCE
 authorization codes when the browser opens it.
+
+New self-serve signup confirmations and existing-account notices use the
+app's shared Resend sender. See the self-serve signup flow below.
 The POST is accepted only from our own pages
 (`sameSitePost`), so another site cannot sign a visitor into its account.
 
@@ -3279,17 +3282,26 @@ Restaurant deletion archives it with the accounting records for ten years.
 The acceptance previously stored on each restaurant is backfilled without
 guessing its user or text hash. Current acceptance fields remain on the restaurant.
 
-Self-serve signup creates an unconfirmed auth user and a restaurant with
-`owner_signup_pending = true`. The verification screen offers resend and sign-in;
-it does not sign the owner in with the password just chosen. The server callback
-accepts the email token hash or a PKCE code and opens `/signup/complete`.
-`complete_owner_signup_v1` checks `auth.users.email_confirmed_at` and the address
-recorded with terms acceptance under the pending restaurant lock. Only then does
-it clear pending and start the existing 30-day Servicio trial. Repeated completion
-does not extend the trial; existing owners and staff pass through unchanged.
-A mail failure keeps the pending account available for resend. Supabase must have
-email confirmation enabled, a server-side token-hash confirmation template and
-the callback URL allowed. No SQL or Auth configuration has been applied by this fix.
+Self-serve signup collects the restaurant name, email and terms acceptance.
+For a new address it stores a server-only `pending_signups` row with hashes of
+the normalized address and confirmation token. The payload holds the signup
+details and terms version and hash. The row expires after 24 hours, and an
+hourly job clears expired rows. The request creates no Auth user or restaurant.
+
+Resend sends the confirmation email in the signup language from the shared
+TableTap sender. Requests for addresses already registered receive sign-in and
+password-reset links by email. Both cases return the same HTTP 200 response,
+independent of mail delivery. The verification screen can resend a live
+signup link using its original deadline. Signup and resend each allow five
+requests per IP per minute.
+
+The confirmation link carries the token in its fragment. The page asks the
+owner to choose a password and spends the token on submit. Auth creation,
+restaurant and terms provisioning, trial activation, and consumption of the
+pending signup commit together. The email is confirmed, and the 30-day
+Servicio trial begins when the restaurant opens. The owner can then sign in.
+Existing in-flight Supabase confirmation links and `/signup/complete` still
+work for signups from before this flow.
 
 Mixed-station combos keep one priced line and one bill. Each component stores its
 verified preparation facts; the board, detail, paper and station-ready writer use

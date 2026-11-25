@@ -4,10 +4,10 @@ import { useState } from "react";
 import Link from "next/link";
 import { useT } from "@/lib/i18n/context";
 
-interface Props { initialEmail?: string; initialSent?: boolean; expired?: boolean }
+interface Props { initialEmail?: string; expired?: boolean }
 
 /** Keep a usable way back when mail is delayed or a confirmation link expires. */
-export default function SignupVerification({ initialEmail = "", initialSent = true, expired = false }: Props) {
+export default function SignupVerification({ initialEmail = "", expired = false }: Props) {
   const t = useT();
   const [email, setEmail] = useState(initialEmail);
   const [busy, setBusy] = useState(false);
@@ -35,7 +35,6 @@ export default function SignupVerification({ initialEmail = "", initialSent = tr
     <h1 className="tt-serif" style={{ margin: "8px 0 4px" }}>{t("auth.verifyTitle")}</h1>
     <p className="tt-muted" style={{ marginTop: 0 }}>{t("auth.verifyBody")}</p>
     {expired && <p className="tt-field-error" role="alert">{t("auth.verifyExpired")}</p>}
-    {!initialSent && <p className="tt-field-error" role="alert">{t("auth.verificationSendFailed")}</p>}
     <form onSubmit={resend}>
       <input className="tt-input" type="email" autoComplete="email" value={email}
         placeholder={t("auth.emailPlaceholder")} aria-label={t("auth.emailPlaceholder")}

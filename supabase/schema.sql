@@ -15597,6 +15597,21 @@ alter table public.cron_token_claims enable row level security;
 revoke all on cron_token_claims from anon, authenticated, public;
 grant select, insert, delete on public.cron_token_claims to service_role;
 
+-- Self-serve signup stores only a short-lived request until the mailbox owner
+-- uses its link to choose a password. This table has no public RLS policies.
+create table if not exists pending_signups (
+  id uuid primary key default gen_random_uuid(),
+  email_hash text not null,
+  payload jsonb not null check (jsonb_typeof(payload) = 'object' and not (payload ? 'password')),
+  token_hash text not null unique,
+  expires_at timestamptz not null default (now() + interval '24 hours')
+);
+create index if not exists pending_signups_email_expiry_idx on public.pending_signups (email_hash, expires_at desc);
+create index if not exists pending_signups_expiry_idx on public.pending_signups (expires_at);
+alter table public.pending_signups enable row level security;
+revoke all on pending_signups from anon, authenticated, public;
+grant select, insert, delete on public.pending_signups to service_role;
+
 revoke truncate, references, trigger on all tables in schema public from authenticated;
 create extension if not exists pg_cron;
 create extension if not exists pg_net;
@@ -15634,3 +15649,55 @@ returns timestamptz language sql stable security definer set search_path = publi
 $$;
 revoke all on function public.admin_restaurant_last_sign_in_v1(uuid) from public, anon, authenticated;
 grant execute on function public.admin_restaurant_last_sign_in_v1(uuid) to service_role;
+
+-- Return account existence only to the server, which selects the email copy.
+create or replace function public.request_pending_signup_v1(
+  p_email text, p_token_hash text, p_restaurant_name text, p_locale text,
+  p_terms_version text, p_terms_text_hash text
+) returns boolean language plpgsql security definer set search_path = '' as $$
+begin
+  if exists (select 1 from auth.users where email = p_email) then return true; end if;
+  insert into public.pending_signups (email_hash, payload, token_hash)
+  values (encode(sha256(convert_to(p_email, 'UTF8')), 'hex'),
+    jsonb_build_object('email', p_email, 'restaurantName', p_restaurant_name,
+      'locale', p_locale, 'termsVersion', p_terms_version, 'termsTextHash', p_terms_text_hash),
+    p_token_hash);
+  return false;
+end;
+$$;
+revoke all on function public.request_pending_signup_v1(text, text, text, text, text, text) from public, anon, authenticated;
+grant execute on function public.request_pending_signup_v1(text, text, text, text, text, text) to service_role;
+
+-- Only the Auth admin can set this app metadata. GoTrue confirms the email
+-- before committing user creation, so a failed provision rolls back Auth too.
+create or replace function public.provision_pending_signup_v1()
+returns trigger language plpgsql security definer set search_path = '' as $$
+declare v_signup public.pending_signups;
+begin
+  delete from public.pending_signups
+    where id = (new.raw_app_meta_data->>'pending_signup_id')::uuid
+      and email_hash = encode(sha256(convert_to(new.email, 'UTF8')), 'hex')
+      and expires_at > clock_timestamp()
+    returning * into v_signup;
+  if not found then raise exception 'Signup link invalid or expired'; end if;
+
+  perform public.signup_restaurant_with_terms_v1(
+    v_signup.payload->>'restaurantName', new.id, new.email,
+    v_signup.payload->>'termsVersion', v_signup.payload->>'termsTextHash',
+    'servicio', clock_timestamp() + interval '30 days'
+  );
+  perform public.complete_owner_signup_v1(new.id);
+  delete from public.pending_signups where email_hash = v_signup.email_hash;
+  update auth.users set raw_app_meta_data = raw_app_meta_data - 'pending_signup_id' where id = new.id;
+  return new;
+end;
+$$;
+revoke all on function public.provision_pending_signup_v1() from public, anon, authenticated;
+drop trigger if exists provision_pending_signup on auth.users;
+create trigger provision_pending_signup
+  after insert or update of email_confirmed_at on auth.users
+  for each row when (new.email_confirmed_at is not null and new.raw_app_meta_data ? 'pending_signup_id')
+  execute function public.provision_pending_signup_v1();
+
+select cron.schedule('tabletap-expire-pending-signups', '0 * * * *',
+  'delete from public.pending_signups where expires_at <= now()');
