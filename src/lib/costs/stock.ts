@@ -26,10 +26,14 @@ export interface IngredientMovement {
   quantity: number;
   kind: "sale" | "waste" | "purchase";
   created_at: string;
+  /** A correction of a waste or purchase record takes the record's place among counts; null is its own id. */
+  count_position?: number | string | null;
 }
 
 /** Each ingredient's expected quantity now, or null for one never counted.
- * Counts made before the upgrade use their old date; new ones use a serial cutoff. */
+ * Counts made before the upgrade use their old date; new ones use a serial cutoff.
+ * Deleting a pre-count waste entry writes a new movement, but in the place of the
+ * entry it corrects: the count already saw the true shelf (2026-11-25). */
 export function expectedOnHand(
   ingredientIds: string[], lastCounts: Map<string, LastCount>, movements: IngredientMovement[],
 ): Map<string, number | null> {
@@ -38,7 +42,7 @@ export function expectedOnHand(
   for (const m of movements) {
     const count = lastCounts.get(m.ingredient_id);
     const current = expected.get(m.ingredient_id);
-    const after = count && (count.movement_cutoff == null ? m.created_at > count.created_at : BigInt(m.id) > BigInt(count.movement_cutoff));
+    const after = count && (count.movement_cutoff == null ? m.created_at > count.created_at : BigInt(m.count_position ?? m.id) > BigInt(count.movement_cutoff));
     if (after && current != null) expected.set(m.ingredient_id, current + Number(m.quantity));
   }
   return expected;

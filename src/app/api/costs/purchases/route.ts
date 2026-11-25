@@ -15,7 +15,7 @@ const MAX_PACKS = 10_000;
 
 // POST /api/costs/purchases — { ingredientId, packs, total }: a delivery came
 // in. It adds to what the shelf should hold, and the price it came at is the
-// ingredient's price now: `record_purchase` writes both in one transaction,
+// ingredient's price now: `record_purchase_v2` writes both in one transaction,
 // and the price trigger keeps the change. Owner and managers.
 export async function POST(req: NextRequest): Promise<NextResponse> {
   const actor = await actingManager();
@@ -32,21 +32,22 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   const total = packPrice(body.total);
   if (total === null) return await apiError("apiErr.purchaseTotal", 400);
 
-  const db = createAdminClient();
   // The pack size the form showed is part of what was entered: changed by
   // another manager meanwhile, two 1-litre packs were recorded as 4 litres and
-  // the derived unit cost halved (D2, end-to-end review).
-  const { data: current, error: readError } = await db.from("ingredients").select("pack_size")
-    .eq("id", ingredientId).eq("restaurant_id", actor.restaurantId).maybeSingle();
-  if (readError) return await apiError("apiErr.generic", 503);
-  if (!current) return await apiError("apiErr.notFound", 404);
-  if (typeof body.packSize !== "number" || Number(current.pack_size) !== body.packSize) {
-    return await apiError("apiErr.purchasePackChanged", 409);
-  }
-  const { data: id, error } = await db.rpc(ref ? "record_purchase_once_v2" : "record_purchase", {
+  // the derived unit cost halved (D2, end-to-end review). The writer compares
+  // it under the ingredient row lock, after answering a retry already saved;
+  // read here first, the edit could land between the read and the write. A
+  // retry goes to the writer even without one, to be answered if it was saved.
+  const packSize = typeof body.packSize === "number" && Number.isFinite(body.packSize) && body.packSize > 0 ? body.packSize : null;
+  if (packSize === null && !ref) return await apiError("apiErr.purchasePackChanged", 409);
+
+  const db = createAdminClient();
+  const { data: id, error } = await db.rpc(ref ? "record_purchase_once_v3" : "record_purchase_v2", {
     ...(ref ? { p_ref: ref } : {}),
     p_restaurant: actor.restaurantId, p_ingredient: ingredientId, p_packs: packs, p_total: total, p_actor: actor.email,
+    p_pack_size: packSize,
   });
+  if (error?.code === "PT412") return await apiError("apiErr.purchasePackChanged", 409);
   if (error?.code === "PT409") return await apiError("apiErr.retryConflict", 409);
   if (error) return await apiError("apiErr.generic", 500);
   if (!id) return await apiError("apiErr.notFound", 404);

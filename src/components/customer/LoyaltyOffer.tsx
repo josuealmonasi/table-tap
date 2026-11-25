@@ -37,7 +37,7 @@ export default function LoyaltyOffer({ offer, asked = false }: LoyaltyOfferProps
   const [email, setEmail] = useState("");
   const [consent, setConsent] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [card, setCard] = useState<{ face: CardFace; qr: QrGrid } | null>(null);
+  const [card, setCard] = useState<{ face: CardFace; qr: QrGrid; email?: "submitted" | "failed" } | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -60,7 +60,7 @@ export default function LoyaltyOffer({ offer, asked = false }: LoyaltyOfferProps
         return;
       }
       rememberCard(offer.restaurantId, data.code);
-      setCard({ face: data.face, qr: data.qr });
+      setCard({ face: data.face, qr: data.qr, email: data.email });
     } catch {
       setError(t("done.networkError"));
     } finally {
@@ -82,6 +82,7 @@ export default function LoyaltyOffer({ offer, asked = false }: LoyaltyOfferProps
       <section className={frame} aria-live="polite">
         <strong>{t("loyaltyOffer.ready")}</strong>
         <p className="tt-muted" style={{ margin: 0 }}>{t("loyaltyOffer.saveHint")}</p>
+        {card.email && <p className="tt-muted">{t(card.email === "submitted" ? "cardEmail.pending" : "cardEmail.failed")}</p>}
         <CardDownload face={card.face} qr={card.qr} />
         <Link className="tt-accent" href={rewardsPath(card.face.printedCode.replace(/-/g, ""), pathname)}>
           {t("loyaltyOffer.checkLater")}

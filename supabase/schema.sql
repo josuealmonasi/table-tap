@@ -3894,10 +3894,21 @@ alter table loyalty_cards add constraint loyalty_cards_email_consented check (em
 drop index if exists loyalty_cards_email_once;
 create unique index if not exists loyalty_cards_email_unsubscribe on loyalty_cards(email_unsubscribe) where email_unsubscribe is not null;
 
+-- A pending address never appears in the active email fields read by the outbox.
+alter table loyalty_cards add column if not exists pending_email text;
+alter table loyalty_cards add column if not exists pending_email_token_hash text;
+alter table loyalty_cards add column if not exists pending_email_expires_at timestamptz;
+alter table loyalty_cards add column if not exists pending_email_notice_version text;
+alter table loyalty_cards add column if not exists pending_email_set_by text;
+create unique index if not exists loyalty_cards_pending_email_token
+  on public.loyalty_cards(pending_email_token_hash) where pending_email_token_hash is not null;
+
 -- A repeated save of the same address keeps its stop link, so a ticket already
 -- delivered can still stop it (review 1117b, finding 5). Consent is given again
 -- with every save, so its time, notice version and author always record the
 -- latest one: a re-save under a newer notice must not keep the older version.
+-- The previous writer stays while deployed code may still call it (new SQL
+-- is added beside the old, never in place of it).
 create or replace function public.set_card_email(p_restaurant uuid, p_code text, p_email text, p_set_by text, p_notice text)
 returns boolean language plpgsql security definer set search_path = public as $$
 begin
@@ -3909,10 +3920,86 @@ begin
     email = p_email
   where restaurant_id = p_restaurant and code = p_code;
   return found;
-end;
-$$;
+end $$;
 revoke all on function public.set_card_email(uuid, text, text, text, text) from public, anon, authenticated;
 grant execute on function public.set_card_email(uuid, text, text, text, text) to service_role;
+create or replace function public.set_card_email_v2(
+  p_restaurant uuid, p_code text, p_email text, p_actor text, p_notice text,
+  p_owner_hash text, p_token_hash text
+)
+returns text language plpgsql security invoker set search_path = '' as $$
+declare
+  card public.loyalty_cards%rowtype;
+  outcome text;
+begin
+  select * into card from public.loyalty_cards
+    where (p_restaurant is null or restaurant_id = p_restaurant) and code = p_code
+    for update;
+  if not found then return 'unknown'; end if;
+  if p_actor is null then
+    if p_owner_hash is null or card.owner_secret_hash is distinct from p_owner_hash then return 'forbidden'; end if;
+  elsif p_restaurant is null then
+    return 'forbidden';
+  end if;
+
+  if p_email is null or p_email = card.email then
+    outcome := case when p_email is null then 'removed' else 'saved' end;
+    update public.loyalty_cards set
+      email = p_email,
+      email_unsubscribe = case when p_email is null then null else card.email_unsubscribe end,
+      email_consent_at = case when p_email is null then null else now() end,
+      email_notice_version = case when p_email is null then null else p_notice end,
+      email_set_by = case when p_email is null then null else coalesce(p_actor, 'diner') end,
+      pending_email = null, pending_email_token_hash = null, pending_email_expires_at = null,
+      pending_email_notice_version = null, pending_email_set_by = null
+    where id = card.id;
+  elsif p_actor is not null then
+    -- Staff type the address the guest gives them at the till: trusted as typed
+    -- (owner decision, card email plan 2026-11-11), logged below.
+    outcome := 'saved';
+    update public.loyalty_cards set
+      email = p_email, email_unsubscribe = gen_random_uuid(), email_consent_at = now(),
+      email_notice_version = p_notice, email_set_by = p_actor,
+      pending_email = null, pending_email_token_hash = null, pending_email_expires_at = null,
+      pending_email_notice_version = null, pending_email_set_by = null
+    where id = card.id;
+  elsif p_email = card.pending_email and card.pending_email_expires_at > clock_timestamp() then
+    return 'pending';
+  else
+    outcome := 'submitted';
+    update public.loyalty_cards set
+      pending_email = p_email, pending_email_token_hash = p_token_hash,
+      pending_email_expires_at = clock_timestamp() + interval '7 days',
+      pending_email_notice_version = p_notice, pending_email_set_by = coalesce(p_actor, 'diner')
+    where id = card.id;
+  end if;
+
+  if p_actor is not null then
+    insert into public.user_logs (restaurant_id, actor_email, entity, action, detail)
+    values (card.restaurant_id, p_actor, 'loyalty', 'updated', 'card_email=' || outcome || ' card_id=' || card.id);
+  end if;
+  return outcome;
+end;
+$$;
+revoke all on function public.set_card_email_v2(uuid, text, text, text, text, text, text) from public, anon, authenticated;
+grant execute on function public.set_card_email_v2(uuid, text, text, text, text, text, text) to service_role;
+
+-- One atomic promotion consumes the inbox token and rotates the stop link.
+create or replace function public.confirm_card_email(p_token_hash text)
+returns boolean language sql security invoker set search_path = '' as $$
+  with confirmed as (
+    update public.loyalty_cards set
+      email = pending_email, email_unsubscribe = gen_random_uuid(), email_consent_at = clock_timestamp(),
+      email_notice_version = pending_email_notice_version, email_set_by = pending_email_set_by,
+      pending_email = null, pending_email_token_hash = null, pending_email_expires_at = null,
+      pending_email_notice_version = null, pending_email_set_by = null
+    where pending_email_token_hash = p_token_hash and pending_email_expires_at > clock_timestamp()
+    returning id
+  )
+  select exists (select 1 from confirmed);
+$$;
+revoke all on function public.confirm_card_email(text) from public, anon, authenticated;
+grant execute on function public.confirm_card_email(text) to service_role;
 
 -- The cashier's choice not to email one sale's ticket, written with it.
 alter table orders add column if not exists ticket_email_skip boolean not null default false;
@@ -11314,6 +11401,11 @@ grant all on ingredient_consumption, ingredient_movements to service_role;
 revoke all on sequence ingredient_movements_id_seq from public, anon, authenticated;
 grant usage, select on sequence ingredient_movements_id_seq to service_role;
 alter table ingredient_counts add column if not exists movement_cutoff bigint;
+-- A correction of a waste or purchase record is a new row with a new id, but
+-- it belongs where the record it corrects stood relative to counts: null is
+-- the movement's own id. The record keeps that place on its consumption row.
+alter table ingredient_movements add column if not exists count_position bigint;
+alter table ingredient_consumption add column if not exists movement_position bigint;
 
 -- A separate lock name keeps this out of the money and stock-reservation locks.
 create or replace function public.lock_ingredient_movements(p_restaurant uuid)
@@ -11442,6 +11534,8 @@ declare
   v_usage jsonb;
   v_active boolean := tg_op <> 'DELETE';
   v_changed boolean := false;
+  v_position bigint;
+  v_first bigint;
 begin
   if tg_op = 'UPDATE' and new.restaurant_id is distinct from old.restaurant_id then
     raise exception 'ingredient history belongs to one restaurant';
@@ -11480,29 +11574,51 @@ begin
     else v_usage := jsonb_build_object(v_row->>'ingredient_id', (v_row->>'quantity')::numeric); end if;
   end if;
   if v_kind = 'sale' then v_active := v_active and v_row->>'status' in ('received', 'preparing', 'ready', 'completed'); end if;
-  insert into ingredient_movements(restaurant_id, ingredient_id, quantity, kind, created_at)
+  -- Dating a correction with its record is not enough: its new id still came
+  -- after a count that had already seen the true shelf, so deleting a spill
+  -- from before a 1,000 ml count expected 1,200 ml from the stock report and
+  -- the next blind count (2026-11-25). It takes the record's place instead.
+  -- Records from before this column find their first movement by its date.
+  if tg_op <> 'INSERT' and v_kind <> 'sale' then
+    v_position := coalesce(v_previous.movement_position, (
+      select min(coalesce(m.count_position, m.id)) from ingredient_movements m
+        where m.restaurant_id = v_restaurant and m.kind = v_kind
+          and m.ingredient_id in (select key::uuid from jsonb_each_text(coalesce(v_previous.usage, '{}')))
+          and m.created_at = (to_jsonb(old)->>'created_at')::timestamptz));
+  end if;
+  with moved as (
+  insert into ingredient_movements(restaurant_id, ingredient_id, quantity, kind, created_at, count_position)
     select v_restaurant, key::uuid, sum(quantity), v_kind,
       -- A sale's cancellation is a real event, dated now. Editing or deleting a
       -- waste or purchase record corrects that record, so it is dated with it:
       -- dated now, it landed after a recount that had already seen the true
       -- shelf, and deleting a mistaken 200 ml spill showed 1,200 ml for a
       -- counted 1,000 (sweep 6/7, finding 2).
-      case when tg_op = 'INSERT' or v_kind <> 'sale' then (v_row->>'created_at')::timestamptz else clock_timestamp() end from (
+      case when tg_op = 'INSERT' or v_kind <> 'sale' then (v_row->>'created_at')::timestamptz else clock_timestamp() end,
+      v_position from (
       select key, value::numeric as quantity from jsonb_each_text(v_usage) where v_active
       union all
       select key, -value::numeric from jsonb_each_text(coalesce(v_previous.usage, '{}')) where coalesce(v_previous.active, false)
-    ) delta group by key having sum(quantity) <> 0;
+    ) delta group by key having sum(quantity) <> 0
+    returning id
+  ) select min(id) into v_first from moved;
+  -- A record that moved nothing yet still takes a place, for a later edit.
+  if v_kind <> 'sale' then
+    v_position := coalesce(v_position, v_first, nextval('public.ingredient_movements_id_seq'));
+  end if;
   -- A sale's lines are valued once, when their usage is worked out: today's
   -- recipe and today's ingredient prices, frozen with the sale's currency. A
   -- later cancellation keeps them; history never reprices old food (sweep 7,
   -- finding 3).
-  insert into ingredient_consumption(restaurant_id, source_kind, source_id, usage, active, cost_currency, line_costs)
+  insert into ingredient_consumption(restaurant_id, source_kind, source_id, usage, active, cost_currency, line_costs, movement_position)
     values(v_restaurant, v_kind, (v_row->>'id')::uuid, v_usage, v_active,
       case when v_kind = 'sale' and (v_previous.usage is null or v_changed) then v_row->>'currency' end,
-      case when v_kind = 'sale' and (v_previous.usage is null or v_changed) then public.sale_line_costs(v_restaurant, v_row->'items') end)
+      case when v_kind = 'sale' and (v_previous.usage is null or v_changed) then public.sale_line_costs(v_restaurant, v_row->'items') end,
+      v_position)
     on conflict (source_kind, source_id) do update set usage = excluded.usage, active = excluded.active,
       cost_currency = coalesce(excluded.cost_currency, ingredient_consumption.cost_currency),
-      line_costs = coalesce(excluded.line_costs, ingredient_consumption.line_costs);
+      line_costs = coalesce(excluded.line_costs, ingredient_consumption.line_costs),
+      movement_position = coalesce(ingredient_consumption.movement_position, excluded.movement_position);
   return null;
 end;
 $$;
@@ -11556,10 +11672,12 @@ begin
   new.created_at := clock_timestamp();
   new.expected := null;
   if v_last.id is not null then
+    -- A correction counts where its record stood (count_position), not where
+    -- its own id fell: a spill deleted after a recount moves nothing since.
     select v_last.counted + coalesce(sum(quantity), 0) into new.expected from ingredient_movements
       where restaurant_id = new.restaurant_id and ingredient_id = new.ingredient_id
-        and id <= new.movement_cutoff and case when v_last.movement_cutoff is null then created_at > v_last.created_at
-          else id > v_last.movement_cutoff end;
+        and coalesce(count_position, id) <= new.movement_cutoff and case when v_last.movement_cutoff is null then created_at > v_last.created_at
+          else coalesce(count_position, id) > v_last.movement_cutoff end;
   end if;
   return new;
 end;
@@ -11867,11 +11985,15 @@ begin
   if exists(select 1 from terminal_deposits where restaurant_id = p_restaurant and sales_day = p_day and currency = p_currency) then
     return jsonb_build_object('error', 'marked');
   end if;
-  with ledger as materialized (
-    select *, (created_at at time zone v_zone)::date sale_day
-    from public.terminal_deposit_ledger_v1(p_restaurant, p_currency)
-  ), marks as materialized (
+  -- A payment a signed deposit holds stays on that deposit's day. After a
+  -- time-zone change moved a signed MX$100 from Nov 23 to Nov 24, Nov 24
+  -- offered it again and both deposits held it (2026-11-25).
+  with marks as materialized (
     select * from terminal_deposits where restaurant_id = p_restaurant and currency = p_currency
+  ), ledger as materialized (
+    select l.*, coalesce((select d.sales_day from marks d where l.payment_id = any(d.payment_ids)
+        order by d.sales_day limit 1), (l.created_at at time zone v_zone)::date) sale_day
+    from public.terminal_deposit_ledger_v1(p_restaurant, p_currency) l
   ), returns as (
     select id, payment_id, amount, sale_day, returned_at at_time, (returned_at at time zone v_zone)::date as day
       from ledger where returned_at is not null
@@ -11912,6 +12034,10 @@ begin
   into v_expected, v_payments, v_returns, v_has_sales, v_has_returns;
   -- A day with no sales may still owe the bank its returns (sweep 11, finding 6).
   if not v_has_sales and not v_has_returns then return jsonb_build_object('error', 'no_sales'); end if;
+  -- One payment, one deposit: never sign a receipt another deposit holds.
+  if exists(select 1 from terminal_deposits d where d.restaurant_id = p_restaurant and d.payment_ids && v_payments) then
+    return jsonb_build_object('error', 'already_signed');
+  end if;
   -- Calculate and insert before releasing the settlement lock. A later receipt
   -- is outside payment_ids even if its recorded_at was set before it waited.
   insert into terminal_deposits(restaurant_id, sales_day, currency, expected, received, note, recorded_by,
@@ -12188,6 +12314,53 @@ end;
 $$;
 revoke all on function public.record_purchase_once_v2(uuid, uuid, numeric, numeric, text, uuid) from public, anon, authenticated;
 grant execute on function public.record_purchase_once_v2(uuid, uuid, numeric, numeric, text, uuid) to service_role;
+
+-- The pack size the form showed is part of what was entered. Read before the
+-- lock, another manager's change from 1 L to 2 L turned two packs for MX$100
+-- into 4 L at MX$25/L (2026-11-25). Compared under the ingredient row lock,
+-- which the pack-size edit also takes, a changed size is refused with PT412.
+-- New signatures, so the deployed callers keep theirs until the route moves.
+create or replace function public.record_purchase_v2(
+  p_restaurant uuid, p_ingredient uuid, p_packs numeric, p_total numeric, p_actor text, p_pack_size numeric
+) returns uuid language plpgsql security definer set search_path = public as $$
+declare v_size numeric;
+begin
+  perform public.lock_ingredient_movements(p_restaurant);
+  select pack_size into v_size from ingredients
+   where id = p_ingredient and restaurant_id = p_restaurant and archived_at is null for update;
+  if not found then return null; end if;
+  if p_pack_size is null or v_size is distinct from p_pack_size then
+    raise exception 'pack size changed' using errcode = 'PT412';
+  end if;
+  return public.record_purchase(p_restaurant, p_ingredient, p_packs, p_total, p_actor);
+end;
+$$;
+revoke all on function public.record_purchase_v2(uuid, uuid, numeric, numeric, text, numeric) from public, anon, authenticated;
+grant execute on function public.record_purchase_v2(uuid, uuid, numeric, numeric, text, numeric) to service_role;
+
+-- A retry of a purchase already saved answers with it first: its quantity was
+-- fixed when it was saved, so a pack size changed since must not refuse it,
+-- or the client would read a saved delivery as lost and enter it again.
+create or replace function public.record_purchase_once_v3(
+  p_restaurant uuid, p_ingredient uuid, p_packs numeric, p_total numeric, p_actor text, p_ref uuid, p_pack_size numeric
+) returns uuid language plpgsql security definer set search_path = public as $$
+declare v_size numeric;
+begin
+  perform public.lock_ingredient_movements(p_restaurant);
+  if exists(select 1 from ingredient_purchases where restaurant_id = p_restaurant and request_ref = p_ref) then
+    return public.record_purchase_once_v2(p_restaurant, p_ingredient, p_packs, p_total, p_actor, p_ref);
+  end if;
+  select pack_size into v_size from ingredients
+   where id = p_ingredient and restaurant_id = p_restaurant and archived_at is null for update;
+  if not found then return null; end if;
+  if p_pack_size is null or v_size is distinct from p_pack_size then
+    raise exception 'pack size changed' using errcode = 'PT412';
+  end if;
+  return public.record_purchase_once_v2(p_restaurant, p_ingredient, p_packs, p_total, p_actor, p_ref);
+end;
+$$;
+revoke all on function public.record_purchase_once_v3(uuid, uuid, numeric, numeric, text, uuid, numeric) from public, anon, authenticated;
+grant execute on function public.record_purchase_once_v3(uuid, uuid, numeric, numeric, text, uuid, numeric) to service_role;
 
 create or replace function public.record_waste_once_v2(
   p_restaurant uuid, p_ingredient uuid, p_item uuid, p_quantity numeric,

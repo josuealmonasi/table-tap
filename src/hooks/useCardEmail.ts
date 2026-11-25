@@ -3,7 +3,7 @@
 import { useState } from "react";
 import useSWR, { useSWRConfig } from "swr";
 
-export interface CardEmailData { email: string | null }
+export interface CardEmailData { email: string | null; pending?: boolean }
 async function read(url: string): Promise<CardEmailData> {
   // A dropped connection reaches SWR's error state, which the screen explains.
   let res: Response;

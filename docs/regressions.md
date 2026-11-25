@@ -223,6 +223,7 @@ and that a new party cannot see the previous party's waiting phones.
 | Repeated card saves keep delivered stop links | A retry rotated the token and left the address subscribed; `shared-address.spec.ts` checks the link and per-card scope |
 | A shared card email saves independently | The generic save answer and rewards read disagreed when another card used the address; `shared-address.spec.ts` compares both paths and stops each card independently |
 | Loyalty card deletion requires the guest's key or a manager of the card's restaurant | The printed QR code was enough to delete the card and its history. `loyalty-owner-secret.spec.ts` checks issuance, saves, guest deletion, and the manager guard. The API gate checks the manager deletion and its audit row together. |
+| A new card email needs inbox confirmation | A copied card code could redirect tickets. The card-email specs check the owner secret, confirmation, staff audit, and continued delivery to the active address while a replacement is pending. |
 | Ticket retries run before tickets expire (review N10) | Daily recovery missed the backoff window; `ticket-email-schedule.spec.ts` models recovery without payment traffic |
 | A table payment check names the actual table relation (review N3) | `payment-check-route.spec.ts` rejects unknown relations and checks the tenant and table before Stripe |
 | Held approval keeps the kitchen's saved instructions (review N4) | `offline-sale.spec.ts` keeps notes and component extras without duplicating flattened extras |
@@ -8638,3 +8639,26 @@ the spent visit be taken back; the redemption is now timed with
 `clock_timestamp()` after the lock. Check: `loyalty-stamp-sale.spec.ts`,
 `card-email.spec.ts`, the api gate's `loyalty` stamp cases, `pnpm attack`
 (a waiter with no sale cannot stamp).
+
+### Terminal deposits, waste reversals and pack sizes (2026-11-25)
+
+Three pairs that had to agree. First, a deposit's signed payment list and the
+day each payment falls on: a MX$100 payment signed on Nov 23 in Mexico City fell
+on Nov 24 after the owner switched the zone to Cancún, the report offered it
+again, and the writer took it, because it checked day and currency but not the
+payment ids already signed. Now a payment a signed deposit holds stays on that
+deposit's day in the report (`signedDays`/`saleDayOf` in `terminal.ts`, also used
+by the payment list and the fee report) and in `record_terminal_deposit_v1`,
+which also refuses a payment id any other deposit holds (`already_signed`,
+409 `apiErr.depositPaymentSigned`). Second, a correction and the record it
+corrects: deleting a mistaken 200 ml spill after a 1,000 ml count wrote a
+reversal with a new movement id, so the stock report and the next blind count
+expected 1,200 ml. The reversal now carries the record's place among counts
+(`ingredient_movements.count_position`, kept on
+`ingredient_consumption.movement_position`), read by `cutoff_ingredient_count`
+and `expectedOnHand`. Third, the pack size the form showed and the one the
+writer multiplies by: read before the write, another manager's change from 1 L
+to 2 L turned two packs for MX$100 into 4 L at MX$25/L. `record_purchase_v2` and
+`record_purchase_once_v3` compare it under the ingredient row lock (PT412, 409
+`apiErr.purchasePackChanged`, which now asks to reload), after answering a retry
+already saved. Check: `terminal-waste-pack-races.spec.ts`.

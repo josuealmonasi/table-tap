@@ -80,7 +80,7 @@ export async function readStock(restaurantId: string, now = new Date()): Promise
     scoped<PurchaseRecord>("ingredient_purchases", "id, ingredient_id, quantity, total, recorded_by, created_at, currency", "the purchases", since),
     scoped<WasteEntry>("waste_entries", "id, ingredient_id, item_id, name, quantity, reason, note, cost, recorded_by, created_at, currency", "the waste", since),
     everyRow<IngredientMovement>((a, b) => {
-      let q = db.from("ingredient_movements").select("id, ingredient_id, quantity, kind, created_at").eq("restaurant_id", restaurantId);
+      let q = db.from("ingredient_movements").select("id, ingredient_id, quantity, kind, created_at, count_position").eq("restaurant_id", restaurantId);
       // An older transaction can commit after a count. Its serial id, rather
       // than its start time, decides which side of the count it belongs to.
       q = oldestCutoff === null ? q.gte("created_at", since) : q.or(`id.gt.${oldestCutoff},created_at.gte.${since}`);

@@ -51,7 +51,7 @@ describe("S18 ingredient SQL contracts", () => {
     const count = fn("cutoff_ingredient_count");
     expect(count.indexOf("lock_ingredient_movements")).toBeLessThan(count.indexOf("select * into v_last"));
     expect(count).toContain("nextval('public.ingredient_movements_id_seq')");
-    expect(count).toContain("id > v_last.movement_cutoff");
+    expect(count).toContain("coalesce(count_position, id) > v_last.movement_cutoff");
     expect(count).toContain("created_at > v_last.created_at");
     expect(count).toContain("into new.expected");
     expect(sql).toContain("before insert on ingredient_counts");

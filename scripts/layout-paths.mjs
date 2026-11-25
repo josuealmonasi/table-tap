@@ -100,6 +100,8 @@ export const PUBLIC = [
   "/tickets/stop",
   "/digest/opt-out",
   `/tickets/stop?t=${SEED_STOP_TOKEN}`,
+  "/tickets/confirm",
+  `/tickets/confirm?t=${"A".repeat(43)}`,
   // The daily digest's confirm and stop pages: one button each. A made-up
   // token shows the real screen and spends nothing.
   "/digest/confirm",

@@ -23,7 +23,7 @@ it("L4 ingredient names read with the service key belong to this restaurant", as
 it("L4 reference purchases log inside their transaction, never again from a replaying route", async () => {
   await send(body.ingredientId); await send(body.ingredientId);
   expect(state.log).not.toHaveBeenCalled();
-  expect(state.rpcs).toEqual(["record_purchase_once_v2", "record_purchase_once_v2"]);
+  expect(state.rpcs).toEqual(["record_purchase_once_v3", "record_purchase_once_v3"]);
 });
 it("L4 a different request under an old reference has its own 409 key", async () => {
   state.error = { code: "PT409" };

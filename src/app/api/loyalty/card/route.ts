@@ -1,4 +1,5 @@
-import { normalizeEmail, setCardEmail, type SetEmailResult } from "@/lib/loyalty/card-email";
+import { normalizeEmail, setCardEmail } from "@/lib/loyalty/card-email";
+import { sendCardEmailConfirmation } from "@/lib/loyalty/card-email-confirmation";
 import { openSittingAt, tableMember } from "@/lib/table-membership";
 import { NextRequest, NextResponse } from "next/server";
 import { apiError } from "@/lib/api-error";
@@ -101,11 +102,17 @@ export async function POST(req: NextRequest) {
       const face = cardFace(restaurant, { code, progress: 0, ladder: program.steps }, req.nextUrl.origin);
       // An address given with the new card, for its tickets (paperless): only
       // with the consent tick. Each card keeps its own address and stop link.
-      let emailLinked: SetEmailResult["outcome"] | undefined;
+      let emailAnswer: "submitted" | "failed" | undefined;
       const email = normalizeEmail(body?.email);
-      if (email && body?.consent === true) emailLinked = (await setCardEmail(restaurantId, code, email, "diner").catch(() => null))?.outcome;
-      // The answer describes this card only, never another card.
-      const emailAnswer = emailLinked === "saved" ? "submitted" : emailLinked;
+      if (email && body?.consent === true) {
+        try {
+          const result = await setCardEmail(code, email, { restaurantId, ownerHash: ownerSecretHash });
+          if (result.outcome === "submitted") await sendCardEmailConfirmation(req, code, email, result.token);
+          emailAnswer = result.outcome === "submitted" || result.outcome === "pending" ? "submitted" : "failed";
+        } catch {
+          emailAnswer = "failed";
+        }
+      }
       const response = NextResponse.json({ code, face, qr: qrGrid(face.qrPayload), ...(emailAnswer ? { email: emailAnswer } : {}) });
       return keepOwnerSecret(response, code, secret);
     }
