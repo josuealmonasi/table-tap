@@ -8693,3 +8693,29 @@ to 2 L turned two packs for MX$100 into 4 L at MX$25/L. `record_purchase_v2` and
 `record_purchase_once_v3` compare it under the ingredient row lock (PT412, 409
 `apiErr.purchasePackChanged`, which now asks to reload), after answering a retry
 already saved. Check: `terminal-waste-pack-races.spec.ts`.
+
+### Admin console: open checkouts, suspension lifts and note audits (2026-11-25)
+
+Three pairs that had to agree (review bl26, findings 5, 6 and 8). First, an
+admin's tier assignment and the Checkout pages opened for it: ending a
+payment-link assignment moved the restaurant to Carta, but a MX$699 Checkout the
+owner still had open stayed payable and its subscription brought the paid tier
+back. `changeTrial` (`admin-trial.ts`) now runs under `withRestaurantBilling`,
+refuses when a checkout already completed before its webhook (`live`), and on
+ending or shortening expires every open session carrying a
+`tier_assignment_id` before it writes; extending leaves them payable, and a
+failed expiry changes nothing. Replacing an assignment (`assignTier`) already
+expired every session under the lock. As a backstop, `applySubscription`
+grants no tier from an unlinked subscription whose `tier_assignment_id` is no
+longer the restaurant's current one; it logs the contract for the platform team
+to cancel or refund. Second, a lift and the suspension it read: a delayed lift
+could clear suspension B applied after it read A, because its update only
+checked that some suspension existed. The lift now matches the exact
+`suspended_at` it read, and the admin screen sends the one it showed
+(`suspendedAt`); a different one answers 409 `apiErr.suspensionChangedMeanwhile`,
+which asks to reload. Third, support notes and the audit stream: a note was
+saved with the audit down. The POST runs through `auditedAdminAction` as
+`restaurant.note` (added to `platform_admin_audit_action_check`), recording the
+restaurant id and never the note's text. Checks: `admin-trial.spec.ts`,
+`admin-suspend.spec.ts`, `subscription-sync.spec.ts`,
+`api/admin/restaurants/notes/__tests__/route.spec.ts`.
