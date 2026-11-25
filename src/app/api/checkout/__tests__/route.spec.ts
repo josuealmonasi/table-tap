@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { NextRequest, NextResponse } from "next/server";
+import type { writeOrderIntent } from "@/lib/order-intent";
 
 /**
  * The diner's checkout, driven end to end with every step it calls replaced,
@@ -18,7 +19,7 @@ let emptyTable = false;
 let admissionFullOnOpen = false;
 const step = {
   counterFull: vi.fn(async () => ({ data: false, error: null as unknown })),
-  intent: vi.fn(async () => ({ orderId: "order-1", sessionId: null, table: null, total: 90 })),
+  intent: vi.fn<typeof writeOrderIntent>(async () => ({ orderId: "order-1", sessionId: null, table: null, total: 90 })),
   openSession: vi.fn(async (): Promise<string | null> => "sitting-1"),
   reserveStock: vi.fn(async () => ({ ok: true, short: [], low: [] as typeof soldOut[], reservationId: "reservation-1" })),
   insertOrder: vi.fn(async (): Promise<{ data: { id: string } | null; error: unknown }> => ({
@@ -71,7 +72,8 @@ vi.mock("@/lib/checkout/claim-coupon", () => ({
   claimCheckoutCoupon: async () => ({ coupon }),
   logCheckoutCoupon: () => step.logCoupon(),
 }));
-vi.mock("@/lib/coupon-service", () => ({
+vi.mock("@/lib/coupon-service", async (original) => ({
+  ...await original<typeof import("@/lib/coupon-service")>(),
   releaseCoupon: (id: string) => releaseCoupon(id),
   toAppliedCoupon: (c: typeof coupon) => ({ code: c.code, kind: c.kind, value: c.value, minSubtotal: 0 }),
 }));
@@ -132,7 +134,7 @@ vi.mock("@/lib/supabase/admin", () => ({
     },
   }),
 }));
-vi.mock("@/lib/order-intent", () => ({ readOrderIntent: async () => null, writeOrderIntent: () => step.intent() }));
+vi.mock("@/lib/order-intent", () => ({ readOrderIntent: async () => null, writeOrderIntent: step.intent }));
 
 const { POST } = await import("@/app/api/checkout/route");
 
@@ -232,6 +234,17 @@ describe("M1: unpaid counter orders have a restaurant-wide ceiling", () => {
     expect(response.status).toBe(409);
     expect(await response.json()).toMatchObject({ error: "apiErr.counterPayLaterFull" });
     expect(step.insertOrder).not.toHaveBeenCalled();
+  });
+  it("passes the pay-later quote to the atomic writer and forwards a changed coupon refusal", async () => {
+    step.intent.mockResolvedValueOnce({ couponReason: "limitReached", couponChanged: true } as never);
+    const response = await checkout({ tableId: null, payLater: true, ref: "00000000-0000-4000-8000-0000000000f2" });
+    expect(response.status).toBe(409);
+    expect(await response.json()).toEqual({ couponReason: "changed" });
+    expect(step.intent).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ coupon: {
+      id: "c1", code: "TACO10", kind: "percent", value: 10, staff_only: false, min_subtotal: 0, eligible_subtotal: 100,
+    } }));
+    expect(step.insertOrder).not.toHaveBeenCalled();
+    expect(releaseCoupon).not.toHaveBeenCalled();
   });
 });
 

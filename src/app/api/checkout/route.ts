@@ -10,7 +10,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { can } from "@/lib/plan";
 import { getPlan } from "@/lib/plan-server";
 import { priceCart, type AppliedCoupon } from "@/lib/pricing";
-import { releaseCoupon, toAppliedCoupon } from "@/lib/coupon-service";
+import { couponQuote, releaseCoupon, toAppliedCoupon } from "@/lib/coupon-service";
 import { isRoomLimited, isTableLimited } from "@/lib/rate-limit";
 import { promotionsOnSale } from "@/lib/promotions-on-sale";
 import { toCartPromos } from "@/lib/promotions";
@@ -273,7 +273,7 @@ export async function POST(req: NextRequest) {
         // claimCheckoutCoupon judged it: the order's own subtotal is after it,
         // and a MX$10 coupon with a MX$100 minimum on MX$100 was refused.
         threshold: Number(restaurant.low_stock_threshold) || 0,
-        coupon: coupon ? { ...coupon, eligible_subtotal: base.subtotal } : null,
+        coupon: coupon ? couponQuote(coupon, base.subtotal) : null,
       });
       if ("closing" in result) {
         await held.giveBack();
@@ -284,6 +284,7 @@ export async function POST(req: NextRequest) {
         await held.giveBack();
         return await apiError("apiErr.counterPayLaterFull", 409);
       }
+      if (result.couponChanged) return NextResponse.json({ couponReason: "changed" }, { status: 409 });
       if (result.couponReason) return NextResponse.json({ couponReason: result.couponReason }, { status: 409 });
       if (result.short) return await refuseShortStock(result.short);
       held.handOver();

@@ -3,7 +3,7 @@ import { drainTicketEmails } from "@/lib/ticket-email";
 import { ordersTipBase, tipFromPercent } from "@/lib/tip-base";
 import { ownBillAccess } from "@/lib/legacy-bill-access";
 import { dinerCurrency } from "@/lib/diner-currency";
-import { DinerScopeBusy, openDinerAttempt, resumeDinerAttempt } from "@/lib/diner-attempt";
+import { DinerCouponChanged, DinerScopeBusy, openDinerAttempt, resumeDinerAttempt } from "@/lib/diner-attempt";
 import { remainingPrincipal, billEntitlements } from "@/lib/bill-principal";
 import { fetchTableBill } from "@/lib/bill-data";
 import { NextResponse, type NextRequest } from "next/server";
@@ -22,6 +22,7 @@ import { NO_FEE, feeMetadata, reserveFee } from "@/lib/platform-fee";
 import { applyCoupon } from "@/lib/pricing";
 import {
   couponProblem,
+  couponQuote,
   findCoupon,
   toAppliedCoupon,
 } from "@/lib/coupon-service";
@@ -269,7 +270,8 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         restaurantId, stripeAccount: restaurant.stripe_account_id, currency, amountCents: cents,
         orderIds: orders.map(o => o.id), payableIds: orders.map(o => o.id), scopeKey,
         payerMemberId: member.id || undefined,
-        ...billEntitlements(orders, discount), couponId: coupon?.id, foodPrincipal: round2(principal - discount),
+        ...billEntitlements(orders, discount), coupon: coupon ? couponQuote(coupon, dishes) : undefined,
+        foodPrincipal: round2(principal - discount),
       },
     );
 
@@ -280,6 +282,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   } catch (err) {
     // Another phone at the table already has a page open on these orders.
     if (err instanceof DinerScopeBusy) return await apiError("apiErr.billBeingPaid", 409);
+    if (err instanceof DinerCouponChanged) return await apiError("apiErr.billCouponChanged", 409);
     // The attempt owns its coupon and fee. Only its initial outright refusal
     // or verified expiry releases them; an unknown answer can still be payable.
     return await apiError("apiErr.checkoutFailed", 502);

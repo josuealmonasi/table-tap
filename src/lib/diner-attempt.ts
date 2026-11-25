@@ -6,18 +6,20 @@ import type Stripe from "stripe";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { recordDinerCheckout, requireVerifiedCheckout, stripeLiveMode } from "@/lib/diner-checkout";
 import { releaseFee, stripeRefusedOutright } from "@/lib/platform-fee";
+import { COUPON_CHANGED_SQLSTATE, type CouponQuote } from "@/lib/coupon-service";
 
 export interface AttemptQuote {
   restaurantId: string; stripeAccount: string; currency: string; amountCents: number;
   orderIds: string[]; payableIds: string[]; scopeKey: string;
   payerMemberId?: string;
-  entitlements?: Record<string, number>; discounts?: Record<string, number>; couponId?: string;
+  entitlements?: Record<string, number>; discounts?: Record<string, number>; coupon?: CouponQuote;
   foodPrincipal: number;
 }
 /** A SQL rejection proves that this request never acquired a payable scope. */
 export class DinerAttemptRejected extends Error {}
 /** Another phone's page already holds these orders (`checkout_scope_busy`). */
 export class DinerScopeBusy extends DinerAttemptRejected {}
+export class DinerCouponChanged extends DinerAttemptRejected {}
 class DinerAttemptExpired extends Error {}
 interface AttemptRecord {
   id: string; restaurant_id: string; stripe_account_id: string; currency: string;
@@ -78,7 +80,8 @@ export async function openDinerAttempt(stripe: Stripe, params: Stripe.Checkout.S
     order_ids: [...new Set(quote.orderIds)], payable_order_ids: quote.payableIds, scope_key: quote.scopeKey,
     payer_member_id: quote.payerMemberId,
     idempotency_key: `diner:${id}`, stripe_params: params, metadata: params.metadata ?? {},
-    entitlements: quote.entitlements ?? {}, order_discounts: quote.discounts ?? {}, coupon_id: quote.couponId ?? null,
+    entitlements: quote.entitlements ?? {}, order_discounts: quote.discounts ?? {},
+    coupon_id: quote.coupon?.id ?? null, coupon_quote: quote.coupon,
     food_principal: quote.foodPrincipal,
   };
   const { data, error } = await checkoutPageRpc("diner_checkout_open", { p_record: record }, {
@@ -94,8 +97,9 @@ export async function openDinerAttempt(stripe: Stripe, params: Stripe.Checkout.S
   if (error) {
     // A database timeout can also have committed. Only a SQL error proves
     // rollback; releasing an uncertain fee could reopen the monthly ceiling.
-    if (/^(22|23|40|42|P0)/.test(error.code ?? "")) {
+    if (error.code === COUPON_CHANGED_SQLSTATE || /^(22|23|40|42|P0)/.test(error.code ?? "")) {
       await releaseFee(String(params.metadata?.fee_id ?? ""));
+      if (error.code === COUPON_CHANGED_SQLSTATE) throw new DinerCouponChanged(`Could not open checkout attempt: ${error.message}`);
       const Rejection = error.message === "checkout_scope_busy" ? DinerScopeBusy : DinerAttemptRejected;
       throw new Rejection(`Could not open checkout attempt: ${error.message}`);
     }

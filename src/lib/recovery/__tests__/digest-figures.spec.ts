@@ -1,4 +1,7 @@
 import { expect, it } from "vitest";
+import { corteFrom, type CortePayment } from "@/lib/corte";
+import { readCorteAdjustments } from "@/lib/corte-adjustments";
+import { logDetail } from "@/lib/log-detail";
 import { readDigestFigures } from "../digest-figures";
 import { digestMail } from "../digest-mail";
 import type { RecoveryContext } from "../job";
@@ -45,6 +48,7 @@ const tables = {
     { ...event, id: "return-3", operation_id: "refund-2", kind: "cancel", amount_cents: 1000 },
     { ...event, id: "return-4", succeeded_at: end },
   ],
+  user_logs: [],
   coupon_redemptions: [{ ...common, order_id: "a", amount: 5, confirmed_at: start }],
   customer_accounts: [{ ...common, id: "open", status: "open" }, { ...common, id: "closed", status: "closed" }],
   discount_requests: [{ ...common, status: "pending" }, { ...common, status: "approved" }],
@@ -60,8 +64,8 @@ const tables = {
   ],
 } satisfies Record<string, Record<string, unknown>[]>;
 
-function fixture(orders = orderRows) {
-  const data: Record<string, Record<string, unknown>[]> = { orders, ...tables };
+function fixture(orders = orderRows, overrides: Record<string, Record<string, unknown>[]> = {}) {
+  const data: Record<string, Record<string, unknown>[]> = { orders, ...tables, ...overrides };
   const reads: string[] = [];
   function query(table: string, initial = data[table]) {
     reads.push(table);
@@ -130,4 +134,26 @@ it.each([
     "List-Unsubscribe": "<https://test/api/digest/opt-out>",
     "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
   });
+});
+
+it("nets cash handed back from a drawer exactly as the Analytics corte does", async () => {
+  // MX$100 collected in cash, MX$30 of it returned from that same drawer.
+  const payments = [{ ...common, ...date, actor_email: "till", amount: 100, method: "cash" }];
+  const cashReturn = { ...event, id: "cash-return", amount_cents: 3000, source: "cash", payout_actor: "till", historical_log_id: null };
+  const { db } = fixture(orderRows, { payments, order_return_events_v1: [cashReturn] });
+  const figures = await readDigestFigures(db, restaurant, now);
+  const corte = corteFrom(payments as CortePayment[], (await readCorteAdjustments(db, "r", "MXN", start, end)).verified);
+  expect(corte.totals.cash).toBe(70);
+  expect(figures).toMatchObject({ cash: corte.totals.cash, card: corte.totals.card + corte.online });
+  expect(figures?.cash).toBe(70);
+});
+
+it("nets a logged cash refund from the drawer too, as the corte reads the activity log", async () => {
+  const payments = [{ ...common, ...date, actor_email: "till", amount: 100, method: "cash" }];
+  const refundLog = { restaurant_id: "r", created_at: start, entity: "order", action: "refunded",
+    detail: logDetail({ amount: "30.00", method: "cash", collector: "till", currency: "MXN" }) };
+  const { db } = fixture(orderRows, { payments, order_return_events_v1: [], user_logs: [refundLog] });
+  const adjustments = await readCorteAdjustments(db, "r", "MXN", start, end);
+  expect(adjustments.verified).toHaveLength(1);
+  expect((await readDigestFigures(db, restaurant, now))?.cash).toBe(corteFrom(payments as CortePayment[], adjustments.verified).totals.cash);
 });

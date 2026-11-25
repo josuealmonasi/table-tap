@@ -75,8 +75,8 @@ export function useAdminActions() {
       call("/api/admin/restaurants/suspend", "POST", { id, reason }, doneMsg),
     changeTrial: (id: string, endsAt: string | null, doneMsg: string) =>
       call("/api/admin/restaurants/trial", "PATCH", { id, endsAt }, doneMsg),
-    liftSuspension: (id: string, doneMsg: string) =>
-      call("/api/admin/restaurants/suspend", "DELETE", { id }, doneMsg),
+    liftSuspension: (id: string, doneMsg: string, suspendedAt?: string | null) =>
+      call("/api/admin/restaurants/suspend", "DELETE", { id, ...(suspendedAt ? { suspendedAt } : {}) }, doneMsg),
     movePlan: (id: string, plan: string, doneMsg: string, choice: TierAssignment) =>
       call("/api/admin/restaurants", "PATCH", { id, plan, ...choice }, doneMsg),
   };
