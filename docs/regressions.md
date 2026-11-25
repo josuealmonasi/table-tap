@@ -8796,3 +8796,24 @@ settlement (`adoptSettledIntent` → `adopt_settled_intent_v1`) queues their
 fee reconciliation and sends the intent's review disputes back to the
 worker. Checks: `refund-due-race.spec.ts`, `refund-due-resume.spec.ts`,
 `settled-intent.spec.ts`, `fee-queue-scope.spec.ts`.
+### Diner data a copied link or code could reach (2026-11-25)
+
+Three places where a bearer value was read as more authority than it carried
+(Codex bl40 review, findings 1, 7 and 8). First, `/api/receipt/payments`
+named every order on a completed split in `splitOrderIds`, and the public
+tracker treats an order id as its whole credential, so a former guest who paid
+one part could read the other diners' lines and notes after the sitting
+closed. It now names only orders this phone placed (`orders.diner`) or its own
+payments were recorded against; the receipt offer only ever compared the list
+with the phone's own orders. Second, `/api/rewards` returned the card's masked
+email to anyone holding the printed code, and its PATCH let that holder advance
+`saved_at`, clearing the owner's "save it again" prompt while their image was
+stale. The address now goes only to the phone with the owner cookie, and PATCH
+records the save only for it (others get `{ ok: true, saved: false }`); a
+code-only holder still sees the card. Third, deleting a table cleared
+`orders.table_id` and, through its sittings, `session_id`, so
+`memberRatingOrders` treated the paid order as a counter order and any copied
+order link could overwrite its ratings. The `table_label` copied onto the
+order at insert is never cleared, and now keeps it on the dine-in path, where
+with no sitting left it is refused. Check: `slot-receipt-payments-route.spec.ts`,
+`loyalty-owner-secret.spec.ts`, `rating-membership.spec.ts`.

@@ -39,7 +39,8 @@ it("N12: subsequent rewards reads must not reveal whether the submitted address 
       code: "K7QM-3XW9-K7P2", email: "ana@example.invalid", consent: true,
     }) }));
     expect(response.status).toBe(200);
-    answers.push((await (await GET(new NextRequest("https://test/api/rewards?c=K7QM3XW9K7P2"))).json()).email);
+    answers.push((await (await GET(new NextRequest("https://test/api/rewards?c=K7QM3XW9K7P2", {
+      headers: { cookie: `tt-loyalty-owner-K7QM3XW9K7P2=${ownerSecret}` } }))).json()).email);
   }
   expect(answers[1]).toEqual(answers[0]);
 });
