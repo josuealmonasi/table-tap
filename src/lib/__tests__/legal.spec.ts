@@ -42,6 +42,10 @@ describe("the text and the version cannot drift apart", () => {
       .digest("hex")
       .slice(0, 16);
 
+  // 2026-11-25, bumped from 2026-11-24: the owner can add up to five outside
+  // addresses (an accountant, a partner) to the daily digest, each confirmed
+  // from its own inbox. Third parties' emails are a new category of data, so
+  // every restaurant is asked again.
   // 2026-11-24, bumped from 2026-11-18.2: deleting a visit card from its page
   // now needs the phone that created it (staff see the printed code when they
   // scan it); from elsewhere the restaurant deletes it on request. A change to
@@ -79,15 +83,15 @@ describe("the text and the version cannot drift apart", () => {
   // kept the version as a clarification.)
   it("has terms that match the version in force", () => {
     expect({ version: TERMS_VERSION, text: fingerprint("terms-es") }).toEqual({
-      version: "2026-11-24",
+      version: "2026-11-25",
       text: "8cce805f4850523f",
     });
   });
 
   it("has a privacy notice that matches the version in force", () => {
     expect({ version: TERMS_VERSION, text: fingerprint("privacy-es") }).toEqual({
-      version: "2026-11-24",
-      text: "31703e339a554123",
+      version: "2026-11-25",
+      text: "a3f308696ce79569",
     });
   });
 });

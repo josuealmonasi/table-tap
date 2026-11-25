@@ -3,7 +3,7 @@ import { drainTicketEmails } from "@/lib/ticket-email";
 import { ordersTipBase, tipFromPercent } from "@/lib/tip-base";
 import { ownBillAccess } from "@/lib/legacy-bill-access";
 import { dinerCurrency } from "@/lib/diner-currency";
-import { openDinerAttempt, resumeDinerAttempt } from "@/lib/diner-attempt";
+import { DinerScopeBusy, openDinerAttempt, resumeDinerAttempt } from "@/lib/diner-attempt";
 import { remainingPrincipal, billEntitlements } from "@/lib/bill-principal";
 import { fetchTableBill } from "@/lib/bill-data";
 import { NextResponse, type NextRequest } from "next/server";
@@ -277,7 +277,9 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     // its coupon, and only this attempt's expiry gives that reservation back.
 
     return NextResponse.json({ url: session.url });
-  } catch {
+  } catch (err) {
+    // Another phone at the table already has a page open on these orders.
+    if (err instanceof DinerScopeBusy) return await apiError("apiErr.billBeingPaid", 409);
     // The attempt owns its coupon and fee. Only its initial outright refusal
     // or verified expiry releases them; an unknown answer can still be payable.
     return await apiError("apiErr.checkoutFailed", 502);

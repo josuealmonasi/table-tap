@@ -8588,3 +8588,32 @@ about 1.1× the tile on a phone and on the 820px tablet band, and wrapped
 mid-number; the seed's small numbers never showed it, only `layout:prod` did.
 Now 10% with a 12px floor: "MX$1,906,921.00" fits at 360, 390 and 820px
 (checked in the browser). Check: the layout gates, and `layout:prod`.
+### Follow-ups from the cross-review of the 2026-11-24 sweep
+
+Four gaps the second look at the sweep found. First, a settled table could stay
+open for hours: the rest of the table paid, the close was refused because one
+diner still had a pay-now card page open, and when that diner walked away the
+abandoned order was deleted but nothing closed the sitting again. Now the expiry
+(`abandonCheckout`) re-closes that sitting, but only when it already has a paid
+order, so a table still browsing with nothing paid stays open. Second, a second
+phone trying to pay the whole bill while another phone's page was open got a
+bare "Checkout failed" (502); the database's `checkout_scope_busy` now comes back
+as `DinerScopeBusy` and the route answers 409 "Someone at the table is already
+paying the bill" (`apiErr.billBeingPaid`). Third, the phone that paid the whole
+bill could be refused its receipt when one order on it had nothing left to
+charge, because that order gets no payments row; `ownPaidOrderIds` now also
+accepts orders on that member's paid, non-split page in the same restaurant and
+sitting. Fourth, the signup trigger could run provisioning again if an
+already-confirmed user's `email_confirmed_at` changed; `provision_pending_signup_v1`
+now returns straight away on that update. Check:
+`checkout-abandon-reclose.spec.ts`, `bill-being-paid.spec.ts`,
+`receipt-zero-order-owner.spec.ts`, `signup-verification.spec.ts`.
+### Extra recipients of the daily digest (owner decisions 2026-11-25)
+
+The owner can add up to five outside addresses to the daily digest. Two things
+had to agree and now do: a mistyped address must never receive the day's sales
+(each address gets one confirmation email and nothing else until it confirms),
+and the privacy notice's promise that an unconfirmed address is deleted after
+seven days (an hourly pg_cron job deletes them). The limit is counted under the
+restaurant's row lock, so two tabs cannot reach six. Check:
+`digest-recipients.spec.ts`, the api gate's `digest` cases.

@@ -15,6 +15,7 @@
       "paragraphs": [
         "Del restaurante: nombre del negocio, nombre y correo electrónico de quien administra la cuenta, datos de contacto y datos fiscales cuando solicita factura. Si el restaurante los registra para sus tickets, también su razón social, RFC, régimen fiscal, domicilio y teléfono, que se imprimen en el ticket de sus ventas; son opcionales y solo el titular de la cuenta los modifica. De ellos, solo la razón social y el domicilio se muestran a los clientes en el menú y antes de pagar, para que sepan a quién le pagan; el RFC, el régimen fiscal y el teléfono no se muestran en el menú. Si el restaurante tuvo la prueba gratuita, conservamos su RFC, aun después de cerrar la cuenta, con el único fin de que la prueba se otorgue una sola vez por RFC.",
         "Del personal del restaurante: correo electrónico, rol y, si lo registra en su perfil, su nombre, con el fin de otorgar acceso al panel y de dejar constancia de quién realizó cada operación — pedidos, cobros, descuentos, cancelaciones, cambios en el equipo, turnos de caja, merma, conteos de existencias, compras y cambios en los costos —, como se describe en los Términos.",
+        "Correo electrónico de las personas que el dueño del restaurante agregue para recibir su resumen diario (por ejemplo, su contador o un socio), hasta cinco. Solo se usa después de que esa persona lo confirme desde su bandeja de entrada.",
         "Del comensal: lo estrictamente necesario para que su pedido opere — qué ordenó, en qué mesa, la nota que escriba para la cocina, el código de promoción que utilice, si dejó propina y la calificación del platillo si la otorga.",
         "Nombre del comensal: únicamente en los pedidos que se recogen en el mostrador, y de manera opcional. Sirve para llamarle cuando su pedido está listo. Puede dejarlo en blanco: su pedido se identifica por su código de recogida, que se le muestra siempre. No se solicita en el servicio en mesa, donde la mesa cumple esa función, ni se solicita su teléfono, ni se crean cuentas de comensal.",
         "Correo electrónico del comensal para un recibo: si lo escribe solo para recibir el recibo de un pedido, no se conserva. Se utiliza para enviar ese único correo y se descarta; no se incorpora a nuestra base de datos, no se da de alta en lista alguna y no se le remite publicidad.",
@@ -40,6 +41,7 @@
         "Enviar automáticamente el ticket de cada venta al correo que el comensal vinculó a su tarjeta de visitas, y para ningún otro fin.",
         "Llevar la cuenta de las visitas de una tarjeta de visitas y de sus recompensas, y mostrarle al comensal su avance cuando consulte su tarjeta con el código impreso en ella.",
         "Llevar las cuentas de clientes que el restaurante abre, mostrarle al cliente su estado de cuenta y enviárselo al correo que él proporcione con esa finalidad.",
+        "Enviar el resumen diario del restaurante (ventas, propinas, reembolsos y pendientes del día anterior) a su dueño, a los gerentes que lo activen y a los correos que el dueño agregue y que su titular haya confirmado, y para ningún otro fin.",
         "No se comercializan datos personales ni se utilizan para publicidad de terceros."
       ]
     },
@@ -58,6 +60,7 @@
         "El correo electrónico que un comensal proporciona para su recibo no se conserva: del envío únicamente queda la fecha en que se realizó, sin la dirección. No existe información posterior que suprimir.",
         "Una tarjeta de visitas, con sus visitas y recompensas, se conserva mientras el restaurante mantenga su programa, o hasta que el comensal la borre desde la página de su tarjeta con el código impreso en ella; al borrarla se eliminan también sus visitas y sus recompensas.",
         "El correo vinculado a una tarjeta de visitas se conserva mientras esté vinculado: se elimina al pulsar «Dejar de recibir mis tickets por correo» en cualquiera de los correos, cuando el comensal o el personal lo quitan de la tarjeta, o al borrarse la tarjeta.",
+        "El correo agregado para el resumen diario se conserva mientras siga en la lista: se elimina al pulsar «Dejar de recibir este resumen» en cualquiera de los envíos, cuando el dueño lo quita, o al eliminarse el restaurante. Un correo que no se confirma en siete días se elimina.",
         "Una cuenta de cliente, con lo cargado y lo pagado, se conserva como registro contable del restaurante mientras exista y, cerrada, durante el plazo que exijan sus obligaciones fiscales. El correo que el cliente proporciona para su estado de cuenta se conserva mientras la cuenta esté abierta, o se usa una sola vez si lo escribe al pedir el envío.",
         "Los códigos calculados a partir de la dirección de red para limitar solicitudes abusivas se eliminan en un plazo máximo de un día."
       ]
@@ -69,7 +72,8 @@
         "Para ejercerlos, le pedimos escribir al correo de contacto publicado en el sitio. Se dará respuesta dentro de los plazos que señala la ley.",
         "Si usted es comensal de un restaurante que utiliza TableTap, le solicitamos dirigir su petición a ese restaurante; TableTap le brindará el apoyo necesario para atenderla.",
         "La cancelación de una tarjeta de visitas no requiere solicitud: el comensal puede borrarla en cualquier momento desde la página de su tarjeta, en el teléfono en el que la creó. Desde otro dispositivo, el código impreso no basta para borrarla, porque el personal del restaurante también lo ve al registrar visitas; en ese caso el comensal puede pedírselo al restaurante, que la borra en el momento y deja constancia de ello.",
-        "La cancelación del correo vinculado a una tarjeta de visitas tampoco requiere solicitud: basta el enlace «Dejar de recibir mis tickets por correo» incluido en cada envío."
+        "La cancelación del correo vinculado a una tarjeta de visitas tampoco requiere solicitud: basta el enlace «Dejar de recibir mis tickets por correo» incluido en cada envío.",
+        "La cancelación del resumen diario tampoco requiere solicitud: basta el enlace «Dejar de recibir este resumen» incluido en cada envío."
       ]
     },
     {
