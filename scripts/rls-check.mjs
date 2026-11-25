@@ -65,7 +65,7 @@ for (const table of [
   // A customer's name and what they owe: read only through the routes.
   "customer_accounts", "account_checkouts", "account_movements", "diner_checkouts", "table_session_members",
   // The drawer's shifts and what was taken out of it; the restaurant's costs.
-  "cash_shifts", "cash_movements", "ingredients", "ingredient_prices", "recipe_lines",
+  "cash_shifts", "cash_movements", "cash_withdrawal_retired_refs", "ingredients", "ingredient_prices", "recipe_lines",
   "waste_entries", "ingredient_purchases", "ingredient_counts", "ingredient_consumption", "ingredient_movements",
   // The ledger and everything around it, the bell, the kitchen's paper, a
   // table's division, and what the routes keep for themselves.

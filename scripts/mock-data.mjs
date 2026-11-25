@@ -1061,8 +1061,13 @@ async function seedDemo(pg, production) {
   await bulkInsert(
     pg,
     "cash_movements",
-    ["restaurant_id", "kind", "amount", "note", "actor_email", "shift_id"],
-    [[rid, "withdrawal", 120, "Pago al proveedor de verduras", "demo-cashier@tabletap.shop", openShift.id]],
+    ["restaurant_id", "kind", "amount", "note", "actor_email", "shift_id", "status"],
+    [
+      [rid, "withdrawal", 120, "Pago al proveedor de verduras", "demo-cashier@tabletap.shop", openShift.id, "approved"],
+      // A cashier's withdrawal awaiting a manager, so the drawer's approve and
+      // reject controls exist for every gate that opens the register close.
+      [rid, "withdrawal", 40, "Cambio para la caja", "demo-cashier@tabletap.shop", openShift.id, "pending"],
+    ],
   );
 
   // A counter product and a kitchen printer with a ticket already through it,

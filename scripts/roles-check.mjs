@@ -142,6 +142,8 @@ const ROUTES = [
   // A station finishing its part: the people who move orders, never the floor.
   { m: "POST", p: "/api/orders/station", body: {}, allow: ["owner", "manager", "kitchen"], passes: 400 },
   { m: "DELETE", p: "/api/cash-drawer", body: {}, allow: MANAGES, passes: 400 },
+  // A cashier's pending withdrawal is approved or rejected by a manager alone.
+  { m: "PATCH", p: "/api/cash-drawer", body: {}, allow: MANAGES, passes: 400 },
   // Its shifts: opened, closed on a count, explained — by those who run it.
   { m: "POST", p: "/api/cash-shift", body: {}, allow: ["owner", "manager", "cashier"], passes: 400 },
   // Costs: owner and managers. Refused on shape — no unit, no id, no lines,

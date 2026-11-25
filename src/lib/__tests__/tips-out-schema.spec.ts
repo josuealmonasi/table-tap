@@ -5,7 +5,9 @@ import { expect, it } from "vitest";
 const schema = readFileSync("supabase/schema.sql", "utf8");
 const proposal = schema;
 function body(sql: string, name: string): string {
-  const start = sql.lastIndexOf(`create or replace function public.${name}(`);
+  // The first definition is the writer; the one after it is the deployed
+  // signature, a one-line delegate kept for the deploy window (2026-11-25).
+  const start = sql.indexOf(`create or replace function public.${name}(`);
   if (start < 0) throw new Error(`Missing function ${name}`);
   return sql.slice(start).split("$$;")[0];
 }

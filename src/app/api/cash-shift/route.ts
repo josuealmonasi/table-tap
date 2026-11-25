@@ -74,6 +74,11 @@ export async function POST(req: NextRequest) {
     if (error) return await apiError("apiErr.generic", 500);
     if (!data) return await apiError("apiErr.shiftChanged", 409);
     if (data.outcome === "held_cash") return await apiError(heldCash, 409, { n: data.waiting });
+    // A cashier's withdrawal still awaiting approval: decided before signing,
+    // or the count carries it as a shortage nobody can approve afterwards.
+    if (data.outcome === "pending_withdrawals") {
+      return await apiError(MANAGES(actor.role) ? "apiErr.shiftPendingWithdrawals" : "apiErr.shiftPendingWithdrawalsCashier", 409, { n: data.waiting });
+    }
     await logEvent({
       operationKey: `shift:${shiftId.toLowerCase()}`,
       restaurantId: actor.restaurantId, actor: actor.email, entity: "cash", action: "closed",

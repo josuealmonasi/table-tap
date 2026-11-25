@@ -15,7 +15,7 @@ export function checkClosedShifts(rows, { ok, bad, info }) {
     const returns = rows.refund_operations.filter(r => mine(r) && r.source === "cash"
       && r.status === "succeeded" && r.payout_actor && inside(r.completed_at));
     const withdrawals = rows.cash_movements.filter(m => mine(m) && m.shift_id === s.id
-      && m.kind === "withdrawal" && time(m.created_at) <= time(s.closed_at));
+      && m.kind === "withdrawal" && (m.status ?? "approved") === "approved" && time(m.created_at) <= time(s.closed_at));
     // Held receipts resolved without a sale whose cash stayed in this drawer.
     const unclassified = rows.held_cash_receipts.filter(c => mine(c) && c.shift_id === s.id
       && inside(c.recognized_at));

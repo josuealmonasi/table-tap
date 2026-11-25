@@ -98,6 +98,7 @@ const NOT_BOOKS: Record<string, string> = {
   waste_entries: "stock written off, not money collected or owed",
   restaurant_admin_notes: "the platform team's support notes, not money collected or owed",
   digest_recipients: "outside contact addresses for the daily digest; deleted with the restaurant (privacy notice)",
+  cash_withdrawal_retired_refs: "retry references of removed withdrawals; the removal itself is in user_logs",
 };
 
 it("bg8: archives every cascading table that is not named as outside the books", () => {

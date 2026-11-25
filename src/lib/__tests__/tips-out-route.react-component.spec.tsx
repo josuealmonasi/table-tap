@@ -29,7 +29,7 @@ for (const once of [false, true]) {
     expect(await res.json()).toEqual({ ok: true, id: "movement" });
     expect(state.rpc).toHaveBeenCalledExactlyOnceWith(once ? "create_cash_withdrawal_once" : "create_cash_withdrawal", {
       ...(once ? { p_ref: ref } : {}), p_restaurant: "r", p_shift: once ? shiftId : "shift",
-      p_amount: 25.5, p_note: "Staff", p_actor: "cashier", p_purpose: purpose ?? "other",
+      p_amount: 25.5, p_note: "Staff", p_actor: "cashier", p_role: "cashier", p_purpose: purpose ?? "other",
     });
   });
   it.each([null, "", "TIPs", "supplier", " tips ", 0, true, [], {}, ["tips"]])(

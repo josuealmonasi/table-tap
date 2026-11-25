@@ -29,6 +29,16 @@ function shownMoney(typed: string | undefined, currency: string): string {
   return value === null ? `${typed ?? ""} ${currency}` : formatMoney(value, currency);
 }
 
+/**
+ * What became of a withdrawal: a cashier's waits for a manager, and a late
+ * retry may find it was removed or rejected meanwhile. Never "recorded" then.
+ */
+function withdrawalOutcome(data: { pending?: boolean; removed?: boolean; rejected?: boolean }): string {
+  if (data.removed) return "corte.withdrawalWasRemoved";
+  if (data.rejected) return "corte.withdrawalWasRejected";
+  return data.pending ? "corte.withdrawalPendingSaved" : "corte.withdrawalSaved";
+}
+
 export default function CashMovementDialog({ kind, currency, shiftId, onClose, onSaved }: CashMovementDialogProps) {
   const t = useT();
   const attempt = useRetryIntent();
@@ -75,7 +85,7 @@ export default function CashMovementDialog({ kind, currency, shiftId, onClose, o
         return;
       }
       if (!data.id) throw new Error("Missing movement result");
-      toast(shownKind === "opening" ? t("shift.opened") : t("corte.withdrawalSaved"));
+      toast(shownKind === "opening" ? t("shift.opened") : t(withdrawalOutcome(data)));
       onSaved();
       onClose();
     } catch {

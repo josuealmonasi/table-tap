@@ -23,6 +23,25 @@ export interface CashMovement {
   purpose?: "tips" | "other";
   /** It pays out a resolved held receipt, so the server refuses to remove it. */
   linked?: boolean;
+  /**
+   * A cashier's withdrawal waits for a manager: only an approved one comes out
+   * of expected cash. Absent on rows read before the column existed.
+   */
+  status?: CashWithdrawalStatus;
+  /** The manager who approved or rejected it. */
+  reviewed_by?: string | null;
+}
+
+export type CashWithdrawalStatus = "pending" | "approved" | "rejected";
+
+/** Whether a withdrawal has left the drawer's books: approved, or older than approval. */
+export function withdrawalCounts(w: Pick<CashMovement, "status">): boolean {
+  return (w.status ?? "approved") === "approved";
+}
+
+/** What cashiers have recorded that a manager has not decided yet. */
+export function pendingWithdrawn(withdrawals: Pick<CashMovement, "status" | "amount">[]): number {
+  return round2(withdrawals.filter(w => w.status === "pending").reduce((sum, w) => sum + w.amount, 0));
 }
 
 /**

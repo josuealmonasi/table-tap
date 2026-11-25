@@ -8628,6 +8628,27 @@ and the privacy notice's promise that an unconfirmed address is deleted after
 seven days (an hourly pg_cron job deletes them). The limit is counted under the
 restaurant's row lock, so two tabs cannot reach six. Check:
 `digest-recipients.spec.ts`, the api gate's `digest` cases.
+
+### Cash withdrawals: approval, cap and retired references (2026-11-25)
+
+Three places had to agree about what left the drawer, and nothing checked it.
+First, a cashier could hide a shortage: with MX$100 expected and MX$40 in the
+drawer, a MX$60 "withdrawal" made the close balance to zero. A cashier's
+withdrawal is now saved `pending` and leaves expected cash only when a manager
+approves it on the Caja block; the close refuses while one is pending. Second,
+a withdrawal larger than the drawer (MX$250 against MX$100) was accepted and
+made expected cash negative; every writer now refuses one that would, under the
+money lock, counting pending ones. Third, a retry whose first reply was lost
+could undo a manager's correction: the manager removed the mistaken MX$40, and
+the retry inserted a fresh MX$40 because the delete had erased its reference.
+The removal now keeps the reference (`cash_withdrawal_retired_refs`) in the same
+transaction, and the retry answers with the removal. The money gate rebuilds
+closes from approved withdrawals only, and the seed has one pending withdrawal
+so the approve/reject controls exist for every gate. Check:
+`cash-withdrawal-approval-schema.spec.ts`, `cash-withdrawal-review-route.spec.ts`,
+`cash-withdrawal-review-ui.react-component.spec.tsx`, `cash-drawer.spec.ts`, and
+the api gate's cash cases (pending, over the drawer, close refused, approve,
+reject, retired retry).
 ### Loyalty stamps, ticket sends and redemption timing (2026-11-25)
 
 Four places that had to agree. First, "Sellar tarjeta" recorded a visit from a
