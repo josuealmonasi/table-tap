@@ -120,7 +120,10 @@ export default function RewardsLookup({ initialCode = "", back = null }: Rewards
         ) : card ? (
           <div className="tt-login-card">
             <RewardsCard card={card} locale={locale} />
-            <CardEmail key={card.face.printedCode} diner code={normalizeCode(card.face.printedCode)!} initialEmail={card.email} />
+            {card.canDelete
+              ? <CardEmail key={card.face.printedCode} diner code={normalizeCode(card.face.printedCode)!}
+                initialEmail={card.email} initialPending={card.emailPending} />
+              : <p className="tt-muted">{t("cardEmail.ownerRequired")}</p>}
             {error && <p className="tt-field-error" role="alert">{error}</p>}
             {saveAgain ? (
               <div style={{ marginTop: 16 }}>

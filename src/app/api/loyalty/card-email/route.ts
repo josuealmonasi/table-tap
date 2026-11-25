@@ -6,7 +6,9 @@ import { MANAGES } from "@/lib/membership";
 import { clientKey, isRateLimited, isRoomLimited } from "@/lib/rate-limit";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { normalizeCode } from "@/lib/loyalty/code";
-import { emailForRole, normalizeEmail, setCardEmail } from "@/lib/loyalty/card-email";
+import { cardEmailPending, emailForRole, normalizeEmail, setCardEmail } from "@/lib/loyalty/card-email";
+import { sendCardEmailConfirmation } from "@/lib/loyalty/card-email-confirmation";
+import { hashOwnerSecret, matchesOwnerSecret, readOwnerSecret } from "@/lib/loyalty/owner-secret";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -21,18 +23,17 @@ export async function GET(req: NextRequest) {
   if (!actor) return await apiError("apiErr.forbidden", 403);
   const code = normalizeCode(req.nextUrl.searchParams.get("code") ?? "");
   if (!code) return await apiError("rewards.invalid", 400);
-  const { data, error } = await createAdminClient().from("loyalty_cards").select("email")
+  const { data, error } = await createAdminClient().from("loyalty_cards").select("email, pending_email_expires_at")
     .eq("restaurant_id", actor.restaurantId).eq("code", code).maybeSingle();
   if (error) return await apiError("apiErr.generic", 503);
   if (!data) return await apiError("apiErr.loyaltyNotHere", 404);
-  return NextResponse.json({ email: emailForRole(data.email, MANAGES(actor.role)) });
+  return NextResponse.json({ email: emailForRole(data.email, MANAGES(actor.role)), pending: cardEmailPending(data.pending_email_expires_at) });
 }
 
 /**
  * POST { code, email | null, consent } — link, replace or remove the card's
- * address. Staff of the card's restaurant, or the diner holding the card's
- * code (the code is the card: whoever holds it holds the card). Linking needs
- * the consent tick every time.
+ * address. Staff of the card's restaurant or the phone holding its secret
+ * can make the request. A new address activates only after inbox confirmation.
  */
 export async function POST(req: NextRequest) {
   if (await isRoomLimited(req, "card-email", 20)) return await apiError("apiErr.tooManyRequests", 429);
@@ -45,32 +46,32 @@ export async function POST(req: NextRequest) {
   if (email && body.consent !== true) return await apiError("cardEmail.consentNeeded", 400);
   try {
     const actor = await actingFrontOfHouse();
-    let restaurantId = actor?.restaurantId;
-    if (!restaurantId) {
-      const { data } = await createAdminClient().from("loyalty_cards").select("restaurant_id").eq("code", code).maybeSingle();
-      restaurantId = data?.restaurant_id as string | undefined;
+    const secret = actor ? null : readOwnerSecret(req, code);
+    if (!actor) {
+      if (!secret) return await apiError("cardEmail.ownerRequired", 403);
+      const { data, error } = await createAdminClient().from("loyalty_cards").select("owner_secret_hash").eq("code", code).maybeSingle();
+      if (error) return await apiError("apiErr.generic", 503);
+      if (!data) return await apiError("apiErr.loyaltyNotHere", 404);
+      if (!matchesOwnerSecret(secret, data.owner_secret_hash)) return await apiError("cardEmail.ownerRequired", 403);
+      // Only linking uses these hourly allowances. Authorization comes first
+      // so a person with the printed code cannot spend the owner's allowance.
+      if (!removing && (await isRateLimited(`card-email:${code}`, 5, 3600)
+        || await isRateLimited(`card-email-diner:${clientKey(req)}`, DINER_LINKS_PER_ADDRESS, 3600))) {
+        return await apiError("apiErr.tooManyRequests", 429);
+      }
     }
-    if (!restaurantId) return await apiError("apiErr.loyaltyNotHere", 404);
-    // Limit changes per card and per network so one caller cannot use many
-    // cards to send an unlimited number of tickets to an address.
-    //
-    // Only linking is counted. Removing an address probes nothing, and taking
-    // consent back must never wait: one diner spending the restaurant Wi-Fi's
-    // shared allowance once left every other diner there unable to remove
-    // their own address for an hour (security review 2026-11-17, finding 4).
-    if (!actor && !removing && (await isRateLimited(`card-email:${code}`, 5, 3600)
-      || await isRateLimited(`card-email-diner:${clientKey(req)}`, DINER_LINKS_PER_ADDRESS, 3600))) {
-      return await apiError("apiErr.tooManyRequests", 429);
-    }
-    const result = await setCardEmail(restaurantId, code, email, actor?.email ?? "diner");
+    const result = await setCardEmail(code, email, actor
+      ? { restaurantId: actor.restaurantId, actor: actor.email }
+      : { ownerHash: hashOwnerSecret(secret!) });
     if (result.outcome === "unknown") return await apiError("apiErr.loyaltyNotHere", 404);
-    if (actor) {
-      if (result.outcome === "saved") return NextResponse.json({ outcome: "saved", email: emailForRole(result.email, MANAGES(actor.role)) });
-      return NextResponse.json(result);
+    if (result.outcome === "forbidden") return await apiError("cardEmail.ownerRequired", 403);
+    if (result.outcome === "submitted" && email) {
+      await sendCardEmailConfirmation(req, code, email, result.token);
     }
-    // Every card saves independently, so this answer reveals no other card.
-    if (result.outcome === "removed") return NextResponse.json(result);
-    return NextResponse.json({ outcome: "submitted", email });
+    if (result.outcome === "saved") {
+      return NextResponse.json({ outcome: "saved", email: emailForRole(result.email, Boolean(actor && MANAGES(actor.role))) });
+    }
+    return NextResponse.json({ outcome: result.outcome === "removed" ? "removed" : "submitted" });
   } catch {
     return await apiError("apiErr.generic", 503);
   }
