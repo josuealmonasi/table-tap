@@ -10,6 +10,9 @@ do $$ begin
     if exists (select 1 from cron.job where jobname = 'tabletap-expire-pending-signups') then
       perform cron.unschedule('tabletap-expire-pending-signups');
     end if;
+    if exists (select 1 from cron.job where jobname = 'tabletap-expire-digest-recipients') then
+      perform cron.unschedule('tabletap-expire-digest-recipients');
+    end if;
   end if;
 end $$;
 drop trigger if exists provision_pending_signup on auth.users;
@@ -148,6 +151,8 @@ drop table if exists loyalty_visits      cascade;
 drop table if exists recovery_nonces cascade;
 drop table if exists recovery_runs cascade;
 drop table if exists cron_token_claims cascade;
+drop table if exists digest_recipients cascade;
+drop function if exists public.add_digest_recipient_v1(uuid, text, text, text, text);
 drop table if exists ticket_email_outbox cascade;
 drop function if exists public.loyalty_delete_card(uuid, text, text);
 -- Dropping the cards also drops their per-card stop-token index.

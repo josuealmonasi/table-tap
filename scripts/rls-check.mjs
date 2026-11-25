@@ -60,7 +60,7 @@ for (const table of [
   "coupons", "coupon_redemptions", "staff", "user_logs", "profiles",
   "plan_price_changes", "plan_price_notices", "platform_admins", "platform_admin_audit", "restaurant_admin_notes", "trial_rfcs", "webhook_heartbeats", "restaurant_accounting_records", "terms_acceptances", "rate_limits", "restaurant_tables",
   "icon_groups", "icon_group_items",
-  "loyalty_programs", "loyalty_cards", "loyalty_visits", "loyalty_redemptions", "ticket_email_outbox", "recovery_nonces", "recovery_runs", "cron_token_claims",
+  "loyalty_programs", "loyalty_cards", "loyalty_visits", "loyalty_redemptions", "ticket_email_outbox", "recovery_nonces", "recovery_runs", "cron_token_claims", "digest_recipients",
   "pending_signups",
   // A customer's name and what they owe: read only through the routes.
   "customer_accounts", "account_checkouts", "account_movements", "diner_checkouts", "table_session_members",

@@ -15,6 +15,7 @@ import InventoryCard from "./InventoryCard";
 import TicketTimesCard from "./TicketTimesCard";
 import { DEFAULT_TICKET_LATE_MINUTES, DEFAULT_TICKET_WARN_MINUTES } from "@/lib/ticket-wait";
 import PrintingCard from "./PrintingCard";
+import DigestRecipientsCard from "./DigestRecipientsCard";
 import LogoCard from "./LogoCard";
 import RestaurantCard from "./RestaurantCard";
 import TaxCard from "./TaxCard";
@@ -125,6 +126,7 @@ export default function SettingsForm({
               <LogoCard restaurant={restaurant} />
               <CoverCard restaurant={restaurant} />
               <PaymentsCard />
+              <DigestRecipientsCard />
             </div>
           </>
         )}
