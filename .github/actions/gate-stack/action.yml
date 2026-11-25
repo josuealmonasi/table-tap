@@ -57,11 +57,35 @@ runs:
     - name: Start a throwaway Supabase
       shell: bash
       run: |
+        # Waiting never freed the port (#746, #747, #751 on 2026-11-25 failed all
+        # three tries), so each retry moves the database ports (54322 and the
+        # shadow 54320) to a free range. The API stays on 54321, because the
+        # build job bakes its URL into the bundle and every gate job checks
+        # that it matches (#759's attack failed when the API moved too). The
+        # next step reads the real ports from `supabase status`.
+        busy() { ss -ltn | awk '{print $4}' | grep -qE "[:.]($1)$"; }
         for attempt in 1 2 3; do
-          supabase start --workdir ci -x studio,imgproxy,edge-runtime,logflare,vector,supavisor,postgres-meta,mailpit && exit 0
+          bases=(54320 55320 56320 57320 58320)
+          # A failed try skips the range it used, even if it looks free now.
+          for base in "${bases[@]:$((attempt-1))}"; do
+            busy "$((base+0))|$((base+2))" || break
+          done
+          if [ "$base" != 54320 ]; then
+            echo "::warning::database ports 54320/54322 are taken on this runner; using $base/$((base+2))"
+            sed -i -E "s/^port = 54322$/port = $((base+2))/; s/^shadow_port = 54320$/shadow_port = $base/" ci/supabase/config.toml
+          fi
+          # public.ecr.aws (the CLI's default) answered "Data limit exceeded" to
+          # every pull on 2026-11-25 after a day of gate runs. From the second
+          # try, pull the same images from Docker Hub instead.
+          if [ "$attempt" -gt 1 ]; then export SUPABASE_INTERNAL_IMAGE_REGISTRY=docker.io; echo "::warning::pulling Supabase images from docker.io"; fi
+          # Under the step's -e and pipefail, only an `if` keeps a failed start from ending the step.
+          if supabase start --workdir ci -x studio,imgproxy,edge-runtime,logflare,vector,supavisor,postgres-meta,mailpit 2>&1 | tee /tmp/supabase-start.log; then exit 0; fi
+          # A spent registry is not worth the wait: go straight to the next try.
+          grep -q "Data limit exceeded\|toomanyrequests" /tmp/supabase-start.log && export SUPABASE_INTERNAL_IMAGE_REGISTRY=docker.io
           echo "::warning::supabase start failed (attempt $attempt); stopping and retrying"
           supabase stop --no-backup --workdir ci || true
-          sleep $((attempt * 15))
+          git checkout -- ci/supabase/config.toml
+          sleep $((attempt * 10))
         done
         exit 1
 

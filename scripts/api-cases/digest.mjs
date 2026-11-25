@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+
 // The daily digest's extra recipients (owner decisions 2026-11-25): owner only,
 // at most five, nothing sent until the address confirms. The demo seeds one
 // confirmed and one pending address; these cases restore what they change.
@@ -22,11 +24,28 @@ export function digestCases() {
       path: "/api/digest/stop", body: { token: UNKNOWN }, expect: [404] },
     { name: "POST /api/digest/stop (the confirmed address stops, then is restored)", as: "diner", method: "POST",
       path: "/api/digest/stop", body: { token: STOP_CONFIRMED }, expect: [200],
+      arrange: async f => {
+        const { data: original, error } = await f.admin.from("digest_recipients").select("*")
+          .eq("restaurant_id", f.restaurant.id).eq("stop_token", STOP_CONFIRMED).single();
+        if (error) throw error;
+        const addressKey = createHash("sha256").update(original.email.trim().toLowerCase()).digest("hex");
+        const stop = () => f.admin.from("digest_staff_stops").select("address_key")
+          .eq("restaurant_id", f.restaurant.id).eq("address_key", addressKey);
+        const { data: priorStop, error: stopError } = await stop().maybeSingle();
+        if (stopError) throw stopError;
+        return async () => {
+          const { error: restoreError } = await f.admin.from("digest_recipients")
+            .upsert(original, { onConflict: "id", ignoreDuplicates: true });
+          if (restoreError) throw restoreError;
+          if (!priorStop) {
+            const { error: cleanupError } = await f.admin.from("digest_staff_stops").delete()
+              .eq("restaurant_id", f.restaurant.id).eq("address_key", addressKey);
+            if (cleanupError) throw cleanupError;
+          }
+        };
+      },
       check: async (d, f) => {
         const { data } = await f.admin.from("digest_recipients").select("id").eq("stop_token", STOP_CONFIRMED).maybeSingle();
-        // Put the seeded row back for the next case and the next run.
-        await f.admin.from("digest_recipients").insert({ restaurant_id: f.restaurant.id, email: "contador@example.test",
-          status: "confirmed", stop_token: STOP_CONFIRMED, added_by: "demo", confirmed_at: new Date().toISOString() });
         if (data) return "answered 200 and the address is still listed";
         return typeof d.restaurant === "string" || "no restaurant name in the answer";
       } },

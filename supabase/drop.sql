@@ -1,4 +1,16 @@
 drop view if exists trial_reminders_due;
+drop view if exists daily_digests_due_v2;
+drop view if exists daily_digest_mailboxes;
+drop table if exists daily_digest_batches cascade;
+drop table if exists digest_staff_stops cascade;
+drop function if exists public.claim_daily_digest_v2(uuid, date, uuid, text, text, timestamptz, int);
+drop function if exists public.stop_digest_outside_v2(text);
+drop function if exists public.stop_digest_staff_v2(uuid, uuid, text, text);
+drop function if exists public.set_digest_preference_v1(uuid, uuid, boolean);
+drop function if exists public.digest_staff_stopped_v1(uuid, uuid);
+drop trigger if exists advance_digest_preference_version on auth.users;
+drop function if exists public.advance_digest_preference_version();
+drop function if exists public.digest_address_key(text);
 drop view if exists daily_digests_due;
 drop view if exists daily_digest_recipients;
 drop table if exists menu_stockouts cascade;
