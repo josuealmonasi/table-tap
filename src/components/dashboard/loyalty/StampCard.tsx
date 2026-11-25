@@ -10,6 +10,12 @@ import StampOutcome, { type Outcome } from "./StampOutcome";
 
 interface StampCardProps {
   buttonClass?: string;
+  /** The paid sale this stamp stands on: the one this till just charged. */
+  saleId?: string | null;
+  /** A manager or the owner: may stamp with no sale, recorded as an override. */
+  canOverride?: boolean;
+  /** The sale stamped a card, so it cannot stamp another. */
+  onSaleUsed?: () => void;
 }
 
 /**
@@ -20,7 +26,12 @@ interface StampCardProps {
  * the server has already said this restaurant takes stamps right now, so the
  * button never leads to "the visit card is switched off".
  */
-export default function StampCard({ buttonClass = "tt-btn tt-btn-ghost tt-btn-sm" }: StampCardProps) {
+export default function StampCard({
+  buttonClass = "tt-btn tt-btn-ghost tt-btn-sm",
+  saleId = null,
+  canOverride = false,
+  onSaleUsed,
+}: StampCardProps) {
   const t = useT();
   const [open, setOpen] = useState(false);
   const [typed, setTyped] = useState("");
@@ -31,12 +42,21 @@ export default function StampCard({ buttonClass = "tt-btn tt-btn-ghost tt-btn-sm
 
   async function send(path: string, code: string, kind: Outcome["kind"], step?: number, round?: number | null): Promise<void> {
     setError(null);
-    const answer = await run({ path, body: { code }, ...(kind === "redeem" && { redeem: { code, round, step } }) });
-    if (answer.status === "done") setOutcome({ kind, code, ...answer.data } as Outcome);
+    // A visit stands on a sale (review 2026-11-25); without one, only a
+    // manager's stamp goes through, and the server records it as such.
+    const body = kind === "stamp" && saleId ? { code, saleId } : { code };
+    const answer = await run({ path, body, ...(kind === "redeem" && { redeem: { code, round, step } }) });
+    if (answer.status === "done") {
+      setOutcome({ kind, code, ...answer.data } as Outcome);
+      if (kind === "stamp" && saleId && answer.data.stamped) onSaleUsed?.();
+    }
     else if (answer.status !== "busy") setError(answer.error);
   }
 
-  const scanning = open && !outcome && !busy && !error;
+  // A waiter or a cashier with no sale at hand cannot stamp: the dialog says
+  // how a visit is earned instead of opening a camera the server would refuse.
+  const mayStamp = Boolean(saleId) || canOverride;
+  const scanning = open && mayStamp && !outcome && !busy && !error;
   const { videoRef, problem, setProblem } = useQrCamera(
     scanning,
     raw => {
@@ -80,8 +100,11 @@ export default function StampCard({ buttonClass = "tt-btn tt-btn-ghost tt-btn-sm
             onRedeem={() => void send("/api/loyalty/redeem", outcome.code, "redeem", outcome.standing.next?.visits, outcome.round)}
             onAnother={reset}
           />
+        ) : !mayStamp ? (
+          <p className="tt-muted" role="status" style={{ fontSize: 14 }}>{t("loyalty.needsSale")}</p>
         ) : (
           <div className="tt-scan-stage">
+            <p className="tt-muted" style={{ fontSize: 13 }}>{t(saleId ? "loyalty.saleNote" : "loyalty.overrideNote")}</p>
             {problem ? (
               <p className="tt-muted" style={{ fontSize: 14 }}>{problem}</p>
             ) : (

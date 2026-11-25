@@ -115,6 +115,9 @@ for (const [fn, args] of [
   // A card is stamped and redeemed by staff through a route that checks who
   // they are. Called from a phone, either would be a free visit or a free meal.
   ["loyalty_stamp", { p_restaurant: crypto.randomUUID(), p_code: "0000000000AA", p_actor: "anon" }],
+  ["loyalty_stamp_v2", { p_restaurant: crypto.randomUUID(), p_code: "0000000000AA", p_actor: "anon", p_order: null }],
+  // Answers a card's ticket address: the server's sender only.
+  ["ticket_email_address_for_send", { p_restaurant: crypto.randomUUID(), p_card: crypto.randomUUID(), p_claim: crypto.randomUUID(), p_ids: [crypto.randomUUID()] }],
   ["loyalty_redeem", { p_restaurant: crypto.randomUUID(), p_code: "0000000000AA", p_actor: "anon" }],
   ["loyalty_redeem_once", { p_restaurant: crypto.randomUUID(), p_code: "0000000000AA", p_actor: "anon", p_step: 2, p_round: 0, p_request_key: crypto.randomUUID() }],
   ["loyalty_progress", { p_card: crypto.randomUUID() }],

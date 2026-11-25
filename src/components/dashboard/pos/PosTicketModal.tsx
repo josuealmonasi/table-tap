@@ -20,6 +20,8 @@ export interface PosTicket {
   receiptHtml?: string;
   /** A one-sale email may have been lost; offer its printable ticket. */
   emailRequested?: boolean;
+  /** The sale, when it was paid now: what "Sellar tarjeta" stamps against. */
+  orderId?: string;
 }
 
 interface PosTicketModalProps {

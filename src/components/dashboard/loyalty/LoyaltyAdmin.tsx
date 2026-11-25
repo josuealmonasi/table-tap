@@ -32,7 +32,7 @@ export default function LoyaltyAdmin({ program, preview }: LoyaltyAdminProps) {
         <div className="container">
           <header className="tt-dash-head">
             <Breadcrumb trail={[{ labelKey: "nav.dashboard", href: "/dashboard" }, { labelKey: "nav.loyalty" }]} />
-            {program.active && <StampCard buttonClass="tt-btn tt-btn-primary tt-btn-sm" />}
+            {program.active && <StampCard buttonClass="tt-btn tt-btn-primary tt-btn-sm" canOverride />}
           </header>
           <ProgramStatus active={program.active} />
           {/* The program on one side; on the other what the team does every day

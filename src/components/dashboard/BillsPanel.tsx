@@ -217,7 +217,7 @@ export default function BillsPanel({
               />
             </div>
             <ScanToCollect onFound={openScanned} />
-            {loyalty && canSettle && <StampCard />}
+            {loyalty && canSettle && <StampCard canOverride={canApprove} />}
           </div>
 
           {shown.length === 0 ? (

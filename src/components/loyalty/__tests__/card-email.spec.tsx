@@ -61,14 +61,15 @@ it("screens5: a failed read is said once, not as a placeholder and an alert", as
   expect(host.textContent!.split(said)).toHaveLength(2);
   expect(host.querySelector('[role="alert"]')?.textContent).toBe(said);
 });
-it("access2: a diner's submitted address is saved for this card", async () => {
-  await render({ diner: true, initialEmail: null });
+it("shows confirmation is pending and keeps displaying the active address", async () => {
+  await render({ diner: true, initialEmail: "o***@example.com" });
   await act(async () => button("Agregar/cambiar correo").click()); await type("ana@example.com");
   await act(async () => host.querySelector<HTMLInputElement>('input[type="checkbox"]')!.click());
-  vi.mocked(fetch).mockResolvedValueOnce(Response.json({ outcome: "submitted", email: "ana@example.com" }));
+  vi.mocked(fetch).mockResolvedValueOnce(Response.json({ outcome: "submitted" }));
   await act(async () => button("Guardar correo").click());
-  expect(host.textContent).toContain("ana@example.com");
-  expect(host.querySelector('[role="status"]')?.textContent).toBe(translate(messagesFor("es"), "cardEmail.submittedDiner"));
+  expect(host.textContent).toContain("o***@example.com");
+  expect(host.textContent).not.toContain("ana@example.com");
+  expect(host.querySelector('[role="status"]')?.textContent).toBe(translate(messagesFor("es"), "cardEmail.pending"));
   expect(host.querySelector('[role="alert"]')).toBeNull();
 });
 it("a new staff reader never flashes a previous reader's full email from a shared cache", async () => {

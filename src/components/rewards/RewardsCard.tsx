@@ -12,6 +12,7 @@ import { SEP } from "@/lib/separator";
 /** The card's standing and whether this browser can delete it. */
 export interface CardStanding {
   canDelete: boolean;
+  emailPending?: boolean;
   email?: string | null;
   face: CardFace;
   qr: QrGrid;

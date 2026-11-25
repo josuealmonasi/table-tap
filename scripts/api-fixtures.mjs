@@ -651,6 +651,8 @@ export async function setup(env, base) {
       cards: (cardsBefore ?? []).map(c => c.id),
     },
     paidOrder: await make({ paid: true }),
+    // A sale paid today with no card on it: what a waiter's stamp stands on.
+    stampSale: await make({ paid: true }),
     unpaidOrder: await make({ paid: false }),
     // A bill with a table: discounts and cancellations are asked for by table.
     tableOrder: await make({ paid: false, table_id: tables[0].id, table_label: tables[0].label }),

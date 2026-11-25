@@ -4,7 +4,7 @@ const schema = readFileSync("supabase/schema.sql", "utf8");
 const fn = (name: string) => schema.slice(schema.lastIndexOf(`create or replace function public.${name}(`)).split("$$;")[0];
 it("I3 calculates and inserts one exact receipt manifest under the settlement lock", () => {
   const sql = fn("record_terminal_deposit_v1");
-  expect(sql.indexOf("lock_restaurant_money")).toBeLessThan(sql.indexOf("with ledger"));
+  expect(sql.indexOf("lock_restaurant_money")).toBeLessThan(sql.indexOf("ledger as materialized"));
   expect(sql).toContain("array_agg(payment_id order by payment_id)");
   expect(sql).toContain("snapshot_at, payment_ids, return_ids, fee_pct");
   expect(sql).toContain("clock_timestamp(), v_payments, v_returns, v_fee");

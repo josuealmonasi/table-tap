@@ -42,6 +42,10 @@ describe("the text and the version cannot drift apart", () => {
       .digest("hex")
       .slice(0, 16);
 
+  // 2026-11-25.2, bumped from 2026-11-25: a guest's own change of the card's
+  // ticket email waits for confirmation from that inbox (pending address and a
+  // hashed code kept up to seven days), and staff changes are logged by name.
+  // New handling of an existing category, so every restaurant is asked again.
   // 2026-11-25, bumped from 2026-11-24: the owner can add up to five outside
   // addresses (an accountant, a partner) to the daily digest, each confirmed
   // from its own inbox. Third parties' emails are a new category of data, so
@@ -83,15 +87,15 @@ describe("the text and the version cannot drift apart", () => {
   // kept the version as a clarification.)
   it("has terms that match the version in force", () => {
     expect({ version: TERMS_VERSION, text: fingerprint("terms-es") }).toEqual({
-      version: "2026-11-25",
+      version: "2026-11-25.2",
       text: "8cce805f4850523f",
     });
   });
 
   it("has a privacy notice that matches the version in force", () => {
     expect({ version: TERMS_VERSION, text: fingerprint("privacy-es") }).toEqual({
-      version: "2026-11-25",
-      text: "a3f308696ce79569",
+      version: "2026-11-25.2",
+      text: "1b0ca1d02ff4689e",
     });
   });
 });

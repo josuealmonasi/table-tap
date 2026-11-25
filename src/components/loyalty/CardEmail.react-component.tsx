@@ -9,11 +9,12 @@ interface CardEmailProps {
   code: string;
   diner?: boolean;
   initialEmail?: string | null;
+  initialPending?: boolean;
   disabled?: boolean;
 }
 
 /** Key by code at the caller: consent from one diner must never follow the next card. */
-export default function CardEmail({ code, diner = false, initialEmail, disabled = false }: CardEmailProps) {
+export default function CardEmail({ code, diner = false, initialEmail, initialPending = false, disabled = false }: CardEmailProps) {
   const t = useT();
   const { data, error: readError, mutate, publish } = useCardEmail(diner ? null : code);
   const [ownEmail, setOwnEmail] = useState(initialEmail);
@@ -22,8 +23,9 @@ export default function CardEmail({ code, diner = false, initialEmail, disabled 
   const [consent, setConsent] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [submitted, setSubmitted] = useState(false);
+  const [submitted, setSubmitted] = useState(initialPending);
   const linked = diner ? ownEmail : data?.email;
+  const pending = diner ? submitted : data?.pending ?? submitted;
 
   async function save(remove = false): Promise<void> {
     if (busy || disabled || (!remove && (!email.trim() || !consent))) return;
@@ -36,16 +38,20 @@ export default function CardEmail({ code, diner = false, initialEmail, disabled 
       });
       const answer = await res.json();
       if (!res.ok) {
-        setError(t(res.status === 400 ? "cardEmail.invalid" : "cardEmail.failed"));
+        setError(t(res.status === 403 && diner ? "cardEmail.ownerRequired"
+          : res.status === 400 ? "cardEmail.invalid" : "cardEmail.failed"));
         return;
       }
-      // A successful answer belongs to this card, regardless of other cards.
       if (!["removed", "saved", "submitted"].includes(answer.outcome)) throw new Error("Missing save outcome");
-      const next = answer.outcome === "removed" ? null : answer.email;
-      if (next !== null && typeof next !== "string") throw new Error("Missing saved email");
       setSubmitted(answer.outcome === "submitted");
-      if (diner) setOwnEmail(next);
-      else await publish({ email: next });
+      if (answer.outcome === "submitted") {
+        if (!diner && data) await publish({ ...data, pending: true });
+      } else {
+        const next = answer.outcome === "removed" ? null : answer.email;
+        if (next !== null && typeof next !== "string") throw new Error("Missing saved email");
+        if (diner) setOwnEmail(next);
+        else await publish({ email: next, pending: false });
+      }
       setEditing(false); setEmail(""); setConsent(false);
     } catch { setError(t("cardEmail.failed")); }
     finally { setBusy(false); }
@@ -56,7 +62,7 @@ export default function CardEmail({ code, diner = false, initialEmail, disabled 
     {linked !== undefined ? <p style={{ overflowWrap: "anywhere" }}>{linked || t("cardEmail.none")}</p>
       // A failed read is said once, by the alert below (review screens5).
       : !readError && <p className="tt-muted">{t(diner ? "cardEmail.ownReadFailed" : "common.loading")}</p>}
-    {submitted && linked && <p className="tt-muted" role="status">{t("cardEmail.submittedDiner")}</p>}
+    {pending && <p className="tt-muted" role="status">{t("cardEmail.pending")}</p>}
     {readError && <p role="alert" className="tt-field-error">{t("cardEmail.readFailed")}</p>}
     {readError && <button type="button" className="tt-btn tt-btn-ghost tt-btn-sm" onClick={() => void mutate()}>{t("settle.retry")}</button>}
     {editing ? <>
@@ -65,7 +71,7 @@ export default function CardEmail({ code, diner = false, initialEmail, disabled 
         onClick={e => { if (e.currentTarget.parentElement?.querySelector("input")?.reportValidity()) void save(); }}>{t("cardEmail.save")}</button>
       <button type="button" className="tt-btn tt-btn-ghost tt-btn-sm" onClick={() => { setEditing(false); setEmail(""); setConsent(false); setError(null); }}>{t("common.cancel")}</button>
     </> : <button type="button" className="tt-btn tt-btn-ghost tt-btn-sm" onClick={() => { setEmail(""); setConsent(false); setEditing(true); }}>{t("cardEmail.edit")}</button>}
-    {linked && <button type="button" className="tt-btn tt-btn-ghost tt-btn-sm" onClick={() => void save(true)}>{t("cardEmail.remove")}</button>}
+    {(linked || pending) && <button type="button" className="tt-btn tt-btn-ghost tt-btn-sm" onClick={() => void save(true)}>{t("cardEmail.remove")}</button>}
     {error && <p className="tt-field-error" role="alert">{error}</p>}
   </fieldset>;
 }
