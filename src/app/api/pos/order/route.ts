@@ -1,4 +1,4 @@
-import { posSuspensionAnswer, queuedBeforeSuspension } from "@/lib/restaurant-suspension";
+import { RESTAURANT_CLOSING_CODE, posSuspensionAnswer, queuedBeforeSuspension } from "@/lib/restaurant-suspension";
 import { after } from "next/server";
 import { drainTicketEmails } from "@/lib/ticket-email";
 import { saleCard } from "@/lib/loyalty/sale-card";
@@ -115,10 +115,11 @@ export async function POST(req: NextRequest) {
   // restaurant, which is what makes that safe.
   const { data: restaurant } = await db
     .from("restaurants")
-    .select("id, name, currency, tax_pct, service_pct, service_enabled, timezone, low_stock_threshold, low_stock_alerts_enabled, suspended_at")
+    .select("id, name, currency, tax_pct, service_pct, service_enabled, timezone, low_stock_threshold, low_stock_alerts_enabled, suspended_at, closing_at")
     .eq("id", actor.restaurantId)
     .single();
   if (!restaurant) return await apiError("apiErr.forbidden", 403);
+  if (restaurant.closing_at) return await apiError("apiErr.restaurantClosing", 409, undefined, { held: body.collected !== undefined });
   // Suspended: no new sale; money already collected is kept (posSuspensionAnswer).
   const suspendedAnswer = await posSuspensionAnswer(restaurant.suspended_at,
     body.collected === undefined ? null : offlineCharge(body.collected)?.at ?? null,
@@ -216,6 +217,9 @@ export async function POST(req: NextRequest) {
         p_terminal: method === "card" ? terminalRef(body.terminalRef) : null,
       });
   // The transaction owns cleanup: a lost response may already have committed.
+  if (error?.code === RESTAURANT_CLOSING_CODE) {
+    return await apiError("apiErr.restaurantClosing", 409, undefined, { held: body.collected !== undefined });
+  }
   if (error || !ticket) return await apiError("apiErr.orderCreate", 503);
   if (ticket.outcome === "stock") {
     return NextResponse.json({ short: parseReserveResult(ticket).short, code: "outOfStock" }, { status: 409 });

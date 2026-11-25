@@ -28,10 +28,14 @@ export async function billingPages<T extends { id: string }>(
 // Read only after taking the billing lock. A second request must see the
 // customer the first saved, and a completed checkout before its webhook.
 // Recovery also reads customers directly: a crash may have lost their local ID.
-export async function restaurantBilling(db: ReturnType<typeof createAdminClient>, id: string, discover = false) {
+export async function restaurantBilling(
+  db: ReturnType<typeof createAdminClient>, id: string,
+  { discover = false, allowClosing = false } = {},
+) {
   const { data: restaurant, error } = await db.from("restaurants")
-    .select("name, stripe_customer_id, stripe_subscription_id").eq("id", id).maybeSingle();
+    .select("name, stripe_customer_id, stripe_subscription_id, closing_at").eq("id", id).maybeSingle();
   if (error) throw new Error(`Billing lookup failed: ${error.message}`);
+  if (restaurant?.closing_at && !allowClosing) throw new BillingError("apiErr.restaurantClosing");
   const { data: record, error: recordError } = await db.from("restaurant_billing_operations")
     .select("state").eq("restaurant_id", id).maybeSingle();
   if (recordError) throw new Error(`Billing record lookup failed: ${recordError.message}`);

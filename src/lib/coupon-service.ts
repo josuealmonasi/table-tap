@@ -34,6 +34,17 @@ export interface CouponRow {
   ends_at: string | null;
 }
 
+export interface CouponQuote extends Pick<CouponRow, "id" | "code" | "staff_only" | "kind" | "value" | "min_subtotal"> {
+  eligible_subtotal: number;
+}
+
+export const COUPON_CHANGED_SQLSTATE = "PT022";
+
+export function couponQuote(coupon: CouponRow, subtotal: number): CouponQuote {
+  const { id, code, staff_only, kind, value, min_subtotal } = coupon;
+  return { id, code, staff_only, kind, value, min_subtotal, eligible_subtotal: subtotal };
+}
+
 const COLUMNS =
   "id, code, kind, value, min_subtotal, max_uses, uses_count, active, starts_at, ends_at, staff_only";
 
@@ -112,15 +123,17 @@ export function toAppliedCoupon(coupon: CouponRow): AppliedCoupon {
 }
 
 /**
- * Claims one use, atomically. Returns false when the coupon ran out between
- * validation and payment — the DB function, not this check, is what makes the
- * limit correct under concurrency.
+ * Claims one use against the same terms that price the order. The database
+ * checks both the quote and the remaining uses under the coupon row lock.
  */
-export async function claimCoupon(couponId: string): Promise<boolean> {
+export async function claimCoupon(restaurantId: string, quote: CouponQuote): Promise<"claimed" | "changed" | "unavailable"> {
   const { data, error } = await createAdminClient().rpc("redeem_coupon", {
-    p_coupon_id: couponId,
+    p_coupon_id: quote.id,
+    p_restaurant: restaurantId,
+    p_quote: quote,
   });
-  return !error && typeof data === "number";
+  if (error?.code === COUPON_CHANGED_SQLSTATE) return "changed";
+  return !error && typeof data === "number" ? "claimed" : "unavailable";
 }
 
 /** Hands a claimed use back when the checkout it was reserved for fell through. */

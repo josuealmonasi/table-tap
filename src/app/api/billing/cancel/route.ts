@@ -33,9 +33,10 @@ export async function POST(req: Request): Promise<NextResponse> {
   const db = createAdminClient();
   try {
     return await withRestaurantBilling(db, actor.restaurantId, async operation => {
-      const { data, error } = await db.from("restaurants").select("stripe_subscription_id")
+      const { data, error } = await db.from("restaurants").select("stripe_subscription_id, closing_at")
         .eq("id", actor.restaurantId).single();
       if (error) throw new Error(`Billing lookup failed: ${error.message}`);
+      if (resume && data?.closing_at) throw new BillingError("apiErr.restaurantClosing");
       const subscriptionId = data?.stripe_subscription_id as string | null;
       if (!subscriptionId) throw new BillingError("apiErr.noBilling", 400);
       const sub = await operation.write(() => stripe.subscriptions.update(subscriptionId, {

@@ -8713,6 +8713,42 @@ charge read the 99-unit cap and the deal maths the raw quantity, so a 100-unit
 line was charged MX$990 and discounted MX$1,000; every step now reads one
 capped `lineQty`. Check: `promo-selection.spec.ts`, `item-quote.spec.ts`,
 `deal-callout.spec.tsx`.
+### Daily digest eligibility, retries and stop links (2026-11-25)
+
+A removed manager or stopped outside address could remain in a queued batch.
+The worker now checks membership, opt-in and confirmation again before every
+send. With 101 addresses, an accepted first batch used to hide the refused
+last address. Delivery state now follows each batch and report date, so the
+worker can retry that address after midnight. An uncertain submission keeps
+its claim. Staff and outside subscriptions to the same normalized mailbox
+share one copy and one restaurant-scoped stop. Opting in renews the staff link
+version, and equivalent UUID spellings share one recipient resend quota.
+Check: `daily-digest.spec.ts`, `digest-schema.spec.ts`,
+`digest-stop.react-component.spec.tsx`, and `digest-resend.spec.ts`.
+### Restaurant deletion raced transfers, collectible bills, and refunds (2026-11-25)
+
+The old route cached staff logins before deletion, skipped completed unpaid
+orders outside customer accounts, and could cancel Stripe while the restaurant
+was still taking orders. The locked deletion now refuses collectible bills and
+records the final staff list with the archive. Auth cleanup locks those users
+and rechecks their current ownership and memberships. The first locked check
+commits Closing before Stripe cancellation. New orders and subscriptions are
+refused, and staff can still settle existing obligations. A later refund hold
+keeps the restaurant in Closing and visible to the admin. Check:
+`admin-safety-schema.spec.ts`, `billing-delete.spec.ts`,
+`restaurant-delete-refund-window.spec.ts`, and `admin-billing-summary.spec.ts`.
+### Coupon claims could use old terms or spend past the cutoff (2026-11-25)
+
+A diner could price MX$100 of food with a public 50% coupon, then spend it
+after a manager changed it to a staff-only 10% coupon. Immediate checkout,
+pay-later checkout and bill payment now compare the priced audience, kind,
+value and minimum against the locked coupon, using the food subtotal before
+the coupon. If the terms changed, the diner is asked to review the cart or bill.
+The same lock makes a claim use the clock after waiting, so a coupon ending
+at noon cannot be spent if the lock is acquired at or after noon. Authenticated
+coupon writes can set terms while the database owns `uses_count`.
+Checks: `coupon-claim.react-component.spec.tsx`, checkout `route.spec.ts`,
+and `diner-attempt.spec.ts`.
 ### Admin console: open checkouts, suspension lifts and note audits (2026-11-25)
 
 Three pairs that had to agree (review bl26, findings 5, 6 and 8). First, an

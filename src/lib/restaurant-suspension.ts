@@ -1,6 +1,8 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { apiError } from "@/lib/api-error";
 
+export const RESTAURANT_CLOSING_CODE = "PT423";
+
 /**
  * A suspended restaurant (a platform admin's decision: non-payment, abuse, an
  * owner's request) starts no new sales. One answer everywhere a sale starts,
@@ -44,6 +46,6 @@ export async function queuedBeforeSuspension(
  * checkout answers. Both menu loaders (cached in production, direct on dev)
  * go through this, so they cannot disagree.
  */
-export function asDinerSees<T extends { accepting_orders: boolean }>(restaurant: T, suspendedAt: unknown): T {
-  return suspendedAt ? { ...restaurant, accepting_orders: false } : restaurant;
+export function asDinerSees<T extends { accepting_orders: boolean }>(restaurant: T, salesPausedAt: unknown): T {
+  return salesPausedAt ? { ...restaurant, accepting_orders: false } : restaurant;
 }

@@ -57,11 +57,26 @@ runs:
     - name: Start a throwaway Supabase
       shell: bash
       run: |
+        # Waiting never freed the port (#746, #747, #751 on 2026-11-25 failed all
+        # three tries), so each retry also moves the whole stack to a free
+        # range. Nothing hard-codes these ports: the next step reads the real
+        # ones from `supabase status`.
+        busy() { ss -ltn | awk '{print $4}' | grep -qE "[:.]($1)$"; }
         for attempt in 1 2 3; do
+          bases=(54320 55320 56320 57320 58320)
+          # A failed try skips the range it used, even if it looks free now.
+          for base in "${bases[@]:$((attempt-1))}"; do
+            busy "$((base+0))|$((base+1))|$((base+2))" || break
+          done
+          if [ "$base" != 54320 ]; then
+            echo "::warning::ports 5432x are taken on this runner; using $((base+1))-$((base+2))"
+            sed -i -E "s/^port = 54321$/port = $((base+1))/; s/^port = 54322$/port = $((base+2))/; s/^shadow_port = 54320$/shadow_port = $base/" ci/supabase/config.toml
+          fi
           supabase start --workdir ci -x studio,imgproxy,edge-runtime,logflare,vector,supavisor,postgres-meta,mailpit && exit 0
           echo "::warning::supabase start failed (attempt $attempt); stopping and retrying"
           supabase stop --no-backup --workdir ci || true
-          sleep $((attempt * 15))
+          git checkout -- ci/supabase/config.toml
+          sleep $((attempt * 10))
         done
         exit 1
 
