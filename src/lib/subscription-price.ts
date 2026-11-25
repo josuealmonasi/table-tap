@@ -3,11 +3,15 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { readPlanName } from "@/lib/billing";
 import type { PlanName } from "@/lib/plan";
 
+export class UnmappedSubscriptionPriceError extends Error {}
+
 /** The actual Price grants the tier; old subscription metadata can be stale. */
 export async function subscriptionPlan(
   sub: Stripe.Subscription, database?: ReturnType<typeof createAdminClient>,
 ): Promise<PlanName> {
-  if (sub.items.data.length !== 1) throw new Error(`Subscription ${sub.id} needs one mapped Price`);
+  if (sub.items.data.length !== 1) {
+    throw new UnmappedSubscriptionPriceError(`Subscription ${sub.id} needs one mapped Price`);
+  }
   const price = sub.items.data[0].price.id;
   const db = database ?? createAdminClient();
   const { data: registered, error } = await db.from("restaurant_subscription_prices")
@@ -21,7 +25,7 @@ export async function subscriptionPlan(
     if (error) throw new Error(`Catalogue Price lookup failed: ${error.message}`);
     plan = readPlanName(data?.plan);
   }
-  if (!plan) throw new Error(`Unmapped subscription Price ${price}`);
+  if (!plan) throw new UnmappedSubscriptionPriceError(`Unmapped subscription Price ${price}`);
   if (sub.metadata.plan !== plan) {
     // Portal or operator Price changes do not rewrite subscription metadata.
     console.warn("Subscription metadata differs from its Price", sub.id, sub.metadata.plan, plan);
