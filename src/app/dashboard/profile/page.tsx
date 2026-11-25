@@ -2,7 +2,8 @@ import { unwrap } from "@/lib/ordering-data";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import ProfileForm from "@/components/dashboard/profile/ProfileForm";
-import { currentUser } from "@/lib/current-user";
+import { getMember, MANAGES } from "@/lib/membership";
+import { digestEnabled } from "@/lib/digest-preference";
 
 export const dynamic = "force-dynamic";
 
@@ -10,7 +11,7 @@ export const dynamic = "force-dynamic";
 // their own name, email and password here.
 export default async function ProfilePage() {
   const supabase = await createClient();
-  const user = await currentUser();
+  const { user, membership } = await getMember();
   if (!user) redirect("/login");
 
   // No row is an answer (a login with no name yet); a failed read is not.
@@ -28,6 +29,7 @@ export default async function ProfilePage() {
       userId={user.id}
       initialName={profile?.full_name ?? ""}
       initialEmail={user.email ?? ""}
+      initialDigest={membership && MANAGES(membership.role) ? digestEnabled(membership.role, user.user_metadata.digest) : null}
     />
   );
 }

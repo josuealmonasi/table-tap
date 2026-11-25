@@ -6,11 +6,11 @@ import { getLocale } from "@/lib/i18n/server";
 import { dateLocale } from "@/lib/format";
 import { requireManager } from "@/lib/page-guard";
 import { ConfirmProvider } from "@/components/ui/ConfirmDialog";
+import { readAnalyticsOrders, readCortePayments } from "@/lib/analytics-read";
 import {
   computeAnalytics,
   normalisePeriod,
   periodRange,
-  type AnalyticsOrder,
 } from "@/lib/analytics";
 import AnalyticsView, { type RatedDish } from "@/components/dashboard/analytics/AnalyticsView";
 import { saleReturnSummary } from "@/lib/refunds/reporting";
@@ -24,7 +24,7 @@ import { readLoyaltyStats } from "@/lib/loyalty/analytics-read";
 import { DEFAULT_TIME_ZONE } from "@/lib/open-menus";
 import { startOfLocalDay, startOfNextLocalDay } from "@/lib/day-window";
 import { otherCurrencyTakings } from "@/lib/other-currency-takings";
-import { corteFrom, type CortePayment } from "@/lib/corte";
+import { corteFrom } from "@/lib/corte";
 import { corteLogs, type CorteLog } from "@/lib/corte-log";
 import { todaysShiftViews } from "@/lib/cash-shift-server";
 import { readTerminalReport } from "@/lib/terminal-report";
@@ -58,15 +58,7 @@ export default async function AnalyticsPage({
   // Every row of the period: one read stops at the server's row cap without
   // saying so, and a month of a busy café read at once is its first thousand
   // orders. A failed page throws to the error screen, like any failed read.
-  const rows = await everyRow<AnalyticsOrder & { id: string; currency: string }>((a, b) => supabase
-    .from("orders")
-    .select("id, currency, total, service_fee, tip, created_at, items")
-    .eq("restaurant_id", membership.restaurant.id).eq("currency", membership.restaurant.currency)
-    .eq("paid", true)
-    .neq("status", "cancelled")
-    .gte("created_at", start.toISOString())
-    .lt("created_at", end.toISOString())
-    .order("id").range(a, b), "the period's sales");
+  const rows = await readAnalyticsOrders(supabase, membership.restaurant.id, membership.restaurant.currency, start.toISOString(), end.toISOString());
 
   const returnSummary = await saleReturnSummary(createAdminClient(), membership.restaurant.id, membership.restaurant.currency, start.toISOString(), end.toISOString());
   const locale = await getLocale();
@@ -88,12 +80,7 @@ export default async function AnalyticsPage({
   const since = dayStart.toISOString();
 
   const [paidRows, givenUp, owedRows, returns, chargedRows, otherCurrencies, discounted] = await Promise.all([
-    everyRow<CortePayment>((a, b) => admin
-      .from("payments")
-      .select("actor_email, amount, method")
-      .eq("restaurant_id", membership.restaurant.id).eq("currency", membership.restaurant.currency)
-      .gte("created_at", since)
-      .order("id").range(a, b), "today's takings"),
+    readCortePayments(admin, membership.restaurant.id, membership.restaurant.currency, since),
     everyRow<CorteLog>((a, b) => admin
       .from("user_logs")
       .select("entity, action, detail")

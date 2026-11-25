@@ -1,14 +1,16 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import { useProfile } from "@/hooks/useProfile";
 import { useT } from "@/lib/i18n/context";
 import Breadcrumb from "@/components/layout/Breadcrumb";
+import SettingsToggle from "@/components/dashboard/settings/SettingsToggle";
 
 interface ProfileFormProps {
   userId: string;
   initialName: string;
   initialEmail: string;
+  initialDigest: boolean | null;
 }
 
 /** The user's own profile: name, login email, and a password change. */
@@ -16,14 +18,20 @@ export default function ProfileForm({
   userId,
   initialName,
   initialEmail,
+  initialDigest,
 }: ProfileFormProps) {
   const t = useT();
-  const { saving, saveName, saveEmail, savePassword } = useProfile(userId);
+  const { saving, saveName, saveEmail, savePassword, saveDigest } = useProfile(userId);
+  const [digest, setDigest] = useState(initialDigest);
   const [name, setName] = useState(initialName);
   const [email, setEmail] = useState(initialEmail);
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
   const [mismatch, setMismatch] = useState(false);
+
+  const handleDigest = useCallback(async (next: boolean): Promise<void> => {
+    if (await saveDigest(next)) setDigest(next);
+  }, [saveDigest]);
 
   async function handleDetails(e: React.FormEvent): Promise<void> {
     e.preventDefault();
@@ -147,6 +155,11 @@ export default function ProfileForm({
             </div>
           </form>
         </div>
+
+        {digest !== null && <div className="tt-section" style={{ maxWidth: 520 }}>
+          <SettingsToggle title={t("digest.preference")} hint={t("digest.preferenceHint")}
+            checked={digest} onChange={handleDigest} disabled={saving} />
+        </div>}
       </div>
     </div>
   );

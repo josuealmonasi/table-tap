@@ -53,6 +53,8 @@ export function loyaltyCases(fx) {
       path: `/api/loyalty/card-email?code=${fx.stampableCode ?? ""}`, expect: [403] },
     { name: "POST /api/tickets/stop (a token that is not one)", as: "diner", method: "POST", path: "/api/tickets/stop",
       body: { token: "nope" }, expect: [400] },
+    { name: "POST /api/digest/opt-out (requires a signed link)", as: "diner", method: "POST", path: "/api/digest/opt-out?t=nope",
+      expect: [400] },
     { name: "POST /api/tickets/stop (no card has that link)", as: "diner", method: "POST", path: "/api/tickets/stop",
       body: { token: "00000000-0000-4000-8000-000000000000" }, expect: [404] },
     { name: "POST /api/loyalty/card-email (waiter removes it)", as: "waiter", method: "POST", path: "/api/loyalty/card-email",
