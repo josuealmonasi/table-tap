@@ -624,7 +624,7 @@ try {
         price: Number(dish.price), qty: 1, mods: {},
       };
       const shots = await Promise.all([...Array(6)].map(() =>
-        post("/api/table-order", { tableId: spare.id, items: [line] }, who.waiter)));
+        post("/api/table-order", { tableId: spare.id, items: [line], ref: crypto.randomUUID() }, who.waiter)));
 
       const { data: after } = await admin.from("menu_items")
         .select("stock, available").eq("id", dish.id).single();

@@ -1,6 +1,7 @@
 import { createServerClient, type CookieOptions } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import { contentSecurityPolicy, loopbackDatabase } from "@/lib/csp";
+import { authConfirmRedirect } from "@/lib/auth-confirm-redirect";
 
 type CookiesToSet = { name: string; value: string; options: CookieOptions }[];
 
@@ -14,6 +15,17 @@ type CookiesToSet = { name: string; value: string; options: CookieOptions }[];
  * setting it on the response is what makes the browser enforce it.
  */
 export async function middleware(request: NextRequest) {
+  if (request.method === "GET" && request.nextUrl.pathname === "/auth/confirm") {
+    const url = new URL(request.url);
+    const tokenHash = url.searchParams.get("token_hash");
+    if (tokenHash !== null) {
+      const type = url.searchParams.get("type");
+      url.searchParams.delete("token_hash");
+      url.searchParams.delete("type");
+      return authConfirmRedirect(url, tokenHash, type, 302);
+    }
+  }
+
   const nonce = btoa(crypto.randomUUID());
   const csp = contentSecurityPolicy(
     nonce,

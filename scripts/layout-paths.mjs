@@ -101,7 +101,7 @@ export const PUBLIC = [
   // Where the auth emails land: one button that posts the token. Opening it
   // spends nothing, so a made-up token shows the real screen.
   "/auth/confirm",
-  "/auth/confirm?token_hash=layout-preview-token&type=email",
+  "/auth/confirm?next=/signup/complete#token_hash=layout-preview-token&type=email",
 ];
 
 /**

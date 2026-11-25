@@ -50,16 +50,19 @@ export function billAmounts(
   const food = scope === "mine" ? bill.mine.total : bill.total;
   const applied = scope === "mine" ? bill.mine.discount : bill.discount;
   const priorTip = scope === "mine" ? bill.mine.tip : bill.tip;
-  const couponOff = coupon ? applyCoupon(coupon, Math.max(0, round2(food - priorTip))) : 0;
+  const service = scope === "mine" ? bill.mine.service : bill.service;
+  const dishes = round2(food - service - priorTip);
+  // A coupon's minimum and its discount are judged on the dishes alone, as the
+  // cart judges them: service never helps reach a minimum (security sweep
+  // 2026-11-24). The pay route uses the same base.
+  const couponOff = coupon ? applyCoupon(coupon, Math.max(0, dishes)) : 0;
   const discount = round2(applied + couponOff);
   const base = round2(food - couponOff);
   const paying = scope === "mine" ? bill.mine.orders : [...bill.mine.orders, ...bill.others.orders];
   const tipBase = ordersTipBase(paying, couponOff);
   const { tip } = applyPayment(base, base, tipCustom ?? tipFromPercent(tipBase, tipPct));
   const total = round2(base + tip);
-  const service = scope === "mine" ? bill.mine.service : bill.service;
   const rates = new Set(paying.map(o => Number(o.tax_pct) || 0));
-  const dishes = round2(food - service - priorTip);
   return {
     food,
     ...((scope === "mine" ? bill.mine.collected : (bill.mine.collected ?? 0) + (bill.others.collected ?? 0)) ? { collected: scope === "mine" ? bill.mine.collected : (bill.mine.collected ?? 0) + (bill.others.collected ?? 0) } : {}),

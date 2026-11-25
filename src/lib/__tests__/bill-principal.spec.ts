@@ -1,4 +1,5 @@
 import { expect, it } from "vitest";
+import fs from "node:fs";
 import { billEntitlements, remainingPrincipal } from "@/lib/bill-principal";
 import { billAmounts } from "@/lib/bill-amounts";
 import { tableBill } from "@/lib/table-bill";
@@ -34,4 +35,16 @@ it("E4 coupon preview and the server freeze agree when the bill already has tips
 });
 it("never creates a negative food entitlement to hide an excessive discount", () => {
   expect(() => billEntitlements([{ id: "a", total: 8, tip: 4 }], 5)).toThrow("exceeds");
+});
+it("a coupon is judged and applied on the dishes alone, on the screen and in the pay route (security sweep 2026-11-24)", () => {
+  // MX$90 of dishes + MX$15 service: a MX$100-minimum coupon must not apply,
+  // and a 10% coupon takes MX$9 (of the dishes), not MX$10.50.
+  const orders = [{ id: "a", total: 105, service_fee: 15, tip: 0, items: [], paid: false, status: "received" }] as unknown as Order[];
+  const shown = billAmounts(tableBill(orders, []), "all", { code: "TEN", kind: "percent", value: 10, minSubtotal: 0 }, 0, null);
+  expect(shown.dishes).toBe(90);
+  expect(shown.couponOff).toBe(9);
+  const route = fs.readFileSync("src/app/api/bill/pay/route.ts", "utf8");
+  expect(route).toContain("couponProblem(coupon, dishes)");
+  expect(route).toContain("applyCoupon(toAppliedCoupon(coupon), dishes)");
+  expect(fs.readFileSync("src/components/customer/BillSheet.tsx", "utf8")).toContain("food={Math.max(0, amounts.dishes)}");
 });

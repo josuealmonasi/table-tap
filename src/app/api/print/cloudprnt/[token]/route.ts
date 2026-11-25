@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { printerForToken } from "@/lib/cloudprnt-printer";
-import { clientKey, isRateLimited } from "@/lib/rate-limit";
+import { isRateLimited } from "@/lib/rate-limit";
 import { kitchenTicket } from "@/lib/ticket";
 import { DEFAULT_LOCALE, messagesFor, translate } from "@/lib/i18n";
 
@@ -34,14 +34,18 @@ export const dynamic = "force-dynamic";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-async function printerFor(req: NextRequest, token: string) {
+async function printerFor(token: string) {
   if (!token || token.length < 32 || token.length > 128) return null;
-  // Bucketed by CALLER, not by token. Keying the limit on the token would give
-  // somebody guessing a fresh bucket with every guess, which is no limit at
-  // all. A real printer polls from one address every few seconds; 120 a minute
-  // is generous for that and useless for a search.
-  if (await isRateLimited(`cloudprnt:${clientKey(req)}`, 120, 60)) return null;
-  return printerForToken(token);
+  // Verified first, then counted. One shared per-address bucket let anybody on
+  // the restaurant's network (the same public IP) use up the printer's
+  // allowance and delay kitchen tickets (security sweep 2026-11-24). A known
+  // printer now counts against its own restaurant: 120 a minute is generous
+  // for a poll every few seconds. A wrong token gets nothing either way; the
+  // lookup it costs is one indexed equality on a 32+ character random token
+  // (unguessable), behind the firewall's per-address cap.
+  const printer = await printerForToken(token);
+  if (!printer) return null;
+  return (await isRateLimited(`cloudprnt:printer:${printer.restaurantId}`, 120, 60)) ? null : printer;
 }
 
 /** The oldest ticket this restaurant has not printed yet. */
@@ -81,7 +85,7 @@ const IDLE = { jobReady: false, mediaTypes: ["text/plain"], deleteMethod: "DELET
 // POST — the printer's heartbeat, every few seconds. Answering `jobReady` is
 // what makes it come back with a GET.
 export async function POST(req: NextRequest, ctx: { params: Promise<{ token: string }> }) {
-  const printer = await printerFor(req, (await ctx.params).token);
+  const printer = await printerFor((await ctx.params).token);
   if (!printer) return NextResponse.json(IDLE);
 
   const job = await pendingJob(printer.restaurantId);
@@ -94,7 +98,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ token: str
 // has no side effects, so a printer that jams and asks again gets the same
 // paper rather than the next order's.
 export async function GET(req: NextRequest, ctx: { params: Promise<{ token: string }> }) {
-  const printer = await printerFor(req, (await ctx.params).token);
+  const printer = await printerFor((await ctx.params).token);
   if (!printer) return new NextResponse(null, { status: 404 });
 
   const delivery = req.nextUrl.searchParams.get("token");
@@ -161,7 +165,7 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ token: stri
 
 // DELETE — it came out of the printer. Only then is the job closed.
 export async function DELETE(req: NextRequest, ctx: { params: Promise<{ token: string }> }) {
-  const printer = await printerFor(req, (await ctx.params).token);
+  const printer = await printerFor((await ctx.params).token);
   if (!printer) return new NextResponse(null, { status: 404 });
 
   // Close the job the printer was actually handed. The protocol echoes the
