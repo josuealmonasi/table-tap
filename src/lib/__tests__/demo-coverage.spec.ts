@@ -64,6 +64,8 @@ const NOT_DEMO_DATA = new Set([
   "fee_returns", // our fee given back through Stripe; only a real refund creates one
   "fee_reconcile_queue", // charges a Stripe refund event asks to reconcile
   "refund_due_coverage", // the refunds that paid a duplicate charge back; only a real refund
+  "refund_due_reviews", // a due stopped mid-send with nothing refundable; only a real Stripe race writes one
+  "unmatched_refund_notices", // a refund that beat its checkout's webhook; settlement consumes it
   "ticket_email_outbox", // filled by the trigger on paid orders; a seeded row would email a demo address
   "cash_withdrawal_retired_refs", // retry bookkeeping a manager's removal writes; nothing to show on a screen
 ]);

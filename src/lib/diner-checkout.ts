@@ -3,6 +3,7 @@ import { dinerCheckoutOrders } from "@/lib/diner-checkout-orders";
 import type Stripe from "stripe";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isDinerCurrency } from "@/lib/diner-currency";
+import { adoptSettledIntent } from "@/lib/settled-intent";
 
 export interface DinerCheckoutRecord {
   stripe_session_id: string;
@@ -104,6 +105,8 @@ export async function verifyDinerCheckout(session: Stripe.Checkout.Session, cont
     const { error: intentError } = await createAdminClient().from("diner_checkouts")
       .update({ stripe_payment_intent: intent }).eq("stripe_session_id", session.id);
     if (intentError) throw new Error(`Could not bind the checkout payment: ${intentError.message}`);
+    // The intent is ours now: refunds and disputes that beat it here are adopted.
+    await adoptSettledIntent(record, intent);
   }
   verified.set(session, record);
 }

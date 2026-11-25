@@ -33,14 +33,26 @@ it.each(["unknown", "pending", "succeeded"] as const)("resumes its own %s attemp
 
   const answer = await refundDue(resumeDb, "r1", "d1", "manager", client);
 
+  if (status === "unknown") {
+    // Never sent, and decided before anyone recorded the charge: the MX$40
+    // made by hand since then is counted and only the MX$60 left is sent
+    // (bl43 finding 1). Sending the frozen MX$100 returned MX$140.
+    expect(answer).toMatchObject({ ok: true });
+    expect(rpc.mock.calls.map(([name]) => name)).toEqual([
+      "record_refund_due_coverage_v1", "start_refund_due_attempt_v3", "reconcile_refund_due_send_v1", "finish_refund_due_attempt_v2",
+    ]);
+    expect(ledger.attempts.get("d1")).toMatchObject({ attempt_no: 2, amount: 60, idempotency_key: "refund-due-d1-2" });
+    expect(ledger.coverage.get("d1")?.get("re_manual")).toEqual({ amount_cents: 4000, active: true });
+    expect(calls.create).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ amount: 6000 }),
+      expect.objectContaining({ idempotencyKey: "refund-due-d1-2", stripeAccount: "acct_1" }));
+    return;
+  }
   expect(answer).toMatchObject(status === "pending" ? { ok: false, error: "apiErr.refundPending" } : { ok: true, amount: 100 });
   expect(rpc.mock.calls.map(([name]) => name)).toEqual([
-    "record_refund_due_coverage_v1", "start_refund_due_attempt_v2", "finish_refund_due_attempt_v2",
+    "record_refund_due_coverage_v1", "start_refund_due_attempt_v3", "finish_refund_due_attempt_v2",
   ]);
   expect(ledger.attempts.get("d1")).toMatchObject({ id: saved.id, amount: saved.amount, idempotency_key: saved.idempotency_key, attempt_no: 1 });
   expect(ledger.coverage.get("d1")?.has("re_manual")).toBe(false);
-  expect(calls.create).toHaveBeenCalledTimes(status === "unknown" ? 1 : 0);
-  if (status === "unknown") expect(calls.create).toHaveBeenCalledWith(expect.objectContaining({ amount: 10000 }),
-    expect.objectContaining({ idempotencyKey: saved.idempotency_key, stripeAccount: "acct_1" }));
-  else expect(calls.retrieve).toHaveBeenCalledWith("re_app", { stripeAccount: "acct_1" });
+  expect(calls.create).not.toHaveBeenCalled();
+  expect(calls.retrieve).toHaveBeenCalledWith("re_app", { stripeAccount: "acct_1" });
 });
