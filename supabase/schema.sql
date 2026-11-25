@@ -1006,36 +1006,62 @@ create policy "team manages coupons"
   using (has_role(restaurant_id, array['manager']))
   with check (has_role(restaurant_id, array['manager']));
 
+-- Row policies restrict the restaurant. Column grants keep the redemption
+-- counter out of direct authenticated writes, including inserts and upserts.
+revoke insert, update on coupons from public, authenticated;
+grant insert (restaurant_id, code, kind, value, min_subtotal, max_uses, active, starts_at, ends_at, staff_only),
+      update (kind, value, min_subtotal, max_uses, active, starts_at, ends_at, staff_only)
+  on coupons to authenticated;
+
 -- Redemptions are written server-side only (secret key), so read-only here.
 drop policy if exists "team reads coupon redemptions" on coupon_redemptions;
 create policy "team reads coupon redemptions"
   on coupon_redemptions for select
   using (has_role(restaurant_id, array['manager']));
 
--- Claim one use of a coupon, atomically. The eligibility test lives in the
--- UPDATE's WHERE clause so Postgres row-locking serialises concurrent callers —
--- two customers racing for the last use cannot both win. Returns the new count,
--- or NULL when the coupon didn't qualify (limit reached, inactive, or expired).
--- Same hardening as rate_limit_hit: SECURITY DEFINER with a pinned search_path,
--- and executable only by the secret key.
-create or replace function public.redeem_coupon(p_coupon_id uuid)
+-- Lock before checking the quoted terms, schedule, and remaining uses. A
+-- waiting claim sees the committed edits and the time it actually got the row.
+-- A restaurant-scoped claim is for diners. A null quote supports deployed bill
+-- callers, which pass the coupon id without its priced terms.
+create or replace function public.redeem_coupon(p_coupon_id uuid, p_restaurant uuid, p_quote jsonb)
 returns int
 language plpgsql
 security definer
 set search_path = public
 as $$
 declare
+  v_coupon coupons;
+  v_now timestamptz;
   v_uses int;
 begin
-  update coupons set uses_count = uses_count + 1
-   where id = p_coupon_id
-     and active
-     and (max_uses is null or uses_count < max_uses)
-     and (starts_at is null or starts_at <= now())
-     and (ends_at   is null or ends_at   >  now())
-  returning uses_count into v_uses;
+  select * into v_coupon from coupons
+    where id = p_coupon_id and (p_restaurant is null or restaurant_id = p_restaurant)
+    for update;
+  if not found then return null; end if;
+  if p_quote is not null and (
+      (v_coupon.staff_only, v_coupon.kind, v_coupon.value, v_coupon.min_subtotal, v_coupon.code) is distinct from
+      ((p_quote->>'staff_only')::boolean, p_quote->>'kind', (p_quote->>'value')::numeric,
+       (p_quote->>'min_subtotal')::numeric, p_quote->>'code')
+      or (v_coupon.min_subtotal <= (p_quote->>'eligible_subtotal')::numeric) is not true
+    ) then raise exception using errcode = 'PT022', message = 'checkout_coupon_changed'; end if;
+  if p_restaurant is not null and v_coupon.staff_only then return null; end if;
+
+  v_now := clock_timestamp();
+  if not v_coupon.active or v_coupon.uses_count >= v_coupon.max_uses
+    or v_coupon.starts_at > v_now or v_coupon.ends_at <= v_now then return null; end if;
+
+  update coupons set uses_count = uses_count + 1 where id = v_coupon.id returning uses_count into v_uses;
   return v_uses;
 end;
+$$;
+revoke all on function public.redeem_coupon(uuid, uuid, jsonb) from public, anon, authenticated;
+grant execute on function public.redeem_coupon(uuid, uuid, jsonb) to service_role;
+
+-- Keep the deployed signature for claims without a diner quote, including
+-- staff discounts. They still use the same locked schedule and counter checks.
+create or replace function public.redeem_coupon(p_coupon_id uuid)
+returns int language sql security definer set search_path = public as $$
+  select public.redeem_coupon(p_coupon_id, null, null);
 $$;
 revoke all on function public.redeem_coupon(uuid) from public, anon, authenticated;
 grant execute on function public.redeem_coupon(uuid) to service_role;
@@ -10304,9 +10330,12 @@ begin
   end if;
   if v_coupon is not null then
     if exists (select 1 from orders where id = any(v_new.payable_order_ids)
-      and (coupon_code is not null or public.retained_order_coverage(v_new.restaurant_id, id) > 0))
-      or not exists (select 1 from coupons where id = v_coupon and restaurant_id = v_new.restaurant_id and not staff_only)
-      or public.redeem_coupon(v_coupon) is null then raise exception 'checkout_coupon_unavailable'; end if;
+      and (coupon_code is not null or public.retained_order_coverage(v_new.restaurant_id, id) > 0)) then
+      raise exception 'checkout_coupon_unavailable';
+    end if;
+    if public.redeem_coupon(v_coupon, v_new.restaurant_id, p_record->'coupon_quote') is null then
+      raise exception 'checkout_coupon_unavailable';
+    end if;
   end if;
   insert into diner_checkouts (id, restaurant_id, stripe_account_id, livemode, currency, amount_cents,
     metadata, order_ids, payable_order_ids, scope_key, idempotency_key, stripe_params, entitlements, order_discounts, food_principal, payer_member_id)
@@ -12293,7 +12322,7 @@ create or replace function public.create_order_intent(
   p_restaurant uuid, p_ref uuid, p_scope text, p_order jsonb, p_demand jsonb,
   p_inventory boolean, p_threshold int, p_coupon jsonb
 ) returns jsonb language plpgsql security definer set search_path = public as $$
-declare v_result jsonb; v_stock jsonb; v_reservation uuid; v_id uuid; v_coupon coupons;
+declare v_result jsonb; v_stock jsonb; v_reservation uuid; v_id uuid; v_coupon uuid;
 begin
   perform public.lock_restaurant_money(p_restaurant);
   perform pg_advisory_xact_lock(hashtextextended(p_restaurant::text || p_ref::text, 20));
@@ -12313,13 +12342,12 @@ begin
       if not (v_stock->>'ok')::boolean then return v_stock; end if;
     end if;
     if p_coupon is not null then
-      select * into v_coupon from coupons where id = (p_coupon->>'id')::uuid and restaurant_id = p_restaurant for update;
-      -- Judged on the subtotal before the coupon, as the route judged it.
-      if not found or v_coupon.staff_only
-        or v_coupon.min_subtotal > coalesce((p_coupon->>'eligible_subtotal')::numeric, (p_order->>'subtotal')::numeric)
-        or (v_coupon.kind, v_coupon.value, v_coupon.code) is distinct from
-           (p_coupon->>'kind', (p_coupon->>'value')::numeric, p_coupon->>'code')
-        or public.redeem_coupon(v_coupon.id) is null then
+      v_coupon := (p_coupon->>'id')::uuid;
+      -- The route prices the subtotal before the coupon. Keep the fallback
+      -- for callers deployed before eligible_subtotal was sent separately.
+      if public.redeem_coupon(v_coupon, p_restaurant, p_coupon || jsonb_build_object(
+        'eligible_subtotal', coalesce((p_coupon->>'eligible_subtotal')::numeric, (p_order->>'subtotal')::numeric)
+      )) is null then
         raise exception using errcode = 'PT020', message = 'coupon unavailable';
       end if;
     end if;
@@ -12341,9 +12369,11 @@ begin
       insert into coupon_redemptions(restaurant_id, coupon_id, order_id, code, amount, confirmed_at)
       -- promo_detail is null when the cart's discount is 0, and the amount is
       -- required: recorded as 0, as logCheckoutCoupon records it.
-      values(p_restaurant, v_coupon.id, v_id, v_coupon.code, coalesce((p_order->'promo_detail'->>'coupon')::numeric, 0), clock_timestamp());
+      values(p_restaurant, v_coupon, v_id, p_coupon->>'code', coalesce((p_order->'promo_detail'->>'coupon')::numeric, 0), clock_timestamp());
     end if;
   exception when sqlstate 'PT020' then return '{"couponReason":"limitReached"}'::jsonb;
+    -- Older checkout routes still read couponReason before the new app ships.
+    when sqlstate 'PT022' then return '{"couponReason":"limitReached","couponChanged":true}'::jsonb;
     when sqlstate 'PT021' then return public.order_intent_result(p_restaurant, p_ref, p_scope);
   end;
   return (public.order_intent_result(p_restaurant, p_ref, p_scope) - 'repeat') || jsonb_build_object('low', coalesce(v_stock->'low', '[]'::jsonb));
