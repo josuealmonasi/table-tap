@@ -18,12 +18,17 @@ async function suspend(_req: NextRequest, { body }: AdminAuditContext) {
   return answer.ok ? NextResponse.json({ ok: true }) : await apiError(answer.error, answer.status);
 }
 
-// DELETE /api/admin/restaurants/suspend { id } — lifts it.
+// DELETE /api/admin/restaurants/suspend { id, suspendedAt? } — lifts the
+// suspension the admin saw (suspendedAt); a newer one answers 409.
 async function lift(_req: NextRequest, { body }: AdminAuditContext) {
   const admin = await getPlatformAdmin();
   if (!admin) return await apiError("apiErr.forbidden", 403);
   if (!body || typeof body.id !== "string") return await apiError("apiErr.invalidRequest", 400);
-  const answer = await setSuspension(createAdminClient(), body.id, null, admin.email);
+  const seen = body.suspendedAt;
+  if (seen !== undefined && (typeof seen !== "string" || !Number.isFinite(Date.parse(seen)))) {
+    return await apiError("apiErr.invalidRequest", 400);
+  }
+  const answer = await setSuspension(createAdminClient(), body.id, null, admin.email, seen);
   return answer.ok ? NextResponse.json({ ok: true }) : await apiError(answer.error, answer.status);
 }
 

@@ -194,3 +194,31 @@ it("activates a new tier when Stripe grants a trial", async () => {
   expect(patches[0]).toMatchObject({ plan: "casa", plan_status: "trialing", stripe_subscription_id: "sub_new" });
   expect(rpc).not.toHaveBeenCalled();
 });
+
+describe("a Checkout opened for an admin's tier assignment (review bl26, finding 5)", () => {
+  const assigned = (assignment: string) => ({
+    ...sub(), metadata: { restaurant_id: "r1", plan: "casa", tier_assignment_id: assignment },
+  }) as unknown as Stripe.Subscription;
+  const row = (assignment: string | null) => ({
+    data: { ...current(null).data, tier_assignment_id: assignment }, error: null,
+  });
+
+  it("grants no tier once that assignment was ended or replaced", async () => {
+    const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+    for (const now of [null, "as_new"]) {
+      patches.length = 0; reads.push(row(now)); writes.push({ data: [{ id: "r1" }], error: null });
+      retrieve.mockResolvedValue(assigned("as_old"));
+      await applySubscription(assigned("as_old"));
+      expect(patches[0]).toEqual({ subscription_sync_revision: 1 });
+    }
+    expect(rpc).not.toHaveBeenCalled();
+    expect(errors).toHaveBeenCalledWith(expect.stringContaining("ended tier assignment"), "sub_new", "r1");
+    errors.mockRestore();
+  });
+
+  it("grants the tier for the assignment still current", async () => {
+    reads.push(row("as_now")); retrieve.mockResolvedValue(assigned("as_now"));
+    await applySubscription(assigned("as_now"));
+    expect(patches[0]).toMatchObject({ plan: "casa", plan_status: "active", stripe_subscription_id: "sub_new" });
+  });
+});

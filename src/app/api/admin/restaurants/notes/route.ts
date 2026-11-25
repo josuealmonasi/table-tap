@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { apiError } from "@/lib/api-error";
-import { jsonBody } from "@/lib/json-body";
+import { auditedAdminAction, type AdminAuditContext } from "@/lib/admin-audit";
 import { getPlatformAdmin } from "@/lib/admin";
 import { createAdminClient } from "@/lib/supabase/admin";
 
@@ -19,11 +19,13 @@ export async function GET(req: NextRequest) {
   return NextResponse.json({ notes: data ?? [] }, { headers: { "Cache-Control": "no-store" } });
 }
 
-// POST /api/admin/restaurants/notes { id, body } — adds one, signed by the admin.
-export async function POST(req: NextRequest) {
+// POST /api/admin/restaurants/notes { id, body } — adds one, signed by the
+// admin. Audited before the write like every other admin action, so a note
+// is never saved while the audit stream is down; the audit names the
+// restaurant only, never the note's text (requestedFacts copies no `body`).
+async function addNote(_req: NextRequest, { body }: AdminAuditContext) {
   const admin = await getPlatformAdmin();
   if (!admin) return await apiError("apiErr.forbidden", 403);
-  const body = await jsonBody<{ id?: unknown; body?: unknown }>(req);
   const text = typeof body?.body === "string" ? body.body.trim() : "";
   if (!body || typeof body.id !== "string" || !UUID.test(body.id) || !text || text.length > 2000) {
     return await apiError("apiErr.invalidRequest", 400);
@@ -35,3 +37,5 @@ export async function POST(req: NextRequest) {
   if (error) return await apiError("apiErr.generic", 500);
   return NextResponse.json({ ok: true });
 }
+
+export const POST = auditedAdminAction("restaurant.note", addNote);
