@@ -91,7 +91,7 @@ it.each([null, "old@example.invalid"])("saves on this card whether another card 
       method: "POST", headers: { cookie: `tt-loyalty-email-owner-${code}=${secret}` }, body: JSON.stringify({
       code, email: "Ana@Example.invalid", consent: true,
     }) }));
-    const rewards = await GET(new NextRequest("https://test/api/rewards?c=K7QM3XW9K7P2"));
+    const rewards = await GET(new NextRequest("https://test/api/rewards?c=K7QM3XW9K7P2", { headers: { cookie: `tt-loyalty-owner-${code}=${secret}` } }));
     answers.push({ status: post.status, post: await post.json(), rewards: await rewards.json() });
     expect(state.cards[1].email).toBe(shared ? "ana@example.invalid" : null);
   }

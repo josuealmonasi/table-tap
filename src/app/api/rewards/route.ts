@@ -80,10 +80,10 @@ export async function GET(req: NextRequest) {
   const response = NextResponse.json({
     canDelete: owned,
     ...(owned ? { emailPending: cardEmailPending(card.pending_email_expires_at) } : {}),
-    // The address this card's tickets go to, masked: a waiter who scanned
-    // the card holds its code too, and the floor never sees an address whole
-    // (Codex review of #622). The diner retypes it to change it.
-    email: emailForRole((card as { email?: string | null }).email ?? null, false),
+    // The address this card's tickets go to, masked, and only to the phone
+    // holding the card's key: the printed code is copied by anyone who sees
+    // the card, and even a masked address names a person (Codex bl40 #7).
+    email: owned ? emailForRole((card as { email?: string | null }).email ?? null, false) : null,
     face,
     qr: qrGrid(face.qrPayload),
     restaurant: { id: card.restaurant_id, ...restaurant.data },
@@ -103,8 +103,9 @@ export async function GET(req: NextRequest) {
   return owned && secret ? keepEmailOwnerSecret(response, code, secret) : response;
 }
 
-// Anyone with the printed code can save the picture. Only the phone already
-// holding the deletion key can renew its cookie when saving again.
+// Anyone with the printed code can save the picture, but only the phone
+// holding the card's key records it: a copied code must not clear the owner's
+// "save it again" prompt while their saved image is stale (Codex bl40 #7).
 export async function PATCH(req: NextRequest) {
   if (await isRateLimited(`rewards:${clientKey(req)}`, 10, 60)) {
     return await apiError("apiErr.tooManyWait", 429);
@@ -112,20 +113,23 @@ export async function PATCH(req: NextRequest) {
   const code = normalizeCode(req.nextUrl.searchParams.get("c") ?? "");
   if (!code) return await apiError("rewards.invalid", 400);
 
-  const { data: card, error } = await createAdminClient()
-    .from("loyalty_cards")
-    .update({ saved_at: new Date().toISOString() })
-    .eq("code", code)
-    .select("owner_secret_hash")
-    .maybeSingle();
+  const db = createAdminClient();
+  const { data: card, error } = await db.from("loyalty_cards").select("owner_secret_hash").eq("code", code).maybeSingle();
   if (error) {
-    console.error("rewards: saved-at write failed:", error.message);
+    console.error("rewards: card read failed:", error.message);
     return await apiError("apiErr.generic", 500);
   }
   if (!card) return await apiError("rewards.notFound", 404);
-  const response = NextResponse.json({ ok: true });
   const secret = readOwnerSecret(req, code);
-  return secret && matchesOwnerSecret(secret, card.owner_secret_hash) ? keepOwnerSecret(response, code, secret) : response;
+  if (!secret || !matchesOwnerSecret(secret, card.owner_secret_hash)) return NextResponse.json({ ok: true, saved: false });
+  const { error: writeError } = await db.from("loyalty_cards")
+    .update({ saved_at: new Date().toISOString() })
+    .eq("code", code).eq("owner_secret_hash", card.owner_secret_hash);
+  if (writeError) {
+    console.error("rewards: saved-at write failed:", writeError.message);
+    return await apiError("apiErr.generic", 500);
+  }
+  return keepOwnerSecret(NextResponse.json({ ok: true, saved: true }), code, secret);
 }
 
 // The delete itself checks both keys. Older cards without a hash can be
