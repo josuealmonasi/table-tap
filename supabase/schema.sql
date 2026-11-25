@@ -2046,7 +2046,12 @@ begin
      and written_off = false
      and account_id is null
      and status <> 'cancelled'
-     and status <> 'pending_payment';
+     -- A pay-now order still being paid keeps the sitting open: closing under
+     -- it sent that order to the kitchen under a closed sitting once its
+     -- payment landed (security sweep 2026-11-25). Its payment closes the
+     -- sitting (closeSessionsFor). Past a checkout page's 30-minute life it no
+     -- longer holds the sitting, so an abandoned one cannot hold it forever.
+     and (status <> 'pending_payment' or created_at > now() - interval '35 minutes');
 
   if v_owing > 0 then
     return false;
@@ -10030,6 +10035,21 @@ begin
      where o.id is null or o.restaurant_id <> v_new.restaurant_id or o.currency <> v_new.currency
   ) then raise exception 'checkout_scope_changed'; end if;
   perform 1 from orders where id = any(v_new.order_ids) order by id for update;
+  -- A split share is paid only while its split is still locked and none of its
+  -- orders was settled another way. The opener checked only the diner's own
+  -- add-on orders (often none), so a page opened just after the cashier took
+  -- the whole bill in cash blocked the table's close and could charge twice
+  -- (security sweep 2026-11-25). Checked under the money lock, after the
+  -- orders are locked, so collection and this cannot interleave.
+  if coalesce(v_new.metadata->>'split_id', '') <> '' then
+    if not exists (select 1 from bill_splits where id = (v_new.metadata->>'split_id')::uuid
+        and restaurant_id = v_new.restaurant_id and status = 'locked') then
+      raise exception 'checkout_scope_changed';
+    end if;
+    if exists (select 1 from orders where id = any(v_new.order_ids) and (paid or written_off)) then
+      raise exception 'checkout_scope_changed';
+    end if;
+  end if;
   if not v_new.payable_order_ids <@ v_new.order_ids then raise exception 'checkout_scope_changed'; end if;
   for v_order in select * from orders where id = any(v_new.payable_order_ids) loop
     if v_order.paid or v_order.written_off or v_order.status in ('cancelled', 'pending_payment') then
@@ -10826,6 +10846,13 @@ begin
   -- Retain completed refunds too. Closing a real business does not make its
   -- receipts disposable, but completed books past the refund window must not
   -- prevent its deletion.
+  -- Customers who still owe on open accounts are the restaurant's receivable:
+  -- deleting would leave that debt only in an archive purged after ten years
+  -- (security sweep 2026-11-25). Settle or write the balances off first.
+  if exists (select 1 from orders where restaurant_id = p_restaurant and account_id is not null
+      and not paid and not written_off and status not in ('cancelled', 'pending_payment')) then
+    return jsonb_build_object('outcome', 'accountsOwed');
+  end if;
   if p_check_only is distinct from false then return jsonb_build_object('outcome', 'ready'); end if;
   foreach v_table in array array[
     'stripe_disputes', 'stripe_dispute_movements', 'stripe_dispute_events',

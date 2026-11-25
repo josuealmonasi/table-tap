@@ -1800,6 +1800,7 @@ foundingLeftBody: "Subscribe now and keep this subscription price for as long as
     restaurantDeleteProvider: "A card payment or refund still needs confirmation. Check its result before deleting this restaurant.",
     restaurantDeleteOfflineSale: "Review the offline sales already collected before deleting this restaurant.",
     restaurantDeleteRefundFee: "This restaurant's share of the fee on refunded payments hasn't been returned yet. Finish returning it before deleting the restaurant.",
+    restaurantDeleteAccountsOwed: "Customers still owe money on this restaurant's open accounts. Have the restaurant collect or write off those balances before deleting it.",
     restaurantDeleteRefundFeeVerification: "We still need to check whether this restaurant is owed any fees on refunded payments. Open Bills and finish checking the refunds before deleting the restaurant.",
     retryConflict: "This was already sent before with different details, so nothing new was recorded. Check what was recorded before starting again.",
     checkoutOpening: "Your payment is already being set up. Wait a few seconds and try again.",

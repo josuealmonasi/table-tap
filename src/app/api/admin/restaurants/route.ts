@@ -49,6 +49,7 @@ async function deleteRestaurant(_req: NextRequest, { body }: AdminAuditContext) 
         dispute: "disputes.deleteBlocked",
         offlineSale: "apiErr.restaurantDeleteOfflineSale", refundFee: "apiErr.restaurantDeleteRefundFee",
         refundFeeVerification: "apiErr.restaurantDeleteRefundFeeVerification",
+        accountsOwed: "apiErr.restaurantDeleteAccountsOwed",
       };
       if (errors[data.outcome]) return await apiError(errors[data.outcome], 409);
       if (!checkOnly && ["deleted", "gone"].includes(data.outcome)) invalidatePublicMenu(id);
