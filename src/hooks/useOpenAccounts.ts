@@ -10,6 +10,8 @@ export interface AccountListItem {
   email: string | null;
   code: string;
   credit_limit: number;
+  /** The currency the ceiling was approved in; null when nobody confirmed one. */
+  credit_currency?: string | null;
   status: "open" | "closed";
   opened_by: string;
   opened_at: string;

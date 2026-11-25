@@ -11,6 +11,7 @@ import { applyPayment } from "@/lib/table-balance";
 import { accountById } from "@/lib/accounts-server";
 import { formatMoney } from "@/lib/format";
 import { isDinerCurrency } from "@/lib/diner-currency";
+import { reviewedOrderIds } from "@/lib/accounts";
 
 export const runtime = "nodejs";
 
@@ -20,19 +21,24 @@ export const runtime = "nodejs";
 // a paid tier still owes after a move down, and money a customer is holding
 // out is never refused.
 //
-// Body: { accountId, expected, tip, method, ref } — `expected` is the balance
-// the cashier showed the customer; `ref` makes a second tap the same payment.
+// Body: { accountId, expected, tip, method, ref, currency, orderIds } —
+// `expected` is the balance the cashier showed the customer and `orderIds` the
+// unpaid orders behind it; `ref` makes a second tap the same payment. Both are
+// required: without a ref a retry whose first try committed recorded the money
+// twice, and a late first try collected replacement debt of the same total
+// (backlog 35, finding 1).
 export async function POST(req: NextRequest): Promise<NextResponse> {
   const actor = await actingFrontOfHouse();
   if (!actor) return await apiError("apiErr.forbidden", 403);
 
   const body = await jsonBody<{
     accountId?: unknown; expected?: unknown; tip?: unknown; method?: unknown; ref?: unknown; currency?: unknown;
+    orderIds?: unknown;
   }>(req);
   const expected = Number(body?.expected);
   if (!body || typeof body.accountId !== "string" || !Number.isFinite(expected) || expected <= 0 ||
       (body.method !== "cash" && body.method !== "card") ||
-      (body.ref !== undefined && (typeof body.ref !== "string" || body.ref.length > 80))) {
+      typeof body.ref !== "string" || !body.ref.trim() || body.ref.length > 80) {
     return await apiError("apiErr.invalidRequest", 400);
   }
   const account = await accountById(actor.restaurantId, body.accountId);
@@ -47,20 +53,26 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   // (sweep 8, finding 1). It refreshes instead.
   if (body.currency === undefined) return await apiError("apiErr.refreshToCollectAccount", 409);
   if (!isDinerCurrency(body.currency)) return await apiError("apiErr.invalidRequest", 400);
+  // The orders the screen showed are part of the review too; a screen from
+  // before this sends none and refreshes, like one without a currency.
+  if (body.orderIds === undefined) return await apiError("apiErr.refreshToCollectAccount", 409);
+  const orderIds = reviewedOrderIds(body.orderIds);
+  if (!orderIds) return await apiError("apiErr.invalidRequest", 400);
   // Tickets this request's payment queued for the card's email go out once it
   // has answered; registered only once the caller and the request are valid.
   after(() => drainTicketEmails());
 
-  const { data, error } = await checkoutPageRpc("account_settle_currency_v1", {
+  const { data, error } = await checkoutPageRpc("account_settle_reviewed_v1", {
     p_restaurant: actor.restaurantId,
     p_account: account.id,
     p_expected: expected,
     p_tip: tip,
     p_method: body.method,
     p_actor: actor.email,
-    p_ref: typeof body.ref === "string" ? `account:${body.ref}` : null,
+    p_ref: `account:${body.ref}`,
     p_currency: body.currency,
-  });
+    p_reviewed_orders: orderIds,
+  }, { accountId: account.id, currency: body.currency });
   if (error) {
     console.error("account settle failed:", error.message);
     return await apiError("apiErr.generic", 500);
@@ -70,6 +82,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   if (r.outcome === "missing") return await apiError("apiErr.notFound", 404);
   if (r.outcome === "nothing") return await apiError("apiErr.accountNothingOwed", 409);
   if (r.outcome === "paying") return await apiError("apiErr.accountPayingOnline", 409);
+  if (r.outcome === "orders_changed") return await apiError("apiErr.accountOrdersChanged", 409);
   if (r.outcome === "changed") {
     return await apiError("apiErr.accountBalanceChanged", 409, {
       owed: formatMoney(Number(r.owed), body.currency),

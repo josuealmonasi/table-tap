@@ -36,7 +36,6 @@ export default function AccountsPanel({ currency, timeZone, canOpen, unlocksWith
   const [opening, setOpening] = useState(false);
   const [shownId, setShownId] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
-  const money = (n: number) => formatMoney(n, currency);
 
   /** The list carries no codes: the server resolves a scanned one. */
   async function openScanned(code: string): Promise<void> {
@@ -119,7 +118,7 @@ export default function AccountsPanel({ currency, timeZone, canOpen, unlocksWith
                         {a.status === "closed" ? (
                           <span className="tt-muted">{t("accounts.closedTag")}</span>
                         ) : (
-                          t("accounts.owesOf", { owed: owedLabel(a.balances ?? [{ currency: a.currency ?? currency, amount: a.owed }], a.currency ?? currency), limit: money(Number(a.credit_limit)) })
+                          t("accounts.owesOf", { owed: owedLabel(a.balances ?? [{ currency: a.currency ?? currency, amount: a.owed }], a.currency ?? currency), limit: formatMoney(Number(a.credit_limit), a.credit_currency ?? currency) })
                         )}
                       </span>
                     </button>
@@ -134,6 +133,7 @@ export default function AccountsPanel({ currency, timeZone, canOpen, unlocksWith
 
       <OpenAccountDialog
         open={opening}
+        currency={currency}
         onClose={() => setOpening(false)}
         onOpened={id => {
           reload();

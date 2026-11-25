@@ -19,6 +19,8 @@ export interface AccountRow {
   email: string | null;
   code: string;
   credit_limit: number;
+  /** The currency the ceiling was approved in; null on a legacy ceiling nobody confirmed. */
+  credit_currency: string | null;
   status: "open" | "closed";
   opened_by: string;
   opened_at: string;
@@ -28,7 +30,7 @@ export interface AccountRow {
 }
 
 const ACCOUNT_COLUMNS =
-  "id, restaurant_id, name, email, code, credit_limit, status, opened_by, opened_at, closed_at, checkout_until";
+  "id, restaurant_id, name, email, code, credit_limit, credit_currency, status, opened_by, opened_at, closed_at, checkout_until";
 
 /** An account and what it owes, as the staff list shows it. */
 export interface AccountSummary extends AccountRow {
@@ -102,6 +104,11 @@ export interface Statement {
   payments: StatementPayment[];
   /** Who charged each order — for the staff's view, never the customer's. */
   chargedBy: Record<string, string | null>;
+  /**
+   * The unpaid orders behind each currency's balance — what a collection at
+   * the till binds itself to. For the staff's view, never the customer's.
+   */
+  openOrders: Record<string, string[]>;
   returns: { id: string; amount: number; currency: string; status: string; created_at: string }[];
 }
 
@@ -158,5 +165,6 @@ export async function statementOf(account: AccountRow, timeZone?: string | null 
     payments: payments.map(p => ({ at: p.created_at, amount: Number(p.amount), tip: Number(p.tip), method: p.method, currency: p.currency })),
     returns: returns.map(r => ({ id: r.id, amount: Number(r.amount), currency: r.currency, status: r.status, created_at: r.created_at })),
     chargedBy: Object.fromEntries(orders.map(o => [o.id, o.charged_by])),
+    openOrders: Object.fromEntries(balances.map(b => [b.currency, orders.filter(o => o.currency === b.currency).map(o => o.id)])),
   };
 }

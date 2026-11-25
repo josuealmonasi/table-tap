@@ -2425,8 +2425,15 @@ lean on who is trusted with what:
   not, and neither is its page: an account opened on a paid tier still owes
   after a move down, and money owed is always collectable.
 - **A ceiling on every account**, set by whoever opens it
-  (`customer_accounts.credit_limit`). Only a manager or owner moves it, never
-  below what is already owed, and every change is logged.
+  (`customer_accounts.credit_limit`), in the currency the form named
+  (`credit_currency`, sent with the request). Only a manager or owner moves it,
+  never below what is already owed, and every change is logged.
+  `account_set_limit_v1` stores a new ceiling only in the currency the account
+  owes in, or the restaurant's when it owes nothing; a screen that showed
+  another currency reviews again. A legacy ceiling with no currency and no
+  charge history is refused on the next charge (`account_charge_v3`,
+  `ring_pos_account_v3`) until a manager saves it again: it never inherits the
+  menu's current currency.
 - **Account boundaries are checked at the write too.** Table discounts,
   write-offs and their approval requests exclude account orders, even when an
   order kept its table ID. Waived orders never enter account balances or
@@ -2451,9 +2458,12 @@ lean on who is trusted with what:
   "En cuenta", not "No pagado".
 - **Paid whole, any day.** In person: the Accounts page (or the customer's QR,
   scanned there) → "Cobrar", with the same tip chips as the cart, cash or
-  card, through `account_settle()` — one payment row with `account_id` for the
-  whole balance, the tip on the latest order, the orders marked paid, a
-  retried tap answered as the same payment. Online: the statement's "Pagar en
+  card, through `account_settle_reviewed_v1()` — one payment row with
+  `account_id` for the whole balance, the tip on the latest order, the orders
+  marked paid. The request must carry a nonblank `ref` (one per review, kept
+  across retries) and the unpaid order ids the screen showed: a retried tap is
+  answered as the same payment, and the same total over different orders is
+  refused (`orders_changed`). Online: the statement's "Pagar en
   línea" opens `account_checkout_open()`, which snapshots exactly the orders
   owed and holds that debt against another collection until Stripe confirms
   expiry or its verified webhook records payment. The hold names its checkout

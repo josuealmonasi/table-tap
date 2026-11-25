@@ -31,22 +31,39 @@ export function accountsCases(root) {
         // The list never carries a customer's reusable link (security sweep 2026-11-24).
         : d.accounts.some(a => "code" in a) ? "the list carries account codes" : true },
     { name: "POST /api/accounts (open one)", as: "waiter", method: "POST", path: "/api/accounts",
-      body: { name: `${MARK} customer`, limit: 500, email: "cliente@example.com" }, expect: [200],
+      body: { name: `${MARK} customer`, limit: 500, email: "cliente@example.com", currency: "MXN" }, expect: [200],
       effect: async f => {
-        const { data } = await f.admin.from("customer_accounts").select("opened_by, credit_limit, code")
+        const { data } = await f.admin.from("customer_accounts").select("opened_by, credit_limit, credit_currency, code")
           .eq("restaurant_id", f.restaurant.id).eq("name", `${MARK} customer`).maybeSingle();
         if (!data) return "no account was opened";
         if (data.opened_by !== fx.emails.waiter) return `opened by ${data.opened_by}, not the waiter`;
+        // Backlog 35, finding 2: the ceiling is stored in the currency the form showed.
+        if (data.credit_currency !== "MXN") return `the ceiling was stored in ${data.credit_currency}`;
         return /^[0-9A-HJKMNP-TV-Z]{12}$/.test(data.code) || `a code the QR cannot carry: ${data.code}`;
       } },
     { name: "POST /api/accounts (no name)", as: "waiter", method: "POST", path: "/api/accounts",
-      body: { name: "  ", limit: 500 }, expect: [400], expectError: /nombre del cliente|customer's name/i },
+      body: { name: "  ", limit: 500, currency: "MXN" }, expect: [400], expectError: /nombre del cliente|customer's name/i },
+    { name: "POST /api/accounts (no reviewed currency)", as: "waiter", method: "POST", path: "/api/accounts",
+      body: { name: `${MARK} no currency`, limit: 500 }, expect: [409], expectError: /desactualizada|out of date/i,
+      effect: async f => {
+        const { data } = await f.admin.from("customer_accounts").select("id")
+          .eq("restaurant_id", f.restaurant.id).eq("name", `${MARK} no currency`);
+        return (data ?? []).length === 0 || "an account opened without the currency its form showed";
+      } },
     { name: "PATCH /api/accounts (a waiter moves a ceiling)", as: "waiter", method: "PATCH", path: "/api/accounts",
-      body: { id: fx.accountId, action: "limit", limit: 5000 }, expect: [403] },
-    { name: "PATCH /api/accounts (a manager moves a ceiling)", as: "manager", method: "PATCH", path: "/api/accounts",
-      body: { id: fx.accountId, action: "limit", limit: 1500 }, expect: [200],
+      body: { id: fx.accountId, action: "limit", limit: 5000, currency: "MXN" }, expect: [403] },
+    { name: "PATCH /api/accounts (a ceiling reviewed in another currency)", as: "manager", method: "PATCH", path: "/api/accounts",
+      body: { id: fx.accountId, action: "limit", limit: 9000, currency: "USD" }, expect: [409],
+      expectError: /moneda de esta cuenta|account's currency/i,
       effect: async f => {
         const { data } = await f.admin.from("customer_accounts").select("credit_limit").eq("id", fx.accountId).single();
+        return Number(data.credit_limit) !== 9000 || "a ceiling was stored in a currency nobody approved";
+      } },
+    { name: "PATCH /api/accounts (a manager moves a ceiling)", as: "manager", method: "PATCH", path: "/api/accounts",
+      body: { id: fx.accountId, action: "limit", limit: 1500, currency: "MXN" }, expect: [200],
+      effect: async f => {
+        const { data } = await f.admin.from("customer_accounts").select("credit_limit, credit_currency").eq("id", fx.accountId).single();
+        if (data.credit_currency !== "MXN") return `the ceiling is in ${data.credit_currency}`;
         return Number(data.credit_limit) === 1500 || `the ceiling is ${data.credit_limit}`;
       } },
     { name: "POST /api/accounts/charge (a table's bill)", as: "waiter", method: "POST", path: "/api/accounts/charge",
@@ -95,17 +112,33 @@ export function accountsCases(root) {
       } },
     // Sweep 8, finding 1: a screen that does not say which currency it showed is refreshed, never settled.
     { name: "POST /api/accounts/settle (no reviewed currency)", as: "cashier", method: "POST", path: "/api/accounts/settle",
-      body: { accountId: fx.accountId, expected: 0.5, tip: 0, method: "cash" }, expect: [409],
+      body: { accountId: fx.accountId, expected: 0.5, tip: 0, method: "cash", ref: crypto.randomUUID() }, expect: [409],
       expectError: /desactualizada|out of date/i },
     { name: "POST /api/accounts/settle (the balance changed)", as: "cashier", method: "POST", path: "/api/accounts/settle",
-      body: { accountId: fx.accountId, expected: 0.5, tip: 0, method: "cash", currency: "MXN" }, expect: [409],
+      body: { accountId: fx.accountId, expected: 0.5, tip: 0, method: "cash", currency: "MXN", ref: crypto.randomUUID(), orderIds: [fx.acctOrder] }, expect: [409],
       expectError: /cambió|changed/i },
+    // Backlog 35, finding 1: the same total over other orders is not what was reviewed.
+    { name: "POST /api/accounts/settle (other orders, same total)", as: "cashier", method: "POST", path: "/api/accounts/settle",
+      body: async f => {
+        const { data } = await f.admin.from("orders").select("id, total")
+          .eq("account_id", fx.accountId).eq("paid", false).eq("written_off", false).neq("status", "cancelled");
+        const owed = Math.round((data ?? []).reduce((s, o) => s + Number(o.total), 0) * 100) / 100;
+        const ids = (data ?? []).map(o => o.id);
+        ids[0] = crypto.randomUUID();
+        return { accountId: fx.accountId, expected: owed, tip: 0, method: "cash", ref: crypto.randomUUID(), currency: "MXN", orderIds: ids };
+      },
+      expect: [409], expectError: /consumos de esta cuenta|orders on this account/i,
+      effect: async f => {
+        const { data } = await f.admin.from("payments").select("id").eq("account_id", fx.accountId);
+        return (data ?? []).length === 0 || "a collection over orders nobody reviewed recorded money";
+      } },
     { name: "POST /api/accounts/settle (cash, with a tip)", as: "cashier", method: "POST", path: "/api/accounts/settle",
       body: async f => {
-        const { data } = await f.admin.from("orders").select("total")
+        const { data } = await f.admin.from("orders").select("id, total")
           .eq("account_id", fx.accountId).eq("paid", false).eq("written_off", false).neq("status", "cancelled");
         f.accountOwed = Math.round((data ?? []).reduce((s, o) => s + Number(o.total), 0) * 100) / 100;
-        return { accountId: fx.accountId, expected: f.accountOwed, tip: 10, method: "cash", ref: crypto.randomUUID(), currency: "MXN" };
+        return { accountId: fx.accountId, expected: f.accountOwed, tip: 10, method: "cash", ref: crypto.randomUUID(), currency: "MXN",
+          orderIds: (data ?? []).map(o => o.id) };
       },
       expect: [200],
       effect: async f => {

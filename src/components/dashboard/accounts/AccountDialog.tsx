@@ -13,7 +13,7 @@ import type { AccountListItem } from "@/hooks/useOpenAccounts";
 import StatementDays from "@/components/accounts/StatementDays";
 import AccountCreditDialog from "./AccountCreditDialog";
 import SettleAccountDialog from "./SettleAccountDialog";
-import { owedLabel, type CurrencyBalance } from "@/lib/currency-balances";
+import { limitCurrencyFor, owedLabel, type CurrencyBalance } from "@/lib/currency-balances";
 
 interface AccountDialogProps {
   account: AccountListItem | null;
@@ -31,6 +31,7 @@ interface StaffStatement {
   owed: number;
   days: StatementDay[];
   chargedBy: Record<string, string | null>;
+  openOrders?: Record<string, string[]>;
 }
 
 /**
@@ -85,10 +86,13 @@ export default function AccountDialog({ account, onClose, currency, timeZone, ca
   }, [link]);
 
   if (!account) return null;
-  const money = (n: number) => formatMoney(n, currency);
   const balances = statement?.balances ?? account.balances ?? [{ currency: account.currency ?? currency, amount: account.owed }];
   const selected = balances.find(b => b.currency === collecting) ?? balances[0];
   const hasDebt = balances.some(b => b.amount > 0);
+  // The ceiling reads in the currency it was approved in; a new one is
+  // approved in the currency the statement shows it owes in (backlog 35, finding 2).
+  const limitMoney = formatMoney(Number(account.credit_limit), account.credit_currency ?? currency);
+  const approveIn = statement ? limitCurrencyFor(statement.balances, currency) : null;
 
   async function change(body: Record<string, unknown>, done: string): Promise<void> {
     setError(null);
@@ -114,7 +118,7 @@ export default function AccountDialog({ account, onClose, currency, timeZone, ca
     <>
       <Modal open={!crediting} onClose={onClose} maxWidth={560} title={account.name}>
         <p className="tt-account-owed">
-          {t("accounts.owesOf", { owed: owedLabel(balances, account.currency ?? currency), limit: money(Number(account.credit_limit)) })}
+          {t("accounts.owesOf", { owed: owedLabel(balances, account.currency ?? currency), limit: limitMoney })}
         </p>
         {account.email && <p className="tt-muted" style={{ marginTop: 0 }}>
           {account.email}{" "}
@@ -186,13 +190,16 @@ export default function AccountDialog({ account, onClose, currency, timeZone, ca
             className="tt-field tt-account-limit"
             onSubmit={e => {
               e.preventDefault();
-              void change({ action: "limit", limit: Number(limit) }, t("accounts.limitChanged"));
+              if (approveIn) void change({ action: "limit", limit: Number(limit), currency: approveIn }, t("accounts.limitChanged"));
             }}
           >
-            <label className="tt-mod-label" htmlFor="account-limit">{t("accounts.limit")}</label>
+            <label className="tt-mod-label" htmlFor="account-limit">
+              {approveIn ? t("accounts.limitIn", { currency: approveIn }) : t("accounts.limit")}
+            </label>
+            {!account.credit_currency && <p className="tt-muted" style={{ fontSize: 13, marginTop: 0 }}>{t("accounts.limitUnconfirmed")}</p>}
             <div className="tt-row" style={{ gap: 8 }}>
               <input id="account-limit" className="tt-input" inputMode="decimal" value={limit} onChange={e => setLimit(e.target.value)} />
-              <button type="submit" className="tt-btn tt-btn-ghost tt-btn-sm">{t("accounts.limitSave")}</button>
+              <button type="submit" className="tt-btn tt-btn-ghost tt-btn-sm" disabled={!approveIn}>{t("accounts.limitSave")}</button>
             </div>
           </form>
         )}
@@ -244,6 +251,7 @@ export default function AccountDialog({ account, onClose, currency, timeZone, ca
         name={account.name}
         owed={selected?.amount ?? 0}
         currency={selected?.currency ?? currency}
+        orderIds={(selected && statement?.openOrders?.[selected.currency]) || []}
         onRefresh={async () => {
           try {
             const res = await fetch(`/api/accounts?id=${account.id}`);
