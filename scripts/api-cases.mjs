@@ -31,6 +31,7 @@ import { paymentCounterCases, billCollectionCases } from "./api-cases/payments.m
 import { accountsCases } from "./api-cases/accounts.mjs";
 import { printerDeliveryCases, orderPrintCases } from "./api-cases/printing.mjs";
 import { staffCases } from "./api-cases/staff.mjs";
+import { digestCases } from "./api-cases/digest.mjs";
 import { webhooksCases } from "./api-cases/webhooks.mjs";
 import { signupCases } from "./api-cases/signup.mjs";
 import { retriesCases } from "./api-cases/retries.mjs";
@@ -78,6 +79,7 @@ export function cases(fx) {
     ...billPayCases(fx),
     ...promotionCleanupCases(fx),
     ...staffCases(fx),
+    ...digestCases(),
     ...webhooksCases(fx),
     ...adminOwnerCases(fx),
     ...signupCases(fx),

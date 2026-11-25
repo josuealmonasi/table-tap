@@ -337,6 +337,17 @@ async function seedDemo(pg, production) {
     logs.push([rid, DEMO_OWNER.email, "created", member.role, member.email]);
   }
   logs.push([rid, DEMO_OWNER.email, "updated", "manager", DEMO_TEAM[0].email]);
+
+  // ── Daily digest: one confirmed outside recipient and one still pending, so
+  // the owner's settings card has both states to show (example.test never
+  // receives mail). Fixed stop tokens keep reseeds identical. ──
+  await pg.query("delete from digest_recipients where restaurant_id = $1", [rid]);
+  await pg.query(
+    `insert into digest_recipients (restaurant_id, email, status, stop_token, added_by, confirmed_at)
+     values ($1, 'contador@example.test', 'confirmed', $2, $3, now()),
+            ($1, 'socio@example.test', 'pending', $4, $3, null)`,
+    [rid, "demoDigestStopConfirmed00000000000000000000", DEMO_OWNER.email, "demoDigestStopPending0000000000000000000000"],
+  );
   await bulkInsert(
     pg,
     "user_logs",

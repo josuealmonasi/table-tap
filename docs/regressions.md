@@ -8579,3 +8579,13 @@ and its orders unsettled under the order lock; `close_session_if_clear` keeps a
 sitting open for a pay-now order younger than a checkout page's life; and
 `admin_delete_restaurant` refuses with `accountsOwed`. Check:
 `sweep-1125-settle-purge.spec.ts`, plus a rolled-back dev probe.
+
+### Extra recipients of the daily digest (owner decisions 2026-11-25)
+
+The owner can add up to five outside addresses to the daily digest. Two things
+had to agree and now do: a mistyped address must never receive the day's sales
+(each address gets one confirmation email and nothing else until it confirms),
+and the privacy notice's promise that an unconfirmed address is deleted after
+seven days (an hourly pg_cron job deletes them). The limit is counted under the
+restaurant's row lock, so two tabs cannot reach six. Check:
+`digest-recipients.spec.ts`, the api gate's `digest` cases.
