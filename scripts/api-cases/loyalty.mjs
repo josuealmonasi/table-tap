@@ -126,6 +126,9 @@ export function loyaltyCases(fx) {
       } },
     { name: "PATCH /api/rewards (a copied code saves the picture)", as: "diner", method: "PATCH",
       path: `/api/rewards?c=${fx.loyaltyCode ?? "no-card-in-the-seed"}`,
+      // Its own address: rewards allows 10 a minute per address, and this
+      // extra case would push a later rewards case into 429.
+      headers: { "x-forwarded-for": "203.0.113.231" },
       arrange: f => withSeedCardOwned(f),
       expect: [200],
       effect: async f => {
