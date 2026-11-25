@@ -55,7 +55,6 @@ export async function writeOrderIntent(intent: OrderIntent, input: {
   inventory: boolean;
   threshold: number;
   coupon?: CouponQuote | null;
-  coupon?: object | null;
   /**
    * A waiter's round: saved only while its sitting is open, under the
    * sitting's lock, so a cashier closing the bill cannot slip in between.
