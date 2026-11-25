@@ -17,6 +17,17 @@ export function loyaltyCases(fx) {
     pending_email: ticketEmail, pending_email_token_hash: confirmationHash, pending_email_notice_version: "api-gate",
     pending_email_expires_at: new Date(Date.now() + 60 * 60_000).toISOString(), pending_email_set_by: "diner",
   };
+  // The seed card given this run's key for one case, then put back as it was.
+  const withSeedCardOwned = async f => {
+    const undoSaved = await f.withCardSavedBefore(fx.loyaltyCode);
+    const { data: was } = await f.admin.from("loyalty_cards").select("owner_secret_hash").eq("code", fx.loyaltyCode).single();
+    const owner_secret_hash = createHash("sha256").update(ownerSecret).digest("hex");
+    await f.admin.from("loyalty_cards").update({ owner_secret_hash }).eq("code", fx.loyaltyCode);
+    return async () => {
+      await f.admin.from("loyalty_cards").update({ owner_secret_hash: was.owner_secret_hash }).eq("code", fx.loyaltyCode);
+      await undoSaved();
+    };
+  };
   const activeCard = (code = sharedCode) => ({ restaurant_id: r, code, goal: 8, ...activeEmail() });
   const arrangeCards = (...cards) => async f => {
     const { data, error } = await f.admin.from("loyalty_cards").insert(cards).select("id");
@@ -101,14 +112,29 @@ export function loyaltyCases(fx) {
       path: `/api/rewards?c=${fx.loyaltyCode ?? "no-card-in-the-seed"}`,
       arrange: f => f.withCardSavedBefore(fx.loyaltyCode),
       expect: [200], check: d => d.saveAgain === true || "the page does not ask for the picture again" },
+    // Only the phone holding the card's key records the save: a copied code
+    // must not clear the owner's prompt (Codex bl40 #7).
     { name: "PATCH /api/rewards (the diner saved the picture)", as: "diner", method: "PATCH",
       path: `/api/rewards?c=${fx.loyaltyCode ?? "no-card-in-the-seed"}`,
-      arrange: f => f.withCardSavedBefore(fx.loyaltyCode),
+      headers: { cookie: `tt-loyalty-owner-${fx.loyaltyCode}=${ownerSecret}` },
+      arrange: f => withSeedCardOwned(f),
       expect: [200],
       effect: async f => {
         const { data } = await f.admin.from("loyalty_cards").select("saved_at, ladder_at")
           .eq("code", fx.loyaltyCode).maybeSingle();
         return new Date(data.saved_at) >= new Date(data.ladder_at) || "saving did not stop the page asking";
+      } },
+    { name: "PATCH /api/rewards (a copied code saves the picture)", as: "diner", method: "PATCH",
+      path: `/api/rewards?c=${fx.loyaltyCode ?? "no-card-in-the-seed"}`,
+      // Its own address: rewards allows 10 a minute per address, and this
+      // extra case would push a later rewards case into 429.
+      headers: { "x-forwarded-for": "203.0.113.231" },
+      arrange: f => withSeedCardOwned(f),
+      expect: [200],
+      effect: async f => {
+        const { data } = await f.admin.from("loyalty_cards").select("saved_at, ladder_at")
+          .eq("code", fx.loyaltyCode).maybeSingle();
+        return new Date(data.saved_at) < new Date(data.ladder_at) || "a copied code cleared the owner's prompt";
       } },
     { name: "PATCH /api/rewards (no such card)", as: "diner", method: "PATCH",
       path: "/api/rewards?c=0000-0000-0000", expect: [404], expectError: /encontramos|couldn't find/i },
