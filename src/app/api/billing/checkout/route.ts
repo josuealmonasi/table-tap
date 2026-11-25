@@ -27,9 +27,8 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   const limits = (await allPlans()).find(p => p.plan === plan);
   if (!limits) return await apiError("apiErr.pickPlan", 400);
   try {
-    // The price rises by itself once place 50 fills: computed here, from the same
-    // count the Plan screen saw, so what is charged and what was shown cannot
-    // disagree.
+    // Use the same server quote for both the owner's confirmation and the
+    // comparison with any open Stripe Checkout session.
     const taken = await foundersTaken();
     // The price the owner saw is part of the choice. Place 50 filling between
     // the page and this tap changed a tier at MX$2,499 for a screen showing

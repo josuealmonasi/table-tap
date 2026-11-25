@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 vi.mock("@/lib/stripe", () => ({ stripe: {} }));
-import { assertStillAssigned } from "@/lib/billing-assigned";
+import { checkoutAssignment } from "@/lib/billing-assigned";
 import { safeLoginNext } from "@/lib/login-next";
 
 const inDays = (d: number) => new Date(Date.now() + d * 86_400_000).toISOString();
@@ -13,14 +13,15 @@ const assigned = (row: Record<string, unknown>) => ({ plan: "grupo", plan_status
 
 describe("the emailed pay link opens Checkout only for its own assignment (review finding 1)", () => {
   const ends = inDays(5);
-  const link = { plan: "grupo", id: ID };
 
   it("passes for the unpaid assignment it was sent for", async () => {
-    await expect(assertStillAssigned(dbWith(assigned({ trial_ends_at: ends })), "r1", link, 0)).resolves.toBeUndefined();
+    await expect(checkoutAssignment(dbWith(assigned({ trial_ends_at: ends })), "r1", "grupo", 0, ID))
+      .resolves.toEqual({ id: ID, payBy: Math.floor(Date.parse(ends) / 1000) });
   });
 
   it("refuses once any subscription is live: it must not be moved and invoiced without a new confirmation", async () => {
-    await expect(assertStillAssigned(dbWith(assigned({ trial_ends_at: ends })), "r1", link, 1)).rejects.toMatchObject({ key: "apiErr.tierLinkStale" });
+    await expect(checkoutAssignment(dbWith(assigned({ trial_ends_at: ends })), "r1", "grupo", 1, ID))
+      .rejects.toMatchObject({ key: "apiErr.tierLinkStale" });
   });
 
   it("refuses a replaced, expired or different assignment (findings 1 and 7)", async () => {
@@ -32,7 +33,7 @@ describe("the emailed pay link opens Checkout only for its own assignment (revie
       assigned({ plan: "casa", trial_ends_at: ends }),   // another tier
       assigned({ plan_status: "active", trial_ends_at: ends }),
     ]) {
-      await expect(assertStillAssigned(dbWith(row), "r1", link, 0)).rejects.toMatchObject({ key: "apiErr.tierLinkStale" });
+      await expect(checkoutAssignment(dbWith(row), "r1", "grupo", 0, ID)).rejects.toMatchObject({ key: "apiErr.tierLinkStale" });
     }
   });
 });

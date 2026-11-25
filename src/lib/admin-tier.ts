@@ -154,6 +154,8 @@ async function rebill(
     if (recurring?.interval !== "month" || recurring.interval_count !== 1) throw new BillingError("apiErr.tierIntervalUnsupported");
     const from = await subscriptionPlan(subscription);
     if (from === limits.plan) return { ok: true, from, to: limits.plan, billing: "next_bill" } as const;
+    // Classic later credits the current price even if it was never billed.
+    if (subscription.billing_mode?.type !== "flexible") throw new BillingError("apiErr.tierFlexibleBillingRequired");
 
     const line = await checkoutPrice(limits, await foundersTaken());
     if (!line.price) throw new Error("Tier price has no Stripe Price");
