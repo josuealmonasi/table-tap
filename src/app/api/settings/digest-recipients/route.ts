@@ -6,6 +6,7 @@ import { isValidEmail, normalizeEmail } from "@/lib/email";
 import { isRateLimited } from "@/lib/rate-limit";
 import { requestLocale } from "@/lib/i18n";
 import { sendMail } from "@/lib/mail";
+import { canonicalUuid } from "@/lib/uuid";
 import { siteOrigin } from "@/lib/site-origin";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { logEvent } from "@/lib/activity-log";
@@ -62,10 +63,11 @@ export async function PATCH(req: NextRequest): Promise<NextResponse> {
   const actor = await actingOwner();
   if (!actor) return await apiError("apiErr.forbidden", 403);
   const body = await jsonBody<{ id?: unknown; action?: unknown }>(req);
-  if (typeof body?.id !== "string" || body.action !== "resend") return await apiError("apiErr.invalidRequest", 400);
-  if (await isRateLimited(`digest-resend:${body.id}`, 3, 86_400)) return await apiError("apiErr.tooManyWait", 429);
+  const id = canonicalUuid(body?.id);
+  if (!id || body?.action !== "resend") return await apiError("apiErr.invalidRequest", 400);
+  if (await isRateLimited(`digest-resend:${id}`, 3, 86_400)) return await apiError("apiErr.tooManyWait", 429);
   try {
-    const renewed = await renewConfirmation(actor.restaurantId, body.id);
+    const renewed = await renewConfirmation(actor.restaurantId, id);
     if (!renewed) return await apiError("apiErr.notFound", 404);
     const sent = await sendConfirmation(req, actor.restaurantId, renewed.email, renewed.token);
     return NextResponse.json({ ok: true, sent });

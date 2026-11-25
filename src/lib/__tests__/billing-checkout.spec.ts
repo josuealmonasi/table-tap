@@ -5,6 +5,17 @@ import {
   post, openCheckout, lineItem, assignFor, subscription, ID,
 } from "./billing-checkout-fixture";
 
+it("refuses new subscription checkout while the restaurant is closing", async () => {
+  state.restaurant.closing_at = "2026-11-25T06:04:00Z";
+  const response = await post();
+  expect(response.status).toBe(409);
+  expect(await response.json()).toEqual({ error: "apiErr.restaurantClosing" });
+  expect(customerList).not.toHaveBeenCalled();
+  expect(subscriptionList).not.toHaveBeenCalled();
+  expect(sessionCreate).not.toHaveBeenCalled();
+  expect(state.locked).toBe(false);
+});
+
 it("changes the existing subscription item instead of starting a second checkout", async () => {
   state.restaurant.stripe_subscription_id = "sub_1";
   subscriptionList.mockResolvedValue({ data: [subscription()], has_more: false });

@@ -1,6 +1,7 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { stockDemand, toDemandPayload, type StockWarning, type StockShortfall } from "@/lib/stock";
 import type { OrderLineItem } from "@/lib/types";
+import { RESTAURANT_CLOSING_CODE } from "@/lib/restaurant-suspension";
 import type { CouponQuote } from "@/lib/coupon-service";
 
 export interface OrderIntent {
@@ -60,7 +61,7 @@ export async function writeOrderIntent(intent: OrderIntent, input: {
    * sitting's lock, so a cashier closing the bill cannot slip in between.
    */
   openSitting?: boolean;
-}): Promise<OrderIntentResult> {
+}): Promise<OrderIntentResult | { closing: true }> {
   const demand = toDemandPayload(stockDemand(input.lines));
   const { data, error } = input.openSitting
     ? await createAdminClient().rpc("create_table_order_intent_v2", {
@@ -72,6 +73,8 @@ export async function writeOrderIntent(intent: OrderIntent, input: {
       p_order: input.order, p_demand: demand, p_inventory: input.inventory, p_threshold: input.threshold,
       p_coupon: input.coupon ?? null,
     });
+  // The closing guard (#748) refuses either path once the restaurant is being deleted.
+  if (error?.code === RESTAURANT_CLOSING_CODE) return { closing: true };
   if (error || !data) throw new Error(`Order could not be recorded: ${error?.message ?? "no result"}`);
   const result = data as OrderIntentResult;
   // The transaction re-checks the reference with the new scope only. A row an

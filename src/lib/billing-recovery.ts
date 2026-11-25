@@ -9,7 +9,7 @@ export async function recoverBillingClaim(db: ReturnType<typeof createAdminClien
   if (!previous?.token || !previous.started_at || Date.parse(previous.started_at) > Date.now() - 15 * 60000) {
     throw new BillingError("apiErr.billingBusy");
   }
-  const { snapshot } = await restaurantBilling(db, id, true);
+  const { snapshot } = await restaurantBilling(db, id, { discover: true, allowClosing: true });
   // The compare-and-swap stores everything Stripe found before the new worker
   // may write. Two recovering servers cannot both take the expired claim.
   const { data: claimed, error: claimError } = await db.rpc("takeover_restaurant_billing", {

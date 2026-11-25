@@ -15,6 +15,7 @@ import { existingTicket, terminalRef, type PosSaleBody } from "@/lib/pos-sale";
 import { heldApprovalCharge, offlineCharge, offlineDrift, offlineLines } from "@/lib/offline-sale";
 import { readOfflineContext, contextCoveredSale } from "@/lib/offline-authority";
 import { currentOfflinePrice, sameOfflinePrice, offlineRevenueLines } from "@/lib/offline-pricing";
+import { RESTAURANT_CLOSING_CODE } from "@/lib/restaurant-suspension";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 export interface OfflineApproval { reason: string; collector?: string; at?: string; currency?: string }
@@ -107,6 +108,9 @@ export async function ringOffline(actor: Actor, body: PosSaleBody & { offline?: 
   // sends racing meet on its lock and the second gets the first one's ticket.
   // An error may be a lost response after commit: deleting would orphan its
   // money, so the device simply sends again.
+  if (error?.code === RESTAURANT_CLOSING_CODE) {
+    return await apiError("apiErr.restaurantClosing", 409, undefined, { held: true, reviewReason: "apiErr.restaurantClosing" });
+  }
   if (error || !ticket) return await apiError("apiErr.orderCreate", 503, undefined, { held: true });
   if (ticket.outcome !== "settled") return await apiError("apiErr.posUnsettled", 409, undefined, { held: true });
   invalidatePublicMenu(actor.restaurantId);

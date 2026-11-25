@@ -10,6 +10,15 @@ const base: RestaurantBilling = {
 const line = (patch: Partial<RestaurantBilling>) => billingSummary({ ...base, ...patch }, t, "es");
 
 describe("how a restaurant pays, as the admin list says it", () => {
+  it.each([
+    ["en", "Closing · deletion pending"],
+    ["es", "En cierre · eliminación pendiente"],
+  ] as const)("shows closing in %s even after the billing status changes", (locale, text) => {
+    const translateForLocale = (key: string) => translate(messagesFor(locale), key);
+    expect(billingSummary({ ...base, closing_at: "2026-11-25T06:04:00Z", plan_status: "locked" },
+      translateForLocale, locale)).toEqual({ text, tone: "warn" });
+  });
+
   it("a paying subscription: price and renewal date", () => {
     const s = line({ stripe_subscription_id: "sub_1", subscribed_price: 1899, plan_period_ends_at: "2026-12-12T18:00:00Z" });
     expect(s.tone).toBe("ok");
