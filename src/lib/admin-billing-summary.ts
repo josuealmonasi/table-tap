@@ -16,6 +16,7 @@ export interface RestaurantBilling {
   /** Set while a platform admin has the restaurant suspended (no new sales). */
   suspended_at?: string | null;
   suspended_reason?: string | null;
+  closing_at?: string | null;
 }
 
 export type BillingTone = "ok" | "warn" | "danger" | "muted";
@@ -33,7 +34,8 @@ export function billingSummary(r: RestaurantBilling, t: T, locale: string): { te
   }).format(new Date(iso));
   const price = r.subscribed_price === null ? null : `${formatMoney(r.subscribed_price, "MXN")}`;
 
-  // A suspension outranks every billing state: nothing sells until it is lifted.
+  if (r.closing_at) return { text: t("adminBilling.closing"), tone: "warn" };
+  // A suspension outranks billing health: nothing sells until it is lifted.
   if (r.suspended_at) {
     return { text: t("adminBilling.suspended", { reason: t(`adminSuspend.reason_${r.suspended_reason ?? "other"}`) }), tone: "danger" };
   }

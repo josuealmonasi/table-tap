@@ -146,6 +146,18 @@ are refused. `GET /api/admin/audit` checks platform membership and returns
 uncached keyset pages of 100. The API checks intentionally retain their genuine
 admin audit events after removing disposable business fixtures.
 
+**Restaurant deletion.** The platform admin starts deletion under the
+restaurant's money lock. Outstanding refunds, provider work, account debt,
+or completed unpaid orders that have not been written off block deletion.
+When the checks pass, the restaurant enters Closing before Stripe
+cancellation. New orders and subscriptions are refused, and existing bills,
+refunds and held receipts can still be resolved. If the final locked check
+finds new evidence that needs attention, the admin console keeps showing
+Closing so staff can resolve it and the admin can retry. The final transaction
+archives the books and saves the staff cleanup list before deleting live data.
+Auth cleanup uses the saved list and preserves logins that still belong to a
+restaurant or the platform admin team.
+
 **Two-step verification for the platform admin.** `/dashboard/admin/mfa`
 enrols an authenticator app (TOTP, Supabase MFA) and later asks for its code.
 The admin guard reads the assurance claim from the exact access token that

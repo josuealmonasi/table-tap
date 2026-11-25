@@ -26,6 +26,7 @@ export function useAdminActions() {
     method: string,
     body: unknown,
     okMsg: string,
+    refreshOnFailure = false,
   ): Promise<boolean> {
     setBusy(true);
     try {
@@ -40,12 +41,13 @@ export function useAdminActions() {
         return false;
       }
       toast(okMsg);
-      router.refresh();
+      if (!refreshOnFailure) router.refresh();
       return true;
     } catch {
       toast(t("done.networkError"), "error");
       return false;
     } finally {
+      if (refreshOnFailure) router.refresh();
       setBusy(false);
     }
   }
@@ -66,7 +68,7 @@ export function useAdminActions() {
     deleteUser: (userId: string) =>
       call("/api/admin/users", "DELETE", { userId }, t("admin.loginDeleted")),
     deleteRestaurant: (id: string) =>
-      call("/api/admin/restaurants", "DELETE", { id }, t("admin.restaurantDeleted")),
+      call("/api/admin/restaurants", "DELETE", { id }, t("admin.restaurantDeleted"), true),
     schedulePrice: (plan: string, newPrice: number, effectiveAt: string, doneMsg: string) =>
       call("/api/admin/plan-price-changes", "POST", { plan, newPrice, effectiveAt }, doneMsg),
     suspend: (id: string, reason: string, doneMsg: string) =>

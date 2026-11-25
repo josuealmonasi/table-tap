@@ -39,6 +39,7 @@ const soldOut = { itemId: "t1", name: "Taco", stock: 0, kind: "out_of_stock" as 
 const restaurant = {
   id: "r1", currency: "MXN", service_pct: 0, service_enabled: false, accepting_orders: true,
   suspended_at: null as string | null,
+  closing_at: null as string | null,
   tax_pct: 16, stripe_account_id: "acct_1", stripe_charges_enabled: true, allow_pay_later: true,
   low_stock_alerts_enabled: true, low_stock_threshold: 2,
 };
@@ -155,6 +156,7 @@ const boom = () => {
 beforeEach(() => {
   vi.clearAllMocks();
   restaurant.suspended_at = null;
+  restaurant.closing_at = null;
   step.counterFull.mockResolvedValue({ data: false, error: null });
   notices.length = 0;
   admissionStatus = "approved";
@@ -176,6 +178,27 @@ describe("a suspended restaurant", () => {
     expect(response.status).toBe(409);
     expect(step.reserveStock).not.toHaveBeenCalled();
     expect(step.insertOrder).not.toHaveBeenCalled();
+  });
+});
+
+describe("a closing restaurant", () => {
+  it("refuses checkout before reserving stock or starting Stripe", async () => {
+    restaurant.closing_at = "2026-11-25T06:04:00Z";
+    const response = await checkout();
+    expect(response.status).toBe(409);
+    expect(await response.json()).toEqual({ error: "apiErr.restaurantClosing" });
+    expect(step.reserveStock).not.toHaveBeenCalled();
+    expect(step.openCard).not.toHaveBeenCalled();
+  });
+
+  it("returns stock and coupon claims when closing wins the final insert", async () => {
+    step.insertOrder.mockResolvedValueOnce({ data: null, error: { code: "PT423" } });
+    const response = await checkout();
+    expect(response.status).toBe(409);
+    expect(await response.json()).toEqual({ error: "apiErr.restaurantClosing" });
+    expect(releaseStock).toHaveBeenCalledOnce();
+    expect(releaseCoupon).toHaveBeenCalledOnce();
+    expect(step.openCard).not.toHaveBeenCalled();
   });
 });
 
