@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { cashAmount, cashNote } from "@/lib/cash-drawer";
+import { cashAmount, cashNote, pendingWithdrawn, withdrawalCounts } from "@/lib/cash-drawer";
 
 /**
  * Asked for by a restaurant: "if we start the day with 250 pesos, the close is
@@ -27,5 +27,22 @@ describe("an amount of cash as typed", () => {
     expect(cashNote("  proveedor  ")).toBe("proveedor");
     expect(cashNote("   ")).toBeNull();
     expect(cashNote("x".repeat(200))).toHaveLength(140);
+  });
+});
+
+describe("a cashier's withdrawal awaiting approval (2026-11-25)", () => {
+  it("counts as cash out only once approved; rows from before approval count as before", () => {
+    expect(withdrawalCounts({ status: "approved" })).toBe(true);
+    expect(withdrawalCounts({})).toBe(true);
+    expect(withdrawalCounts({ status: "pending" })).toBe(false);
+    expect(withdrawalCounts({ status: "rejected" })).toBe(false);
+  });
+
+  it("sums only what still waits for a manager, to the cent", () => {
+    expect(pendingWithdrawn([
+      { status: "pending", amount: 60.1 }, { status: "pending", amount: 0.2 },
+      { status: "approved", amount: 40 }, { status: "rejected", amount: 5 }, { amount: 7 },
+    ])).toBe(60.3);
+    expect(pendingWithdrawn([])).toBe(0);
   });
 });

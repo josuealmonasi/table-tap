@@ -19,7 +19,7 @@ const TRAIL: Record<string, string[]> = {
   order: ["cancelled", "refunded"],
   bill: ["written_off"],
   discount: ["discounted", "approved"],
-  cash: ["created", "deleted"],
+  cash: ["created", "deleted", "requested", "approved", "rejected"],
 };
 
 const numbers = (s: Record<string, unknown>): CashShift => ({
@@ -56,7 +56,7 @@ export async function todaysShifts(restaurantId: string, dayStart: Date): Promis
 export async function shiftWithdrawals(restaurantId: string, shiftId: string): Promise<CashMovement[]> {
   const db = createAdminClient();
   const { data, error } = await db
-    .from("cash_movements").select("id, currency, kind, amount, note, actor_email, created_at, purpose")
+    .from("cash_movements").select("id, currency, kind, amount, note, actor_email, created_at, purpose, status, reviewed_by")
     .eq("restaurant_id", restaurantId).eq("shift_id", shiftId).eq("kind", "withdrawal")
     .order("created_at", { ascending: true });
   if (error) throw new Error(`the shift's withdrawals: ${error.message}`);

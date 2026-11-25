@@ -860,7 +860,32 @@ dishes on a bill the restaurant has just cancelled.
   purpose. The shift block, closed record and printed handover show the tips
   inside cash sales (`tips`) and, when positive, tips paid out (`tips_out`) below
   that line. Payouts are already part of withdrawals: expected cash remains
-  opening + net cash sales − all withdrawals, regardless of purpose.
+  opening + net cash sales − all approved withdrawals, regardless of purpose.
+  **Approval (2026-11-25):** a withdrawal recorded by anyone but the owner or a
+  manager (in practice, the cashier at the till) is saved `pending`
+  (`cash_movements.status`; the role comes from the route, `p_role`, and any
+  role but owner/manager is pending). It does not reduce expected cash until a
+  manager approves it on the Caja block, which lists it with who, when, amount
+  and note and offers "Aprobar" / "Rechazar" behind a confirmation
+  (`PATCH /api/cash-drawer`, `review_cash_withdrawal`, recording `reviewed_by`
+  and `reviewed_at`). A rejected withdrawal stays on record and never counts;
+  the cash, if missing, shows as the close's difference. The Caja sum shows
+  pending withdrawals on their own line, not subtracted. The close refuses
+  while any withdrawal is pending (`pending_withdrawals`), with one message for
+  the cashier (call a manager) and one for the manager. A returned-cash
+  resolution links only an approved withdrawal. Owners' and managers' own
+  withdrawals are approved at once, as before.
+  **Cap:** no writer accepts a withdrawal that would take expected cash below
+  zero, counting withdrawals still pending (`check_cash_withdrawal_room`,
+  under the money lock after the open shift is locked; errcode `PT422`,
+  answered 409 "mayor que el efectivo que debe haber en caja"). An approval
+  re-checks against the drawer as it stands, counting only approved ones.
+  **Retired references:** removing a withdrawal written with a retry
+  reference stores that reference in `cash_withdrawal_retired_refs` in the
+  same transaction; a late retry of that request answers `removed` (the till
+  says a manager removed it) instead of writing the cash again. The deployed
+  six- and seven-argument writers remain as delegates that record approved,
+  under the same cap, for the deploy window.
   **Schema handoff:** `supabase/PROPOSAL-tips-out.sql` proposes the column and
   RPC changes; Claude must incorporate them into `schema.sql` and `drop.sql`
   and apply them before deploying the route's `p_purpose` argument.

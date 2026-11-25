@@ -56,7 +56,8 @@ it("F2: held cash is rechecked under the queue writer's lock before signing a sh
   expect(queue.indexOf("perform public.lock_restaurant_money(p_restaurant);")).toBeLessThan(queue.indexOf("insert into offline_sale_queue"));
   const once = body("close_cash_shift_once");
   expect(once.indexOf("return s.close_result")).toBeLessThan(once.indexOf("public.close_cash_shift("));
-  expect(once).toContain("if v_result->>'outcome' = 'held_cash' then return v_result; end if;");
+  // A close refused for pending withdrawals is returned unsigned the same way.
+  expect(once).toContain("if v_result->>'outcome' in ('held_cash', 'pending_withdrawals') then return v_result; end if;");
 });
 
 it("F1/F2: modified SQL objects retain service-only grants and teardown parity", () => {

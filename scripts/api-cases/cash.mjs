@@ -5,6 +5,12 @@ import { tipsOutCases } from "./cash-tips-out.mjs";
 export function cashCases(fx) {
   const { restaurant } = fx;
   const r = restaurant.id;
+  // One request, sent twice: before and after a manager removes what it wrote.
+  const retiredRef = crypto.randomUUID();
+  const retiredRequest = async f => {
+    const { data } = await f.admin.from("cash_shifts").select("id").eq("restaurant_id", r).is("closed_at", null).single();
+    return { kind: "withdrawal", amount: 12, note: `${MARK} retired`, ref: retiredRef, shiftId: data.id };
+  };
   return [
     // ── The cash drawer, a shift at a time ───────────────────────────────
     // A whole shift, in order: nothing can be taken out of a drawer nobody
@@ -55,6 +61,61 @@ export function cashCases(fx) {
     { name: "DELETE /api/cash-drawer (one that is not here)", as: "manager", method: "DELETE",
       path: "/api/cash-drawer", body: { id: "00000000-0000-4000-8000-000000000000" }, expect: [404],
       expectError: /ya no está|not here/i },
+    // Cash withdrawals: approval, cap and retired references (2026-11-25). A
+    // cashier's withdrawal waits for a manager; none may take the drawer below
+    // zero; a retry of one a manager removed is not written again.
+    { name: "POST /api/cash-drawer (a cashier's withdrawal waits for approval)", as: "cashier", method: "POST",
+      path: "/api/cash-drawer", body: { kind: "withdrawal", amount: 40, note: `${MARK} cashier` }, expect: [200],
+      save: d => ({ cashierWithdrawal: d.id }),
+      check: async (d, f) => {
+        const { data: row } = await f.admin.from("cash_movements").select("status, amount, actor_email").eq("id", d.id).maybeSingle();
+        return d.pending === true && row?.status === "pending" && Number(row.amount) === 40
+          && row.actor_email === "demo-cashier@tabletap.shop" || `answered ${JSON.stringify(d)}, stored ${JSON.stringify(row)}`;
+      } },
+    { name: "POST /api/cash-drawer (more than the drawer holds)", as: "manager", method: "POST",
+      path: "/api/cash-drawer", body: { kind: "withdrawal", amount: 999999, note: `${MARK} too much` }, expect: [409],
+      expectError: /mayor que el efectivo|more than the cash/i,
+      effect: async f => {
+        const { count } = await f.admin.from("cash_movements").select("id", { count: "exact", head: true }).eq("note", `${MARK} too much`);
+        return count === 0 || `${count} rows written`;
+      } },
+    { name: "POST /api/cash-shift (a withdrawal still awaits approval)", as: "cashier", method: "POST",
+      arrange: f => setAsideHeldCash(f, r),
+      path: "/api/cash-shift", body: async f => {
+        const { data } = await f.admin.from("cash_shifts").select("id").eq("restaurant_id", r).is("closed_at", null).single();
+        return { action: "close", shiftId: data.id, ref: crypto.randomUUID(), counted: "1000", confirm: true };
+      }, expect: [409], expectError: /aprobar o rechazar|approve or reject/i },
+    { name: "PATCH /api/cash-drawer (a cashier cannot approve)", as: "cashier", method: "PATCH",
+      path: "/api/cash-drawer", body: (_f, saved) => ({ id: saved.cashierWithdrawal, decision: "approve" }), expect: [403] },
+    { name: "PATCH /api/cash-drawer (a manager approves it)", as: "manager", method: "PATCH",
+      path: "/api/cash-drawer", body: (_f, saved) => ({ id: saved.cashierWithdrawal, decision: "approve" }), expect: [200],
+      check: async (_d, f) => {
+        const { data: row } = await f.admin.from("cash_movements").select("status, reviewed_by").eq("note", `${MARK} cashier`).maybeSingle();
+        return row?.status === "approved" && row.reviewed_by === "demo-manager@tabletap.shop" || `stored ${JSON.stringify(row)}`;
+      } },
+    { name: "POST /api/cash-drawer (a cashier's second withdrawal)", as: "cashier", method: "POST",
+      path: "/api/cash-drawer", body: { kind: "withdrawal", amount: 15, note: `${MARK} refused` }, expect: [200],
+      save: d => ({ refusedWithdrawal: d.id }) },
+    { name: "PATCH /api/cash-drawer (a manager rejects it)", as: "manager", method: "PATCH",
+      path: "/api/cash-drawer", body: (_f, saved) => ({ id: saved.refusedWithdrawal, decision: "reject" }), expect: [200],
+      check: async (_d, f) => {
+        const { data: row } = await f.admin.from("cash_movements").select("status, reviewed_by").eq("note", `${MARK} refused`).maybeSingle();
+        return row?.status === "rejected" && row.reviewed_by === "demo-manager@tabletap.shop" || `stored ${JSON.stringify(row)}`;
+      } },
+    { name: "PATCH /api/cash-drawer (approving after the rejection)", as: "manager", method: "PATCH",
+      path: "/api/cash-drawer", body: (_f, saved) => ({ id: saved.refusedWithdrawal, decision: "approve" }), expect: [409],
+      expectError: /ya decidió|already decided/i },
+    { name: "POST /api/cash-drawer (a manager's withdrawal sent with a reference)", as: "manager", method: "POST",
+      path: "/api/cash-drawer", body: async f => retiredRequest(f), expect: [200],
+      save: d => ({ retiredWithdrawal: d.id }) },
+    { name: "DELETE /api/cash-drawer (the manager removes it)", as: "manager", method: "DELETE",
+      path: "/api/cash-drawer", body: (_f, saved) => ({ id: saved.retiredWithdrawal }), expect: [200] },
+    { name: "POST /api/cash-drawer (its late retry answers with the removal)", as: "manager", method: "POST",
+      path: "/api/cash-drawer", body: async f => retiredRequest(f), expect: [200],
+      check: async (d, f) => {
+        const { count } = await f.admin.from("cash_movements").select("id", { count: "exact", head: true }).eq("note", `${MARK} retired`);
+        return d.removed === true && count === 0 || `answered ${JSON.stringify(d)}, ${count} rows`;
+      } },
     { name: "POST /api/cash-shift (a close nobody signed off)", as: "cashier", method: "POST",
       path: "/api/cash-shift", body: { action: "close", counted: 1000 }, expect: [400],
       expectError: /contaste|counted/i },
@@ -75,13 +136,14 @@ export function cashCases(fx) {
       save: d => ({ cashShift: d.id }),
       check: async (d, f) => {
         // What the drawer should have held: the opening, the cash taken while
-        // it was open (none, in this run), the withdrawal struck off.
+        // it was open (none, in this run), the withdrawals struck off or
+        // rejected left out, the cashier's approved MX$40 taken out.
         const { data } = await f.admin.from("cash_shifts")
           .select("closed_by, counted_cash, expected_cash, difference").eq("id", d.id).maybeSingle();
-        if (Number(d.expected) !== 1250.5) return `expected ${d.expected}, not 1250.50`;
-        if (Number(d.difference) !== -250.5) return `a difference of ${d.difference}, not -250.50`;
+        if (Number(d.expected) !== 1210.5) return `expected ${d.expected}, not 1210.50`;
+        if (Number(d.difference) !== -210.5) return `a difference of ${d.difference}, not -210.50`;
         return data?.closed_by === "demo-cashier@tabletap.shop" && Number(data.counted_cash) === 1000
-          && Number(data.expected_cash) === 1250.5 && Number(data.difference) === -250.5
+          && Number(data.expected_cash) === 1210.5 && Number(data.difference) === -210.5
           || `stored ${JSON.stringify(data)}`;
       } },
     { name: "POST /api/cash-drawer (nothing taken out of a closed shift)", as: "manager", method: "POST",

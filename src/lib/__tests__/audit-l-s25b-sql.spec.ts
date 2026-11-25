@@ -32,9 +32,13 @@ it("L4 compares a purchase's original packs, ingredient and total before returni
   expect(readFileSync("supabase/drop.sql", "utf8")).toContain("drop function if exists public.record_purchase_once_v2(uuid, uuid, numeric, numeric, text, uuid);");
 });
 
+// The withdrawal writer is defined first; the deployed signature after it is a
+// one-line delegate to it (2026-11-25).
+const firstFn = (name: string) => sql.slice(sql.indexOf(`create or replace function public.${name}(`)).split("$$;")[0];
 it.each(["record_waste_once_v2", "record_ingredient_counts_once", "create_cash_withdrawal_once", "close_cash_shift_once"])("L4 %s refuses a changed saved request", name => {
-  expect(fn(name)).toContain("errcode = 'PT409'");
-  expect(fn(name)).toContain("is distinct from");
+  const body = name === "create_cash_withdrawal_once" ? firstFn(name) : fn(name);
+  expect(body).toContain("errcode = 'PT409'");
+  expect(body).toContain("is distinct from");
 });
 
 it("L4 account sales compare the saved account and request before answering with a ticket", () => {

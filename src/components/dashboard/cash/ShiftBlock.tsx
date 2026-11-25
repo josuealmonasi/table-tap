@@ -5,14 +5,12 @@ import { useRouter } from "next/navigation";
 import { useLocale, useT } from "@/lib/i18n/context";
 import { dateLocale, formatMoney } from "@/lib/format";
 import { otherCurrencyLines } from "@/lib/other-currency";
-import { useToast } from "@/components/ui/Toast";
-import { useConfirm } from "@/components/ui/ConfirmDialog";
-import type { CashMovement } from "@/lib/cash-drawer";
+import { pendingWithdrawn } from "@/lib/cash-drawer";
 import { shiftOtherCurrencies, type ShiftView } from "@/lib/cash-shift";
 import CashMovementDialog from "./CashMovementDialog";
 import CloseShiftDialog from "./CloseShiftDialog";
 import ShiftRecord from "./ShiftRecord";
-import { SEP } from "@/lib/separator";
+import WithdrawalList from "./WithdrawalList";
 
 interface ShiftBlockProps {
   /** Today's shifts, oldest first; the open one, if any, is last. */
@@ -34,50 +32,14 @@ export default function ShiftBlock({ shifts, currency, timeZone, restaurantName 
   const t = useT();
   const { locale } = useLocale();
   const router = useRouter();
-  const toast = useToast();
-  const confirm = useConfirm();
   const [dialog, setDialog] = useState<"opening" | "withdrawal" | "close" | null>(null);
-  const [busy, setBusy] = useState<string | null>(null);
-  const [withdrawalError, setWithdrawalError] = useState<{ id: string; message: string } | null>(null);
   const current = shifts.find(v => v.shift.closed_at === null) ?? null;
   const drawerCurrency = current?.shift.currency ?? currency;
   const money = (n: number) => formatMoney(n, drawerCurrency);
   const time = (iso: string) =>
     new Date(iso).toLocaleTimeString(dateLocale(locale), { timeZone, hour: "2-digit", minute: "2-digit" });
   const closed = shifts.filter(v => v.shift.closed_at !== null).reverse();
-
-  async function strike(w: CashMovement): Promise<void> {
-    const ok = await confirm({
-      title: t("corte.removeWithdrawalTitle", { amount: formatMoney(w.amount, w.currency) }),
-      message: t("corte.removeWithdrawalMsg"),
-      confirmLabel: t("corte.removeWithdrawal"),
-    });
-    if (!ok) return;
-    setBusy(w.id);
-    setWithdrawalError(null);
-    try {
-      const res = await fetch("/api/cash-drawer", {
-        method: "DELETE",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: w.id }),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        const message = data.error ?? t("done.networkError");
-        setWithdrawalError({ id: w.id, message });
-        toast(message, "error");
-      }
-      else {
-        toast(t("corte.withdrawalRemoved"));
-        router.refresh();
-      }
-    } catch {
-      setWithdrawalError({ id: w.id, message: t("done.networkError") });
-      toast(t("done.networkError"), "error");
-    } finally {
-      setBusy(null);
-    }
-  }
+  const pending = current ? pendingWithdrawn(current.withdrawals) : 0;
 
   return (
     <div className="tt-cashbox">
@@ -132,6 +94,11 @@ export default function ShiftBlock({ shifts, currency, timeZone, restaurantName 
               <span role="cell">− {t("corte.withdrawals")}</span>
               <span role="cell">{money(current.sum.withdrawn)}</span>
             </div>
+            {/* Recorded by a cashier, not yet approved: shown, never subtracted. */}
+            {pending > 0 && <div className="tt-cashbox-line tt-muted" role="row">
+              <span role="cell">{t("corte.pendingWithdrawals")}</span>
+              <span role="cell">{money(pending)}</span>
+            </div>}
             <div className="tt-cashbox-line tt-cashbox-total" role="row">
               <strong role="cell">{t("corte.expected")}</strong>
               <strong role="cell">{money(current.sum.expected)}</strong>
@@ -140,31 +107,7 @@ export default function ShiftBlock({ shifts, currency, timeZone, restaurantName 
           {otherCurrencyLines(shiftOtherCurrencies(current), t, formatMoney).map(line => (
             <p key={line} className="tt-muted tt-costs-hint">{line}</p>
           ))}
-          {current.withdrawals.length > 0 && (
-            <ul className="tt-cashbox-list">
-              {current.withdrawals.map(w => (
-                <li key={w.id} className="tt-cashbox-item">
-                  <span className="tt-cashbox-what">
-                    <strong>{formatMoney(w.amount, w.currency)}</strong>
-                    <span className="tt-muted">
-                      {time(w.created_at)} · {w.actor_email}
-                      {w.note ? `${SEP}${w.note}` : ""}
-                    </span>
-                    {withdrawalError?.id === w.id && <span role="alert">{withdrawalError.message}</span>}
-                  </span>
-                  {/* The server never removes a withdrawal that pays out a
-                      resolved held receipt; say why instead of offering it. */}
-                  {w.linked ? (
-                    <span className="tt-muted tt-costs-hint">{t("corte.withdrawalLinked")}</span>
-                  ) : (
-                    <button className="tt-btn tt-btn-ghost tt-btn-sm" disabled={busy === w.id} onClick={() => void strike(w)}>
-                      {t("corte.removeWithdrawal")}
-                    </button>
-                  )}
-                </li>
-              ))}
-            </ul>
-          )}
+          <WithdrawalList withdrawals={current.withdrawals} time={time} />
         </>
       ) : (
         <p className="tt-muted tt-cashbox-note">{t("shift.none")}</p>
