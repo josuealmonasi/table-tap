@@ -8773,3 +8773,31 @@ drawer read MX$100 cash in the mail and MX$70 on the corte. Both now read
 their adjustments (logged write-offs and refunds, plus completed return
 events) from one reader, `readCorteAdjustments` in `corte-adjustments.ts`.
 Check: `signup-mail-ceiling.spec.ts`, `digest-figures.spec.ts`.
+### Checkout attempts: a 429 freed a live share; a refused retry held the bill (2026-11-25)
+
+Two pairs that had to agree (bl43 review, findings 2 and 3). First, what
+counts as "Stripe made nothing" and what a retry may give back:
+`stripeRefusedOutright` (`platform-fee.ts`) called every 4xx but 409 a
+refusal, so a retry that met a 429 (a rate limit, or a lock timeout on the
+idempotency key the first request was still creating) retired the split share,
+coupon and fee, and the first request then bound and showed its still-payable
+page: staff could collect the freed share in cash while the diner paid it by
+card. A 429, an idempotency error and any answer Stripe marks retryable now
+keep the reservation, and an attempt's page binds through
+`diner_checkout_bind_open_v1`, which refuses an attempt that is no longer open
+(`checkout_attempt_closed`); `recordDinerCheckout` then expires that late page
+instead of exposing it. Second, a saved whole-bill request and a resume that
+can never send it: the request died before Stripe, the diner retried after the
+saved `expires_at` had passed, Stripe refused it, and only an attempt the
+current call had just inserted was ever cleaned up, so the bill, its coupon
+and its fee stayed held with no session whose expiry could free them. `deliver`
+(`diner-attempt.ts`) now closes an attempt on durable proof it made no session
+(no bound page, an outright refusal of its saved key, and either just opened
+or younger than Stripe's 23-hour key window): the share is retired, or the
+attempt is finished unpaid and its fee released, and resume returns null so the
+caller quotes a fresh attempt with a new key and expiry. Uncertain answers stay
+reserved: the next resume replays the same key (returning the page, which
+binds and expires through the webhook, or a refusal, which closes it), and
+`resolveCheckoutPages` does the same replay for unbound pages under 23 hours.
+Checks: `checkout-attempt-refusal.spec.ts`, `diner-checkout.spec.ts`,
+`platform-fee.spec.ts`.

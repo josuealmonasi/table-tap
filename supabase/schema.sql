@@ -10372,6 +10372,30 @@ end; $$;
 revoke all on function public.diner_checkout_bind(uuid, jsonb) from public, anon, authenticated;
 grant execute on function public.diner_checkout_bind(uuid, jsonb) to service_role;
 
+-- The bind above checks whose page it is, never whether the attempt still
+-- owns anything. A retry that retired the attempt (its split share, coupon and
+-- fee given back) let the first request's late page bind and be shown, so the
+-- share could be paid twice (bl43 #2). Only an open attempt takes a page; the
+-- caller expires a refused one. A paid attempt answers its own page again.
+create or replace function public.diner_checkout_bind_open_v1(p_attempt uuid, p_record jsonb)
+returns void language plpgsql security definer set search_path = public as $$
+declare c diner_checkouts;
+begin
+  select * into c from diner_checkouts where id = p_attempt for update;
+  if not found or (c.stripe_session_id is not null and c.stripe_session_id <> p_record->>'stripe_session_id')
+    or c.restaurant_id::text <> p_record->>'restaurant_id'
+    or c.stripe_account_id <> p_record->>'stripe_account_id'
+    or c.currency <> p_record->>'currency' or c.amount_cents <> (p_record->>'amount_cents')::int
+    or c.livemode <> (p_record->>'livemode')::boolean or c.metadata <> p_record->'metadata' then
+    raise exception 'checkout_provenance_changed';
+  end if;
+  if c.status = 'paid' and c.stripe_session_id = p_record->>'stripe_session_id' then return; end if;
+  if c.status <> 'open' then raise exception 'checkout_attempt_closed'; end if;
+  update diner_checkouts set stripe_session_id = p_record->>'stripe_session_id' where id = p_attempt;
+end; $$;
+revoke all on function public.diner_checkout_bind_open_v1(uuid, jsonb) from public, anon, authenticated;
+grant execute on function public.diner_checkout_bind_open_v1(uuid, jsonb) to service_role;
+
 create or replace function public.finish_diner_checkout(p_attempt uuid, p_paid boolean)
 returns void language plpgsql security definer set search_path = public as $$
 declare v_checkout diner_checkouts; r record;
