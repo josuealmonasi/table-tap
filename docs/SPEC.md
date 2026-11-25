@@ -2990,9 +2990,15 @@ Order responses carry `version: { adjustmentIds: [...] }`; a reissue supplies
 that version. Empty means the original bill, so later forgiveness cannot change
 its financial values. Omitted means the current statement. Unknown version IDs
 and inconsistent or failed financial reads do not issue a receipt. The prompt
-shares its issued version across email and print. No new table, expiry or
-payment/sign-out restriction is introduced; the version selects saved financial
-facts rather than storing full historical HTML or customer email.
+shares its issued version across email and print. The version selects saved
+financial facts.
+
+Table receipt requests require staff membership in the order's restaurant or
+the approved phone that placed the order or paid for it. A whole-bill card
+checkout records its payer before opening the page. The diner bill keeps the
+shared outstanding orders and shows paid orders only to the phone that placed
+or paid for them. Receipt limits use canonical UUIDs and charge each order
+once per request.
 
 `POST /api/receipt` also accepts `paymentId` for a model-2 slot collection. It
 reads the immutable payment and its paid slots, verifies their restaurant,
@@ -3003,9 +3009,9 @@ currency and time, without reading today's order totals. Both receipt components
 accept that payment identity. The menu remembers the selected parts only when
 checkout returns a card URL, then resolves their payment after Stripe returns,
 including late confirmation. Approved phones poll `/api/receipt/payments` for
-their sitting, including after it closes. A new staff collection offers its
-payment receipt while other parts remain unpaid. The first successful read
-sets a baseline; old payments are not offered on a first visit. Each payment
+their own payments in that sitting, including after it closes. Staff can
+issue a receipt for a part collected in person. The first successful read
+sets a baseline so only new payments are offered on a first visit. Each payment
 is offered once per tab. Simultaneous payments wait their turn, and unshown
 receipts survive a refresh. Failed reads preserve the previous observation.
 The bill sheet and tracker wait while a receipt is open. Receipt memory never

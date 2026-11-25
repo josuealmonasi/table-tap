@@ -9989,6 +9989,9 @@ end $$;
 revoke truncate, references, trigger on all tables in schema public from authenticated;
 revoke truncate, references, trigger on all tables in schema public from public, anon, authenticated;
 
+-- The verified phone opening a whole-bill or split checkout.
+alter table diner_checkouts add column if not exists payer_member_id uuid;
+
 -- Every payable attempt has one owner, including fee-free plans. Its Stripe
 -- request is kept intact so a lost response is retried with the same key.
 create or replace function public.diner_checkout_open(p_record jsonb)
@@ -10060,10 +10063,10 @@ begin
       or public.redeem_coupon(v_coupon) is null then raise exception 'checkout_coupon_unavailable'; end if;
   end if;
   insert into diner_checkouts (id, restaurant_id, stripe_account_id, livemode, currency, amount_cents,
-    metadata, order_ids, payable_order_ids, scope_key, idempotency_key, stripe_params, entitlements, order_discounts, food_principal)
+    metadata, order_ids, payable_order_ids, scope_key, idempotency_key, stripe_params, entitlements, order_discounts, food_principal, payer_member_id)
   values (v_new.id, v_new.restaurant_id, v_new.stripe_account_id, v_new.livemode, v_new.currency, v_new.amount_cents,
     v_new.metadata, v_new.order_ids, v_new.payable_order_ids, v_new.scope_key, v_new.idempotency_key,
-    v_new.stripe_params, v_new.entitlements, v_new.order_discounts, v_new.food_principal);
+    v_new.stripe_params, v_new.entitlements, v_new.order_discounts, v_new.food_principal, v_new.payer_member_id);
   if v_coupon is not null then
     insert into coupon_redemptions (restaurant_id, coupon_id, order_id, code, amount, checkout_attempt_id)
     values (v_new.restaurant_id, v_coupon, v_new.payable_order_ids[1], v_new.metadata->>'settle_coupon', v_discount, v_new.id);
@@ -12741,7 +12744,6 @@ grant execute on function public.fail_stripe_dispute_event(uuid, uuid, text) to 
 -- every table before them (invariants/money.spec.ts).
 revoke truncate, references, trigger on all tables in schema public from authenticated;
 
-alter table diner_checkouts add column if not exists payer_member_id uuid;
 alter table diner_checkouts add column if not exists split_id uuid;
 alter table diner_checkouts add column if not exists split_revision int;
 

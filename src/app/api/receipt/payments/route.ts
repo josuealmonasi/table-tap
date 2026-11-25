@@ -5,6 +5,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { clientKey, forTheRoom, isRateLimited } from "@/lib/rate-limit";
 import { BILL_POLL_MS, perMinute } from "@/lib/poll";
 import type { SlotReceiptTarget } from "@/lib/slot-receipt-offer";
+import { receiptPaymentOwners } from "@/lib/receipt-payment-owners";
 
 export const dynamic = "force-dynamic";
 
@@ -30,16 +31,26 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     const { data: slots, error: slotError } = await db.from("bill_split_slots").select("payment_id, split_id, share_no")
       .eq("restaurant_id", restaurantId).in("split_id", splits.map(s => s.id)).order("share_no");
     if (slotError || !slots) return await apiError("apiErr.ordersLoad", 503);
+    const paymentIds = [...new Set(slots.map(s => s.payment_id).filter(Boolean))];
+    const { data: ledger, error: paymentError } = paymentIds.length
+      ? await db.from("payments").select("id, stripe_payment_intent")
+        .eq("restaurant_id", restaurantId).eq("session_id", sessionId).in("id", paymentIds)
+      : { data: [], error: null };
+    if (paymentError || !ledger) return await apiError("apiErr.ordersLoad", 503);
+    const owners = await receiptPaymentOwners(db, restaurantId, ledger.map(p => p.stripe_payment_intent));
+    const owned = new Map(ledger.map(p => [p.id, owners.get(p.stripe_payment_intent)]));
+    const paidSplits = new Set(slots.filter(s => s.payment_id).map(s => s.split_id));
     const payments: SlotReceiptTarget[] = [];
     for (const slot of slots) {
-      if (!slot.payment_id) continue;
+      const owner = owned.get(slot.payment_id);
+      if (!owner || owner.payer_member_id !== member.id || owner.split_id !== slot.split_id) continue;
       let receipt = payments.find(p => p.paymentId === slot.payment_id);
       if (!receipt) { receipt = { paymentId: slot.payment_id, splitId: slot.split_id, slots: [] }; payments.push(receipt); }
       receipt.slots.push(slot.share_no);
     }
     // A completed split still owns its order receipts, but not the next round.
     const splitOrderIds = [...new Set(splits.filter(s => s.status !== "cancelled"
-      || payments.some(p => p.splitId === s.id)).flatMap(s => s.order_ids ?? []))];
+      || paidSplits.has(s.id)).flatMap(s => s.order_ids ?? []))];
     return NextResponse.json({ split: splits.some(s => ["proposed", "locked"].includes(s.status)), splitOrderIds, payments });
   } catch { return await apiError("apiErr.ordersLoad", 503); }
 }

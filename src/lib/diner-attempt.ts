@@ -10,6 +10,7 @@ import { releaseFee, stripeRefusedOutright } from "@/lib/platform-fee";
 export interface AttemptQuote {
   restaurantId: string; stripeAccount: string; currency: string; amountCents: number;
   orderIds: string[]; payableIds: string[]; scopeKey: string;
+  payerMemberId?: string;
   entitlements?: Record<string, number>; discounts?: Record<string, number>; couponId?: string;
   foodPrincipal: number;
 }
@@ -73,6 +74,7 @@ export async function openDinerAttempt(stripe: Stripe, params: Stripe.Checkout.S
     id, restaurant_id: quote.restaurantId, stripe_account_id: quote.stripeAccount,
     currency: quote.currency.toUpperCase(), amount_cents: quote.amountCents, livemode: stripeLiveMode(),
     order_ids: [...new Set(quote.orderIds)], payable_order_ids: quote.payableIds, scope_key: quote.scopeKey,
+    payer_member_id: quote.payerMemberId,
     idempotency_key: `diner:${id}`, stripe_params: params, metadata: params.metadata ?? {},
     entitlements: quote.entitlements ?? {}, order_discounts: quote.discounts ?? {}, coupon_id: quote.couponId ?? null,
     food_principal: quote.foodPrincipal,

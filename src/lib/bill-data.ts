@@ -1,4 +1,5 @@
 import { paymentCoverageDetails } from "@/lib/payment-coverage";
+import { ownPaidOrderIds } from "@/lib/receipt-payment-owners";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { TableMember } from "@/lib/table-membership";
 import { billWindowStart, paidOrders, unpaidOrders } from "@/lib/table-bill";
@@ -81,7 +82,6 @@ export async function fetchTableBill(
       settled = settled.in("id", member.legacyOrderIds);
     } else if (member.closed) {
       owed = owed.eq("diner", member.id);
-      settled = settled.eq("diner", member.id);
     }
   }
 
@@ -94,9 +94,15 @@ export async function fetchTableBill(
   // the written-off, so an order falls on one side or the other and never both.
   const outstanding = unpaidOrders((owedRes.data ?? []) as Order[]);
   const coverage = await paymentCoverageDetails(restaurantId, outstanding, audience === "staff");
+  let paid = paidOrders((settledRes.data ?? []) as Order[]);
+  if (audience === "diner" && member && !member.legacyOrderIds) {
+    const otherIds = paid.filter(o => o.diner !== member.id).map(o => o.id);
+    const paidByMember = await ownPaidOrderIds(createAdminClient(), restaurantId, member.sessionId, member.id, otherIds);
+    paid = paid.filter(o => o.diner === member.id || paidByMember.has(o.id));
+  }
   return [
     ...outstanding.map(o => ({ ...o, collected: coverage.get(o.id)?.amount ?? 0, collected_tip: coverage.get(o.id)?.tip ?? 0 })),
-    ...paidOrders((settledRes.data ?? []) as Order[]),
+    ...paid,
   ];
 }
 

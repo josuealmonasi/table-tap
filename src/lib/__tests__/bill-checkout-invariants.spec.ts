@@ -55,3 +55,10 @@ it("E11 display and payment use one validated sitting, including old debt", () =
   expect(bill).not.toContain('.gte("created_at", billWindowStart()');
   expect(read("src/hooks/useBillPayment.ts").split('fetch("/api/bill/pay"')[1]).toMatch(/sessionId/);
 });
+it("keeps payer identity in the persisted checkout and scopes retries to that payer", () => {
+  const bill = read("src/app/api/bill/pay/route.ts");
+  expect(bill).toContain('member.id ? `:${member.id}`');
+  expect(bill).toContain("payerMemberId: member.id");
+  expect(fn("diner_checkout_open")).toMatch(/insert into diner_checkouts \([^)]*payer_member_id\)/);
+  expect(fn("diner_checkout_open")).toContain("v_new.payer_member_id");
+});

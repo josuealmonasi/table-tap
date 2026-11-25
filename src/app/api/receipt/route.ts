@@ -12,6 +12,8 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { isValidEmail, normalizeEmail } from "@/lib/email";
 import { dateLocale } from "@/lib/format";
 import { printableReceipt } from "@/lib/print-document";
+import { canReadOrderReceipt, canReadSlotReceipt } from "@/lib/receipt-access";
+import { canonicalReceiptId } from "@/lib/receipt-ids";
 
 export const runtime = "nodejs";
 
@@ -55,49 +57,48 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   if (!body) return await apiError("apiErr.invalidRequest", 400);
   const { orderId, orderIds, email } = body;
   const printing = body.delivery === "print";
-  const paymentId = typeof body.paymentId === "string" ? body.paymentId : "";
-  if ((body.paymentId !== undefined && (!paymentId || paymentId.length > 100))
+  const paymentId = canonicalReceiptId(body.paymentId);
+  if ((body.paymentId !== undefined && !paymentId)
+    || (orderIds !== undefined && !Array.isArray(orderIds))
     || (body.version !== undefined && (!body.version || !Array.isArray(body.version.adjustmentIds)))) {
     return await apiError("apiErr.invalidRequest", 400);
   }
   // One ticket, or every ticket a table settled together. Capped: a table
   // settles a handful of orders, and an uncapped list is a way to make one
   // request read the whole table and build an enormous email.
-  // Read as an array only when it is one: JSON can say anything, and a string
-  // here once reached `.filter` and answered 500.
   // Refused above the cap, never shortened to it: the first 40 of 41 orders
   // went out by email as the whole bill, MX$10 short (sweep 4, finding 2).
-  const ids = (Array.isArray(orderIds) && orderIds.length ? orderIds : [orderId])
-    .filter((v): v is string => typeof v === "string" && v.length > 0);
-  if (ids.length > MAX_RECEIPT_ORDERS) return await apiError("receipt.tooManyOrders", 413);
+  const requested = orderIds?.length ? orderIds : orderId === undefined ? [] : [orderId];
+  if (requested.length > MAX_RECEIPT_ORDERS) return await apiError("receipt.tooManyOrders", 413);
+  const canonical = requested.map(canonicalReceiptId);
+  if (canonical.some(id => id === null)) return await apiError("apiErr.invalidRequest", 400);
+  const ids = [...new Set(canonical.filter((id): id is string => id !== null))];
   const address = normalizeEmail(String(email ?? ""));
   if ((!paymentId && ids.length === 0) || (!printing && !isValidEmail(address))) {
     return await apiError("receipt.badEmail", 400);
   }
 
-  // Per ORDER (or slot PAYMENT) as well as per caller. The IP limit alone bounds how fast one
-  // machine can send, not how much: anybody holding a single order id could
-  // point our sender at any address they liked, five a minute, for as long as
-  // they cared to — from our domain, which is the part that gets a sending
-  // reputation blocked. A real diner asks for a receipt once, and mistypes the
-  // address at most a couple of times.
-  for (const id of paymentId ? [paymentId] : ids) {
-    if (await isRateLimited(`${printing ? "receipt-print" : "receipt-order"}:${id}`, printing ? 20 : RESENDS_PER_ORDER, 86_400)) {
-      return await apiError("apiErr.tooManyRequests", 429);
-    }
-  }
-
   const db = createAdminClient();
   let source: ReceiptSource;
   try {
-    source = paymentId ? await readSlotReceipt(db, paymentId, undefined, body.version) : await readOrderReceipt(db, ids, true, orderIds, body.version);
+    source = paymentId
+      ? await readSlotReceipt(db, paymentId, undefined, body.version,
+        (payment, splitId, tableId) => canReadSlotReceipt(req, db, payment, splitId, tableId))
+      : await readOrderReceipt(db, ids, true, orderIds, body.version,
+        (restaurantId, orders) => canReadOrderReceipt(req, db, restaurantId, orders));
   } catch (error) {
-    return await apiError(error instanceof ReceiptReadError && error.status === 404 ? "apiErr.notFound" : "apiErr.generic",
-      error instanceof ReceiptReadError ? error.status : 503);
+    const status = error instanceof ReceiptReadError ? error.status : 503;
+    return await apiError(status === 403 ? "apiErr.forbidden" : status === 404 ? "apiErr.notFound" : "apiErr.generic", status);
   }
   // The table is known only now; the room was counted before anything was read.
   if (await isTableLimited(req, "receipt", source.tableId, 5)) {
     return await apiError("apiErr.tooManyRequests", 429);
+  }
+  // Charge each authorized order or slot payment once per request, by its canonical ID.
+  for (const id of paymentId ? [paymentId] : ids) {
+    if (await isRateLimited(`${printing ? "receipt-print" : "receipt-order"}:${id}`, printing ? 20 : RESENDS_PER_ORDER, 86_400)) {
+      return await apiError("apiErr.tooManyRequests", 429);
+    }
   }
 
   const { data: restaurant } = await db

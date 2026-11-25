@@ -125,7 +125,9 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   if (orders.length !== wanted.size) return await apiError("apiErr.billChanged", 409);
   if (!orders.length) return await apiError("apiErr.billSettled", 409);
   const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
-  const scopeKey = `bill:${[...wanted].sort().join(",")}`;
+  // Only the phone opening the payment can resume it. The database also
+  // excludes competing open attempts whose orders overlap this bill.
+  const scopeKey = `bill:${[...wanted].sort().join(",")}` + (member.id ? `:${member.id}` : "");
   try {
     const prior = await resumeDinerAttempt(stripe, restaurantId, scopeKey);
     if (prior) return NextResponse.json({ url: prior.url });
@@ -266,6 +268,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       {
         restaurantId, stripeAccount: restaurant.stripe_account_id, currency, amountCents: cents,
         orderIds: orders.map(o => o.id), payableIds: orders.map(o => o.id), scopeKey,
+        payerMemberId: member.id || undefined,
         ...billEntitlements(orders, discount), couponId: coupon?.id, foodPrincipal: round2(principal - discount),
       },
     );

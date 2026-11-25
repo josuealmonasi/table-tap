@@ -103,6 +103,12 @@ it("keeps the ordinary whole-bill cash offer", async () => {
   await render(); bill = tableBill([], []); await render(); expect(offer.offering).toEqual(["order"]);
   expect(offer.paymentId).toBeNull(); expect(fetch).not.toHaveBeenCalled();
 });
+it("does not offer an ordinary cash receipt to a phone with only somebody else's orders", async () => {
+  receiptScope = undefined;
+  bill = { ...tableBill([], []), settled: false, others: { ...tableBill([], []).others, orders: [{ id: "other" } as never] } };
+  await render(); bill = tableBill([], []); await render();
+  expect(offer.offering).toBeNull();
+});
 it("keeps the ordinary whole-bill card return and forgets a cancelled slot checkout", async () => {
   receiptScope = undefined; sessionStorage.setItem("tt.settling", JSON.stringify(["order"]));
   window.history.replaceState(null, "", "/?settled=1"); await render(); expect(offer.offering).toEqual(["order"]);
