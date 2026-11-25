@@ -27,6 +27,11 @@ export interface Mail {
   headers?: Record<string, string>;
 }
 
+export interface MailBatch extends Pick<Mail, "idempotencyKey" | "signal" | "throwOnUncertainDelivery"> {
+  messages: Omit<Mail, "attachments" | "idempotencyKey" | "signal" | "throwOnUncertainDelivery">[];
+}
+export const MAIL_BATCH_SIZE = 100;
+
 /**
  * A failure says whether trying again can help: a 429, a 5xx, a dropped
  * connection or an idempotent request still in flight may succeed later; a
@@ -48,32 +53,35 @@ export function mailConfigured(): boolean {
   return Boolean(process.env.RESEND_API_KEY && process.env.RECEIPT_FROM_EMAIL);
 }
 
-export async function sendMail(mail: Mail): Promise<MailResult> {
+function mailBody(mail: Mail) {
+  return {
+    from: `${mail.fromName ?? "TableTap"} <${process.env.RECEIPT_FROM_EMAIL}>`,
+    to: [mail.to],
+    subject: mail.subject,
+    text: mail.text,
+    html: mail.html,
+    ...(mail.attachments?.length
+      ? { attachments: mail.attachments.map(a => ({ filename: a.filename, content: a.content.toString("base64") })) }
+      : {}),
+    ...(mail.headers ? { headers: mail.headers } : {}),
+  };
+}
+
+export async function sendMail(mail: Mail | MailBatch): Promise<MailResult> {
   if (!mailConfigured()) return { sent: false, reason: "unconfigured" };
 
   try {
-    const res = await fetch("https://api.resend.com/emails", {
+    const batch = "messages" in mail;
+    const res = await fetch(batch ? "https://api.resend.com/emails/batch" : "https://api.resend.com/emails", {
       method: "POST",
       signal: mail.signal,
       headers: {
         Authorization: `Bearer ${process.env.RESEND_API_KEY}`,
         "Content-Type": "application/json",
+        ...(batch ? { "X-Batch-Validation": "strict" } : {}),
         ...(mail.idempotencyKey ? { "Idempotency-Key": mail.idempotencyKey } : {}),
       },
-      body: JSON.stringify({
-        // The restaurant's name over our verified domain: the diner bought
-        // from them, and a receipt signed by a company they have never heard
-        // of is a receipt that gets reported as spam.
-        from: `${mail.fromName ?? "TableTap"} <${process.env.RECEIPT_FROM_EMAIL}>`,
-        to: [mail.to],
-        subject: mail.subject,
-        text: mail.text,
-        html: mail.html,
-        ...(mail.attachments?.length
-          ? { attachments: mail.attachments.map(a => ({ filename: a.filename, content: a.content.toString("base64") })) }
-          : {}),
-        ...(mail.headers ? { headers: mail.headers } : {}),
-      }),
+      body: JSON.stringify(batch ? mail.messages.map(mailBody) : mailBody(mail)),
     });
     if (!res.ok) {
       const body = await res.text().catch(() => "");
@@ -82,6 +90,12 @@ export async function sendMail(mail: Mail): Promise<MailResult> {
       }
       console.error("receipt mail failed", res.status, body);
       return { sent: false, reason: "failed", ...mailFailure(res.status, body) };
+    }
+    if (batch) {
+      const reply = await res.json() as { data?: { id?: string }[] };
+      if (!Array.isArray(reply?.data) || reply.data.length !== mail.messages.length || reply.data.some(row => !row?.id)) {
+        throw new Error("Mail batch delivery uncertain");
+      }
     }
     return { sent: true };
   } catch (err) {

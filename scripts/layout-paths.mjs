@@ -98,6 +98,7 @@ export const PUBLIC = [
   "/privacidad",
   // The "stop emailing my tickets" page a ticket email links to.
   "/tickets/stop",
+  "/digest/opt-out",
   `/tickets/stop?t=${SEED_STOP_TOKEN}`,
   // The daily digest's confirm and stop pages: one button each. A made-up
   // token shows the real screen and spends nothing.

@@ -10403,6 +10403,73 @@ create or replace view trial_reminders_due with (security_invoker = true) as
 revoke all on trial_reminders_due from anon, authenticated, public, service_role;
 grant select on trial_reminders_due to service_role;
 
+-- One owner digest per restaurant's completed local day.
+alter table restaurants add column if not exists digest_sent_for date;
+
+-- Record actual stock transitions even when the bell's alerts are off, and
+-- keep the item's name when it is restocked, renamed, or removed.
+create table if not exists menu_stockouts (
+  restaurant_id uuid not null references restaurants(id) on delete cascade,
+  item_id uuid not null,
+  name text not null,
+  created_at timestamptz not null default statement_timestamp(),
+  primary key (restaurant_id, created_at, item_id)
+);
+alter table menu_stockouts enable row level security;
+revoke all on menu_stockouts from anon, authenticated, public, service_role;
+grant select on menu_stockouts to service_role;
+
+create or replace function public.record_menu_stockout() returns trigger
+language plpgsql security definer set search_path = '' as $$
+begin
+  insert into public.menu_stockouts (restaurant_id, item_id, name)
+    values (new.restaurant_id, new.id, new.name) on conflict do nothing;
+  return new;
+end;
+$$;
+revoke all on function public.record_menu_stockout() from anon, authenticated, public, service_role;
+drop trigger if exists record_menu_stockout on menu_items;
+create trigger record_menu_stockout after update of stock on menu_items
+  for each row when (old.stock > 0 and new.stock = 0)
+  execute function public.record_menu_stockout();
+
+-- This view reads the Auth table with the view owner's privileges. Only the
+-- service role may read these confirmed addresses and their mail preferences.
+create or replace view daily_digest_recipients as
+  with recipients as (
+    select r.id as restaurant_id, r.owner_id as user_id, true as is_owner
+      from restaurants r where r.owner_id is not null
+    union all
+    select s.restaurant_id, s.user_id, s.role = 'owner' from staff s
+      join restaurants r on r.id = s.restaurant_id
+      where s.role in ('owner', 'manager') and s.user_id is distinct from r.owner_id
+  )
+  select r.restaurant_id, r.user_id, r.is_owner, u.email, u.raw_user_meta_data->>'locale' as locale
+    from recipients r join auth.users u on u.id = r.user_id
+    where u.email_confirmed_at is not null and nullif(u.email, '') is not null
+      and case when r.is_owner then u.raw_user_meta_data->'digest' is distinct from 'false'::jsonb
+        else u.raw_user_meta_data->'digest' = 'true'::jsonb end;
+revoke all on daily_digest_recipients from anon, authenticated, public, service_role;
+grant select on daily_digest_recipients to service_role;
+
+create or replace view daily_digests_due with (security_invoker = true) as
+  select r.id as restaurant_id, r.owner_id, r.name, r.currency, r.timezone,
+    clock.local_now::date - 1 as digest_day,
+    (clock.local_now::date + time '07:00') at time zone r.timezone as created_at
+  from restaurants r
+  cross join lateral (select now() at time zone r.timezone as local_now) clock
+  where clock.local_now::time >= time '07:00'
+    and (r.digest_sent_for is null or r.digest_sent_for < clock.local_now::date - 1)
+    and exists (select 1 from daily_digest_recipients d where d.restaurant_id = r.id)
+    and exists (
+      select 1 from orders o where o.restaurant_id = r.id and o.currency = r.currency
+        and o.paid and o.status <> 'cancelled'
+        and o.created_at >= ((clock.local_now::date - 1)::timestamp at time zone r.timezone)
+        and o.created_at < (clock.local_now::date::timestamp at time zone r.timezone)
+    );
+revoke all on daily_digests_due from anon, authenticated, public, service_role;
+grant select on daily_digests_due to service_role;
+
 -- One free trial per RFC. A restaurant's RFC is recorded here once it has had
 -- a trial (no FK: it outlives the restaurant, which is the point). Saving an
 -- RFC that another restaurant already used for a trial ends this one's trial

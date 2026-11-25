@@ -122,7 +122,7 @@ it("uses Spanish by default and releases the claim after a definite refusal", as
   const result = await recoverTrialReminders(context(d));
   expect(result.failed).toBe(1);
   expect(claimAtSend).toBe(due.trial_ends_at);
-  expect(send.mock.calls[0][0].subject).toContain("Tu prueba gratis de Servicio termina el");
+  expect(send.mock.calls[0][0]).toMatchObject({ subject: expect.stringContaining("Tu prueba gratis de Servicio termina el") });
   expect(d.restaurant.trial_reminded_for).toBeNull();
   expect((await recoverTrialReminders(context(d))).done).toBe(1);
 });

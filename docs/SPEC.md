@@ -226,6 +226,33 @@ told. A paying restaurant or an admin pay-by window is never touched. The RFC
 stays non-unique: one owner's second location keeps working, without a free
 month. The terms (2026-11-18) and the privacy notice say so.
 
+## The daily sales digest
+
+At 7:00 a.m. in each restaurant's timezone, the recovery job emails the previous
+local calendar day's digest if there were sales. Owners receive it by default.
+Managers can opt in. The profile switch sets the login's `user_metadata.digest`
+boolean, and the email uses that login's saved `user_metadata.locale` with a
+Spanish fallback. The signed footer link opens a stop button. Mail providers
+can also POST the one-click unsubscribe form. Both update only the digest
+preference on that login.
+
+Sales, average ticket, tips, and the top three dishes by quantity use Analytics'
+paid, non-cancelled order reader. The digest compares sales with the same
+weekday one week earlier and breaks out table and to-go orders. Card and cash
+use the register's gross payment ledger for the day. Discounts use Analytics'
+promotion and redemption reader, and refunds use successful return and
+cancellation events from the same refund ledger. Items needing attention include
+pending discount and write-off requests, undecided offline sales, customers
+who owe money on open accounts, and refunds due to customers. Accounts uses
+saved currencies, which the digest lists separately. The stock section uses
+transitions to zero recorded during that local day, even with bell alerts off.
+
+The service-only recovery and recipient views select the due restaurant and its
+eligible logins. A conditional write to `restaurants.digest_sent_for` claims the
+day before the job submits localized HTML and text to Resend. A confirmed
+refusal reopens an unaccepted digest for retry. An uncertain response keeps
+the claim.
+
 ## The two ways in
 
 - **A table QR** → `/r/<restaurantId>/t/<tableId>`. The order knows its table,

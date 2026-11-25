@@ -13,7 +13,7 @@ describe("a read that grows with time reads every row", () => {
     // or only counts.
     const GROWING = ["orders", "payments", "user_logs", "loyalty_cards", "loyalty_visits", "loyalty_redemptions",
       "waste_entries", "ingredient_purchases", "ingredient_counts", "ingredient_prices", "cash_movements",
-      "coupon_redemptions", "dish_ratings", "print_jobs", "notifications", "terminal_deposits"];
+      "coupon_redemptions", "dish_ratings", "print_jobs", "notifications", "terminal_deposits", "menu_stockouts"];
     const files = walk("src").filter(f => /\.(ts|tsx)$/.test(f) && !f.includes("__tests__"));
     const offenders: string[] = [];
     let windows = 0;

@@ -1,4 +1,8 @@
 drop view if exists trial_reminders_due;
+drop view if exists daily_digests_due;
+drop view if exists daily_digest_recipients;
+drop table if exists menu_stockouts cascade;
+drop function if exists public.record_menu_stockout() cascade;
 drop table if exists restaurant_admin_notes cascade;
 -- The database's five-minute recovery call (audit of #648). The extensions
 -- stay: other projects' jobs may use them.
