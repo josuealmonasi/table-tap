@@ -21,6 +21,7 @@ beforeEach(() => {
     bill_split_slots: [0, 2].map(share_no => ({ restaurant_id: "r", split_id: "split", share_no, payment_id: "payment", reserved_checkout_id: "secret-checkout" })),
     payments: [{ id: "payment", restaurant_id: "r", session_id: "session", stripe_payment_intent: "pi_own" }],
     diner_checkouts: [{ restaurant_id: "r", stripe_payment_intent: "pi_own", payer_member_id: "member", split_id: "split" }],
+    orders: ["order", "split-order"].map(id => ({ id, restaurant_id: "r", session_id: "session", diner: "member" })),
   };
 });
 it("groups only the approved sitting's paid parts, including after its last payment", async () => {
@@ -54,7 +55,7 @@ it("refuses an unapproved phone before reading any payment ids", async () => {
 it("rate limits polling before reading the sitting", async () => {
   state.limited = true; expect((await request()).status).toBe(429); expect(state.member).not.toHaveBeenCalled();
 });
-it.each(["bill_splits", "bill_split_slots", "payments", "diner_checkouts"])("does not turn a failed %s read into an empty observation", async table => {
+it.each(["bill_splits", "bill_split_slots", "payments", "diner_checkouts", "orders"])("does not turn a failed %s read into an empty observation", async table => {
   state.errorTable = table; expect((await request()).status).toBe(503);
 });
 it("does not invent a receipt for an unsplit or legacy bill", async () => {
@@ -68,4 +69,18 @@ it("names the split's orders without labelling a later round as divided", async 
   expect(body.splitOrderIds).toEqual(["split-order"]);
   expect(body.split).toBe(false);
   expect(body.payments).toHaveLength(1);
+});
+
+it("names only orders this phone placed or paid for, never the rest of a closed split", async () => {
+  state.tables.bill_splits[0] = { ...state.tables.bill_splits[0], status: "done", order_ids: ["order", "theirs", "paid-for", "next-party"] };
+  state.tables.orders.push(
+    { id: "theirs", restaurant_id: "r", session_id: "session", diner: "other" },
+    { id: "paid-for", restaurant_id: "r", session_id: "session", diner: "other" },
+    { id: "next-party", restaurant_id: "r", session_id: "later", diner: "member" });
+  state.tables.payments[0].order_id = "paid-for";
+  state.tables.payments.push({ id: "p2", restaurant_id: "r", session_id: "session", order_id: "theirs", stripe_payment_intent: "pi_other" });
+  state.tables.bill_split_slots.push({ restaurant_id: "r", split_id: "split", share_no: 1, payment_id: "p2" });
+  state.tables.diner_checkouts.push({ restaurant_id: "r", stripe_payment_intent: "pi_other", payer_member_id: "other", split_id: "split" });
+  const body = await (await request()).json();
+  expect(body.splitOrderIds).toEqual(["order", "paid-for"]);
 });

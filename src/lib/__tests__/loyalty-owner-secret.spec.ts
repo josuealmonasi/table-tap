@@ -117,15 +117,34 @@ it("renews the owner's cookie when the card is saved again", async () => {
   expect(response.status).toBe(200);
   expect(response.cookies.get(cookieName)).toMatchObject({ value: secret, httpOnly: true, maxAge: 365 * 86400 });
   expect(db.update).toHaveBeenCalledWith({ saved_at: expect.any(String) });
-  expect(await response.json()).toEqual({ ok: true });
+  expect(await response.json()).toEqual({ ok: true, saved: true });
 });
 
-it.each([hash(secret), null])("never grants deletion authority on a save by another phone (hash %s)", async owner_secret_hash => {
+// Codex bl40 #7: a copied code must not clear the owner's "save it again"
+// prompt, nor be granted the key.
+it.each([
+  [hash(secret), `${cookieName}=${"B".repeat(43)}`], [null, `${cookieName}=${"B".repeat(43)}`], [hash(secret), undefined],
+])("a save by another phone records nothing and grants nothing (hash %s)", async (owner_secret_hash, cookie) => {
   db.maybeSingle.mockResolvedValue({ data: { owner_secret_hash }, error: null });
-  const response = await PATCH(rewards("PATCH", `${cookieName}=${"B".repeat(43)}`));
+  const response = await PATCH(rewards("PATCH", cookie));
   expect(response.status).toBe(200);
+  expect(await response.json()).toEqual({ ok: true, saved: false });
   expect(response.cookies.get(cookieName)).toBeUndefined();
-  expect(db.update).toHaveBeenCalledWith({ saved_at: expect.any(String) });
+  expect(db.update).not.toHaveBeenCalled();
+});
+
+it("shows the masked ticket address only to the phone holding the card's key", async () => {
+  db.maybeSingle.mockResolvedValue({ data: {
+    id: "card", restaurant_id: restaurant, created_at: "2026-11-24", owner_secret_hash: hash(secret),
+    email: "ana@example.invalid", ladder_at: "2026-11-24", saved_at: "2026-11-24",
+  }, error: null });
+  db.single.mockResolvedValue({ data: { name: "Cafe" }, error: null });
+  const owner = await (await GET(rewards("GET", `${cookieName}=${secret}`))).json();
+  const guest = await (await GET(rewards("GET"))).json();
+  expect(owner.email).toBe("a***@example.invalid");
+  expect(guest.email).toBeNull();
+  expect(JSON.stringify(guest)).not.toContain("example.invalid");
+  expect(guest.standing).toEqual(owner.standing);
 });
 
 it("checks the code and cookie hash in the same delete and clears the cookie on success", async () => {
