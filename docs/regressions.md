@@ -8618,3 +8618,26 @@ and the privacy notice's promise that an unconfirmed address is deleted after
 seven days (an hourly pg_cron job deletes them). The limit is counted under the
 restaurant's row lock, so two tabs cannot reach six. Check:
 `digest-recipients.spec.ts`, the api gate's `digest` cases.
+
+### Terminal deposits, waste reversals and pack sizes (2026-11-25)
+
+Three pairs that had to agree. First, a deposit's signed payment list and the
+day each payment falls on: a MX$100 payment signed on Nov 23 in Mexico City fell
+on Nov 24 after the owner switched the zone to Cancún, the report offered it
+again, and the writer took it, because it checked day and currency but not the
+payment ids already signed. Now a payment a signed deposit holds stays on that
+deposit's day in the report (`signedDays`/`saleDayOf` in `terminal.ts`, also used
+by the payment list and the fee report) and in `record_terminal_deposit_v1`,
+which also refuses a payment id any other deposit holds (`already_signed`,
+409 `apiErr.depositPaymentSigned`). Second, a correction and the record it
+corrects: deleting a mistaken 200 ml spill after a 1,000 ml count wrote a
+reversal with a new movement id, so the stock report and the next blind count
+expected 1,200 ml. The reversal now carries the record's place among counts
+(`ingredient_movements.count_position`, kept on
+`ingredient_consumption.movement_position`), read by `cutoff_ingredient_count`
+and `expectedOnHand`. Third, the pack size the form showed and the one the
+writer multiplies by: read before the write, another manager's change from 1 L
+to 2 L turned two packs for MX$100 into 4 L at MX$25/L. `record_purchase_v2` and
+`record_purchase_once_v3` compare it under the ingredient row lock (PT412, 409
+`apiErr.purchasePackChanged`, which now asks to reload), after answering a retry
+already saved. Check: `terminal-waste-pack-races.spec.ts`.

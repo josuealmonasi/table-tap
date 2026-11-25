@@ -2,7 +2,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { everyRow } from "@/lib/paged";
 import { subtractLocalDays } from "@/lib/day-window";
 import { orderCode } from "@/lib/types";
-import { depositDays, localDay, type DepositDay, type DepositRecord, type TerminalPayment } from "./terminal";
+import { depositDays, localDay, saleDayOf, signedDays, type DepositDay, type DepositRecord, type TerminalPayment } from "./terminal";
 
 /** The recent window; older unsigned days and late receipts remain visible. */
 export const TERMINAL_WINDOW_DAYS = 14;
@@ -73,8 +73,9 @@ export async function readTerminal(restaurantId: string, timeZone: string, now =
     .filter(d => d.day >= localDay(since, timeZone) || !d.deposit || d.late !== 0);
   const visible = new Set(days.map(d => d.day));
   const byDay: Record<string, TerminalPaymentRow[]> = {};
+  const signed = signedDays(deposits);
   for (const p of rows.sort((a, b) => a.created_at.localeCompare(b.created_at))) {
-    const day = localDay(p.created_at, timeZone);
+    const day = saleDayOf(p, timeZone, signed);
     if (!visible.has(day)) continue;
     (byDay[day] ??= []).push({
       id: p.id, at: p.created_at, amount: Number(p.amount), tip: Number(p.tip), ref: p.terminal_ref,
