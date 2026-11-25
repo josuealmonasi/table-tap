@@ -4,6 +4,7 @@ import {
   logRedemption,
   claimCoupon,
   couponProblem,
+  couponQuote,
   findCoupon,
   type CouponRow,
 } from "@/lib/coupon-service";
@@ -40,11 +41,12 @@ export async function claimCheckoutCoupon(
   const problem = couponProblem(reserve ? found : { ...found, max_uses: null }, subtotal);
   if (problem)
     return { refused: NextResponse.json({ couponReason: problem }, { status: 409 }) };
-  // Reserve the use now.
-  if (reserve && !(await claimCoupon(found.id))) {
-    return {
-      refused: NextResponse.json({ couponReason: "limitReached" }, { status: 409 }),
-    };
+  if (reserve) {
+    const claim = await claimCoupon(restaurantId, couponQuote(found, subtotal));
+    if (claim !== "claimed") {
+      const couponReason = claim === "changed" ? "changed" : "limitReached";
+      return { refused: NextResponse.json({ couponReason }, { status: 409 }) };
+    }
   }
   return { coupon: found };
 }

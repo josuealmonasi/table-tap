@@ -28,8 +28,8 @@ it("judges a coupon's minimum spend on the subtotal before the coupon, as the ro
   const schema = readFileSync("supabase/schema.sql", "utf8");
   const start = schema.lastIndexOf("create or replace function public.create_order_intent(");
   const fn = schema.slice(start, schema.indexOf("$$;", schema.indexOf("$$", start) + 2));
-  expect(fn).toMatch(/min_subtotal > coalesce\(\(p_coupon->>'eligible_subtotal'\)::numeric/);
+  expect(fn).toContain("coalesce((p_coupon->>'eligible_subtotal')::numeric, (p_order->>'subtotal')::numeric)");
   const route = readFileSync("src/app/api/checkout/route.ts", "utf8");
-  expect(route).toContain("eligible_subtotal: base.subtotal");
+  expect(route).toContain("couponQuote(coupon, base.subtotal)");
   expect(route).toContain("claimCheckoutCoupon(restaurantId, couponCode, base.subtotal");
 });

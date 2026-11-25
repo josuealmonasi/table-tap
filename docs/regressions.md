@@ -8693,3 +8693,16 @@ to 2 L turned two packs for MX$100 into 4 L at MX$25/L. `record_purchase_v2` and
 `record_purchase_once_v3` compare it under the ingredient row lock (PT412, 409
 `apiErr.purchasePackChanged`, which now asks to reload), after answering a retry
 already saved. Check: `terminal-waste-pack-races.spec.ts`.
+
+### Coupon claims could use old terms or spend past the cutoff (2026-11-25)
+
+A diner could price MX$100 of food with a public 50% coupon, then spend it
+after a manager changed it to a staff-only 10% coupon. Immediate checkout,
+pay-later checkout and bill payment now compare the priced audience, kind,
+value and minimum against the locked coupon, using the food subtotal before
+the coupon. If the terms changed, the diner is asked to review the cart or bill.
+The same lock makes a claim use the clock after waiting, so a coupon ending
+at noon cannot be spent if the lock is acquired at or after noon. Authenticated
+coupon writes can set terms while the database owns `uses_count`.
+Checks: `coupon-claim.react-component.spec.tsx`, checkout `route.spec.ts`,
+and `diner-attempt.spec.ts`.

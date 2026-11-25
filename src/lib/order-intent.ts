@@ -1,6 +1,7 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { stockDemand, toDemandPayload, type StockWarning, type StockShortfall } from "@/lib/stock";
 import type { OrderLineItem } from "@/lib/types";
+import type { CouponQuote } from "@/lib/coupon-service";
 
 export interface OrderIntent {
   restaurantId: string;
@@ -24,6 +25,7 @@ export interface OrderIntentResult {
   conflict?: boolean;
   counterFull?: boolean;
   couponReason?: string;
+  couponChanged?: boolean;
   short?: StockShortfall[];
   low?: StockWarning[];
 }
@@ -50,7 +52,7 @@ export async function writeOrderIntent(intent: OrderIntent, input: {
   lines: OrderLineItem[];
   inventory: boolean;
   threshold: number;
-  coupon?: object | null;
+  coupon?: CouponQuote | null;
 }): Promise<OrderIntentResult> {
   const { data, error } = await createAdminClient().rpc("create_order_intent", {
     p_restaurant: intent.restaurantId, p_ref: intent.ref, p_scope: intent.scope,
