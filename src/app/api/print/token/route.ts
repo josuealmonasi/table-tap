@@ -1,11 +1,8 @@
-import { invalidatePublicMenu } from "@/lib/public-menu-cache";
 import { NextResponse } from "next/server";
-import { randomBytes } from "node:crypto";
 import { apiError } from "@/lib/api-error";
 import { actingManager } from "@/lib/api-guard";
 import { frozenBlocks } from "@/lib/plan-guard";
-import { createAdminClient } from "@/lib/supabase/admin";
-import { logEvent } from "@/lib/activity-log";
+import { rotatePrintToken } from "@/lib/staff-removal";
 
 export const runtime = "nodejs";
 
@@ -29,26 +26,8 @@ export async function POST() {
   const frozen = await frozenBlocks(actor.restaurantId);
   if (frozen) return frozen;
 
-  // 32 bytes. base64url so it survives a URL, a QR code and a printer's
-  // configuration field without anything re-encoding it.
-  const token = randomBytes(32).toString("base64url");
-
-  const { error } = await createAdminClient()
-    .from("restaurants")
-    .update({ print_token: token })
-    .eq("id", actor.restaurantId);
-  invalidatePublicMenu(actor.restaurantId);
-  if (error) return await apiError("apiErr.printerTokenFailed", 500);
-
-  await logEvent({
-    restaurantId: actor.restaurantId,
-    actor: actor.email,
-    entity: "settings",
-    action: "updated",
-    // Field and verb, the way the rest of the log is written — and never the
-    // value. An activity log is read by more people than the settings screen.
-    detail: "print_token: rotated",
-  });
+  const token = await rotatePrintToken(actor.restaurantId, actor.email);
+  if (!token) return await apiError("apiErr.printerTokenFailed", 500);
 
   return NextResponse.json({ token });
 }

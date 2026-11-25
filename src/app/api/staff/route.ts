@@ -10,6 +10,7 @@ import { logUserChange } from "@/lib/user-log";
 import { getPlan, allPlans } from "@/lib/plan-server";
 import { assignableRoles, cheapestWith, planLabel, type TeamRole } from "@/lib/plan";
 import { siteOrigin } from "@/lib/site-origin";
+import { accountsOpenedBy, rotateAccountCodes, rotatePrintToken } from "@/lib/staff-removal";
 
 export const runtime = "nodejs";
 
@@ -125,13 +126,41 @@ export async function PATCH(req: NextRequest) {
   return NextResponse.json({ ok: true });
 }
 
+// GET /api/staff?removal=<id> — what removing this member could leave behind:
+// whether the restaurant has a printer link, and how many customer-account
+// links they opened. The owner's removal dialog offers to reset them.
+export async function GET(req: NextRequest) {
+  const id = req.nextUrl.searchParams.get("removal");
+  if (!id) return await apiError("apiErr.invalidRequest", 400);
+  const actor = await actingOwner();
+  if (!actor) return await apiError("apiErr.forbidden", 403);
+  const admin = createAdminClient();
+  const [{ data: member }, { data: restaurant }] = await Promise.all([
+    admin.from("staff").select("email, role, restaurant_id").eq("id", id).maybeSingle(),
+    admin.from("restaurants").select("print_token").eq("id", actor.restaurantId).maybeSingle(),
+  ]);
+  if (!member || member.restaurant_id !== actor.restaurantId) return await apiError("apiErr.notFound", 404);
+  try {
+    const opened = await accountsOpenedBy(actor.restaurantId, member.email as string);
+    return NextResponse.json({ printer: Boolean(restaurant?.print_token), accountsOpened: opened.length, role: member.role });
+  } catch {
+    return await apiError("apiErr.generic", 503);
+  }
+}
+
 // DELETE /api/staff — an owner removes a login entirely (the staff row
-// cascades away with the auth user).
+// cascades away with the auth user). Optionally it also resets what the person
+// may have copied (security sweep 2026-11-24): the printer's link, and the
+// links of the customer accounts they opened. The new values come back once.
 export async function DELETE(req: NextRequest) {
-  const body = await jsonBody<{ id?: string }>(req);
+  const body = await jsonBody<{ id?: string; resetPrinter?: unknown; resetAccounts?: unknown }>(req);
   if (!body) return await apiError("apiErr.invalidRequest", 400);
   const { id } = body;
   if (!id) return await apiError("apiErr.invalidRequest", 400);
+  if ((body.resetPrinter !== undefined && typeof body.resetPrinter !== "boolean")
+    || (body.resetAccounts !== undefined && typeof body.resetAccounts !== "boolean")) {
+    return await apiError("apiErr.invalidRequest", 400);
+  }
 
   const actor = await actingOwner();
   if (!actor) return await apiError("apiErr.forbidden", 403);
@@ -146,11 +175,26 @@ export async function DELETE(req: NextRequest) {
     return await apiError("apiErr.notFound", 404);
   }
 
+  // Read before the login goes: the log rows stay, but read them while the
+  // removal is still the owner's decision.
+  let opened: string[] = [];
+  if (body.resetAccounts === true) {
+    try { opened = await accountsOpenedBy(actor.restaurantId, member.email); }
+    catch { return await apiError("apiErr.generic", 503); }
+  }
+
   const { error } = await admin.auth.admin.deleteUser(member.user_id);
   if (error) return await apiError("apiErr.loginRemove", 500);
 
   await logUserChange(actor.restaurantId, actor.email, "deleted", member.role, member.email);
-  return NextResponse.json({ ok: true });
+  // The login is gone either way; a reset that fails is reported, not undone.
+  const printerToken = body.resetPrinter === true ? await rotatePrintToken(actor.restaurantId, actor.email) : null;
+  const accounts = opened.length ? await rotateAccountCodes(actor.restaurantId, opened, actor.email).catch(() => null) : [];
+  return NextResponse.json({
+    ok: true,
+    ...(body.resetPrinter === true ? { printerToken, printerReset: printerToken !== null } : {}),
+    ...(body.resetAccounts === true ? { accounts: accounts ?? [], accountsReset: accounts !== null } : {}),
+  });
 }
 
 /**

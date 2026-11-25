@@ -37,6 +37,13 @@ export function staffCases() {
       // there was no member and the id was empty.
       expect: [403],
       check: () => "a manager changed a role and was told 200" },
+    // What a removal could leave behind (security sweep 2026-11-24): the owner's
+    // removal dialog reads it. Read-only, so it runs before the member goes.
+    { name: "GET  /api/staff?removal (what removing them could leave behind)", as: "owner", method: "GET",
+      path: async f => `/api/staff?removal=${f.crewId}`, expect: [200],
+      check: d => (typeof d.printer === "boolean" && Number.isInteger(d.accountsOpened)) || "no printer flag or accounts count" },
+    { name: "GET  /api/staff?removal (a manager refused)", as: "manager", method: "GET",
+      path: async f => `/api/staff?removal=${f.crewId}`, expect: [403] },
     { name: "DELETE /api/staff", as: "owner", method: "DELETE", path: "/api/staff",
       body: async f => ({ id: f.crewId }), expect: [200],
       check: async (_d, f) => {

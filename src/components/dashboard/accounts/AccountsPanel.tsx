@@ -38,9 +38,21 @@ export default function AccountsPanel({ currency, timeZone, canOpen, unlocksWith
   const [notice, setNotice] = useState<string | null>(null);
   const money = (n: number) => formatMoney(n, currency);
 
+  /** The list carries no codes: the server resolves a scanned one. */
+  async function openScanned(code: string): Promise<void> {
+    try {
+      const res = await fetch(`/api/accounts?code=${encodeURIComponent(code)}`);
+      const id = res.ok ? ((await res.json()) as { id?: string }).id : undefined;
+      if (id) setShownId(id);
+      else setNotice(t(res.status === 404 ? "accounts.scanNotHere" : "apiErr.generic"));
+    } catch {
+      setNotice(t("done.networkError"));
+    }
+  }
+
   const shown = useMemo(() => {
     const q = query.trim().toLowerCase();
-    return (accounts ?? []).filter(a => !q || a.name.toLowerCase().includes(q));
+  return (accounts ?? []).filter(a => !q || a.name.toLowerCase().includes(q));
   }, [accounts, query]);
   const current: AccountListItem | null = (accounts ?? []).find(a => a.id === shownId) ?? null;
   const owedTotal = currencyBalances((accounts ?? []).flatMap(a => a.balances ?? [{ currency: a.currency ?? currency, amount: a.owed }]));
@@ -59,9 +71,7 @@ export default function AccountsPanel({ currency, timeZone, canOpen, unlocksWith
               onRead={raw => {
                 const code = accountCodeFromScan(raw);
                 if (!code) return "keep-looking";
-                const found = (accounts ?? []).find(a => a.code === code);
-                if (found) setShownId(found.id);
-                else setNotice(t("accounts.scanNotHere"));
+                void openScanned(code);
                 return "taken";
               }}
             />
