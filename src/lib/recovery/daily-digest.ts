@@ -76,7 +76,7 @@ async function readOutsideLocale(db: RecoveryContext["db"], ownerId: string | nu
   const { data, error } = await db.auth.admin.getUserById(ownerId);
   if (error && error.code !== "user_not_found") throw new Error("Could not read the digest owner's locale", { cause: error });
   const locale: unknown = data?.user?.user_metadata.locale;
-  return isLocale(locale) ? locale : DEFAULT_LOCALE;
+  return typeof locale === "string" && isLocale(locale) ? locale : DEFAULT_LOCALE;
 }
 
 async function deliver(context: RecoveryContext, row: Due, mails: MailBatch["messages"]): Promise<void> {
