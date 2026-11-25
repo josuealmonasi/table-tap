@@ -1797,6 +1797,7 @@ foundingLeftBody: "Quien contrata ahora conserva este precio de suscripción mie
     restaurantDeleteProvider: "Un pago con tarjeta o una devolución todavía necesita confirmación. Revisa su resultado antes de eliminar este restaurante.",
     restaurantDeleteOfflineSale: "Revisa las ventas sin conexión que ya se cobraron antes de eliminar este restaurante.",
     restaurantDeleteRefundFee: "Todavía falta devolverle a este restaurante su parte de la comisión de pagos reembolsados. Termina de devolverla antes de eliminarlo.",
+    restaurantDeleteAccountsOwed: "Hay clientes que todavía deben en cuentas abiertas de este restaurante. Que el restaurante cobre o cancele esos saldos antes de eliminarlo.",
     restaurantDeleteRefundFeeVerification: "Falta revisar si hay comisiones de pagos reembolsados que debamos devolverle a este restaurante. Abre Cuentas y termina de revisar los reembolsos antes de eliminarlo.",
     retryConflict: "Esto ya se había enviado antes con otros datos, así que no se registró de nuevo. Revisa lo que quedó registrado antes de volver a empezar.",
     checkoutOpening: "Tu pago ya se está preparando. Espera unos segundos e inténtalo de nuevo.",

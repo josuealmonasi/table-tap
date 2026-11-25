@@ -8566,3 +8566,16 @@ automatically only when its order is paid by card; a pay-later order at an
 empty table makes it wait for staff, in the same "let this phone in" list
 every other phone at a table already uses (`request_table_member_v2`,
 `p_first_approved`). Check: checkout `route.spec.ts`, plus a rolled-back dev probe.
+
+### Settling and deleting while money was in flight (security sweep 2026-11-25)
+
+A split share's card page could open just after the cashier took the whole bill
+in cash (the opener checked only the diner's own add-on orders, often none): the
+table could not close and the diner could be charged twice. A sitting could close
+while a pay-now order on it was still being paid, so its food reached the kitchen
+under a closed sitting. And a restaurant could be deleted while its customers
+still owed on open accounts. `diner_checkout_open` now rechecks a split is locked
+and its orders unsettled under the order lock; `close_session_if_clear` keeps a
+sitting open for a pay-now order younger than a checkout page's life; and
+`admin_delete_restaurant` refuses with `accountsOwed`. Check:
+`sweep-1125-settle-purge.spec.ts`, plus a rolled-back dev probe.
