@@ -38,6 +38,9 @@ export function dinerCases(fx) {
     // not let in must not summon staff with it (Codex review bl40, finding 3).
     { name: "POST /api/service-requests (a stale QR key)", as: "diner", method: "POST", path: "/api/service-requests",
       body: { restaurantId: r, tableId: table.id, kind: "waiter", qrKey: "0".repeat(32) },
+      // A phone that was never let in: an admitted guest needs no key, so the
+      // diner's own cookie would turn this into a (duplicate) call.
+      headers: { cookie: "" },
       expect: table.qr_key ? [403] : [200],
       ...(table.qr_key ? { expectError: /ya no corresponde|no longer matches/i } : {}) },
     { name: "PATCH /api/service-requests (kitchen answers a call without a table id)", as: "kitchen",
