@@ -1,0 +1,81 @@
+name: Production sweeps
+
+# Read-only checks of the deployed site, on GitHub's runners instead of the
+# owner's Mac (owner 2026-11-25). They sign in with the demo logins and read
+# production, so their secret lives in the `prod-sweeps` environment, which only
+# `main` may use: branches and pull requests cannot read it. It holds only the
+# Supabase URL and keys, the database URL and the demo/test passwords — no
+# Stripe secret and no platform-admin password (roles:prod, which needs it,
+# stays in the ship train). Nothing here writes: every script below refuses
+# to change production, and the browser sweeps answer their own writes.
+on:
+  schedule:
+    - cron: "17 9 * * *" # 03:17 in Mexico City
+  workflow_dispatch:
+  # After each production deploy Vercel reports to GitHub.
+  deployment_status:
+
+concurrency:
+  group: prod-sweeps
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  sweep:
+    if: >-
+      github.event_name != 'deployment_status' ||
+      (github.event.deployment_status.state == 'success' && github.event.deployment.environment == 'Production')
+    runs-on: ubuntu-latest
+    environment: prod-sweeps
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        check:
+          - { name: smoke, cmd: "node scripts/smoke.mjs --prod" }
+          - { name: money, cmd: "node scripts/money-check.mjs --prod" }
+          - { name: promises, cmd: "node scripts/promise-audit.mjs --prod" }
+          - { name: layout, cmd: "node scripts/layout-check.mjs --prod" }
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - name: Install
+        run: pnpm install --frozen-lockfile
+      - name: Install the browser
+        if: matrix.check.name == 'promises' || matrix.check.name == 'layout'
+        run: pnpm exec playwright install --with-deps chromium
+      - name: Write the production env file
+        env:
+          PROD_SWEEP_ENV: ${{ secrets.PROD_SWEEP_ENV }}
+        run: |
+          umask 077
+          printf '%s\n' "$PROD_SWEEP_ENV" > .env.production.local
+          test -s .env.production.local
+      - name: ${{ matrix.check.name }}:prod
+        env:
+          PROD_SITE_URL: https://tabletap.shop
+          GATE_EVIDENCE_DIR: gate-output/evidence
+        run: ${{ matrix.check.cmd }} 2>&1 | tee sweep-${{ matrix.check.name }}.txt; exit ${PIPESTATUS[0]}
+      - name: Keep the output
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: prod-${{ matrix.check.name }}-${{ github.run_id }}
+          path: |
+            sweep-${{ matrix.check.name }}.txt
+            gate-output/
+          if-no-files-found: ignore
+          retention-days: 14
+      - name: Remove the env file
+        if: always()
+        run: rm -f .env.production.local
