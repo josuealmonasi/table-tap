@@ -8793,6 +8793,32 @@ their adjustments (logged write-offs and refunds, plus completed return
 events) from one reader, `readCorteAdjustments` in `corte-adjustments.ts`.
 Check: `signup-mail-ceiling.spec.ts`, `digest-figures.spec.ts`.
 
+### Cash shifts: collecting shift, offline prices and retries (2026-11-25)
+
+Four pairs that had to agree (bl39 review, findings 2, 3, 5 and 6). First, the
+shift that collected a cash sale and the shift that counted it: a sale taken
+at 11:59 and posted after a noon close was dated after the close, so the
+first shift read MX$80 over and the next MX$80 short. The till route now reads
+the open shift as the sale arrives (`collectingShiftId`) and
+`ring_pos_sale_v3` binds the receipt to it (`payments.cash_shift_id`, set
+once). `cash_shift_totals`, `cash_shifts_for_day` and the money gate count a
+bound receipt in its own shift whatever its time; one posted after that shift
+closed shows on it as cash that arrived after the count, for the manager to
+review there, never in the next shift. `recorded_at` keeps the posting time.
+Offline receipts are still placed by their device time. Second, the price an
+offline receipt was compared with and the price it was posted at: a manager's
+change between the two posted the old price with zero drift.
+`record_offline_sale_v2` re-reads `offline_pricing_revision_v1` under the
+money lock and answers `pricing_changed`, and the receipt is queued for Held
+sales; a manager's approval still posts the collected price. Third, an opening
+and its retry: the dialog keeps one reference until a definite answer, and
+`open_cash_shift_v2` returns the shift that reference opened, closed or not,
+instead of a second shift with the same float. Fourth, a close and its retry:
+the route checked queued cash before the RPC, so cash queued after a
+successful close hid it; the RPC now answers the saved close first and checks
+the queue itself. Check: `cash-shift-binding.spec.ts`,
+`offline-exceptions.spec.ts`, `cash-shift-open.spec.ts`,
+`shift-held-cash.spec.ts`.
 ### Stripe refund race, early refund fee, early dispute (2026-11-25)
 
 Three pairs that had to agree with nothing checking (bl43 review, findings 1,

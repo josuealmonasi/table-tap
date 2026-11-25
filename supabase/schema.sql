@@ -11933,6 +11933,15 @@ revoke all on cash_withdrawal_retired_refs from anon;
 revoke all on cash_withdrawal_retired_refs from authenticated;
 grant all on cash_withdrawal_retired_refs to service_role;
 
+-- The shift that collected a cash sale (bl39 finding 2). created_at is when
+-- the money was posted, and recorded_at when the server wrote it; neither says
+-- which drawer holds the cash. A sale captured while shift A was open and
+-- posted after A closed went into shift B's window: A showed an overage, B a
+-- matching shortage. Null on older rows and on sales rung with no shift open,
+-- which keep the timestamp window. Set once, by ring_pos_sale_v3.
+alter table payments add column if not exists cash_shift_id uuid references cash_shifts(id) on delete set null;
+create index if not exists payments_cash_shift_idx on payments(cash_shift_id) where cash_shift_id is not null;
+
 -- One calculation for both the signed close and the later review. Aggregate
 -- inside Postgres: PostgREST's row cap must never cut a busy shift short.
 create or replace function public.cash_shift_totals(p_restaurant uuid, p_shift uuid, p_until timestamptz)
@@ -11946,7 +11955,11 @@ returns jsonb language sql stable security definer set search_path = public as $
     select coalesce(sum(p.amount), 0) amount, coalesce(sum(p.tip), 0) tip from payments p, s
       where p.restaurant_id = p_restaurant and p.currency = s.currency
         and p.method = 'cash' and nullif(p.actor_email, '') is not null
-        and p.created_at between s.opened_at and s.until_at
+        -- A sale bound to the shift that collected it counts there, even when
+        -- it was posted after that shift closed; never in the next one
+        -- (bl39 finding 2). Unbound rows keep the timestamp window.
+        and (p.cash_shift_id = s.id and p.created_at <= p_until
+          or p.cash_shift_id is null and p.created_at between s.opened_at and s.until_at)
   ), returns as (
     -- The tip part of a cash return comes out of the shift's tips too: MX$110
     -- with MX$10 tip, refunded whole, read "sales MX$0, of which tips MX$10"
@@ -12171,7 +12184,8 @@ returns setof public.cash_shifts language sql stable security definer set search
     or exists(select 1 from payments p where p.restaurant_id = p_restaurant and p.currency = s.currency
       and p.method = 'cash' and nullif(p.actor_email, '') is not null
       and p.recorded_at >= p_day_start and p.recorded_at > s.closed_at
-      and p.created_at between s.opened_at and s.closed_at)
+      and (p.cash_shift_id = s.id
+        or p.cash_shift_id is null and p.created_at between s.opened_at and s.closed_at))
     -- Held cash retained or returned, received into a shift already closed and
     -- counted there as an approval would be: that shift's count changed today
     -- too (full review M1).
@@ -16817,3 +16831,135 @@ $$;
 revoke all on function public.adopt_settled_intent_v1(uuid, text, boolean, text) from public, anon, authenticated;
 grant execute on function public.adopt_settled_intent_v1(uuid, text, boolean, text) to service_role;
 revoke truncate, references, trigger on all tables in schema public from authenticated;
+-- ============================================================================
+-- Cash shifts: the collecting shift, priced offline receipts, and retries
+-- (Codex bl39 review, findings 2, 3, 5 and 6)
+-- ============================================================================
+
+-- A receipt's shift is set once: rebinding it would move counted cash from one
+-- signed drawer to another. A cascade from a deleted shift may still clear it.
+create or replace function public.keep_cash_shift_binding_v1()
+returns trigger language plpgsql security definer set search_path = public as $$
+begin
+  if pg_trigger_depth() > 1 then return new; end if;
+  if old.cash_shift_id is not null and new.cash_shift_id is distinct from old.cash_shift_id then
+    raise exception 'receipt shift is immutable';
+  end if;
+  return new;
+end;
+$$;
+revoke all on function public.keep_cash_shift_binding_v1() from public, anon, authenticated, service_role;
+drop trigger if exists keep_cash_shift_binding on payments;
+create trigger keep_cash_shift_binding before update on payments
+  for each row execute function public.keep_cash_shift_binding_v1();
+
+-- Finding 2. A till cash sale carries the shift that was open when the route
+-- received it (p_cash_shift, null when none was). Under the money lock, after
+-- the sale is rung, its cash receipt is bound to that shift. If the shift
+-- closed while the sale was on its way, the receipt still belongs to it: the
+-- shift's record shows it as cash that arrived after the count, for the
+-- manager to review there, instead of a shortage in the next shift's count.
+-- ring_pos_sale_v2 stays for the deployed route.
+create or replace function public.ring_pos_sale_v3(
+  p_restaurant uuid, p_ref uuid, p_order jsonb, p_method text, p_actor text,
+  p_status text, p_at timestamptz, p_terminal text, p_demand jsonb,
+  p_inventory boolean, p_threshold int, p_cash_shift uuid
+) returns jsonb language plpgsql security definer set search_path = public as $$
+declare v_ticket jsonb; s cash_shifts;
+begin
+  perform public.lock_restaurant_money(p_restaurant);
+  v_ticket := public.ring_pos_sale_v2(p_restaurant, p_ref, p_order, p_method, p_actor,
+    p_status, p_at, p_terminal, p_demand, p_inventory, p_threshold);
+  if v_ticket->>'outcome' = 'settled' and not coalesce((v_ticket->>'repeat')::boolean, false)
+    and p_method = 'cash' and p_at is null and p_cash_shift is not null then
+    select * into s from cash_shifts where restaurant_id = p_restaurant and id = p_cash_shift;
+    if found then
+      update payments set cash_shift_id = s.id
+        where restaurant_id = p_restaurant and order_id = p_ref and method = 'cash'
+          and cash_shift_id is null and currency = s.currency;
+      v_ticket := v_ticket || jsonb_build_object('lateForShift', s.closed_at is not null);
+    end if;
+  end if;
+  return v_ticket;
+end;
+$$;
+revoke all on function public.ring_pos_sale_v3(uuid, uuid, jsonb, text, text, text, timestamptz, text, jsonb, boolean, int, uuid) from public, anon, authenticated;
+grant execute on function public.ring_pos_sale_v3(uuid, uuid, jsonb, text, text, text, timestamptz, text, jsonb, boolean, int, uuid) to service_role;
+
+-- Finding 3. Everything an offline receipt's price comparison reads: the
+-- restaurant's charges, every dish's price, discount and modifiers, add-ons,
+-- and promotions with their items. Not availability or stock, which a sale
+-- that already happened ignores. Row text keeps a null apart from a value.
+create or replace function public.offline_pricing_revision_v1(p_restaurant uuid)
+returns text language sql stable security definer set search_path = public as $$
+  select md5(row(
+    (select row(r.currency, r.tax_pct, r.service_pct, r.service_enabled)::text from restaurants r where r.id = p_restaurant),
+    (select string_agg(row(m.id, m.price, m.discount_pct, m.modifiers, m.is_addon)::text, ',' order by m.id)
+      from menu_items m where m.restaurant_id = p_restaurant),
+    (select string_agg(row(a.product_id, a.addon_id)::text, ',' order by a.product_id, a.addon_id)
+      from item_addons a join menu_items m on m.id = a.product_id where m.restaurant_id = p_restaurant),
+    (select string_agg(row(p.id, p.kind, p.combo_price, p.buy_qty, p.pay_qty, p.tiers, p.active, p.sort_order)::text, ',' order by p.id)
+      from promotions p where p.restaurant_id = p_restaurant),
+    (select string_agg(row(i.promotion_id, i.item_id, i.qty)::text, ',' order by i.promotion_id, i.item_id)
+      from promotion_items i join promotions p on p.id = i.promotion_id where p.restaurant_id = p_restaurant)
+  )::text);
+$$;
+revoke all on function public.offline_pricing_revision_v1(uuid) from public, anon, authenticated;
+grant execute on function public.offline_pricing_revision_v1(uuid) to service_role;
+
+-- The route compares the receipt with today's menu, then settles it. A price
+-- changed between the two posted the old price automatically with zero drift.
+-- The route reads the revision before its comparison; under the money lock it
+-- must still be the same, or the receipt goes to a manager (outcome
+-- 'pricing_changed'). A manager's approval (p_manager) accepts the collected
+-- price as it is and skips the check. A receipt already rung answers as before.
+-- record_offline_sale stays for the deployed route.
+create or replace function public.record_offline_sale_v2(
+  p_restaurant uuid, p_ref uuid, p_order jsonb, p_method text, p_actor text,
+  p_at timestamptz, p_terminal text, p_demand jsonb,
+  p_manager text, p_reason text, p_original_at text, p_authority text, p_pricing_revision text
+) returns jsonb language plpgsql security definer set search_path = public as $$
+begin
+  perform public.lock_restaurant_money(p_restaurant);
+  if p_manager is null and public.pos_ticket(p_restaurant, p_ref) is null
+    and p_pricing_revision is distinct from public.offline_pricing_revision_v1(p_restaurant) then
+    return jsonb_build_object('outcome', 'pricing_changed');
+  end if;
+  return public.record_offline_sale(p_restaurant, p_ref, p_order, p_method, p_actor, p_at, p_terminal,
+    p_demand, p_manager, p_reason, p_original_at, p_authority);
+end;
+$$;
+revoke all on function public.record_offline_sale_v2(uuid,uuid,jsonb,text,text,timestamptz,text,jsonb,text,text,text,text,text) from public,anon,authenticated;
+grant execute on function public.record_offline_sale_v2(uuid,uuid,jsonb,text,text,timestamptz,text,jsonb,text,text,text,text,text) to service_role;
+
+-- Finding 5. An opening carries the dialog's reference. A retry whose first
+-- send committed returns that shift, open or since closed, instead of
+-- starting a second one with the same float. The same reference with another
+-- amount or opener is a different request (PT409). open_cash_shift stays for
+-- the deployed route.
+alter table cash_shifts add column if not exists open_ref uuid;
+create unique index if not exists cash_shifts_open_once on cash_shifts(restaurant_id, open_ref) where open_ref is not null;
+create or replace function public.open_cash_shift_v2(p_restaurant uuid, p_actor text, p_amount numeric, p_ref uuid)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare s cash_shifts; v_id uuid;
+begin
+  perform public.lock_restaurant_money(p_restaurant);
+  if p_ref is null then raise exception 'opening reference required'; end if;
+  select * into s from cash_shifts where restaurant_id = p_restaurant and open_ref = p_ref;
+  if found then
+    if s.opening_amount is distinct from p_amount or s.opened_by is distinct from p_actor then
+      raise exception 'reference belongs to another opening' using errcode = 'PT409';
+    end if;
+    return jsonb_build_object('id', s.id, 'replayed', true, 'closed', s.closed_at is not null);
+  end if;
+  if exists (select 1 from cash_shifts where restaurant_id = p_restaurant and closed_at is null) then
+    return null;
+  end if;
+  insert into cash_shifts (restaurant_id, opened_by, opening_amount, opened_at, open_ref)
+  values (p_restaurant, p_actor, p_amount, clock_timestamp(), p_ref)
+  returning id into v_id;
+  return jsonb_build_object('id', v_id, 'replayed', false, 'closed', false);
+end;
+$$;
+revoke all on function public.open_cash_shift_v2(uuid, text, numeric, uuid) from public, anon, authenticated;
+grant execute on function public.open_cash_shift_v2(uuid, text, numeric, uuid) to service_role;
