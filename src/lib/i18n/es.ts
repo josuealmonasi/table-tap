@@ -1762,7 +1762,7 @@ foundingLeftBody: "Quien contrata ahora conserva este precio de suscripción mie
     accountNothingOwed: "Esta cuenta no debe nada.",
     accountPayingOnline: "Hay un pago en línea de esta cuenta de cliente sin confirmar. Vuelve a intentarlo en unos minutos; si sigue igual, pide a un gerente que lo revise.",
     accountBalanceChanged: "Lo que debe esta cuenta cambió: ahora debe {owed}. Revísalo con el cliente.",
-    accountOrdersChanged: "Los consumos de esta cuenta cambiaron desde que la revisaste, aunque el total sea el mismo. Actualiza y revísala con el cliente antes de cobrar.",
+    accountOrdersChanged: "Los consumos de esta cuenta cambiaron desde que la revisaste, aunque el total no haya cambiado. Actualiza y revísala con el cliente antes de cobrar.",
     accountStatementChanged: "Tu cuenta cambió mientras la veías. Revísala y vuelve a intentarlo.",
     mailOff: "El envío por correo no está disponible.",
     mailFailed: "No pudimos enviar el correo. Inténtalo de nuevo.",
