@@ -18,7 +18,10 @@ export async function fetchPromotions(
     .from("promotions")
     .select(`${PROMO_COLUMNS}, items:promotion_items(item_id, qty)`)
     .eq("restaurant_id", restaurantId)
-    .order("sort_order");
+    // id breaks ties: two deals with the same sort_order came back in either
+    // order, and pricing breaks ties by position (see bestPromoFor).
+    .order("sort_order")
+    .order("id");
   if (activeOnly) query = query.eq("active", true);
 
   // A failed read is not "no promotions". Read that way, checkout priced a cart

@@ -7,7 +7,7 @@ import { dietaryTags, tagLabel } from "@/lib/dietary";
 import { useDietaryTags } from "@/components/DietaryTagsContext";
 import { itemSalePrice, MAX_LINE_QTY } from "@/lib/pricing";
 import { missingRequired } from "@/lib/modifiers";
-import { detailPromoPrice } from "@/lib/promo-math";
+import { quoteItemLine } from "@/lib/item-quote";
 import NoteField from "./NoteField";
 import type { CartPromo } from "@/lib/pricing";
 import { useT, useLocale } from "@/lib/i18n/context";
@@ -23,8 +23,8 @@ export default function ItemDetailScreen({
   onBack,
   onAdd,
   initialLine,
-  promo,
-  inCartQty = 0,
+  promos = [],
+  cartLines = [],
 }: {
   item: MenuItem;
   extras: MenuItem[];
@@ -33,10 +33,10 @@ export default function ItemDetailScreen({
   onAdd: (line: OrderLineItem) => void;
   /** Editing an existing cart line: prefills choices and relabels the button. */
   initialLine?: OrderLineItem;
-  /** A quantity deal covering this dish, so the screen can explain it. */
-  promo?: CartPromo;
-  /** How many of this dish are already in the cart, for the "one more" maths. */
-  inCartQty?: number;
+  /** The quantity deals on sale, priced exactly as the cart prices them. */
+  promos?: CartPromo[];
+  /** Every other line in the cart — when editing, without the line edited. */
+  cartLines?: OrderLineItem[];
 }) {
   const t = useT();
   const { locale: lang } = useLocale();
@@ -72,47 +72,46 @@ export default function ItemDetailScreen({
   }
 
   const chosenExtras = extras.filter(e => extraIds.includes(e.id));
-  const extrasTotal = chosenExtras.reduce((sum, e) => sum + e.price, 0);
   // Extras are never discounted, so only the base price gets the % off.
   const onSale = (item.discount_pct ?? 0) > 0;
   const salePrice = itemSalePrice(item.price, item.discount_pct);
 
-  // What this deal is, and what one more would earn. A dish covered by a 2x1
-  // used to look exactly like any other on this screen — the offer only
-  // surfaced once it had already applied in the cart, which is too late to
-  // influence the decision it exists to influence.
-  // Quantity deals apply across every line of this product, so what the diner
-  // already has in the cart decides what this one costs. When editing a line,
-  // its own quantity is excluded — it is being replaced, not added to.
-  const otherQty = Math.max(0, inCartQty - (initialLine?.qty ?? 0));
-  const deal = detailPromoPrice(promo, otherQty, qty, salePrice, extrasTotal);
+  // A dish covered by a 2x1 used to look exactly like any other on this
+  // screen — the offer only surfaced once it had already applied in the cart,
+  // which is too late to influence the decision it exists to influence.
+  // The line as it would be added: the price below is the cart priced with
+  // and without it, by the same priceCart the cart and checkout run. A quantity
+  // deal applies across every line of this product, so what the diner already
+  // has in the cart decides what this one costs.
+  const line: OrderLineItem = {
+    itemId: item.id,
+    name: item.name,
+    emoji: item.emoji,
+    // The full price plus the discount travels with the line; checkout
+    // re-reads both from the DB, so this is a snapshot, never the authority.
+    price: item.price,
+    discountPct: item.discount_pct ?? 0,
+    qty,
+    mods,
+    extras: chosenExtras.map(e => ({
+      id: e.id,
+      name: e.name,
+      emoji: e.emoji,
+      price: e.price,
+    })),
+    notes: notes || undefined,
+  };
+  const deal = quoteItemLine(cartLines, line, promos);
   // What the same items would cost without the deal, so the saving is visible
   // before committing rather than only once it lands in the cart.
-  const { total: lineTotal, full: fullPrice, step } = deal;
+  const { total: lineTotal, full: fullPrice, step, promoName } = deal;
 
   function handleAdd() {
     if (missing.length > 0) {
       setShowMissing(true);
       return;
     }
-    onAdd({
-      itemId: item.id,
-      name: item.name,
-      emoji: item.emoji,
-      // The full price plus the discount travels with the line; checkout
-      // re-reads both from the DB, so this is a snapshot, never the authority.
-      price: item.price,
-      discountPct: item.discount_pct ?? 0,
-      qty,
-      mods,
-      extras: chosenExtras.map(e => ({
-        id: e.id,
-        name: e.name,
-        emoji: e.emoji,
-        price: e.price,
-      })),
-      notes: notes || undefined,
-    });
+    onAdd(line);
   }
 
   return (
@@ -138,9 +137,9 @@ export default function ItemDetailScreen({
             {item.description}
           </p>
 
-          {promo && (
+          {promoName && (
             <div className="tt-promo-callout">
-              <span className="tt-deal">{promo.name}</span>
+              <span className="tt-deal">{promoName}</span>
               {deal.applied && <span>{t("promos.applied")}</span>}
               {step && (
                 <span>

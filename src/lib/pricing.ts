@@ -39,6 +39,16 @@ export function applyCoupon(coupon: AppliedCoupon, base: number): number {
  */
 export const MAX_LINE_QTY = 99;
 
+/**
+ * The quantity a line is priced at: whole units, never negative, never past
+ * the cap. Every step of priceCart reads this one figure. The charge once used
+ * the cap and the deal maths the raw number, so a 100-unit line was charged
+ * for 99 and discounted for 100: a discount larger than the charge.
+ */
+function lineQty(line: OrderLineItem): number {
+  return Math.min(MAX_LINE_QTY, Math.max(0, Math.floor(line.qty)));
+}
+
 /** A coupon that has already been looked up and confirmed to exist. */
 export interface AppliedCoupon {
   code: string;
@@ -137,6 +147,32 @@ function discountedBase(line: OrderLineItem): number {
   return itemSalePrice(line.price, line.discountPct);
 }
 
+/**
+ * The one deal a product gets: the one that saves the customer the most for
+ * this quantity. Ties go to the earlier deal in the list, which the loader
+ * orders by sort_order then id, so every screen breaks a tie the same way.
+ *
+ * Taking the first deal in the list was order-dependent: two tied deals came
+ * back in either order, so the till and the phone could price one cart at
+ * MX$100 and MX$200, and a deal that saved nothing could shut out one that
+ * saved something.
+ */
+export function bestPromoFor(
+  promos: CartPromo[],
+  itemId: string,
+  qty: number,
+  unit: number,
+): { promo: CartPromo; saved: number } | null {
+  let best: { promo: CartPromo; saved: number } | null = null;
+  for (const promo of promos) {
+    if (!promo.itemIds.includes(itemId)) continue;
+    // Never below zero: a deal is a discount, never a surcharge (sweep 1).
+    const saved = Math.max(0, round2(qty * unit - promoCost(promo, qty, unit)));
+    if (!best || saved > best.saved) best = { promo, saved };
+  }
+  return best;
+}
+
 export function priceCart(input: PriceInput): PricedCart {
   const { items, promos = [], coupon = null } = input;
 
@@ -146,7 +182,7 @@ export function priceCart(input: PriceInput): PricedCart {
 
   // 1. Per-line: apply each item's own discount. Extras are always full price.
   for (const line of items) {
-    const qty = Math.min(MAX_LINE_QTY, Math.max(0, Math.floor(line.qty)));
+    const qty = lineQty(line);
     const extras = extrasTotal(line);
     const grossUnit = line.price + extras;
     const unit = discountedBase(line) + extras;
@@ -166,7 +202,7 @@ export function priceCart(input: PriceInput): PricedCart {
   const unitByItem = new Map<string, number>();
   for (const line of items) {
     if (line.comboId) continue; // a combo is priced as a unit, not per product
-    const qty = Math.max(0, Math.floor(line.qty));
+    const qty = lineQty(line);
     qtyByItem.set(line.itemId, (qtyByItem.get(line.itemId) ?? 0) + qty);
     // If the same product appears twice at different prices — a different set
     // of extras, say — the lower one wins, so the deal never takes more off
@@ -186,29 +222,24 @@ export function priceCart(input: PriceInput): PricedCart {
   // discounted twice.
   for (const line of items) {
     if (!line.comboId || !line.comboRegular) continue;
-    const qty = Math.max(0, Math.floor(line.qty));
+    const qty = lineQty(line);
     const saved = round2((line.comboRegular - line.price) * qty);
     if (saved > 0) promoSavings[line.itemId] = { saved, promoName: line.name };
   }
   const hints: PromoHint[] = [];
-  const claimed = new Set<string>(); // one deal per product — the first wins
 
-  for (const promo of promos) {
-    for (const itemId of promo.itemIds) {
-      const qty = qtyByItem.get(itemId);
-      const unit = unitByItem.get(itemId);
-      if (!qty || unit === undefined || claimed.has(itemId)) continue;
-      claimed.add(itemId);
+  for (const [itemId, qty] of qtyByItem) {
+    const unit = unitByItem.get(itemId);
+    if (!qty || unit === undefined) continue;
+    const best = bestPromoFor(promos, itemId, qty, unit);
+    if (!best) continue;
+    const { promo, saved } = best;
+    promoDiscount += saved;
+    if (saved > 0) promoSavings[itemId] = { saved, promoName: promo.name };
 
-      // Never below zero: a deal is a discount, never a surcharge (sweep 1).
-      const saved = Math.max(0, round2(qty * unit - promoCost(promo, qty, unit)));
-      promoDiscount += saved;
-      if (saved > 0) promoSavings[itemId] = { saved, promoName: promo.name };
-
-      const step = nextPromoStep(promo, qty, unit);
-      if (step) {
-        hints.push({ itemId, promoName: promo.name, ...step });
-      }
+    const step = nextPromoStep(promo, qty, unit);
+    if (step) {
+      hints.push({ itemId, promoName: promo.name, ...step });
     }
   }
 
