@@ -2249,7 +2249,9 @@ email or phone.
   walking towards. `/rewards` says so: rewards the program has that the card
   does not yet are listed as the next round's, and a card whose own ladder
   moved on after its diner last saved the picture of it (`ladder_at` after
-  `saved_at`) asks for the picture to be saved again. The page links back to
+  `saved_at`) asks for the picture to be saved again. Only the phone holding
+  the card's key records a save or sees its masked ticket address; a copied
+  code still shows the card. The page links back to
   the menu the diner came from (`back`, accepted only as `/r/…`) or to the
   card's restaurant, and shows the card's shape while it looks it up.
 - **A reward is spent once**, under the same card lock, by
