@@ -2751,6 +2751,16 @@ tier's link expires first; an unsettled contract offers its invoice or portal.
 `billing-checkout.spec.ts` reproduces concurrent setup, duplicate purchase,
 pending checkout reuse, and refused upgrades.
 
+### Next-bill changes and Checkout follow the offer
+
+On classic billing, changing a price without proration could let a later
+move credit a price the restaurant never paid. A next-bill price change
+requires flexible billing. Checkout for an assigned tier now carries the
+assignment ID and expires by its pay-by time, including from the Plan screen.
+Reopening the same tier after founding places fill expires its old Checkout
+and opens one with today's price. Checks: `admin-tier.spec.ts` and
+`billing-checkout.spec.ts`.
+
 ### A crashed request can be recovered
 
 The local claim and Stripe's actual records had to agree. After 15 minutes,

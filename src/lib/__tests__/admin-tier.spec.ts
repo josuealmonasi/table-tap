@@ -83,7 +83,8 @@ const fakeStripe = {
 } as never;
 
 const subscription = (plan: string, status = "active", extra: Record<string, unknown> = {}, interval = "month") => ({
-  id: "sub_1", status, metadata: { restaurant_id: "r1" }, cancel_at_period_end: false, cancel_at: null, ...extra,
+  id: "sub_1", status, metadata: { restaurant_id: "r1" }, cancel_at_period_end: false, cancel_at: null,
+  billing_mode: { type: "flexible" }, ...extra,
   items: { data: [{ id: "si_1", price: { id: `price_${plan}`, currency: "mxn", recurring: { interval, interval_count: 1 } } }] },
 });
 
@@ -114,11 +115,21 @@ describe("a platform admin assigns a tier to a restaurant that pays through Stri
   });
 
   it("changes nothing in Stripe when the subscription is already on that tier", async () => {
-    live = [subscription("casa")];
+    live = [subscription("casa", "active", { billing_mode: { type: "classic" } })];
     const answer = await assignTier(fakeDb(), { ...base, plan: "casa", billing: "next_bill" }, "admin@x.dev", fakeStripe);
     expect(answer).toMatchObject({ ok: true });
     expect(updates).toEqual([]);
   });
+
+  it.each([["classic", { type: "classic" }], ["missing", undefined]])(
+    "refuses a next-bill price change with %s billing mode", async (_mode, billing_mode) => {
+      live = [subscription("caja", "active", { billing_mode })];
+      const answer = await assignTier(fakeDb(), { ...base, plan: "casa", billing: "next_bill" }, "admin@x.dev", fakeStripe);
+      expect(answer).toEqual({ ok: false, error: "apiErr.tierFlexibleBillingRequired", status: 409 });
+      expect(updates).toEqual([]);
+      expect(applied).toEqual([]);
+    },
+  );
 
   it("refuses an overdue subscription: unpaid time is settled before the price moves", async () => {
     live = [subscription("caja", "past_due")];

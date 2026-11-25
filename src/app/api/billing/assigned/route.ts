@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { actingOwner } from "@/lib/api-guard";
 import { readPlanName } from "@/lib/billing";
+import { apiError } from "@/lib/api-error";
 import { startRestaurantBilling } from "@/lib/billing-checkout";
 import { BillingError } from "@/lib/billing-operation";
 import { foundersTaken, allPlans } from "@/lib/plan-server";
@@ -36,16 +37,17 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   const { data: restaurant } = await db.from("restaurants")
     .select("plan, plan_status, stripe_subscription_id").eq("id", actor.restaurantId).maybeSingle();
   // A cheap early answer; the binding check runs again inside the billing
-  // lock (`assertStillAssigned`), where nothing can change underneath it.
+  // lock, where nothing can change underneath it.
   if (!restaurant || restaurant.plan !== plan || restaurant.plan_status !== "trialing" || restaurant.stripe_subscription_id) {
     return toPlanScreen;
   }
   const limits = (await allPlans()).find(p => p.plan === plan);
   if (!limits) return toPlanScreen;
   try {
-    const { url } = await startRestaurantBilling(db, actor, limits, await foundersTaken(), origin, { plan, id });
+    const { url } = await startRestaurantBilling(db, actor, limits, await foundersTaken(), origin, id);
     return NextResponse.redirect(url, 303);
   } catch (err) {
+    if (err instanceof BillingError && err.key === "apiErr.tierPayByTooSoon") return await apiError(err.key, err.status);
     if (!(err instanceof BillingError)) console.error("assigned tier checkout failed", err);
     return toPlanScreen;
   }

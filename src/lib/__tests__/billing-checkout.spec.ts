@@ -1,103 +1,12 @@
-import { beforeEach, expect, it, vi } from "vitest";
-import { NextRequest, NextResponse } from "next/server";
+import { expect, it, vi } from "vitest";
+import {
+  state, customerCreate, customerList, sessionCreate, sessionList, sessionExpire, sessionLineItems,
+  subscriptionList, subscriptionUpdate, priceCreate, invoiceRetrieve, sync, get,
+  post, openCheckout, lineItem, assignFor, subscription, ID,
+} from "./billing-checkout-fixture";
 
-vi.mock("@/lib/subscription-price", () => ({
-  subscriptionPlan: async () => "servicio", registerSubscriptionPrice: async () => {},
-}));
-const customerCreate = vi.fn();
-const customerList = vi.fn();
-let saved: Record<string, unknown>;
-const sessionCreate = vi.fn();
-const sessionList = vi.fn();
-const sessionExpire = vi.fn();
-const subscriptionList = vi.fn();
-const subscriptionRetrieve = vi.fn();
-const subscriptionUpdate = vi.fn();
-const productCreate = vi.fn();
-const priceCreate = vi.fn();
-const invoiceRetrieve = vi.fn();
-const portalCreate = vi.fn();
-const sync = vi.fn();
-const rpc = vi.fn();
-let locked = false;
-let restaurant: Record<string, unknown>;
-const failure = { data: null, error: { message: "database unavailable" } };
-let writeFailure = false;
-vi.mock("@/lib/api-guard", () => ({ actingOwner: async () => ({ restaurantId: "r1", email: "owner@test.com" }) }));
-vi.mock("@/lib/api-error", () => ({ apiError: async (error: string, status: number) => NextResponse.json({ error }, { status }) }));
-vi.mock("@/lib/plan-server", () => ({ allPlans: async () => [
-  { plan: "casa", monthly_price: 1499, stripe_price_id: null }, { plan: "servicio", monthly_price: 699 },
-], foundersTaken: async () => 0 }));
-vi.mock("@/lib/subscription-sync", () => ({ applySubscription: (...args: unknown[]) => sync(...args) }));
-vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({
-  rpc: (...args: unknown[]) => rpc(...args),
-  from: (table: string) => {
-    let patch: Record<string, unknown> | undefined;
-    const q = {
-      select: () => q, eq: () => q,
-      update: (value: Record<string, unknown>) => { patch = value; return q; },
-      single: async () => ({ data: restaurant, error: null }),
-      maybeSingle: async () => ({ data: table === "restaurant_billing_operations" ? saved : restaurant, error: null }),
-      then: (resolve: (v: unknown) => unknown) => {
-        if (patch && !writeFailure) Object.assign(restaurant, patch);
-        return Promise.resolve(writeFailure ? failure : { data: [{ id: "r1" }], error: null }).then(resolve);
-      },
-    };
-    return q;
-  },
-}) }));
-vi.mock("@/lib/stripe", () => ({ stripe: {
-  invoices: { retrieve: (...args: unknown[]) => invoiceRetrieve(...args) },
-  billingPortal: { sessions: { create: (...args: unknown[]) => portalCreate(...args) } },
-  customers: { list: (...args: unknown[]) => customerList(...args), create: (...args: unknown[]) => customerCreate(...args) },
-  checkout: { sessions: {
-    create: (...args: unknown[]) => sessionCreate(...args),
-    list: (...args: unknown[]) => sessionList(...args),
-    expire: (...args: unknown[]) => sessionExpire(...args),
-  } },
-  subscriptions: {
-    list: (...args: unknown[]) => subscriptionList(...args),
-    retrieve: (...args: unknown[]) => subscriptionRetrieve(...args),
-    update: (...args: unknown[]) => subscriptionUpdate(...args),
-  },
-  prices: { create: (...args: unknown[]) => priceCreate(...args) },
-  products: { create: (...args: unknown[]) => productCreate(...args) },
-} }));
-const { POST } = await import("@/app/api/billing/checkout/route");
-const post = (plan = "casa") => POST(new NextRequest("https://tabletap.test/api/billing/checkout", {
-  method: "POST", body: JSON.stringify({ plan, founding: true }),
-}));
-const subscription = (id = "sub_1", status = "active") => ({
-  id, status, customer: "cus_1", latest_invoice: "in_1", metadata: { restaurant_id: "r1", plan: "servicio" },
-  items: { data: [{ id: "si_1", price: { id: "price_old", currency: "mxn" } }] },
-});
-beforeEach(() => {
-  vi.resetAllMocks(); locked = false; writeFailure = false;
-  saved = { state: {} };
-  customerList.mockResolvedValue({ data: [], has_more: false });
-  restaurant = { name: "Demo", currency: "USD", stripe_customer_id: "cus_1", stripe_subscription_id: null };
-  rpc.mockImplementation(async (fn: string, args: { p_state?: object }) => {
-    if (fn === "claim_restaurant_billing") {
-      if (locked) return { data: false, error: null };
-      locked = true;
-    } else if (fn === "release_restaurant_billing") locked = false;
-    else if (fn === "takeover_restaurant_billing") saved.state = args.p_state;
-    else if (fn === "record_restaurant_billing") saved.state = { ...(saved.state as object), ...args.p_state };
-    return { data: true, error: null };
-  });
-  customerCreate.mockResolvedValue({ id: "cus_1" });
-  sessionCreate.mockResolvedValue({ id: "cs_new", url: "https://checkout/new" });
-  sessionList.mockResolvedValue({ data: [], has_more: false });
-  subscriptionList.mockResolvedValue({ data: [], has_more: false });
-  subscriptionRetrieve.mockResolvedValue(subscription());
-  subscriptionUpdate.mockResolvedValue(subscription());
-  invoiceRetrieve.mockResolvedValue({ hosted_invoice_url: "https://invoice/pay" });
-  portalCreate.mockResolvedValue({ url: "https://portal/pay" });
-  priceCreate.mockResolvedValue({ id: "price_generated" });
-  productCreate.mockResolvedValue({ id: "prod_casa" });
-});
 it("changes the existing subscription item instead of starting a second checkout", async () => {
-  restaurant.stripe_subscription_id = "sub_1";
+  state.restaurant.stripe_subscription_id = "sub_1";
   subscriptionList.mockResolvedValue({ data: [subscription()], has_more: false });
   expect((await post()).status).toBe(200);
   expect(sessionCreate).not.toHaveBeenCalled();
@@ -107,13 +16,90 @@ it("changes the existing subscription item instead of starting a second checkout
     payment_behavior: "error_if_incomplete", proration_behavior: "always_invoice",
   }), expect.anything());
 });
-it("reuses an open checkout for the requested plan", async () => {
-  sessionList.mockResolvedValue({ data: [{ id: "cs_old", mode: "subscription", url: "https://checkout/old", metadata: { plan: "casa" } }], has_more: false });
+it("reuses an open checkout with the same plan, currency and recurring Price", async () => {
+  sessionList.mockResolvedValue({ data: [openCheckout()], has_more: false });
   expect(await (await post()).json()).toEqual({ url: "https://checkout/old" });
+  expect(sessionLineItems).toHaveBeenCalledWith("cs_old", { limit: 1 });
+  expect(sessionExpire).not.toHaveBeenCalled();
   expect(sessionCreate).not.toHaveBeenCalled();
 });
+it("expires a founding checkout before opening one at the confirmed regular price", async () => {
+  state.taken = 50;
+  sessionList.mockResolvedValue({ data: [openCheckout()], has_more: false });
+  sessionLineItems.mockResolvedValue({ data: [lineItem("price_founding")], has_more: false });
+  expect(await (await post("casa", false)).json()).toEqual({ url: "https://checkout/new" });
+  expect(priceCreate).toHaveBeenCalledWith(expect.objectContaining({ unit_amount: 189900 }), expect.anything());
+  expect(sessionCreate).toHaveBeenCalledWith(expect.objectContaining({ line_items: [{ price: "price_generated", quantity: 1 }] }), expect.anything());
+  expect(sessionExpire).toHaveBeenCalledWith("cs_old");
+  expect(sessionExpire.mock.invocationCallOrder[0]).toBeLessThan(sessionCreate.mock.invocationCallOrder[0]);
+});
+it("replaces an open checkout in a different currency even if it names the requested plan", async () => {
+  sessionList.mockResolvedValue({ data: [openCheckout({ currency: "usd" })], has_more: false });
+  expect(await (await post()).json()).toEqual({ url: "https://checkout/new" });
+  expect(sessionExpire).toHaveBeenCalledWith("cs_old");
+});
+it.each([["emailed link", get], ["Plan screen", post]])(
+  "binds checkout from the %s to its assignment and pay-by time", async (_entry, request) => {
+    const deadline = assignFor(60);
+    expect((await request()).status).toBe(request === get ? 303 : 200);
+    const metadata = { restaurant_id: "r1", plan: "casa", tier_assignment_id: ID };
+    expect(sessionCreate).toHaveBeenCalledWith(expect.objectContaining({
+      expires_at: deadline, metadata, subscription_data: { metadata },
+    }), expect.anything());
+  },
+);
+it("caps assigned checkout at Stripe's 24-hour maximum when the deadline is farther away", async () => {
+  assignFor(48 * 60);
+  const before = Math.floor(Date.now() / 1000);
+  expect((await get()).headers.get("location")).toBe("https://checkout/new");
+  expect(sessionCreate.mock.calls[0][0].expires_at).toBeGreaterThanOrEqual(before + 86400);
+  expect(sessionCreate.mock.calls[0][0].expires_at).toBeLessThanOrEqual(Math.floor(Date.now() / 1000) + 86400);
+});
+it.each([["emailed link", get], ["Plan screen", post]])(
+  "shows the pay-by refusal on the %s with less than 30 minutes left", async (_entry, request) => {
+    assignFor(29);
+    const res = await request();
+    expect(res.status).toBe(409);
+    expect(await res.json()).toEqual({ error: "apiErr.tierPayByTooSoon" });
+    expect(sessionCreate).not.toHaveBeenCalled();
+  },
+);
+it("releases the billing lock if just under 30 minutes remain after Stripe setup", async () => {
+  const now = Date.now();
+  const clock = vi.spyOn(Date, "now").mockReturnValue(now);
+  try {
+    assignFor(31);
+    state.restaurant.stripe_customer_id = null;
+    customerCreate.mockImplementation(async () => {
+      clock.mockReturnValue(now + 60_001);
+      return { id: "cus_1" };
+    });
+    expect((await get()).status).toBe(409);
+    expect(sessionCreate).not.toHaveBeenCalled();
+    expect(state.restaurant.stripe_customer_id).toBe("cus_1");
+    expect(state.locked).toBe(false);
+  } finally {
+    clock.mockRestore();
+  }
+});
+it.each(["wrong id", "missing id", "late expiry", "current assignment"])(
+  "checks assignment identity and expiry before reusing checkout (%s)", async scenario => {
+    const deadline = assignFor(60);
+    const id = scenario === "wrong id" ? "other" : scenario === "missing id" ? undefined : ID;
+    const expires_at = scenario === "late expiry" ? deadline + 1 : deadline;
+    sessionList.mockResolvedValue({ data: [openCheckout({ metadata: { plan: "casa", tier_assignment_id: id }, expires_at })], has_more: false });
+    const location = (await get()).headers.get("location");
+    if (scenario === "current assignment") {
+      expect(location).toBe("https://checkout/old");
+      expect(sessionCreate).not.toHaveBeenCalled();
+    } else {
+      expect(location).toBe("https://checkout/new");
+      expect(sessionExpire).toHaveBeenCalledWith("cs_old");
+    }
+  },
+);
 it("serializes concurrent first checkouts before creating a customer", async () => {
-  restaurant.stripe_customer_id = null;
+  state.restaurant.stripe_customer_id = null;
   const responses = await Promise.all([post(), post()]);
   expect(responses.map(r => r.status).sort()).toEqual([200, 409]);
   expect(customerCreate).toHaveBeenCalledTimes(1);
@@ -142,16 +128,16 @@ it("keeps the lock after an unknown Stripe result so retry cannot create another
   expect(sessionCreate).toHaveBeenCalledTimes(1);
 });
 it("keeps the lock and stops checkout when saving the customer fails", async () => {
-  restaurant.stripe_customer_id = null; writeFailure = true;
+  state.restaurant.stripe_customer_id = null; state.writeFailure = true;
   expect((await post()).status).toBe(502);
-  expect(locked).toBe(true);
+  expect(state.locked).toBe(true);
   expect(sessionCreate).not.toHaveBeenCalled();
 });
 it("does not sync an upgrade Stripe refused to charge", async () => {
   subscriptionList.mockResolvedValue({ data: [subscription()], has_more: false });
   subscriptionUpdate.mockRejectedValue({ statusCode: 402 });
   expect((await post()).status).toBe(402);
-  expect(sync).not.toHaveBeenCalled(); expect(locked).toBe(false);
+  expect(sync).not.toHaveBeenCalled(); expect(state.locked).toBe(false);
 });
 it("finds a completed subscription even before its webhook linked it", async () => {
   subscriptionList.mockResolvedValue({ data: [subscription()], has_more: false });
@@ -180,19 +166,19 @@ it("expires an older open checkout before changing the live contract", async () 
   expect(sessionExpire.mock.invocationCallOrder[0]).toBeLessThan(subscriptionUpdate.mock.invocationCallOrder[0]);
 });
 it("recovers an expired empty claim and permits a new payment", async () => {
-  locked = true;
-  saved = { token: "old", started_at: new Date(Date.now() - 16 * 60000).toISOString(), state: {} };
+  state.locked = true;
+  state.saved = { token: "old", started_at: new Date(Date.now() - 16 * 60000).toISOString(), state: {} };
   expect((await post()).status).toBe(200);
   expect(customerList).toHaveBeenCalled(); expect(sessionCreate).toHaveBeenCalledTimes(1);
 });
 it("recovers an unrecorded checkout instead of charging again", async () => {
-  locked = true; restaurant.stripe_customer_id = null;
-  saved = { token: "old", started_at: new Date(Date.now() - 16 * 60000).toISOString(), state: {} };
+  state.locked = true; state.restaurant.stripe_customer_id = null;
+  state.saved = { token: "old", started_at: new Date(Date.now() - 16 * 60000).toISOString(), state: {} };
   customerList.mockResolvedValue({ data: [{ id: "cus_orphan", metadata: { restaurant_id: "r1" } }], has_more: false });
-  sessionList.mockResolvedValue({ data: [{ id: "cs_old", mode: "subscription", url: "https://checkout/old", metadata: { plan: "casa" } }], has_more: false });
+  sessionList.mockResolvedValue({ data: [openCheckout()], has_more: false });
   expect(await (await post()).json()).toEqual({ url: "https://checkout/old" });
   expect(customerCreate).not.toHaveBeenCalled(); expect(sessionCreate).not.toHaveBeenCalled();
-  expect(restaurant.stripe_customer_id).toBe("cus_orphan");
+  expect(state.restaurant.stripe_customer_id).toBe("cus_orphan");
 });
 it("offers the billing portal when an unsettled contract has no invoice link", async () => {
   subscriptionList.mockResolvedValue({ data: [subscription("sub_1", "past_due")], has_more: false });
