@@ -6,7 +6,12 @@ import type { CorteAdjustment } from "@/lib/corte";
 /** Only completed returns leave the drawer. Audit text is presentation, never
  * the source of the new return's amount, method, date or payout drawer. */
 export async function returnedAdjustments(restaurantId: string, from: string, to?: string, currency?: string): Promise<CorteAdjustment[]> {
-  const db = createAdminClient();
+  return returnAdjustmentsFrom(createAdminClient(), restaurantId, from, to, currency);
+}
+
+/** `returnedAdjustments` with the caller's secret-key client, for a worker that already holds one. */
+export async function returnAdjustmentsFrom(db: ReturnType<typeof createAdminClient>, restaurantId: string,
+  from: string, to?: string, currency?: string): Promise<CorteAdjustment[]> {
   const rows = await readReturnEvents(db, restaurantId, from, to, { currency, excludeHistorical: true });
   return rows.map(r => ({ action: "refunded", detail: logDetail({
     amount: (r.amount_cents / 100).toFixed(2), method: r.source === "cash" ? "cash" : "card", collector: r.payout_actor,

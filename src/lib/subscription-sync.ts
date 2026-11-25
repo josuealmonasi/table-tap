@@ -43,7 +43,7 @@ export async function applySubscription(
   // local revision, and only store it while that revision still matches.
   for (let attempt = 0; attempt < 3; attempt++) {
     const { data: current, error: readError } = await db.from("restaurants")
-      .select("stripe_subscription_id, stripe_customer_id, subscription_sync_revision")
+      .select("stripe_subscription_id, stripe_customer_id, subscription_sync_revision, tier_assignment_id")
       .eq("id", restaurantId).maybeSingle();
     if (readError) throw new Error(`Subscription lookup failed: ${readError.message}`);
     if (!current) return;
@@ -75,7 +75,14 @@ export async function applySubscription(
     // Unlinked contracts only change the plan once active or trialing. A
     // terminal event still advances the revision so any competing activation
     // must reread Stripe, without resetting a plan an admin assigned.
-    const outcome = linked || latest.status === "active" || latest.status === "trialing"
+    // A Checkout opened for an admin's tier assignment carries its id. Once
+    // that assignment was ended or replaced, a page left open must not bring
+    // the paid tier back (review bl26, finding 5): the contract stays unlinked
+    // in Stripe for the platform team to cancel or refund.
+    const assignment = latest.metadata?.tier_assignment_id;
+    const staleAssignment = !linked && typeof assignment === "string" && assignment !== "" && assignment !== current.tier_assignment_id;
+    if (staleAssignment) console.error("Subscription from an ended tier assignment left unlinked", latest.id, restaurantId);
+    const outcome = !staleAssignment && (linked || latest.status === "active" || latest.status === "trialing")
       ? await resolveOutcome(latest, db)
       : null;
     if (outcome?.status === "active" && !ended) await claimFounder(db, latest, outcome.plan);
