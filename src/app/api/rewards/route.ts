@@ -1,10 +1,10 @@
-import { emailForRole } from "@/lib/loyalty/card-email";
+import { cardEmailPending, emailForRole } from "@/lib/loyalty/card-email";
 import { NextRequest, NextResponse } from "next/server";
 import { apiError } from "@/lib/api-error";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { clientKey, isRateLimited } from "@/lib/rate-limit";
 import { normalizeCode } from "@/lib/loyalty/code";
-import { hashOwnerSecret, keepOwnerSecret, matchesOwnerSecret, readOwnerSecret } from "@/lib/loyalty/owner-secret";
+import { hashOwnerSecret, keepEmailOwnerSecret, keepOwnerSecret, matchesOwnerSecret, readOwnerSecret } from "@/lib/loyalty/owner-secret";
 import { cardFace } from "@/lib/loyalty/face";
 import { qrGrid } from "@/lib/loyalty/qr-grid";
 import { CARD_COLUMNS, cardState, type CardRow } from "@/lib/loyalty/server";
@@ -32,9 +32,12 @@ export async function GET(req: NextRequest) {
   const db = createAdminClient();
   const { data: card, error } = await db
     .from("loyalty_cards")
-    .select(`${CARD_COLUMNS}, restaurant_id, created_at, ladder_at, saved_at, email, owner_secret_hash`)
+    .select(`${CARD_COLUMNS}, restaurant_id, created_at, ladder_at, saved_at, email, owner_secret_hash, pending_email_expires_at`)
     .eq("code", code)
-    .maybeSingle<CardRow & { restaurant_id: string; created_at: string; ladder_at: string; saved_at: string; owner_secret_hash: string | null }>();
+    .maybeSingle<CardRow & {
+      restaurant_id: string; created_at: string; ladder_at: string; saved_at: string;
+      owner_secret_hash: string | null; pending_email_expires_at: string | null;
+    }>();
   if (error) {
     console.error("rewards: card read failed:", error.message);
     return await apiError("apiErr.generic", 500);
@@ -72,8 +75,11 @@ export async function GET(req: NextRequest) {
       ? programLadder.map(s => ({ visits: s.visits, reward: s.reward.trim() }))
       : null;
 
-  return NextResponse.json({
-    canDelete: matchesOwnerSecret(readOwnerSecret(req, code), card.owner_secret_hash),
+  const secret = readOwnerSecret(req, code);
+  const owned = matchesOwnerSecret(secret, card.owner_secret_hash);
+  const response = NextResponse.json({
+    canDelete: owned,
+    ...(owned ? { emailPending: cardEmailPending(card.pending_email_expires_at) } : {}),
     // The address this card's tickets go to, masked: a waiter who scanned
     // the card holds its code too, and the floor never sees an address whole
     // (Codex review of #622). The diner retypes it to change it.
@@ -93,6 +99,8 @@ export async function GET(req: NextRequest) {
     lastVisit: lastVisit.data?.visit_day ?? null,
     redeemed: (spent.data ?? []).map(r => ({ day: r.created_at.slice(0, 10), reward: r.reward })),
   }, { headers: { "Cache-Control": "private, no-store" } });
+  // Phones with the original rewards-only cookie can edit from this screen.
+  return owned && secret ? keepEmailOwnerSecret(response, code, secret) : response;
 }
 
 // Anyone with the printed code can save the picture. Only the phone already

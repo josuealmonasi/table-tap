@@ -1,6 +1,8 @@
 import { beforeEach, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
 import { splitTipPrincipal } from "@/lib/tip-base";
+import { hashOwnerSecret } from "@/lib/loyalty/owner-secret";
+const ownerSecret = "A".repeat(43);
 const f = vi.hoisted(() => ({ taken: false, email: null as string | null }));
 vi.mock("@/lib/api-guard", () => ({ actingFrontOfHouse: async () => null }));
 vi.mock("@/lib/api-error", () => ({ apiError: async (error: string, status: number) => Response.json({ error }, { status }) }));
@@ -15,7 +17,9 @@ vi.mock("@/lib/loyalty/server", () => ({ CARD_COLUMNS: "id,code", cardState: asy
 vi.mock("@/lib/loyalty/face", () => ({ cardFace: () => ({ qrPayload: "url", standing: {} }) }));
 vi.mock("@/lib/loyalty/qr-grid", () => ({ qrGrid: () => [] }));
 vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({ from: (table: string) => {
-  const answer = () => ({ data: table === "loyalty_cards" ? { id: "own-card", restaurant_id: "r1", created_at: "2026-01-01", email: f.email }
+  const answer = () => ({ data: table === "loyalty_cards" ? {
+    id: "own-card", restaurant_id: "r1", created_at: "2026-01-01", email: f.email, owner_secret_hash: hashOwnerSecret(ownerSecret),
+  }
     : table === "restaurants" ? { name: "Cafe" } : table === "loyalty_redemptions" ? [] : null, error: null });
   const q = { select: () => q, eq: () => q, order: () => q, limit: () => q,
     maybeSingle: async () => answer(), single: async () => answer(),
@@ -30,9 +34,11 @@ it("N12: subsequent rewards reads must not reveal whether the submitted address 
   const answers = [];
   for (const taken of [false, true]) {
     f.taken = taken; f.email = null;
-    await POST(new NextRequest("https://test/api/loyalty/card-email", { method: "POST", body: JSON.stringify({
+    const response = await POST(new NextRequest("https://test/api/loyalty/card-email", {
+      method: "POST", headers: { cookie: `tt-loyalty-email-owner-K7QM3XW9K7P2=${ownerSecret}` }, body: JSON.stringify({
       code: "K7QM-3XW9-K7P2", email: "ana@example.invalid", consent: true,
     }) }));
+    expect(response.status).toBe(200);
     answers.push((await (await GET(new NextRequest("https://test/api/rewards?c=K7QM3XW9K7P2"))).json()).email);
   }
   expect(answers[1]).toEqual(answers[0]);
