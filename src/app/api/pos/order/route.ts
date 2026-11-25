@@ -1,4 +1,4 @@
-import { posSuspensionAnswer } from "@/lib/restaurant-suspension";
+import { posSuspensionAnswer, queuedBeforeSuspension } from "@/lib/restaurant-suspension";
 import { after } from "next/server";
 import { drainTicketEmails } from "@/lib/ticket-email";
 import { saleCard } from "@/lib/loyalty/sale-card";
@@ -121,7 +121,8 @@ export async function POST(req: NextRequest) {
   if (!restaurant) return await apiError("apiErr.forbidden", 403);
   // Suspended: no new sale; money already collected is kept (posSuspensionAnswer).
   const suspendedAnswer = await posSuspensionAnswer(restaurant.suspended_at,
-    body.collected === undefined ? null : offlineCharge(body.collected)?.at ?? null);
+    body.collected === undefined ? null : offlineCharge(body.collected)?.at ?? null,
+    await queuedBeforeSuspension(db, actor.restaurantId, posRef, restaurant.suspended_at));
   if (suspendedAnswer) return suspendedAnswer;
 
   // Only what the restaurant is actually serving right now: a cashier should

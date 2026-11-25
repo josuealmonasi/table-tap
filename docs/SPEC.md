@@ -243,8 +243,10 @@ stored in `table_session_members`, with RLS enabled and all public and
 signed-in client access revoked. The server's service role alone reads it.
 
 An empty table stays empty while someone browses. The first phone to order
-opens the sitting and becomes approved in the same database transaction,
-under the physical table's lock. Another phone, including one returning from
+opens the sitting in one database transaction, under the physical table's
+lock. It is approved there only when that order is paid by card; a pay-later
+order at an empty table leaves it pending like any other phone, so a saved
+photo of the QR cannot send unpaid food to the kitchen from anywhere. Another phone, including one returning from
 an earlier party, is pending. It can browse and call the waiter, but cannot
 read the shared bill, order onto it, divide it, request collection or claim
 the table's visit card. It sees its phone code and a waiting message.
@@ -1044,6 +1046,13 @@ pay-at-the-counter, dividing the bill with the rest of the table, live tracker
 with a QR staff can scan, receipts by email, dish ratings, "lo de siempre", the
 visit card and its page, a customer account's statement (`/cuenta/<code>`) to
 check and pay, a scan button for TableTap's own codes, ES/EN.
+
+Staff never receive every customer account's link at once: the account list
+carries no codes, one account's link comes with its statement when someone
+opens it (logged as `account`/`opened`), and a scanned card is resolved by the
+server. Removing a login, the owner may also reset the kitchen printer's link
+(on by default for a manager or owner) and the links of the accounts that
+person opened; the new printer link and account codes are shown once.
 
 Restaurant: multiple menus with schedules, full menu editing, dietary tags and
 icon groups, tables with printable QR codes, the orders board, open bills,

@@ -8480,6 +8480,15 @@ GHSA-pc58-hwjq-p385 (cross-client response injection) and GHSA-7qx7-33qx-rqx2
 eslint-config-next now pin 15.5.29, and the framework floor in
 `security-headers.spec.ts` rises to it, so a downgrade fails the unit tests.
 
+### A suspended restaurant could still ring sales on the device's word (security sweep 2026-11-24)
+
+While suspended, the till recorded a sale whose collection time the device said
+was before the suspension, and that time is the device's own claim: a cashier
+could date a new sale early. The offline intake did not check suspension at
+all and rang sales straight through. Now a pre-suspension date counts only with
+the server's own queue row from before the suspension (otherwise the sale is
+held), and offline sales during a suspension wait in the manager review queue.
+Check: `pos-atomic.spec.tsx`, `sweep-1124-suspension.spec.ts`.
 ### Requests that could be repeated without end (security sweep 2026-11-24)
 
 A waiter could tap "ask for a discount" or "ask for a write-off" over and over,
@@ -8527,3 +8536,23 @@ SELECT policy on the `menu` bucket listed every restaurant's uploads; the public
 for hidden dishes and inactive promotions; and `dish_rating_stats` returned
 averages for hidden dishes to anyone. Each is narrowed; the server key keeps
 full access. Check: `sweep-1124-grants.spec.ts`, plus a rolled-back dev probe.
+
+### A removed member kept the links they had copied (security sweep 2026-11-24)
+
+Removing a login did not take back the kitchen printer's link (it reads and
+clears tickets) or customer-account links (they read statements), and every
+waiter's account list carried every customer's reusable link. The list no
+longer carries codes; one account's link is opened on purpose and logged; and
+the owner's removal dialog offers to reset the printer link (on by default for
+a manager or owner) and the links of the accounts that person opened, showing
+the new values once. Check: `sweep-1124-staff-links.spec.ts`, the api gate's
+`GET /api/accounts` and `GET /api/staff?removal` cases.
+### A saved photo of a table's QR could send unpaid food to the kitchen (security sweep 2026-11-24)
+
+The phone that opened an empty table was let in automatically, and with
+pay-later on, its first order opened the sitting and went to the kitchen
+unpaid, from anywhere the photo of the QR travelled. Now that phone is let in
+automatically only when its order is paid by card; a pay-later order at an
+empty table makes it wait for staff, in the same "let this phone in" list
+every other phone at a table already uses (`request_table_member_v2`,
+`p_first_approved`). Check: checkout `route.spec.ts`, plus a rolled-back dev probe.
