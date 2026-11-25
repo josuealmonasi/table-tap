@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import { heldCashWaiting } from "@/lib/held-cash";
 import { apiError } from "@/lib/api-error";
 import { jsonBody } from "@/lib/json-body";
 import { actingStaff } from "@/lib/api-guard";
@@ -15,7 +14,7 @@ export const runtime = "nodejs";
 
 // POST /api/cash-shift — the cash drawer's shifts.
 //
-// { action: "open", amount }                 a shift starts with this cash
+// { action: "open", amount, ref }            a shift starts with this cash
 // { action: "close", shiftId, ref, counted, confirm: true } the closer counted this drawer
 // { action: "explain", id, note }            why a closed shift's count differed
 //
@@ -33,19 +32,26 @@ export async function POST(req: NextRequest) {
     const amount = cashAmount(body.amount, false);
     if (amount === null) return await apiError("apiErr.cashAmount", 400);
     // Under the money lock, stamped after it: a shift opened while another was
-    // closing cannot start before that one ended (paths audit #6).
-    const { data: id, error } = await db.rpc("open_cash_shift", {
-      p_restaurant: actor.restaurantId, p_actor: actor.email, p_amount: amount,
+    // closing cannot start before that one ended (paths audit #6). The
+    // dialog's reference makes a retry return the shift its first send opened,
+    // even one closed since, instead of opening a second (bl39 finding 5).
+    const ref = uuidOf(body.ref);
+    if (!ref) return await apiError("apiErr.invalidRequest", 400);
+    const { data, error } = await db.rpc("open_cash_shift_v2", {
+      p_restaurant: actor.restaurantId, p_actor: actor.email, p_amount: amount, p_ref: ref,
     });
+    if (error?.code === "PT409") return await apiError("apiErr.retryConflict", 409);
     // Somebody opened it first (the one-open-shift index says the same).
-    if (!error && !id) return await apiError("apiErr.shiftAlreadyOpen", 409);
+    if (!error && !data) return await apiError("apiErr.shiftAlreadyOpen", 409);
     if (error?.code === "23505") return await apiError("apiErr.shiftAlreadyOpen", 409);
     if (error) return await apiError("apiErr.generic", 500);
-    await logEvent({
-      restaurantId: actor.restaurantId, actor: actor.email, entity: "cash", action: "opened",
-      detail: logDetail({ opening: amount.toFixed(2) }),
-    });
-    return NextResponse.json({ ok: true, id });
+    if (!data.replayed) {
+      await logEvent({
+        restaurantId: actor.restaurantId, actor: actor.email, entity: "cash", action: "opened",
+        detail: logDetail({ opening: amount.toFixed(2) }),
+      });
+    }
+    return NextResponse.json({ ok: true, id: data.id, closed: data.closed === true });
   }
 
   if (body?.action === "close") {
@@ -58,11 +64,10 @@ export async function POST(req: NextRequest) {
     if (!shiftId || !ref) return await apiError("apiErr.shiftChanged", 409);
     // Held cash awaiting review is reviewed before the drawer is signed (C4).
     // Only a manager can review it: a cashier is told to call one, not sent to
-    // a screen they cannot open (full review, screens #1).
+    // a screen they cannot open (full review, screens #1). The RPC checks it,
+    // after answering a retry with the close it already signed: checked here
+    // first, cash queued since hid a close that had succeeded (bl39 finding 6).
     const heldCash = MANAGES(actor.role) ? "apiErr.shiftHeldCash" : "apiErr.shiftHeldCashCashier";
-    const waiting = await heldCashWaiting(db, actor.restaurantId).catch(() => null);
-    if (waiting === null) return await apiError("apiErr.generic", 503);
-    if (waiting > 0) return await apiError(heldCash, 409, { n: waiting });
     // Only the shift still open: two people closing at once close it once.
     // The sum and the signature belong to one transaction, after every earlier
     // money writer and before another withdrawal can change the drawer.

@@ -117,7 +117,8 @@ export default function OrdersBoard({
       const res = await fetch("/api/orders/station", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id, station: done }),
+        // The cycle this screen showed: a "done" from before a rewind is refused.
+        body: JSON.stringify({ id, station: done, revision: byId.get(id)?.prep_revision ?? 0 }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {

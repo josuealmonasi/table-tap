@@ -10,8 +10,11 @@ export function checkClosedShifts(rows, { ok, bad, info }) {
   for (const s of shifts) {
     const mine = r => r.restaurant_id === s.restaurant_id && r.currency === s.currency;
     const inside = at => time(at) >= time(s.opened_at) && time(at) <= time(s.closed_at);
+    // A receipt bound to its collecting shift counts there and nowhere else,
+    // whatever its time (bl39 finding 2); an unbound one by its time.
     const receipts = rows.payments.filter(p => mine(p) && p.method === "cash" && p.actor_email
-      && inside(p.created_at) && time(p.recorded_at ?? p.created_at) <= time(s.closed_at));
+      && (p.cash_shift_id ? p.cash_shift_id === s.id : inside(p.created_at))
+      && time(p.recorded_at ?? p.created_at) <= time(s.closed_at));
     const returns = rows.refund_operations.filter(r => mine(r) && r.source === "cash"
       && r.status === "succeeded" && r.payout_actor && inside(r.completed_at));
     const withdrawals = rows.cash_movements.filter(m => mine(m) && m.shift_id === s.id

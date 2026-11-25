@@ -3,10 +3,14 @@ import { stripe } from "@/lib/stripe";
 import type { createAdminClient } from "@/lib/supabase/admin";
 import { logEvent } from "@/lib/activity-log";
 import { logDetail } from "@/lib/log-detail";
-import { refundMadeFor, fullyReturnedCharge, chargeRefundState, refusedAsTooLarge, type RefundCoverage } from "@/lib/refunds/due-provider";
+import { fullyReturnedCharge, chargeRefundState, refusedAsTooLarge, type RefundCoverage } from "@/lib/refunds/due-provider";
 import { reconcileDueFee, verifyDueCurrency } from "@/lib/refunds/due-recovery";
+import { guardRefundSend, type DueAttempt } from "@/lib/refunds/due-send-guard";
 
 type Db = ReturnType<typeof createAdminClient>;
+
+/** Reopenings for refunds made by hand mid-send before the request gives up and the next click reads again. */
+const MAX_SEND_PASSES = 3;
 
 /** A card payment that arrived for a bill already collected, as Cuentas lists it. */
 export interface RefundDueRow {
@@ -108,47 +112,60 @@ export async function refundDue(
     console.error("refund due: could not read the charge", err);
     return { ok: false, error: "apiErr.refundDueFailed", status: 502 };
   }
+  // Refunds made by hand covered the whole due: our fee is all that is left.
+  const coveredByHand = async (marked: boolean): Promise<RefundAnswer> => {
+    const returned = await reconcileDueFee(db, restaurantId, id, found, client);
+    if (marked) {
+      await logEvent({
+        restaurantId, actor, entity: "bill", action: "refunded",
+        detail: refundDueLogDetail(Number(due.amount), (due.table_label as string | null) ?? null, currency),
+      });
+    }
+    return { ok: true, amount: Number(due.amount), alreadyInStripe: true, ...(!returned && { feePending: true }) };
+  };
   if (charge.manual.length > 0) {
     const { data: recorded, error } = await db.rpc("record_refund_due_coverage_v1", {
       p_restaurant: restaurantId, p_due: id, p_actor: actor, p_refunds: charge.manual,
     });
     if (error) return { ok: false, error: "apiErr.refundDueFailed", status: 503 };
-    if (recorded?.outcome === "completed") {
-      const returned = await reconcileDueFee(db, restaurantId, id, found, client);
-      if (recorded.marked === true) {
-        await logEvent({
-          restaurantId, actor, entity: "bill", action: "refunded",
-          detail: refundDueLogDetail(Number(due.amount), (due.table_label as string | null) ?? null, currency),
-        });
-      }
-      return { ok: true, amount: Number(due.amount), alreadyInStripe: true, ...(!returned && { feePending: true }) };
-    }
+    if (recorded?.outcome === "completed") return coveredByHand(recorded.marked === true);
   }
 
   // An attempt in flight is resumed as it is; a new one is capped at what the
-  // charge still has refundable, and never edited afterwards.
-  const prepared = await db.rpc("start_refund_due_attempt_v2", {
-    p_restaurant: restaurantId, p_due: id, p_refundable_cents: charge.refundableCents,
+  // charge still has refundable, and never edited afterwards. It freezes the
+  // refunds the charge has now, so one made later stops its send.
+  const prepared = await db.rpc("start_refund_due_attempt_v3", {
+    p_restaurant: restaurantId, p_due: id, p_refundable_cents: charge.refundableCents, p_refund_ids: charge.ids,
   });
   if (prepared.error) return { ok: false, error: "apiErr.refundDueFailed", status: 503 };
   if (!prepared.data) return { ok: false, error: "apiErr.refundNeedsStripe", status: 409 };
   if (prepared.data.outcome === "none") return { ok: false, error: "apiErr.refundPending", status: 409 };
-  let attempt = prepared.data;
+  let attempt = prepared.data as DueAttempt;
   // An attempt is sent on the account it was frozen with.
   stripeAccount = attempt.stripe_account_id as string;
 
   let coverage: RefundCoverage[] | null = null;
   let alreadyInStripe = false;
   let amount = 0;
-  // At most one replacement: only Stripe's own "more than is left" refusal
-  // retires an attempt, and the new one is capped at what Stripe says is left.
+  // At most one replacement for Stripe's own "more than is left" refusal,
+  // capped at what Stripe says is left; and a few for refunds made by hand
+  // while we were deciding, each reopened for only what is still owed.
+  let replaced = false;
   for (let pass = 0; ; pass++) {
   amount = Number(attempt.amount);
   const cents = Math.round(amount * 100);
   try {
-    const refund = (attempt.stripe_refund_id
-      ? await client.refunds.retrieve(attempt.stripe_refund_id, { stripeAccount })
-      : await refundMadeFor(client, intent, stripeAccount, id, attempt.id, attempt.attempt_no)) ?? await client.refunds.create(
+    let refund: Stripe.Refund | null = attempt.stripe_refund_id ? await client.refunds.retrieve(attempt.stripe_refund_id, { stripeAccount }) : null;
+    if (!refund) {
+      // Read the charge again right before sending (bl43 finding 1).
+      const guard = await guardRefundSend(db, client, { restaurantId, dueId: id, actor, intent, attempt });
+      if (guard.kind === "own") refund = guard.refund;
+      else if (guard.kind === "completed") return coveredByHand(guard.marked);
+      else if (guard.kind === "retry" && pass < MAX_SEND_PASSES) { attempt = guard.attempt; continue; }
+      else if (guard.kind === "failed") return { ok: false, error: "apiErr.refundDueFailed", status: 503 };
+      else if (guard.kind !== "send") return { ok: false, error: "apiErr.refundPending", status: 409 };
+    }
+    refund ??= await client.refunds.create(
       { payment_intent: intent, amount: cents, refund_application_fee: true, metadata: { refund_due: id, refund_due_attempt: attempt.id } },
       { idempotencyKey: attempt.idempotency_key, stripeAccount },
     );
@@ -164,19 +181,21 @@ export async function refundDue(
     break;
   } catch (err) {
     const code = err && typeof err === "object" && "code" in err ? err.code : undefined;
-    if (pass === 0 && refusedAsTooLarge(err)) {
+    if (!replaced && refusedAsTooLarge(err)) {
       // Nothing was created: retire this attempt and open one for what is left.
+      replaced = true;
       const { error: retireError } = await db.rpc("finish_refund_due_attempt_v2", { p_restaurant: restaurantId, p_due: id,
         p_attempt: attempt.id, p_actor: actor, p_refunds: [], p_status: "failed" });
       if (retireError) return { ok: false, error: "apiErr.refundDueFailed", status: 503 };
       const fresh = await chargeRefundState(client, intent, stripeAccount).catch(() => null);
       if (!fresh) return { ok: false, error: "apiErr.refundDueFailed", status: 502 };
-      const { data: next, error: nextError } = await db.rpc("start_refund_due_attempt_v2", {
-        p_restaurant: restaurantId, p_due: id, p_refundable_cents: fresh.refundableCents,
+      // The replacement freezes the charge as read now; the guard rereads it before its POST.
+      const { data: next, error: nextError } = await db.rpc("start_refund_due_attempt_v3", {
+        p_restaurant: restaurantId, p_due: id, p_refundable_cents: fresh.refundableCents, p_refund_ids: fresh.ids,
       });
       if (nextError) return { ok: false, error: "apiErr.refundDueFailed", status: 503 };
       if (!next || next.outcome === "none") return { ok: false, error: "apiErr.refundPending", status: 409 };
-      attempt = next;
+      attempt = next as DueAttempt;
       continue;
     }
     // The other click, still being answered: its refund is the one.

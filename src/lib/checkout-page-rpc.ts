@@ -9,7 +9,7 @@ export async function checkoutPageRpc(name: string, args: Record<string, unknown
   const db = createAdminClient();
   const result = await db.rpc(name, args);
   const data = result.data;
-  const accountHold = name === "prepare_order_refund" && args.p_expected_account && data?.outcome === "changed";
+  const accountHold = ["prepare_order_refund", "prepare_order_refund_v2"].includes(name) && args.p_expected_account && data?.outcome === "changed";
   const paying = accountHold || data === "paying" || data?.outcome === "paying"
     || (Array.isArray(data) && data.some(row => row.outcome === "paying")) || ["paying", "checkout_scope_busy"].includes(result.error?.message ?? "");
   const record = args.p_record as { restaurant_id?: unknown } | undefined;
