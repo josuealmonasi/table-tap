@@ -1,6 +1,7 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { stockDemand, toDemandPayload, type StockWarning, type StockShortfall } from "@/lib/stock";
 import type { OrderLineItem } from "@/lib/types";
+import { RESTAURANT_CLOSING_CODE } from "@/lib/restaurant-suspension";
 import type { CouponQuote } from "@/lib/coupon-service";
 
 export interface OrderIntent {
@@ -53,12 +54,13 @@ export async function writeOrderIntent(intent: OrderIntent, input: {
   inventory: boolean;
   threshold: number;
   coupon?: CouponQuote | null;
-}): Promise<OrderIntentResult> {
+}): Promise<OrderIntentResult | { closing: true }> {
   const { data, error } = await createAdminClient().rpc("create_order_intent", {
     p_restaurant: intent.restaurantId, p_ref: intent.ref, p_scope: intent.scope,
     p_order: input.order, p_demand: toDemandPayload(stockDemand(input.lines)),
     p_inventory: input.inventory, p_threshold: input.threshold, p_coupon: input.coupon ?? null,
   });
+  if (error?.code === RESTAURANT_CLOSING_CODE) return { closing: true };
   if (error || !data) throw new Error(`Order could not be recorded: ${error?.message ?? "no result"}`);
   const result = data as OrderIntentResult;
   // The transaction re-checks the reference with the new scope only. A row an

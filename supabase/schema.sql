@@ -11036,6 +11036,8 @@ update refund_operations r set fee_verification_pending = false
     and (r.source <> 'stripe' or r.fee_reconciled_at is not null
       or public.refund_fee_proven_clear(r.restaurant_id, r.stripe_payment_intent));
 
+alter table restaurants add column if not exists closing_at timestamptz;
+
 create or replace function public.admin_delete_restaurant(p_restaurant uuid, p_check_only boolean default true)
 returns jsonb language plpgsql security definer set search_path = public as $$
 declare
@@ -11157,6 +11159,16 @@ begin
       and not paid and not written_off and status not in ('cancelled', 'pending_payment')) then
     return jsonb_build_object('outcome', 'accountsOwed');
   end if;
+  if exists (select 1 from orders where restaurant_id = p_restaurant and account_id is null
+      and status = 'completed' and not paid and not written_off) then
+    return jsonb_build_object('outcome', 'ordersOwed');
+  end if;
+  -- A pay-now order exists before its provider checkout is recorded. Give
+  -- that checkout the same 35-minute window as table close to finish binding.
+  if exists (select 1 from orders where restaurant_id = p_restaurant and status = 'pending_payment'
+      and created_at > clock_timestamp() - interval '35 minutes') then
+    return jsonb_build_object('outcome', 'provider');
+  end if;
   if p_check_only is distinct from false then return jsonb_build_object('outcome', 'ready'); end if;
   foreach v_table in array array[
     'stripe_disputes', 'stripe_dispute_movements', 'stripe_dispute_events',
@@ -11220,12 +11232,104 @@ begin
     select p_restaurant, 'bill_split_claims', md5(concat_ws(':', t.split_id, t.share_no))::uuid, to_jsonb(t)
     from (select c.* from bill_split_claims c join bill_splits s on s.id = c.split_id
       where s.restaurant_id = p_restaurant for update of c) t;
+  -- Capture the final staff rows while ownership transfer is locked out.
+  -- Use a new key so a retry never consumes the old route's pre-delete list.
+  update restaurant_billing_operations set state = state || jsonb_build_object(
+    'deleted_staff_ids', coalesce((
+      select jsonb_agg(m.user_id) from (
+        select s.user_id from staff s where s.restaurant_id = p_restaurant and s.role <> 'owner'
+          and not exists (select 1 from restaurants r where r.owner_id = s.user_id)
+        for update of s
+      ) m
+    ), '[]'::jsonb))
+    where restaurant_id = p_restaurant;
   delete from restaurants where id = p_restaurant;
   return jsonb_build_object('outcome', 'deleted');
 end;
 $$;
 revoke all on function public.admin_delete_restaurant(uuid, boolean) from public, anon, authenticated;
 grant execute on function public.admin_delete_restaurant(uuid, boolean) to service_role;
+
+-- Claim closing under the same locks as the checks, then commit before Stripe.
+-- The final check may still see provider events about an existing sale.
+create or replace function public.admin_close_restaurant_v1(p_restaurant uuid, p_token uuid, p_finalize boolean)
+returns jsonb language plpgsql security definer set search_path = '' as $$
+declare v_result jsonb;
+begin
+  perform public.lock_restaurant_money(p_restaurant);
+  perform 1 from public.restaurant_billing_operations
+    where restaurant_id = p_restaurant and token = p_token
+      and started_at > now() - interval '15 minutes' for update;
+  if not found then return jsonb_build_object('outcome', 'billingBusy'); end if;
+
+  if p_finalize is true then
+    if exists (select 1 from public.restaurants where id = p_restaurant and closing_at is null) then
+      return jsonb_build_object('outcome', 'notClosing');
+    end if;
+    return public.admin_delete_restaurant(p_restaurant, false);
+  end if;
+
+  v_result := public.admin_delete_restaurant(p_restaurant, true);
+  if v_result->>'outcome' = 'ready' then
+    update public.restaurants set closing_at = coalesce(closing_at, clock_timestamp())
+      where id = p_restaurant;
+  end if;
+  return v_result;
+end;
+$$;
+revoke all on function public.admin_close_restaurant_v1(uuid, uuid, boolean) from public, anon, authenticated;
+grant execute on function public.admin_close_restaurant_v1(uuid, uuid, boolean) to service_role;
+
+create or replace function public.admin_cleanup_restaurant_logins_v1(p_restaurant uuid, p_token uuid)
+returns boolean language plpgsql security definer set search_path = '' as $$
+declare v_staff jsonb;
+begin
+  select state->'deleted_staff_ids' into v_staff from public.restaurant_billing_operations
+    where restaurant_id = p_restaurant and token = p_token
+      and started_at > now() - interval '15 minutes' for update;
+  if not found or exists (select 1 from public.restaurants where id = p_restaurant) then return false; end if;
+
+  -- Lock each Auth row against new memberships/ownership via their FKs. Recheck
+  -- in a new statement so a relationship committed while waiting is visible.
+  perform 1 from auth.users where id in (select value::uuid from jsonb_array_elements_text(v_staff))
+    order by id for update;
+  delete from auth.users u where u.id in (select value::uuid from jsonb_array_elements_text(v_staff))
+    and not exists (select 1 from public.restaurants r where r.owner_id = u.id)
+    and not exists (select 1 from public.staff s where s.user_id = u.id)
+    and not exists (select 1 from public.platform_admins a where a.user_id = u.id);
+
+  update public.restaurant_billing_operations set state = (state - 'staff_ids')
+    || jsonb_build_object('deleted', true, 'deleted_staff_ids', '[]'::jsonb)
+    where restaurant_id = p_restaurant;
+  return true;
+end;
+$$;
+revoke all on function public.admin_cleanup_restaurant_logins_v1(uuid, uuid) from public, anon, authenticated;
+grant execute on function public.admin_cleanup_restaurant_logins_v1(uuid, uuid) to service_role;
+
+create or replace function public.guard_order_during_restaurant_closure()
+returns trigger language plpgsql security definer set search_path = '' as $$
+declare v_closing_at timestamptz;
+begin
+  -- Conflicts with the close's FOR UPDATE, including for legacy direct inserts.
+  select closing_at into v_closing_at from public.restaurants where id = new.restaurant_id for key share;
+  if v_closing_at is not null then
+    -- Manager approval can still settle an already-retained offline receipt.
+    if new.pos_ref is not null and current_setting('tabletap.offline_queue_writer', true) = new.pos_ref::text
+      and exists (select 1 from public.offline_sale_queue q
+        where q.restaurant_id = new.restaurant_id and q.pos_ref = new.pos_ref
+          and q.approved_at is null and q.resolved_at is null) then
+      return new;
+    end if;
+    raise exception 'restaurant is closing' using errcode = 'PT423';
+  end if;
+  return new;
+end;
+$$;
+revoke all on function public.guard_order_during_restaurant_closure() from public, anon, authenticated, service_role;
+drop trigger if exists a_guard_order_during_restaurant_closure on orders;
+create trigger a_guard_order_during_restaurant_closure before insert on orders
+  for each row execute function public.guard_order_during_restaurant_closure();
 
 revoke truncate, references, trigger on all tables in schema public from authenticated;
 -- S14: an offer's terms and products commit together. Additive for old callers.
