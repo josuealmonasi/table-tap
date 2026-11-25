@@ -71,7 +71,11 @@ function parseCharge(raw: unknown, now: number, recovery: boolean, money: (v: un
   const discount = money(r.discount);
   const total = money(r.total);
   if (subtotal === null || serviceFee === null || tip === null || discount === null || total === null) return null;
-  if (tip > total) return null;
+  // The till never lets a tip exceed the discounted subtotal (pricing.ts), so
+  // neither does a receipt rung offline, approved or not: the old check
+  // compared the tip with a total that already contains it (security sweep
+  // 2026-11-24).
+  if (Math.round(tip * 100) > Math.round(subtotal * 100)) return null;
   // The subtotal is already after the discounts; the service charge and the
   // tip go on top of it. A total that is not those three is not a charge.
   if (Math.abs(Math.round(round2(subtotal + serviceFee + tip) * 100) - Math.round(total * 100)) > 1) return null;

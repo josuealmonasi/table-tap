@@ -60,3 +60,21 @@ export async function GET(req: NextRequest) {
     redeemed: (spent.data ?? []).map(r => ({ day: r.created_at.slice(0, 10), reward: r.reward, by: r.actor_email })),
   });
 }
+
+export async function DELETE(req: NextRequest) {
+  const actor = await actingManager();
+  if (!actor) return await apiError("apiErr.forbidden", 403);
+
+  const code = normalizeCode(req.nextUrl.searchParams.get("c") ?? "");
+  if (!code) return await apiError("rewards.invalid", 400);
+
+  const { data: deleted, error } = await createAdminClient().rpc("loyalty_delete_card", {
+    p_restaurant: actor.restaurantId, p_code: code, p_actor: actor.email,
+  });
+  if (error) {
+    console.error("loyalty: manager card delete failed:", error.message);
+    return await apiError("apiErr.generic", 500);
+  }
+  if (!deleted) return await apiError("apiErr.loyaltyNotHere", 404);
+  return NextResponse.json({ ok: true });
+}

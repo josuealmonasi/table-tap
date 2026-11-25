@@ -112,6 +112,10 @@ export async function PATCH(req: NextRequest) {
     return await apiError("apiErr.notFound", 404);
   }
   if (member.role === role) return NextResponse.json({ ok: true });
+  // A locked subscription freezes the team the same way it freezes invitations
+  // (security sweep 2026-11-24): no promotions, co-owners included.
+  const frozen = await frozenBlocks(actor.restaurantId);
+  if (frozen) return frozen;
   const roleRefused = await roleBlocks(actor.restaurantId, role);
   if (roleRefused) return roleRefused;
 

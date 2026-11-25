@@ -4,6 +4,7 @@ import { en } from "@/lib/i18n/en";
 import { translate } from "@/lib/i18n";
 
 const writes = vi.hoisted(() => vi.fn());
+vi.mock("@/lib/staff-request-guard", () => ({ staffWriteLimited: async () => false, repeatedStaffRequest: async () => null }));
 vi.mock("@/lib/stripe", () => ({ stripe: {} }));
 vi.mock("@/lib/api-error", () => ({ apiError: async (key: string, status: number) =>
   NextResponse.json({ error: translate(en, key) }, { status }) }));
@@ -25,7 +26,7 @@ vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({ rpc: writes
     : table === "restaurant_tables" ? { id: "00000000-0000-4000-8000-000000000001", label: "1" }
       : table === "menu_items" ? [{ id: "dish", name: "Dish", price: 20, available: true, modifiers: [] }] : null;
   const query = {
-    select: () => query, eq: () => query, in: () => query, insert: writes, update: writes,
+    select: () => query, eq: () => query, in: () => query, lt: () => query, insert: writes, update: writes,
     single: async () => ({ data, error: null }), maybeSingle: async () => ({ data, error: null }),
     then: (resolve: (value: unknown) => unknown) => Promise.resolve({ data, error: null }).then(resolve),
   };

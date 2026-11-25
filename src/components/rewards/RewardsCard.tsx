@@ -9,8 +9,9 @@ import { dateLocale } from "@/lib/format";
 import LadderSteps from "@/components/loyalty/LadderSteps";
 import { SEP } from "@/lib/separator";
 
-/** What /api/rewards answers: what the card itself would show, and no more. */
+/** The card's standing and whether this browser can delete it. */
 export interface CardStanding {
+  canDelete: boolean;
   email?: string | null;
   face: CardFace;
   qr: QrGrid;

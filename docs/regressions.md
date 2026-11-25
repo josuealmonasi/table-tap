@@ -222,6 +222,7 @@ and that a new party cannot see the previous party's waiting phones.
 | Missing mail configuration is visible to recovery | The outbox discarded tickets while health stayed green; `card-email.spec.ts` and `recovery-route-health.spec.ts` check retry and health |
 | Repeated card saves keep delivered stop links | A retry rotated the token and left the address subscribed; `shared-address.spec.ts` checks the link and per-card scope |
 | A shared card email saves independently | The generic save answer and rewards read disagreed when another card used the address; `shared-address.spec.ts` compares both paths and stops each card independently |
+| Loyalty card deletion requires the guest's key or a manager of the card's restaurant | The printed QR code was enough to delete the card and its history. `loyalty-owner-secret.spec.ts` checks issuance, saves, guest deletion, and the manager guard. The API gate checks the manager deletion and its audit row together. |
 | Ticket retries run before tickets expire (review N10) | Daily recovery missed the backoff window; `ticket-email-schedule.spec.ts` models recovery without payment traffic |
 | A table payment check names the actual table relation (review N3) | `payment-check-route.spec.ts` rejects unknown relations and checks the tenant and table before Stripe |
 | Held approval keeps the kitchen's saved instructions (review N4) | `offline-sale.spec.ts` keeps notes and component extras without duplicating flattened extras |
@@ -8451,6 +8452,17 @@ checkout agree on MX$14.50 per share. Earlier locks with a null food-only
 snapshot keep their existing tip behavior. Checks: `tip-base.react-component.spec.tsx`,
 `split-slots-schema.spec.ts`, and `split-slots-pay.spec.ts`.
 
+## A manual Stripe refund appeared while TableTap prepared a return (review 1124)
+
+TableTap listed a MX$100 charge before preparing a MX$40 return. A manager
+could return that MX$40 in Stripe before TableTap sent its own MX$40 request.
+TableTap now lists all refunds for the same payment intent and account again
+immediately before sending. A new refund without TableTap attempt evidence
+leaves the return in review and records the reason on the saved attempt. A
+failed final listing aborts the request. A manager can use Check to retire the
+attempt after 24 hours if a fresh listing still shows no refund for it, then
+attribute the manual refund. A Stripe refund made after the final listing can
+still race the POST. Check: `src/lib/refunds/__tests__/operations.spec.tsx`.
 ## Auth email tokens appeared in request logs (2026-11-24)
 
 The auth email templates put one-time tokens in the query string, which
@@ -8467,6 +8479,45 @@ GHSA-pc58-hwjq-p385 (cross-client response injection) and GHSA-7qx7-33qx-rqx2
 (SVG rejection bypass in the image optimiser), all fixed in 15.5.29. Next and
 eslint-config-next now pin 15.5.29, and the framework floor in
 `security-headers.spec.ts` rises to it, so a downgrade fails the unit tests.
+
+### A suspended restaurant could still ring sales on the device's word (security sweep 2026-11-24)
+
+While suspended, the till recorded a sale whose collection time the device said
+was before the suspension, and that time is the device's own claim: a cashier
+could date a new sale early. The offline intake did not check suspension at
+all and rang sales straight through. Now a pre-suspension date counts only with
+the server's own queue row from before the suspension (otherwise the sale is
+held), and offline sales during a suspension wait in the manager review queue.
+Check: `pos-atomic.spec.tsx`, `sweep-1124-suspension.spec.ts`.
+### Requests that could be repeated without end (security sweep 2026-11-24)
+
+A waiter could tap "ask for a discount" or "ask for a write-off" over and over,
+each tap a new pending row in the managers' queue, and send table orders with
+no retry reference, each a new kitchen ticket. A diner from a closed sitting
+kept the membership it needed to pay what it owed, and with it could call for
+the bill at a table the next party now sits at. Requests now reuse the pending
+one per table (`repeatedStaffRequest`), and all three have a 30-a-minute
+per-person ceiling (`staffWriteLimited`), and bill and payment calls need the
+current sitting. Check: `sweep-1124-requests.spec.ts`.
+### Three guards that did not match their siblings (security sweep 2026-11-24)
+
+`PATCH /api/staff` changed roles while the subscription was locked (invitations
+were frozen); `POST /api/terminal/deposits/verify` edited a deposit with the
+till locked or off the tier (the other deposit routes refuse); and CloudPRNT
+counted every poll against the caller's address, so anyone sharing the
+restaurant's public IP could use up the printer's allowance. Each now matches:
+the freeze check, the deposit guard, and a per-restaurant printer allowance
+counted after the token is verified. Check: `sweep-1124-guards.spec.ts`.
+### Coupon minimum counted the service charge; offline tips had no real ceiling (security sweep 2026-11-24)
+
+Paying a bill, a coupon's minimum spend and its discount were judged on the
+dishes plus the service charge, while the cart judges them on the dishes alone:
+MX$90 of food and MX$15 of service passed a MX$100 minimum. The bill screen and
+`bill/pay` now both use the dishes (`BillAmounts.dishes`). Separately, an
+offline receipt's tip was only checked against a total that already contains
+it, so a manager approving one could record a tip above the food; it now obeys
+the till's ceiling (the discounted subtotal). Check: `bill-principal.spec.ts`,
+`offline-sale.spec.ts`.
 ## A GitHub recovery token could start more than one run (2026-11-24)
 
 The route now claims the verified token's `jti` with a unique insert before
@@ -8496,3 +8547,12 @@ the owner's removal dialog offers to reset the printer link (on by default for
 a manager or owner) and the links of the accounts that person opened, showing
 the new values once. Check: `sweep-1124-staff-links.spec.ts`, the api gate's
 `GET /api/accounts` and `GET /api/staff?removal` cases.
+### A saved photo of a table's QR could send unpaid food to the kitchen (security sweep 2026-11-24)
+
+The phone that opened an empty table was let in automatically, and with
+pay-later on, its first order opened the sitting and went to the kitchen
+unpaid, from anywhere the photo of the QR travelled. Now that phone is let in
+automatically only when its order is paid by card; a pay-later order at an
+empty table makes it wait for staff, in the same "let this phone in" list
+every other phone at a table already uses (`request_table_member_v2`,
+`p_first_approved`). Check: checkout `route.spec.ts`, plus a rolled-back dev probe.

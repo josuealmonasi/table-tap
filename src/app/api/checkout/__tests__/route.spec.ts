@@ -13,6 +13,8 @@ import { NextRequest, NextResponse } from "next/server";
 vi.mock("@/lib/i18n/server", () => ({ getLocale: async () => "es" }));
 
 let admissionStatus = "approved";
+/** No sitting open yet: the phone that opens it is let in only when told to. */
+let emptyTable = false;
 let admissionFullOnOpen = false;
 const step = {
   counterFull: vi.fn(async () => ({ data: false, error: null as unknown })),
@@ -75,7 +77,7 @@ vi.mock("@/lib/coupon-service", () => ({
 vi.mock("@/lib/table-guard", () => ({ tableOf: async () => ({ id: "00000000-0000-4000-8000-0000000000f1" }) }));
 vi.mock("@/lib/table-member-cookie", () => ({ memberHash: () => "hash" }));
 vi.mock("@/lib/table-membership", () => ({ requestTableMember: async (...args: unknown[]) => ({
-  status: args[3] && admissionFullOnOpen ? "full" : admissionStatus, sessionId: await step.openSession(), diner: "member-1",
+  status: args[3] && admissionFullOnOpen ? "full" : args[3] && emptyTable && args[4] === false ? "pending" : admissionStatus, sessionId: await step.openSession(), diner: "member-1",
 }) }));
 vi.mock("@/lib/stock-service", () => ({
   reserveStock: () => step.reserveStock(),
@@ -156,6 +158,7 @@ beforeEach(() => {
   step.counterFull.mockResolvedValue({ data: false, error: null });
   notices.length = 0;
   admissionStatus = "approved";
+  emptyTable = false;
   admissionFullOnOpen = false;
   step.openSession.mockImplementation(async () => "sitting-1");
   step.reserveStock.mockImplementation(async () => ({ ok: true, short: [], low: [], reservationId: "reservation-1" }));
@@ -302,9 +305,16 @@ describe("admission before a new table order", () => {
     expect(step.openCard).not.toHaveBeenCalled();
     expect(releaseCoupon).not.toHaveBeenCalled();
   });
-  it("keeps the first phone at an empty table ordering normally", async () => {
-    expect((await checkout({ payLater: true })).status).toBe(200);
-    expect(step.insertOrder).toHaveBeenCalledOnce();
+  it("keeps the first phone at an empty table ordering normally when it pays by card", async () => {
+    emptyTable = true;
+    expect((await checkout({})).status).not.toBe(403);
+  });
+  it("makes the first phone at an empty table wait for staff before an unpaid order (security sweep 2026-11-24)", async () => {
+    // A saved photo of the QR must not send unpaid food to the kitchen from anywhere.
+    emptyTable = true;
+    expect((await checkout({ payLater: true })).status).toBe(403);
+    expect(step.reserveStock).not.toHaveBeenCalled();
+    expect(step.insertOrder).not.toHaveBeenCalled();
   });
 });
 

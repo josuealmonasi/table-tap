@@ -1,4 +1,5 @@
 const resolve = vi.hoisted(() => vi.fn());
+vi.mock("@/lib/staff-request-guard", () => ({ staffWriteLimited: async () => false, repeatedStaffRequest: async () => null }));
 vi.mock("@/lib/whole-bill-pages", () => ({ resolveCheckoutPages: resolve }));
 import { beforeEach, expect, it, vi } from "vitest";
 import { NextRequest, NextResponse } from "next/server";

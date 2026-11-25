@@ -19,12 +19,18 @@ export interface JoinState {
   diner: string | null;
 }
 
-/** Only ordering opens a sitting; merely reading the menu never occupies it. */
+/**
+ * Only ordering opens a sitting; merely reading the menu never occupies it.
+ * `firstApproved` is whether the phone that opens an empty table is let in
+ * without staff: only when its order is paid up front. A pay-later order from
+ * a saved photo of the QR would otherwise send unpaid food to the kitchen
+ * from anywhere (security sweep 2026-11-24).
+ */
 export async function requestTableMember(
-  restaurantId: string, tableId: string, hash: string, open = false,
+  restaurantId: string, tableId: string, hash: string, open = false, firstApproved = true,
 ): Promise<JoinState> {
-  const { data, error } = await createAdminClient().rpc("request_table_member", {
-    p_restaurant: restaurantId, p_table: tableId, p_hash: hash, p_open: open,
+  const { data, error } = await createAdminClient().rpc("request_table_member_v2", {
+    p_restaurant: restaurantId, p_table: tableId, p_hash: hash, p_open: open, p_first_approved: firstApproved,
   });
   if (error || !data) throw new Error("Could not join the table");
   return data as JoinState;
