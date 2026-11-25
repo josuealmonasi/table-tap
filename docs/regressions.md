@@ -8749,3 +8749,27 @@ drawer read MX$100 cash in the mail and MX$70 on the corte. Both now read
 their adjustments (logged write-offs and refunds, plus completed return
 events) from one reader, `readCorteAdjustments` in `corte-adjustments.ts`.
 Check: `signup-mail-ceiling.spec.ts`, `digest-figures.spec.ts`.
+### A waiter's round, an expired card page and a stale station "done" (2026-11-25)
+
+Three pairs that had to agree (Codex review bl33, findings 1-3). First, the
+sitting a waiter's round joins and the cashier closing it: the route opened the
+sitting, then inserted the order in a second call, so a sitting closed in
+between took an MX$120 round to the kitchen under a closed bill, and a failed
+open saved the round with no sitting at all. The round is now inserted by
+`create_table_order_v2` / `create_table_order_intent_v2`, which hold the sitting
+row FOR SHARE and refuse a closed one, and `close_session_if_clear_v2` holds it
+FOR UPDATE before counting what is owed (the old name delegates to it). A null
+sitting answers 503 `apiErr.tableBillUnavailable`, a closed one 409
+`apiErr.tableBillClosed`; both put the stock back. Second, a cancellation and
+the card page that blocks it: an unpaid table order on a whole-bill page Stripe
+had already expired answered `changed`, and `checkoutPageRpc` only asks Stripe on
+`paying`, so the manager could never cancel. `prepare_order_refund_v2` answers
+`paying` for that page under the order lock, so the wrapper verifies the page
+closed and retries. Third, a kitchen rewind and a station's delayed "done": a
+completion sent before a two-station ticket was sent back counted toward the
+new cycle, and one fresh completion then called the order ready. A backward
+move now bumps `orders.prep_revision` (trigger `orders_bump_prep_revision`,
+copied to `kitchen_tickets`), the board sends the revision it rendered, and
+`mark_station_ready_v2` refuses another under the order lock (409
+`apiErr.stationStale`). Check: `open-sitting.spec.ts`, `cancel-race.spec.tsx`,
+`kitchen-station.spec.ts`.

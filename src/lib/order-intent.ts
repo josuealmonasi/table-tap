@@ -26,6 +26,8 @@ export interface OrderIntentResult {
   counterFull?: boolean;
   couponReason?: string;
   couponChanged?: boolean;
+  /** A waiter's round whose sitting closed before it could be saved. */
+  sittingClosed?: boolean;
   short?: StockShortfall[];
   low?: StockWarning[];
 }
@@ -53,12 +55,24 @@ export async function writeOrderIntent(intent: OrderIntent, input: {
   inventory: boolean;
   threshold: number;
   coupon?: CouponQuote | null;
+  coupon?: object | null;
+  /**
+   * A waiter's round: saved only while its sitting is open, under the
+   * sitting's lock, so a cashier closing the bill cannot slip in between.
+   */
+  openSitting?: boolean;
 }): Promise<OrderIntentResult> {
-  const { data, error } = await createAdminClient().rpc("create_order_intent", {
-    p_restaurant: intent.restaurantId, p_ref: intent.ref, p_scope: intent.scope,
-    p_order: input.order, p_demand: toDemandPayload(stockDemand(input.lines)),
-    p_inventory: input.inventory, p_threshold: input.threshold, p_coupon: input.coupon ?? null,
-  });
+  const demand = toDemandPayload(stockDemand(input.lines));
+  const { data, error } = input.openSitting
+    ? await createAdminClient().rpc("create_table_order_intent_v2", {
+      p_restaurant: intent.restaurantId, p_ref: intent.ref, p_scope: intent.scope,
+      p_order: input.order, p_demand: demand, p_inventory: input.inventory, p_threshold: input.threshold,
+    })
+    : await createAdminClient().rpc("create_order_intent", {
+      p_restaurant: intent.restaurantId, p_ref: intent.ref, p_scope: intent.scope,
+      p_order: input.order, p_demand: demand, p_inventory: input.inventory, p_threshold: input.threshold,
+      p_coupon: input.coupon ?? null,
+    });
   if (error || !data) throw new Error(`Order could not be recorded: ${error?.message ?? "no result"}`);
   const result = data as OrderIntentResult;
   // The transaction re-checks the reference with the new scope only. A row an

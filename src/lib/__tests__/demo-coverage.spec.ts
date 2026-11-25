@@ -68,7 +68,7 @@ const NOT_DEMO_DATA = new Set([
 
 describe("the demo shows the whole app", () => {
   it("fills the kitchen projections through the seeded source tables", () => {
-    for (const [target, source, fn] of [["kitchen_tickets", "orders", "sync_kitchen_ticket"],
+    for (const [target, source, fn] of [["kitchen_tickets", "orders", "sync_kitchen_ticket_v2"],
       ["kitchen_requests", "service_requests", "sync_kitchen_request"]]) {
       expect(seeder).toMatch(new RegExp(`\\b${source}\\b`));
       expect(schema).toContain(`after insert or update on ${source}`);

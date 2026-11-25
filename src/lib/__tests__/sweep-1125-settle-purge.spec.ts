@@ -15,7 +15,7 @@ it("a split share's page opens only while the split is locked and its orders uns
 });
 
 it("a pay-now order still being paid keeps the sitting open, for a checkout page's life only", () => {
-  expect(fn("close_session_if_clear")).toContain("and (status <> 'pending_payment' or created_at > now() - interval '35 minutes');");
+  expect(fn("close_session_if_clear_v2")).toContain("and (status <> 'pending_payment' or created_at > now() - interval '35 minutes');");
 });
 
 it("a restaurant whose customers still owe on accounts is not deleted, and the admin is told why", () => {

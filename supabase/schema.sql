@@ -2059,12 +2059,25 @@ grant execute on function public.open_table_session(uuid, uuid, int, text) to se
 
 -- Closes a sitting once nothing on it is owed. Called after every way money
 -- stops being outstanding: a card, cash at the table, or a debt written off.
-create or replace function public.close_session_if_clear(
+--
+-- Holds the sitting row for update BEFORE it counts what is owed. A waiter's
+-- round is inserted under a share lock on the same row
+-- (create_table_order_v2), so the two serialize: either the round commits
+-- first and the count sees it, or the sitting closes first and the round is
+-- refused instead of reaching the kitchen under a closed bill (bl33 #1).
+create or replace function public.close_session_if_clear_v2(
   p_session uuid,
   p_reason text
 ) returns boolean language plpgsql security definer set search_path = public as $$
-declare v_owing int;
+declare v_owing int; v_restaurant uuid;
 begin
+  select restaurant_id into v_restaurant from table_sessions where id = p_session;
+  if v_restaurant is null then return false; end if;
+  -- Money first, then the sitting: the order every other writer takes them in.
+  perform public.lock_restaurant_money(v_restaurant);
+  perform 1 from table_sessions where id = p_session and closed_at is null for update;
+  if not found then return false; end if;
+
   select count(*) into v_owing
     from orders
    where session_id = p_session
@@ -2088,9 +2101,53 @@ begin
    where id = p_session and closed_at is null;
   return true;
 end; $$;
+revoke all on function public.close_session_if_clear_v2(uuid, text)
+  from public, anon, authenticated;
+grant execute on function public.close_session_if_clear_v2(uuid, text) to service_role;
+
+-- The deployed signature, kept for the deploy window and for account_charge_v2.
+-- It takes the same locks, so no caller closes a sitting under a waiter's round.
+create or replace function public.close_session_if_clear(
+  p_session uuid,
+  p_reason text
+) returns boolean language sql security definer set search_path = public as $$
+  select public.close_session_if_clear_v2(p_session, p_reason);
+$$;
 revoke all on function public.close_session_if_clear(uuid, text)
   from public, anon, authenticated;
 grant execute on function public.close_session_if_clear(uuid, text) to service_role;
+
+-- A waiter's round, saved only into a sitting that is still open.
+--
+-- The sitting row is held FOR SHARE while the order is inserted, so
+-- close_session_if_clear_v2 (FOR UPDATE) cannot count the bill between the
+-- check and the insert. Returns the order id, or null when the sitting is
+-- closed or is not this table's: the route refuses and puts the stock back.
+create or replace function public.create_table_order_v2(
+  p_restaurant uuid, p_order jsonb
+) returns uuid language plpgsql security definer set search_path = public as $$
+declare v_session uuid := (p_order->>'session_id')::uuid; v_id uuid;
+begin
+  if v_session is null or p_order->>'table_id' is null then raise exception 'table order needs a sitting'; end if;
+  perform public.lock_restaurant_money(p_restaurant);
+  perform 1 from table_sessions
+   where id = v_session and restaurant_id = p_restaurant
+     and table_id = (p_order->>'table_id')::uuid and closed_at is null
+   for share;
+  if not found then return null; end if;
+  insert into orders(restaurant_id, table_id, table_label, session_id, status, paid, pay_method,
+    subtotal, service_fee, tip, tax_pct, discount, platform_fee, promo_detail, total, currency,
+    items, note, stock_managed, stock_reservation_id)
+  values(p_restaurant, (p_order->>'table_id')::uuid, p_order->>'table_label', v_session,
+    'received', false, null, (p_order->>'subtotal')::numeric, (p_order->>'service_fee')::numeric,
+    (p_order->>'tip')::numeric, (p_order->>'tax_pct')::numeric, (p_order->>'discount')::numeric,
+    0, p_order->'promo_detail', (p_order->>'total')::numeric, p_order->>'currency',
+    p_order->'items', p_order->>'note', true, (p_order->>'stock_reservation_id')::uuid)
+  returning id into v_id;
+  return v_id;
+end; $$;
+revoke all on function public.create_table_order_v2(uuid, jsonb) from public, anon, authenticated;
+grant execute on function public.create_table_order_v2(uuid, jsonb) to service_role;
 
 -- Orders that predate sittings still have to belong to one, or a debt already
 -- on the floor becomes invisible to the diner who owes it. Idempotent: it only
@@ -4848,6 +4905,53 @@ $$;
 revoke all on function public.mark_station_ready(uuid, uuid, text) from public, anon, authenticated;
 grant execute on function public.mark_station_ready(uuid, uuid, text) to service_role;
 
+-- Which preparation cycle the order is on. Sending a ticket back on the board
+-- starts a new one: every station has to finish again. A station's "done"
+-- carries the revision its screen showed, so a completion sent before the
+-- rewind and delivered after it cannot count toward the new cycle and call
+-- the order ready while the other station is still cooking (bl33 #3).
+alter table orders add column if not exists prep_revision int not null default 0;
+
+-- Bumped in the same write as the backward move, whoever makes it.
+create or replace function public.bump_prep_revision_v1()
+returns trigger language plpgsql set search_path = public as $$
+begin
+  if array_position(array['received', 'preparing', 'ready'], new.status)
+     < array_position(array['received', 'preparing', 'ready'], old.status) then
+    new.prep_revision := old.prep_revision + 1;
+  end if;
+  return new;
+end; $$;
+revoke all on function public.bump_prep_revision_v1() from public, anon, authenticated;
+drop trigger if exists orders_bump_prep_revision on orders;
+create trigger orders_bump_prep_revision before update of status on orders
+  for each row execute function public.bump_prep_revision_v1();
+
+-- mark_station_ready, refusing a completion from an earlier preparation cycle.
+-- Checked under the order's lock, after the stage checks, so a stale "done"
+-- answers `stale` and changes nothing.
+create or replace function public.mark_station_ready_v2(
+  p_restaurant uuid, p_order uuid, p_station text, p_revision int
+) returns jsonb language plpgsql security definer set search_path = public as $$
+declare v_order orders;
+begin
+  if p_station not in ('kitchen', 'bar') then return jsonb_build_object('outcome', 'invalid'); end if;
+  select * into v_order from orders where id = p_order and restaurant_id = p_restaurant for update;
+  if v_order.id is null then return jsonb_build_object('outcome', 'missing'); end if;
+  if v_order.written_off then return jsonb_build_object('outcome', 'inactive'); end if;
+  if v_order.status not in ('received', 'preparing') then
+    return jsonb_build_object('outcome', 'moved', 'status', v_order.status);
+  end if;
+  if p_revision is distinct from v_order.prep_revision then
+    return jsonb_build_object('outcome', 'stale', 'revision', v_order.prep_revision);
+  end if;
+  -- Same transaction, same lock: the original writer does the rest.
+  return public.mark_station_ready(p_restaurant, p_order, p_station);
+end;
+$$;
+revoke all on function public.mark_station_ready_v2(uuid, uuid, text, int) from public, anon, authenticated;
+grant execute on function public.mark_station_ready_v2(uuid, uuid, text, int) to service_role;
+
 -- ── Last, on purpose ────────────────────────────────────────────────────────
 -- The table-shaping privileges, taken from every table once more. The revoke
 -- near the top only reaches tables that already exist when it runs, so a table
@@ -6842,6 +6946,37 @@ end;
 $$;
 revoke all on function public.prepare_order_refund(uuid, uuid, text, jsonb, boolean, uuid, timestamptz, uuid) from public, anon, authenticated;
 grant execute on function public.prepare_order_refund(uuid, uuid, text, jsonb, boolean, uuid, timestamptz, uuid) to service_role;
+
+-- The same cancellation, but an unpaid order still on an open whole-bill card
+-- page answers `paying`, decided under the order lock. prepare_order_refund
+-- answered `changed` there, and checkoutPageRpc only asks Stripe whether a
+-- page really closed on `paying`: a page Stripe had expired kept blocking the
+-- manager's cancel for ever (bl33 #2). Locks in prepare_order_refund's order
+-- (money, account, order); the call below takes them again in this transaction.
+create or replace function public.prepare_order_refund_v2(
+  p_restaurant uuid, p_order uuid, p_actor text, p_legacy_demand jsonb,
+  p_expected_paid boolean, p_expected_account uuid, p_expected_hold timestamptz, p_expected_checkout uuid
+) returns jsonb language plpgsql security definer set search_path = public as $$
+declare o orders;
+begin
+  perform public.lock_restaurant_money(p_restaurant);
+  perform public.backfill_payment_allocations(p_restaurant);
+  if p_expected_account is not null then
+    perform 1 from customer_accounts where id = p_expected_account and restaurant_id = p_restaurant for update;
+  end if;
+  select * into o from orders where restaurant_id = p_restaurant and id = p_order for update;
+  if o.id is not null and not o.paid
+    and not exists (select 1 from order_adjustments where order_id = o.id and kind = 'cancel')
+    and not coalesce((public.order_coverage(p_restaurant, array[o.id])->0->>'unresolved')::boolean, false)
+    and public.whole_bill_card_open_v1(p_restaurant, array[o.id]) then
+    return jsonb_build_object('outcome', 'paying');
+  end if;
+  return public.prepare_order_refund(p_restaurant, p_order, p_actor, p_legacy_demand,
+    p_expected_paid, p_expected_account, p_expected_hold, p_expected_checkout);
+end;
+$$;
+revoke all on function public.prepare_order_refund_v2(uuid, uuid, text, jsonb, boolean, uuid, timestamptz, uuid) from public, anon, authenticated;
+grant execute on function public.prepare_order_refund_v2(uuid, uuid, text, jsonb, boolean, uuid, timestamptz, uuid) to service_role;
 
 -- An attempt is saved before a provider is called. The same immutable request
 -- and key survive a lost HTTP response, process crash, or repeated button tap.
@@ -10117,6 +10252,8 @@ create table if not exists kitchen_tickets (
   created_at timestamptz not null
 );
 create index if not exists kitchen_tickets_board on kitchen_tickets(restaurant_id, status, created_at);
+-- The preparation cycle the pass is looking at (orders.prep_revision).
+alter table kitchen_tickets add column if not exists prep_revision int not null default 0;
 alter table kitchen_tickets enable row level security;
 revoke all on kitchen_tickets from anon;
 revoke all on kitchen_tickets from public, authenticated;
@@ -10168,9 +10305,32 @@ begin
 end; $$;
 revoke all on function public.sync_kitchen_ticket() from public, anon, authenticated;
 grant execute on function public.sync_kitchen_ticket() to service_role;
+
+-- The same copy, carrying the preparation revision the station's "done" must
+-- send back (mark_station_ready_v2).
+create or replace function public.sync_kitchen_ticket_v2()
+returns trigger language plpgsql security definer set search_path = public as $$
+begin
+  if new.status <> 'pending_payment' then
+    insert into kitchen_tickets (id, restaurant_id, code, table_label, customer_name,
+      status, stations_ready, prep_revision, items, note, created_at)
+    values (new.kitchen_ticket_id, new.restaurant_id, left(replace(new.id::text, '-', ''), 4),
+      new.table_label, new.customer_name,
+      case when new.written_off then 'cancelled' else new.status end, new.stations_ready,
+      new.prep_revision, kitchen_items(new.items), new.note, new.created_at)
+    on conflict (id) do update set restaurant_id = excluded.restaurant_id,
+      code = excluded.code, table_label = excluded.table_label, customer_name = excluded.customer_name,
+      status = excluded.status, stations_ready = excluded.stations_ready,
+      prep_revision = excluded.prep_revision,
+      items = excluded.items, note = excluded.note, created_at = excluded.created_at;
+  end if;
+  return new;
+end; $$;
+revoke all on function public.sync_kitchen_ticket_v2() from public, anon, authenticated;
+grant execute on function public.sync_kitchen_ticket_v2() to service_role;
 drop trigger if exists orders_sync_kitchen_ticket on orders;
 create trigger orders_sync_kitchen_ticket after insert or update on orders
-  for each row execute function public.sync_kitchen_ticket();
+  for each row execute function public.sync_kitchen_ticket_v2();
 
 -- Lock the initial copy against concurrent moves, or an older snapshot could
 -- overwrite a newer trigger result on a busy pass during rollout.
@@ -12381,6 +12541,32 @@ end;
 $$;
 revoke all on function public.create_order_intent(uuid, uuid, text, jsonb, jsonb, boolean, int, jsonb) from public, anon, authenticated;
 grant execute on function public.create_order_intent(uuid, uuid, text, jsonb, jsonb, boolean, int, jsonb) to service_role;
+
+-- A waiter's round with a retry reference, saved only into an open sitting.
+-- A replay answers first (its order is already on the bill, whatever the
+-- sitting did since); a new round holds the sitting FOR SHARE while
+-- create_order_intent inserts it, in this same transaction (bl33 #1).
+create or replace function public.create_table_order_intent_v2(
+  p_restaurant uuid, p_ref uuid, p_scope text, p_order jsonb, p_demand jsonb,
+  p_inventory boolean, p_threshold int
+) returns jsonb language plpgsql security definer set search_path = public as $$
+declare v_result jsonb; v_session uuid := (p_order->>'session_id')::uuid;
+begin
+  perform public.lock_restaurant_money(p_restaurant);
+  perform pg_advisory_xact_lock(hashtextextended(p_restaurant::text || p_ref::text, 20));
+  v_result := public.order_intent_result(p_restaurant, p_ref, p_scope);
+  if v_result is not null then return v_result; end if;
+  if v_session is null or p_order->>'table_id' is null then raise exception 'table order needs a sitting'; end if;
+  perform 1 from table_sessions
+   where id = v_session and restaurant_id = p_restaurant
+     and table_id = (p_order->>'table_id')::uuid and closed_at is null
+   for share;
+  if not found then return '{"sittingClosed":true}'::jsonb; end if;
+  return public.create_order_intent(p_restaurant, p_ref, p_scope, p_order, p_demand, p_inventory, p_threshold, null);
+end;
+$$;
+revoke all on function public.create_table_order_intent_v2(uuid, uuid, text, jsonb, jsonb, boolean, int) from public, anon, authenticated;
+grant execute on function public.create_table_order_intent_v2(uuid, uuid, text, jsonb, jsonb, boolean, int) to service_role;
 
 -- Required purpose and role, as create_cash_withdrawal above: pending for a
 -- cashier, capped at the drawer. A reference a manager retired by removing its
