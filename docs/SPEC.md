@@ -3679,3 +3679,17 @@ cannot connect or never starts fails the gate, and the runner ends with one
 money path. The journal race and RLS before/after equivalence probes stay
 separate: the first commits fixtures, the second needs a baseline from before
 the schema change.
+
+## Daily digest: extra recipients (25 November 2026)
+
+Besides the owner (and managers who opt in), the owner can send the daily
+digest to up to five outside addresses from Settings → "Resumen diario por
+correo" (owner only; managers neither see nor change them). Adding an address
+sends one confirmation email; nothing else goes to it until its holder presses
+"Sí, quiero recibirlo" on `/digest/confirm` (link valid 7 days, resendable).
+Every digest carries that address's own stop link (`/digest/stop`, a button,
+so mail scanners change nothing). Unconfirmed addresses are deleted after 7
+days by an hourly pg_cron job. Stored in `digest_recipients` (server only; the
+confirm token is kept hashed; the limit is counted under the restaurant's row
+lock in `add_digest_recipient_v1`). The digest sender reads confirmed addresses
+with `confirmedRecipients()`. Privacy notice version 2026-11-25.

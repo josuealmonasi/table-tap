@@ -4187,9 +4187,12 @@ a.tt-btn {
   container-type: inline-size;
 }
 /* A month's takings fit their tile whole: 24px where there is room, down to
-   14px on a narrow one — wrapping, mid-number, only past that. */
+   12px on a narrow one — wrapping, mid-number, only past that. Sized for
+   "MX$1,906,921.00" (15 characters, ~0.6em each in bold): at 14cqi a busy
+   restaurant's MX$190,692.10 already wrapped on production (2026-11-25),
+   because thirteen characters need ~1.1× the tile at that size. */
 .tt-analytics-tile strong {
-  font-size: clamp(14px, 14cqi, 24px);
+  font-size: clamp(12px, 10cqi, 24px);
   line-height: 1.1;
   overflow-wrap: anywhere;
   font-variant-numeric: tabular-nums;

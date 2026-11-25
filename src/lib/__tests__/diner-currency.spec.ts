@@ -29,6 +29,7 @@ vi.mock("@/lib/bill-data", () => ({ fetchTableBill: async () => state.orders }))
 vi.mock("@/lib/table-bill", async original => ({ ...await original<typeof import("@/lib/table-bill")>(), billWindowStart: () => new Date("2026-10-20T04:00:00Z"), MAX_BILL_ORDERS: 200, tableBill: () => ({ total: 100 }) }));
 vi.mock("@/lib/diner-attempt", () => ({
   DinerAttemptRejected: class extends Error {},
+  DinerScopeBusy: class extends Error {},
   resumeDinerAttempt: async () => state.prior,
   openDinerAttempt: async (_stripe: unknown, params: unknown, quote: unknown) => {
     const session = await (state.create as (...args: unknown[]) => Promise<unknown>)(params, {});

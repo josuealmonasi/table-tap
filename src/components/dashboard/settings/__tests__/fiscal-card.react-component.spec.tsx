@@ -13,6 +13,8 @@ import FiscalCard from "../fiscal-card.react-component";
 const save = vi.hoisted(() => vi.fn(async () => true));
 vi.mock("@/hooks/useSettings", () => ({ useSettings: () => ({ saving: false, save }) }));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn() }) }));
+// Loads its own list over the network; these tests are about the fiscal card.
+vi.mock("../DigestRecipientsCard", () => ({ default: () => null }));
 vi.mock("@/components/layout/Breadcrumb", () => ({ default: () => null }));
 vi.mock("../PaymentsCard", () => ({ default: () => null }));
 vi.mock("../CoverCard", () => ({ default: () => null }));

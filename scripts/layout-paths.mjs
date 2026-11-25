@@ -99,6 +99,12 @@ export const PUBLIC = [
   // The "stop emailing my tickets" page a ticket email links to.
   "/tickets/stop",
   `/tickets/stop?t=${SEED_STOP_TOKEN}`,
+  // The daily digest's confirm and stop pages: one button each. A made-up
+  // token shows the real screen and spends nothing.
+  "/digest/confirm",
+  "/digest/stop",
+  "/digest/confirm?t=layoutPreviewToken0000000000000000000000000",
+  "/digest/stop?t=layoutPreviewToken0000000000000000000000000",
   "/rewards",
   // Where the auth emails land: one button that posts the token. Opening it
   // spends nothing, so a made-up token shows the real screen.

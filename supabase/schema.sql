@@ -15701,6 +15701,9 @@ create or replace function public.provision_pending_signup_v1()
 returns trigger language plpgsql security definer set search_path = '' as $$
 declare v_signup public.pending_signups;
 begin
+  -- A later email_confirmed_at change on an already-confirmed user (an admin
+  -- edit, a re-confirmation) must never provision a second restaurant.
+  if tg_op = 'UPDATE' and old.email_confirmed_at is not null then return new; end if;
   delete from public.pending_signups
     where id = (new.raw_app_meta_data->>'pending_signup_id')::uuid
       and email_hash = encode(sha256(convert_to(new.email, 'UTF8')), 'hex')
@@ -15728,3 +15731,50 @@ create trigger provision_pending_signup
 
 select cron.schedule('tabletap-expire-pending-signups', '0 * * * *',
   'delete from public.pending_signups where expires_at <= now()');
+
+-- Extra recipients of the owner's daily digest (owner 2026-11-25): up to five
+-- outside addresses the owner adds (an accountant, a partner). Each receives
+-- nothing until its holder confirms from that inbox (a typo must not send the
+-- day's sales to a stranger); every digest carries its own stop link. Only the
+-- server reads or writes them.
+create table if not exists digest_recipients (
+  id uuid primary key default gen_random_uuid(),
+  restaurant_id uuid not null references restaurants(id) on delete cascade,
+  email text not null check (char_length(email) between 3 and 254),
+  status text not null default 'pending' check (status in ('pending', 'confirmed')),
+  confirm_token_hash text unique,
+  confirm_sent_at timestamptz not null default now(),
+  stop_token text not null unique,
+  added_by text not null,
+  created_at timestamptz not null default now(),
+  confirmed_at timestamptz
+);
+create unique index if not exists digest_recipients_address on digest_recipients (restaurant_id, lower(email));
+alter table public.digest_recipients enable row level security;
+revoke all on digest_recipients from anon, authenticated, public;
+grant select, insert, update, delete on public.digest_recipients to service_role;
+revoke truncate, references, trigger on all tables in schema public from authenticated;
+
+-- The limit is counted under the restaurant's row lock, so two owners' tabs
+-- adding at once cannot reach six.
+create or replace function public.add_digest_recipient_v1(
+  p_restaurant uuid, p_email text, p_confirm_hash text, p_stop_token text, p_actor text
+) returns text language plpgsql security definer set search_path = public as $$
+begin
+  perform 1 from restaurants where id = p_restaurant for update;
+  if not found then return 'not_found'; end if;
+  if exists (select 1 from digest_recipients where restaurant_id = p_restaurant and lower(email) = lower(p_email)) then
+    return 'exists';
+  end if;
+  if (select count(*) from digest_recipients where restaurant_id = p_restaurant) >= 5 then return 'full'; end if;
+  insert into digest_recipients (restaurant_id, email, confirm_token_hash, stop_token, added_by)
+    values (p_restaurant, p_email, p_confirm_hash, p_stop_token, p_actor);
+  return 'added';
+end; $$;
+revoke all on function public.add_digest_recipient_v1(uuid, text, text, text, text) from public, anon, authenticated;
+grant execute on function public.add_digest_recipient_v1(uuid, text, text, text, text) to service_role;
+
+-- An address nobody confirmed within seven days is deleted (the privacy notice
+-- promises it).
+select cron.schedule('tabletap-expire-digest-recipients', '17 * * * *',
+  $$delete from public.digest_recipients where status = 'pending' and confirm_sent_at < now() - interval '7 days'$$);
