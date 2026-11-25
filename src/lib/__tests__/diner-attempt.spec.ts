@@ -1,5 +1,6 @@
 import { beforeEach, expect, it, vi } from "vitest";
 import type Stripe from "stripe";
+import type { CouponQuote } from "@/lib/coupon-service";
 
 const state = vi.hoisted(() => ({ attempts: [] as Record<string, unknown>[], calls: [] as { fn: string; args: Record<string, unknown> }[], failOpen: "", verified: true }));
 const record = vi.hoisted(() => vi.fn(async () => {}));
@@ -26,10 +27,11 @@ vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({
     return q;
   },
 }) }));
-const { openDinerAttempt, resumeDinerAttempt, finishDinerCheckout } = await import("@/lib/diner-attempt");
+const { DinerCouponChanged, openDinerAttempt, resumeDinerAttempt, finishDinerCheckout } = await import("@/lib/diner-attempt");
 const params = { mode: "payment", metadata: { restaurant_id: "r", fee_id: "fee1" }, expires_at: 12345 } as Stripe.Checkout.SessionCreateParams;
+const coupon: CouponQuote = { id: "coupon1", code: "TEN", kind: "percent", value: 10, staff_only: false, min_subtotal: 100, eligible_subtotal: 100 };
 const quote = { restaurantId: "r", stripeAccount: "acct", currency: "MXN", amountCents: 9000,
-  orderIds: ["a"], payableIds: ["a"], scopeKey: "bill:a", entitlements: { a: 90 }, discounts: { a: 10 }, couponId: "coupon1", foodPrincipal: 90 };
+  orderIds: ["a"], payableIds: ["a"], scopeKey: "bill:a", entitlements: { a: 90 }, discounts: { a: 10 }, coupon, foodPrincipal: 90 };
 const session = { id: "cs1", status: "open", url: "https://stripe.test/one" } as Stripe.Checkout.Session;
 const create = vi.fn(async () => session);
 const retrieve = vi.fn(async () => session);
@@ -41,7 +43,7 @@ beforeEach(() => {
 it("E4 freezes net entitlements and the coupon in the attempt before asking Stripe", async () => {
   await openDinerAttempt(stripe, params, quote);
   expect(state.calls[0]).toMatchObject({ fn: "diner_checkout_open", args: { p_record: {
-    entitlements: { a: 90 }, order_discounts: { a: 10 }, coupon_id: "coupon1", amount_cents: 9000,
+    entitlements: { a: 90 }, order_discounts: { a: 10 }, coupon_id: "coupon1", coupon_quote: coupon, amount_cents: 9000,
   } } });
   expect(create).toHaveBeenCalledWith(params, expect.objectContaining({ idempotencyKey: state.attempts[0].idempotency_key }));
   expect(record).toHaveBeenCalled();
@@ -95,6 +97,12 @@ it("a SQL refusal gives back only the losing request's fee", async () => {
   state.failOpen = "P0001";
   await expect(openDinerAttempt(stripe, params, quote)).rejects.toThrow("failed");
   expect(release).toHaveBeenCalledWith("fee1");
+  expect(create).not.toHaveBeenCalled();
+});
+it("a changed coupon releases the proposed bill fee before any Stripe call", async () => {
+  state.failOpen = "PT022";
+  await expect(openDinerAttempt(stripe, params, quote)).rejects.toBeInstanceOf(DinerCouponChanged);
+  expect(release).toHaveBeenCalledExactlyOnceWith("fee1");
   expect(create).not.toHaveBeenCalled();
 });
 it("a database connection error does not prove rollback", async () => {

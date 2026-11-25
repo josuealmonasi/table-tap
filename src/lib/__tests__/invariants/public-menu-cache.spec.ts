@@ -5,7 +5,7 @@ import { read, walk } from "./helpers";
 const TABLES = new Set(["restaurants", "menus", "categories", "menu_items", "item_addons", "promotions",
   "promotion_items", "dietary_tags", "icon_groups", "icon_group_items", "loyalty_programs", "plan_limits"]);
 const RPCS = new Set(["duplicate_menu_v1", "save_product_addons_v1", "recount_stock", "delete_dietary_tag_v1",
-  "save_promotion_v1", "admin_delete_restaurant"]);
+  "save_promotion_v1", "admin_delete_restaurant", "admin_close_restaurant_v1"]);
 function failures(file: string, code: string): string[] {
   const source = ts.createSourceFile(file, code, ts.ScriptTarget.Latest, true);
   const errors: string[] = [];

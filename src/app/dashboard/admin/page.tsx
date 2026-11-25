@@ -32,7 +32,7 @@ export default async function AdminPage() {
   const [restaurants, staff, admins, profiles, logins] = await Promise.all([
     everyRow<{ id: string; name: string; logo: string | null; owner_id: string | null; created_at: string } & RestaurantBilling>(
       (a, b) => db.from("restaurants")
-        .select("id, name, logo, owner_id, created_at, plan, plan_status, stripe_subscription_id, subscribed_price, trial_ends_at, plan_ends_at, plan_period_ends_at, suspended_at, suspended_reason")
+        .select("id, name, logo, owner_id, created_at, plan, plan_status, stripe_subscription_id, subscribed_price, trial_ends_at, plan_ends_at, plan_period_ends_at, suspended_at, suspended_reason, closing_at")
         .order("created_at").order("id").range(a, b),
       "the restaurants",
     ),
@@ -98,7 +98,7 @@ export default async function AdminPage() {
       plan: r.plan, plan_status: r.plan_status, stripe_subscription_id: r.stripe_subscription_id,
       subscribed_price: r.subscribed_price === null ? null : Number(r.subscribed_price),
       trial_ends_at: r.trial_ends_at, plan_ends_at: r.plan_ends_at, plan_period_ends_at: r.plan_period_ends_at,
-      suspended_at: r.suspended_at, suspended_reason: r.suspended_reason,
+      suspended_at: r.suspended_at, suspended_reason: r.suspended_reason, closing_at: r.closing_at,
     },
     created_at: r.created_at,
   }));

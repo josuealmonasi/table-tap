@@ -1,4 +1,4 @@
-import { suspensionRefusal } from "@/lib/restaurant-suspension";
+import { RESTAURANT_CLOSING_CODE, suspensionRefusal } from "@/lib/restaurant-suspension";
 import { orderRequestScope } from "@/lib/order-request";
 import { NextRequest, NextResponse } from "next/server";
 import { apiError } from "@/lib/api-error";
@@ -10,7 +10,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { can } from "@/lib/plan";
 import { getPlan } from "@/lib/plan-server";
 import { priceCart, type AppliedCoupon } from "@/lib/pricing";
-import { releaseCoupon, toAppliedCoupon } from "@/lib/coupon-service";
+import { couponQuote, releaseCoupon, toAppliedCoupon } from "@/lib/coupon-service";
 import { isRoomLimited, isTableLimited } from "@/lib/rate-limit";
 import { promotionsOnSale } from "@/lib/promotions-on-sale";
 import { toCartPromos } from "@/lib/promotions";
@@ -84,7 +84,7 @@ export async function POST(req: NextRequest) {
     const { data: restaurant, error: rErr } = await supabase
       .from("restaurants")
       .select(
-        "id, currency, service_pct, service_enabled, accepting_orders, suspended_at, tax_pct, stripe_account_id, stripe_charges_enabled, allow_pay_later, low_stock_alerts_enabled, low_stock_threshold",
+        "id, currency, service_pct, service_enabled, accepting_orders, suspended_at, closing_at, tax_pct, stripe_account_id, stripe_charges_enabled, allow_pay_later, low_stock_alerts_enabled, low_stock_threshold",
       )
       .eq("id", restaurantId)
       .single();
@@ -102,6 +102,7 @@ export async function POST(req: NextRequest) {
     }
 
     // A pause or suspension may have started after the diner opened the menu.
+    if (restaurant.closing_at) return await apiError("apiErr.restaurantClosing", 409);
     const suspended = await suspensionRefusal(restaurant.suspended_at);
     if (suspended) return suspended;
     if (!restaurant.accepting_orders) {
@@ -272,13 +273,18 @@ export async function POST(req: NextRequest) {
         // claimCheckoutCoupon judged it: the order's own subtotal is after it,
         // and a MX$10 coupon with a MX$100 minimum on MX$100 was refused.
         threshold: Number(restaurant.low_stock_threshold) || 0,
-        coupon: coupon ? { ...coupon, eligible_subtotal: base.subtotal } : null,
+        coupon: coupon ? couponQuote(coupon, base.subtotal) : null,
       });
+      if ("closing" in result) {
+        await held.giveBack();
+        return await apiError("apiErr.restaurantClosing", 409);
+      }
       if (result.conflict) return await apiError("apiErr.retryConflict", 409);
       if (result.counterFull) {
         await held.giveBack();
         return await apiError("apiErr.counterPayLaterFull", 409);
       }
+      if (result.couponChanged) return NextResponse.json({ couponReason: "changed" }, { status: 409 });
       if (result.couponReason) return NextResponse.json({ couponReason: result.couponReason }, { status: 409 });
       if (result.short) return await refuseShortStock(result.short);
       held.handOver();
@@ -341,6 +347,7 @@ export async function POST(req: NextRequest) {
 
     if (oErr || !order) {
       await held.giveBack();
+      if (oErr?.code === RESTAURANT_CLOSING_CODE) return await apiError("apiErr.restaurantClosing", 409);
       // Both requests can see no order. The unique reference picks one; give
       // back only this loser's claims before returning the winner's page.
       if (cardRetry && oErr?.code === "23505" && oErr.message.includes("orders_request_once")) {
