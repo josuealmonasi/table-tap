@@ -26,6 +26,7 @@ export function useAdminActions() {
     method: string,
     body: unknown,
     okMsg: string,
+    refreshOnFailure = false,
   ): Promise<boolean> {
     setBusy(true);
     try {
@@ -40,12 +41,13 @@ export function useAdminActions() {
         return false;
       }
       toast(okMsg);
-      router.refresh();
+      if (!refreshOnFailure) router.refresh();
       return true;
     } catch {
       toast(t("done.networkError"), "error");
       return false;
     } finally {
+      if (refreshOnFailure) router.refresh();
       setBusy(false);
     }
   }
@@ -66,15 +68,15 @@ export function useAdminActions() {
     deleteUser: (userId: string) =>
       call("/api/admin/users", "DELETE", { userId }, t("admin.loginDeleted")),
     deleteRestaurant: (id: string) =>
-      call("/api/admin/restaurants", "DELETE", { id }, t("admin.restaurantDeleted")),
+      call("/api/admin/restaurants", "DELETE", { id }, t("admin.restaurantDeleted"), true),
     schedulePrice: (plan: string, newPrice: number, effectiveAt: string, doneMsg: string) =>
       call("/api/admin/plan-price-changes", "POST", { plan, newPrice, effectiveAt }, doneMsg),
     suspend: (id: string, reason: string, doneMsg: string) =>
       call("/api/admin/restaurants/suspend", "POST", { id, reason }, doneMsg),
     changeTrial: (id: string, endsAt: string | null, doneMsg: string) =>
       call("/api/admin/restaurants/trial", "PATCH", { id, endsAt }, doneMsg),
-    liftSuspension: (id: string, doneMsg: string) =>
-      call("/api/admin/restaurants/suspend", "DELETE", { id }, doneMsg),
+    liftSuspension: (id: string, doneMsg: string, suspendedAt?: string | null) =>
+      call("/api/admin/restaurants/suspend", "DELETE", { id, ...(suspendedAt ? { suspendedAt } : {}) }, doneMsg),
     movePlan: (id: string, plan: string, doneMsg: string, choice: TierAssignment) =>
       call("/api/admin/restaurants", "PATCH", { id, plan, ...choice }, doneMsg),
   };

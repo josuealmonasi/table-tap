@@ -46,7 +46,7 @@ export async function receiveOffline(actor: Actor, body: PosSaleBody & { offline
     const res = await ringOffline(actor, body);
     if (res.ok || res.status !== 409) return res;
     const data = await res.clone().json();
-    if (!["apiErr.offlineCollector", "apiErr.offlineApproval", "recovery.currencyChanged", "apiErr.offlineCurrencyRequired"].includes(data.reviewReason)) return res;
+    if (!["apiErr.offlineCollector", "apiErr.offlineApproval", "recovery.currencyChanged", "apiErr.offlineCurrencyRequired", "apiErr.restaurantClosing"].includes(data.reviewReason)) return res;
     reason = data.reviewReason;
   } else if (blocked) reason = "recovery.planChanged";
   else if (suspended) reason = "apiErr.restaurantSuspended";

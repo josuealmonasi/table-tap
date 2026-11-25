@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { NextRequest, NextResponse } from "next/server";
+import type { writeOrderIntent } from "@/lib/order-intent";
 
 /**
  * The diner's checkout, driven end to end with every step it calls replaced,
@@ -18,7 +19,7 @@ let emptyTable = false;
 let admissionFullOnOpen = false;
 const step = {
   counterFull: vi.fn(async () => ({ data: false, error: null as unknown })),
-  intent: vi.fn(async () => ({ orderId: "order-1", sessionId: null, table: null, total: 90 })),
+  intent: vi.fn<typeof writeOrderIntent>(async () => ({ orderId: "order-1", sessionId: null, table: null, total: 90 })),
   openSession: vi.fn(async (): Promise<string | null> => "sitting-1"),
   reserveStock: vi.fn(async () => ({ ok: true, short: [], low: [] as typeof soldOut[], reservationId: "reservation-1" })),
   insertOrder: vi.fn(async (): Promise<{ data: { id: string } | null; error: unknown }> => ({
@@ -39,6 +40,7 @@ const soldOut = { itemId: "t1", name: "Taco", stock: 0, kind: "out_of_stock" as 
 const restaurant = {
   id: "r1", currency: "MXN", service_pct: 0, service_enabled: false, accepting_orders: true,
   suspended_at: null as string | null,
+  closing_at: null as string | null,
   tax_pct: 16, stripe_account_id: "acct_1", stripe_charges_enabled: true, allow_pay_later: true,
   low_stock_alerts_enabled: true, low_stock_threshold: 2,
 };
@@ -70,7 +72,8 @@ vi.mock("@/lib/checkout/claim-coupon", () => ({
   claimCheckoutCoupon: async () => ({ coupon }),
   logCheckoutCoupon: () => step.logCoupon(),
 }));
-vi.mock("@/lib/coupon-service", () => ({
+vi.mock("@/lib/coupon-service", async (original) => ({
+  ...await original<typeof import("@/lib/coupon-service")>(),
   releaseCoupon: (id: string) => releaseCoupon(id),
   toAppliedCoupon: (c: typeof coupon) => ({ code: c.code, kind: c.kind, value: c.value, minSubtotal: 0 }),
 }));
@@ -131,7 +134,7 @@ vi.mock("@/lib/supabase/admin", () => ({
     },
   }),
 }));
-vi.mock("@/lib/order-intent", () => ({ readOrderIntent: async () => null, writeOrderIntent: () => step.intent() }));
+vi.mock("@/lib/order-intent", () => ({ readOrderIntent: async () => null, writeOrderIntent: step.intent }));
 
 const { POST } = await import("@/app/api/checkout/route");
 
@@ -155,6 +158,7 @@ const boom = () => {
 beforeEach(() => {
   vi.clearAllMocks();
   restaurant.suspended_at = null;
+  restaurant.closing_at = null;
   step.counterFull.mockResolvedValue({ data: false, error: null });
   notices.length = 0;
   admissionStatus = "approved";
@@ -176,6 +180,27 @@ describe("a suspended restaurant", () => {
     expect(response.status).toBe(409);
     expect(step.reserveStock).not.toHaveBeenCalled();
     expect(step.insertOrder).not.toHaveBeenCalled();
+  });
+});
+
+describe("a closing restaurant", () => {
+  it("refuses checkout before reserving stock or starting Stripe", async () => {
+    restaurant.closing_at = "2026-11-25T06:04:00Z";
+    const response = await checkout();
+    expect(response.status).toBe(409);
+    expect(await response.json()).toEqual({ error: "apiErr.restaurantClosing" });
+    expect(step.reserveStock).not.toHaveBeenCalled();
+    expect(step.openCard).not.toHaveBeenCalled();
+  });
+
+  it("returns stock and coupon claims when closing wins the final insert", async () => {
+    step.insertOrder.mockResolvedValueOnce({ data: null, error: { code: "PT423" } });
+    const response = await checkout();
+    expect(response.status).toBe(409);
+    expect(await response.json()).toEqual({ error: "apiErr.restaurantClosing" });
+    expect(releaseStock).toHaveBeenCalledOnce();
+    expect(releaseCoupon).toHaveBeenCalledOnce();
+    expect(step.openCard).not.toHaveBeenCalled();
   });
 });
 
@@ -209,6 +234,17 @@ describe("M1: unpaid counter orders have a restaurant-wide ceiling", () => {
     expect(response.status).toBe(409);
     expect(await response.json()).toMatchObject({ error: "apiErr.counterPayLaterFull" });
     expect(step.insertOrder).not.toHaveBeenCalled();
+  });
+  it("passes the pay-later quote to the atomic writer and forwards a changed coupon refusal", async () => {
+    step.intent.mockResolvedValueOnce({ couponReason: "limitReached", couponChanged: true } as never);
+    const response = await checkout({ tableId: null, payLater: true, ref: "00000000-0000-4000-8000-0000000000f2" });
+    expect(response.status).toBe(409);
+    expect(await response.json()).toEqual({ couponReason: "changed" });
+    expect(step.intent).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ coupon: {
+      id: "c1", code: "TACO10", kind: "percent", value: 10, staff_only: false, min_subtotal: 0, eligible_subtotal: 100,
+    } }));
+    expect(step.insertOrder).not.toHaveBeenCalled();
+    expect(releaseCoupon).not.toHaveBeenCalled();
   });
 });
 

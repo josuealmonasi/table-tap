@@ -9,6 +9,7 @@ const cancel = vi.fn();
 const expire = vi.fn();
 const remove = vi.fn();
 const deleteUser = vi.fn();
+const cleanup = vi.fn();
 const rpc = vi.fn();
 let restaurant: Record<string, unknown>;
 let active = true;
@@ -16,6 +17,9 @@ let open = false;
 let record: Record<string, unknown>;
 let deletionFailure = false;
 let restaurantGone = false;
+let finalBlocker: string | null;
+let staff: string[];
+let owners: Set<string>;
 vi.mock("@/lib/admin", () => ({ getPlatformAdmin: async () => ({ email: "admin@test.com" }) }));
 vi.mock("@/lib/admin-plan", () => ({ moveRestaurantPlan: vi.fn() }));
 vi.mock("@/lib/api-error", () => ({ apiError: async (error: string, status: number) => NextResponse.json({ error }, { status }) }));
@@ -25,17 +29,12 @@ vi.mock("@/lib/stripe", () => ({ stripe: {
   checkout: { sessions: { list: (...a: unknown[]) => sessions(...a), expire: (...a: unknown[]) => expire(...a) } },
 } }));
 vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({
-  rpc: (...a: unknown[]) => rpc(...a), auth: { admin: { deleteUser } },
+  rpc: (...a: unknown[]) => rpc(...a),
   from: (table: string) => {
-    let deleting = false;
     const q = {
-      select: () => q, eq: () => q, insert: () => q, delete: () => { deleting = true; return q; },
+      select: () => q, eq: () => q, insert: () => q,
       maybeSingle: async () => ({ data: table === "restaurant_billing_operations" ? { state: record } : restaurantGone ? null : restaurant, error: null }),
-      then: (resolve: (v: unknown) => unknown) => {
-        if (deleting) { remove(); if (!deletionFailure) restaurantGone = true; }
-        return Promise.resolve({ data: table === "staff" ? (restaurantGone ? [] : [{ user_id: "u1" }]) : restaurant,
-          error: deleting && deletionFailure ? { message: "database unavailable" } : null }).then(resolve);
-      },
+      then: (resolve: (v: unknown) => unknown) => Promise.resolve({ data: null, error: null }).then(resolve),
     }; return q;
   },
 }) }));
@@ -45,15 +44,23 @@ const run = () => DELETE(new NextRequest("https://tabletap.test/api/admin/restau
 }));
 beforeEach(() => {
   vi.resetAllMocks(); active = true; open = false; record = {}; deletionFailure = false; restaurantGone = false;
+  finalBlocker = null; staff = ["u1"]; owners = new Set();
   restaurant = { stripe_customer_id: "cus_1", stripe_subscription_id: "sub_1" };
-  rpc.mockImplementation(async (fn: string, args: { p_state: object; p_check_only?: boolean }) => {
-    if (fn === "admin_delete_restaurant") {
-      if (args.p_check_only) return { data: { outcome: restaurantGone ? "gone" : "ready" }, error: null };
+  rpc.mockImplementation(async (fn: string, args: { p_state: object; p_finalize?: boolean }) => {
+    if (fn === "admin_close_restaurant_v1") {
+      if (restaurantGone) return { data: { outcome: "gone" }, error: null };
+      if (!args.p_finalize) {
+        restaurant.closing_at ??= "closing";
+        return { data: { outcome: "ready" }, error: null };
+      }
+      if (finalBlocker) return { data: { outcome: finalBlocker }, error: null };
       remove();
       if (deletionFailure) return { data: null, error: { message: "database unavailable" } };
+      record.deleted_staff_ids = staff.filter(id => !owners.has(id));
       restaurantGone = true;
       return { data: { outcome: "deleted" }, error: null };
     }
+    if (fn === "admin_cleanup_restaurant_logins_v1") return await cleanup();
     if (fn === "record_restaurant_billing") {
       const next = { ...record, ...args.p_state } as Record<string, unknown>;
       for (const key of ["customers", "sessions", "subscriptions"]) {
@@ -67,9 +74,21 @@ beforeEach(() => {
   list.mockResolvedValue({ data: [], has_more: false });
   customers.mockResolvedValue({ data: [], has_more: false });
   sessions.mockImplementation(async () => ({ data: open ? [{ id: "cs_1", mode: "subscription" }] : [], has_more: false }));
-  cancel.mockImplementation(async () => { active = false; return { id: "sub_1", status: "canceled" }; });
+  cancel.mockImplementation(async () => {
+    expect(restaurant.closing_at).toBeTruthy();
+    active = false;
+    return { id: "sub_1", status: "canceled" };
+  });
   expire.mockImplementation(async () => { open = false; });
-  deleteUser.mockResolvedValue({ error: null });
+  cleanup.mockImplementation(async () => {
+    expect(restaurantGone).toBe(true);
+    for (const id of (record.deleted_staff_ids ?? []) as string[]) {
+      if (!owners.has(id)) deleteUser(id);
+    }
+    delete record.staff_ids;
+    record = { ...record, deleted: true, deleted_staff_ids: [] };
+    return { data: true, error: null };
+  });
 });
 it("cancels billing and confirms termination before deleting staff and the restaurant", async () => {
   expect((await run()).status).toBe(200);
@@ -101,7 +120,7 @@ it("retries a failed restaurant deletion without charging or canceling again", a
   expect((await run()).status).toBe(200); expect(cancel).toHaveBeenCalledTimes(1);
 });
 it("refuses deletion while a recent request owns the billing lock", async () => {
-  rpc.mockImplementation(async (fn: string) => ({ data: fn === "admin_delete_restaurant" ? { outcome: "ready" } : false, error: null }));
+  rpc.mockResolvedValue({ data: false, error: null });
   expect((await run()).status).toBe(409);
   expect(retrieve).not.toHaveBeenCalled(); expect(remove).not.toHaveBeenCalled();
 });
@@ -114,12 +133,36 @@ it("confirms a completed deletion again using the retained Stripe IDs", async ()
   expect(record.subscriptions).toEqual(["sub_1"]);
 });
 it("retries staff cleanup from the retained IDs after the restaurant has gone", async () => {
-  deleteUser.mockResolvedValueOnce({ error: { message: "Auth unavailable" } });
+  cleanup.mockResolvedValueOnce({ data: null, error: { message: "Auth unavailable" } });
   expect((await run()).status).toBe(502);
   expect(restaurantGone).toBe(true);
-  expect(record.staff_ids).toEqual(["u1"]);
+  expect(record.deleted_staff_ids).toEqual(["u1"]);
   expect((await run()).status).toBe(200);
   expect(deleteUser).toHaveBeenLastCalledWith("u1");
-  expect(record).toMatchObject({ deleted: true, staff_ids: [] });
+  expect(record).toMatchObject({ deleted: true, deleted_staff_ids: [] });
   expect(cancel).toHaveBeenCalledTimes(1);
+});
+
+it("leaves the restaurant closing and skips Auth cleanup if a refund arrives during Stripe cancellation", async () => {
+  finalBlocker = "refundDue";
+  const response = await run();
+  expect(response.status).toBe(409);
+  expect(await response.json()).toEqual({ error: "apiErr.restaurantDeleteRefundDue" });
+  expect(restaurant.closing_at).toBe("closing");
+  expect(restaurantGone).toBe(false);
+  expect(cancel).toHaveBeenCalledOnce();
+  expect(cleanup).not.toHaveBeenCalled();
+});
+
+it("uses the committed list and preserves owners both at deletion and on a cleanup retry", async () => {
+  record.staff_ids = ["stale"];
+  staff = ["incoming-owner", "later-owner", "remaining-staff"];
+  owners.add("incoming-owner");
+  cleanup.mockResolvedValueOnce({ data: null, error: { message: "Auth unavailable" } });
+  expect((await run()).status).toBe(502);
+  expect(record.deleted_staff_ids).toEqual(["later-owner", "remaining-staff"]);
+
+  owners.add("later-owner");
+  expect((await run()).status).toBe(200);
+  expect(deleteUser.mock.calls).toEqual([["remaining-staff"]]);
 });

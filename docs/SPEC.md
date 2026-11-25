@@ -95,11 +95,18 @@ line reads "Suspendido · <reason>".
 A platform admin can also **extend or end a trial** (`PATCH
 /api/admin/restaurants/trial { id, endsAt | null }`): extend to a date at most
 90 days out, or end it now, which drops to Carta exactly as an expired trial
-does. Refused for a restaurant paying through Stripe or not on a trial.
+does. Refused for a restaurant paying through Stripe or not on a trial. It runs
+under the restaurant billing lock: ending or shortening a tier assignment first
+expires every open Checkout bound to it (`tier_assignment_id`), and a checkout
+already paid but not yet synced refuses the change. A subscription from an
+ended or replaced assignment's Checkout grants no tier. A lift (`DELETE
+/api/admin/restaurants/suspend { id, suspendedAt }`) clears only the suspension
+the admin saw; a newer one answers 409 and asks to reload.
 
 **Support tools** live in each restaurant's usage dialog: private notes by the
 platform team (`restaurant_admin_notes`, author and time, never shown to the
-restaurant; `GET/POST /api/admin/restaurants/notes`), and a button that emails
+restaurant; `GET/POST /api/admin/restaurants/notes`, each POST audited first as
+`restaurant.note` with the restaurant id, never the text), and a button that emails
 the owner the standard password-reset link (`POST
 /api/admin/restaurants/owner-reset`, audited `restaurant.owner_reset`). The admin
 never sees or sets a password.
@@ -145,6 +152,18 @@ RLS denies clients and only the service can insert/read; mutation and truncation
 are refused. `GET /api/admin/audit` checks platform membership and returns
 uncached keyset pages of 100. The API checks intentionally retain their genuine
 admin audit events after removing disposable business fixtures.
+
+**Restaurant deletion.** The platform admin starts deletion under the
+restaurant's money lock. Outstanding refunds, provider work, account debt,
+or completed unpaid orders that have not been written off block deletion.
+When the checks pass, the restaurant enters Closing before Stripe
+cancellation. New orders and subscriptions are refused, and existing bills,
+refunds and held receipts can still be resolved. If the final locked check
+finds new evidence that needs attention, the admin console keeps showing
+Closing so staff can resolve it and the admin can retry. The final transaction
+archives the books and saves the staff cleanup list before deleting live data.
+Auth cleanup uses the saved list and preserves logins that still belong to a
+restaurant or the platform admin team.
 
 **Two-step verification for the platform admin.** `/dashboard/admin/mfa`
 enrols an authenticator app (TOTP, Supabase MFA) and later asks for its code.

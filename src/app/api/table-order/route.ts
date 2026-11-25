@@ -1,6 +1,6 @@
 import { staffWriteLimited } from "@/lib/staff-request-guard";
 import { orderItemsWithRevenue } from "@/lib/order-line-revenue";
-import { suspensionRefusal } from "@/lib/restaurant-suspension";
+import { RESTAURANT_CLOSING_CODE, suspensionRefusal } from "@/lib/restaurant-suspension";
 import { invalidatePublicMenu } from "@/lib/public-menu-cache";
 import { orderRequestScope } from "@/lib/order-request";
 import { NextRequest, NextResponse } from "next/server";
@@ -106,11 +106,12 @@ export async function POST(req: NextRequest) {
   // to price from the row rather than from what a screen last showed.
   const { data: restaurant } = await db
     .from("restaurants")
-    .select("id, currency, service_pct, service_enabled, tax_pct, timezone, low_stock_threshold, low_stock_alerts_enabled, suspended_at")
+    .select("id, currency, service_pct, service_enabled, tax_pct, timezone, low_stock_threshold, low_stock_alerts_enabled, suspended_at, closing_at")
     .eq("id", actor.restaurantId)
     .maybeSingle();
   if (!restaurant) return await apiError("apiErr.restaurantNotFound", 404);
   // A suspended restaurant takes no new orders; bills already open stay payable.
+  if (restaurant.closing_at) return await apiError("apiErr.restaurantClosing", 409);
   const suspended = await suspensionRefusal(restaurant.suspended_at);
   if (suspended) return suspended;
 
@@ -196,6 +197,7 @@ export async function POST(req: NextRequest) {
       order: orderRow, lines: verified, inventory: Boolean(plan && can(plan.limits, "inventory")),
       threshold: Number(restaurant.low_stock_threshold) || 0,
     });
+    if ("closing" in result) return await apiError("apiErr.restaurantClosing", 409);
     if (result.conflict) return await apiError("apiErr.retryConflict", 409);
     if (result.short) return NextResponse.json({ short: result.short, code: "outOfStock" }, { status: 409 });
     if ((result.low ?? []).some(w => w.stock === 0)) invalidatePublicMenu(actor.restaurantId);
@@ -214,6 +216,7 @@ export async function POST(req: NextRequest) {
   if (error || !order) {
     // The food was never ordered, so it goes back on the shelf.
     await releaseStock(actor.restaurantId, reservation.reservationId);
+    if (error?.code === RESTAURANT_CLOSING_CODE) return await apiError("apiErr.restaurantClosing", 409);
     return await apiError("apiErr.orderCreate", 500);
   }
 
