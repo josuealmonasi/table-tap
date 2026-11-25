@@ -109,11 +109,6 @@ export default function ProfileForm({
           </form>
         </div>
 
-        {digest !== null && <div className="tt-section" style={{ maxWidth: 520 }}>
-          <SettingsToggle title={t("digest.preference")} hint={t("digest.preferenceHint")}
-            checked={digest} onChange={handleDigest} disabled={saving} />
-        </div>}
-
         <div className="tt-section" style={{ maxWidth: 520 }}>
           <div className="tt-section-head">
             <h3 className="tt-serif" style={{ margin: 0 }}>
@@ -160,6 +155,11 @@ export default function ProfileForm({
             </div>
           </form>
         </div>
+
+        {digest !== null && <div className="tt-section" style={{ maxWidth: 520 }}>
+          <SettingsToggle title={t("digest.preference")} hint={t("digest.preferenceHint")}
+            checked={digest} onChange={handleDigest} disabled={saving} />
+        </div>}
       </div>
     </div>
   );
