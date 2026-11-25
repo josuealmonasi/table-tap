@@ -1,9 +1,9 @@
 import { invalidatePublicMenu } from "@/lib/public-menu-cache";
 import { stripe } from "@/lib/stripe";
-import { subscriptionPlan } from "@/lib/subscription-price";
+import { subscriptionPlan, UnmappedSubscriptionPriceError } from "@/lib/subscription-price";
 import { FOUNDING_SLOTS } from "@/lib/founding";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { subscriptionOutcome } from "@/lib/billing";
+import { subscriptionOutcome, type BillingOutcome } from "@/lib/billing";
 import type Stripe from "stripe";
 import type { PlanName } from "@/lib/plan";
 
@@ -43,7 +43,7 @@ export async function applySubscription(
   // local revision, and only store it while that revision still matches.
   for (let attempt = 0; attempt < 3; attempt++) {
     const { data: current, error: readError } = await db.from("restaurants")
-      .select("stripe_subscription_id, subscription_sync_revision")
+      .select("stripe_subscription_id, stripe_customer_id, subscription_sync_revision")
       .eq("id", restaurantId).maybeSingle();
     if (readError) throw new Error(`Subscription lookup failed: ${readError.message}`);
     if (!current) return;
@@ -51,41 +51,40 @@ export async function applySubscription(
     // replaced it, recovering that old snapshot must not undo their move.
     if (expectedSubscriptionId && current.stripe_subscription_id !== expectedSubscriptionId) return;
     const latest = await client.subscriptions.retrieve(sub.id);
-    // A finished subscription the restaurant no longer has is history, not a
-    // plan. Stripe re-delivers a cancellation for days; a platform admin who
-    // moved the restaurant in between (which unlinks the subscription) must
-    // not see that move quietly reset to the free plan.
-    if (!current.stripe_subscription_id && ["canceled", "incomplete_expired"].includes(latest.status)) return;
-    if (current.stripe_subscription_id && current.stripe_subscription_id !== latest.id) {
+    if (latest.metadata?.restaurant_id !== restaurantId) {
+      throw new Error(`Subscription ${latest.id} has inconsistent metadata`);
+    }
+    const customer = typeof latest.customer === "string" ? latest.customer : latest.customer?.id;
+    if (!customer || customer !== current.stripe_customer_id) {
+      console.error("Subscription billing customer mismatch", latest.id, restaurantId);
+      return;
+    }
+    const ended = isEnded(latest);
+    const linked = current.stripe_subscription_id === latest.id;
+    if (current.stripe_subscription_id && !linked) {
       const active = await client.subscriptions.retrieve(current.stripe_subscription_id);
       // A late cancellation from the previous subscription must not replace
       // the newer contract. Equal creation seconds keep the active contract;
       // two live contracts need review rather than silently forgetting one.
-      const activeFinished = ["canceled", "incomplete_expired"].includes(active.status);
-      if (!activeFinished) {
-        if (["canceled", "incomplete_expired"].includes(latest.status)) return;
+      if (!isEnded(active)) {
+        if (ended) return;
         throw new Error(`Restaurant ${restaurantId} already has a live subscription ${active.id}; reconcile ${latest.id}`);
       }
       if (active.created > latest.created) return;
     }
-    if (latest.metadata?.restaurant_id !== restaurantId) {
-      throw new Error(`Subscription ${latest.id} has inconsistent metadata`);
-    }
-    const ended = ["canceled", "incomplete_expired"].includes(latest.status);
-    // Ending a contract or failing its first invoice grants no paid tier;
-    // an old unregistered Price must not prevent recording that outcome.
-    const latestPlan = ended || latest.status === "incomplete" ? "carta" : await subscriptionPlan(latest, db);
-    const outcome = subscriptionOutcome(latest.status, latestPlan);
-    // Do not link an unpaid first contract: getPlan must still be able to
-    // expire the local trial. Customer lookup in checkout finds it for retries.
-    const pending = !outcome || (current.stripe_subscription_id !== latest.id && !["active", "trialing"].includes(latest.status));
-    if (!pending) await claimFounder(db, latest, latestPlan);
+    // Unlinked contracts only change the plan once active or trialing. A
+    // terminal event still advances the revision so any competing activation
+    // must reread Stripe, without resetting a plan an admin assigned.
+    const outcome = linked || latest.status === "active" || latest.status === "trialing"
+      ? await resolveOutcome(latest, db)
+      : null;
+    if (outcome?.status === "active" && !ended) await claimFounder(db, latest, outcome.plan);
     const item = latest.items?.data?.[0];
     const endsAt = latest.cancel_at ?? (latest.cancel_at_period_end ? item?.current_period_end : null);
     const charged = item?.price?.unit_amount;
     const { data: updated, error } = await db.from("restaurants").update({
       subscription_sync_revision: current.subscription_sync_revision + 1,
-      ...(!pending && outcome ? {
+      ...(outcome ? {
         plan: outcome.plan,
         plan_status: outcome.status,
         stripe_subscription_id: latest.id,
@@ -97,39 +96,57 @@ export async function applySubscription(
         trial_ends_at: null,
       } : {}),
     }).eq("id", restaurantId)
-      .eq("subscription_sync_revision", current.subscription_sync_revision).select("id");
+      .eq("subscription_sync_revision", current.subscription_sync_revision)
+      .eq("stripe_customer_id", customer).select("id");
     if (error) throw new Error(`Subscription update failed: ${error.message}`);
     if (updated?.length) { invalidatePublicMenu(restaurantId); return; }
   }
   throw new Error(`Subscription ${sub.id} changed during synchronization; retry required`);
 }
 
+function isEnded(sub: Stripe.Subscription): boolean {
+  return sub.status === "canceled" || sub.status === "incomplete_expired";
+}
+
+async function resolveOutcome(
+  sub: Stripe.Subscription, db: ReturnType<typeof createAdminClient>,
+): Promise<BillingOutcome | null> {
+  // Stripe's nonpayment lock and terminal states apply even if the Price
+  // registry is unavailable.
+  const outcome = subscriptionOutcome(sub.status, "carta");
+  if (!outcome || outcome.status === "locked" || isEnded(sub)) return outcome;
+  try {
+    return { ...outcome, plan: await subscriptionPlan(sub, db) };
+  } catch (error) {
+    if (!(error instanceof UnmappedSubscriptionPriceError)) throw error;
+    console.warn("Subscription locked to Carta", sub.id, error.message);
+    return { plan: "carta", status: "locked" };
+  }
+}
+
 async function claimFounder(
   db: ReturnType<typeof createAdminClient>, sub: Stripe.Subscription, plan: PlanName,
 ): Promise<void> {
   const restaurantId = sub.metadata.restaurant_id;
-  const outcome = subscriptionOutcome(sub.status, plan);
   // The founding place is taken on subscribing, not on signing up: if signup
   // counted, free registrations would eat the places without anyone ever
   // having paid. If they are already a founder they keep their number.
-  if (outcome?.status === "active") {
-    const { data: number, error: claimError } = await db.rpc("claim_founding_price", {
-      p_restaurant: restaurantId,
-      p_limit: FOUNDING_SLOTS,
-    });
-    if (claimError) throw new Error(`Founding claim failed: ${claimError.message}`);
+  const { data: number, error: claimError } = await db.rpc("claim_founding_price", {
+    p_restaurant: restaurantId,
+    p_limit: FOUNDING_SLOTS,
+  });
+  if (claimError) throw new Error(`Founding claim failed: ${claimError.message}`);
 
-    // Two restaurants subscribing in the same second can both see the founding
-    // price with room for only one. Whoever was already charged that price is
-    // honoured: charging a founder's price and not making them one would be
-    // keeping their money under a promise we never meant to keep.
-    if (number === null && (await paidFoundingPrice(db, sub, plan))) {
-      const { error } = await db.rpc("claim_founding_price", {
-        p_restaurant: restaurantId,
-        p_limit: FOUNDING_SLOTS + 25,
-      });
-      if (error) throw new Error(`Founding claim failed: ${error.message}`);
-    }
+  // Two restaurants subscribing in the same second can both see the founding
+  // price with room for only one. Whoever was already charged that price is
+  // honoured: charging a founder's price and not making them one would be
+  // keeping their money under a promise we never meant to keep.
+  if (number === null && (await paidFoundingPrice(db, sub, plan))) {
+    const { error } = await db.rpc("claim_founding_price", {
+      p_restaurant: restaurantId,
+      p_limit: FOUNDING_SLOTS + 25,
+    });
+    if (error) throw new Error(`Founding claim failed: ${error.message}`);
   }
 }
 
