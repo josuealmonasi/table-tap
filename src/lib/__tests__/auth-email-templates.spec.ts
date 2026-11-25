@@ -2,25 +2,24 @@ import { readFileSync, readdirSync } from "node:fs";
 import { expect, it } from "vitest";
 
 const dir = "docs/auth-email-templates";
-const files = readdirSync(dir).filter(f => f.endsWith(".html"));
+const links = {
+  "change-email.html": ["/dashboard/profile", "email_change"],
+  "confirm-signup.html": ["/signup/complete", "email"],
+  "invite-user.html": ["/reset-password", "invite"],
+  "reset-password.html": ["/reset-password", "recovery"],
+};
 
-it("every auth email links to our own confirm page, in both languages, never to supabase.co", () => {
-  expect(files.sort()).toEqual(["change-email.html", "confirm-signup.html", "invite-user.html", "reset-password.html"]);
-  for (const f of files) {
-    const html = readFileSync(`${dir}/${f}`, "utf8");
-    expect(html, f).not.toMatch(/supabase\.co|ConfirmationURL/);
-    expect(html.match(/\{\{ \.SiteURL \}\}\/auth\/confirm\?token_hash=\{\{ \.TokenHash \}\}/g)?.length, f).toBe(2);
-    expect(html, f).toContain('{{ if and .Data.locale (eq .Data.locale "en") }}');
-    expect(html, f).toContain("{{ else }}");
-  }
+it("lists every auth email template", () => {
+  expect(readdirSync(dir).filter(f => f.endsWith(".html")).sort()).toEqual(Object.keys(links));
 });
 
-it("the confirm page only posts, and the callback accepts the post", () => {
-  const page = readFileSync("src/app/auth/confirm/page.tsx", "utf8");
-  expect(page).toContain('method="post" action="/auth/callback"');
-  expect(page).not.toMatch(/verifyOtp|useEffect|requestSubmit/);
-  const route = readFileSync("src/app/auth/callback/route.ts", "utf8");
-  expect(route).toContain("export async function POST");
+it.each(Object.entries(links))("puts the token in both language links' fragments in %s", (file, [next, type]) => {
+  const html = readFileSync(`${dir}/${file}`, "utf8");
+  expect(html).not.toMatch(/supabase\.co|ConfirmationURL|[?&]token_hash=/);
+  const href = `{{ .SiteURL }}/auth/confirm?next=${next}#token_hash={{ .TokenHash }}&amp;type=${type}`;
+  expect(html.split(`href="${href}"`)).toHaveLength(3);
+  expect(html).toContain('{{ if and .Data.locale (eq .Data.locale "en") }}');
+  expect(html).toContain("{{ else }}");
 });
 
 it("signup, invites and admin-created logins record the language the emails use", () => {

@@ -185,10 +185,12 @@ Supabase dashboard. Each is written in Spanish and English, switched on
 `user_metadata.locale`, which signup, staff invites and admin-created logins
 save from the request's language cookie (`requestLocale`); without it,
 Spanish. Links go to `tabletap.shop/auth/confirm`, never to the Supabase host.
-That page only shows a button that POSTs the token to `/auth/callback`, so a
-mail scanner that opens the link cannot spend it. Older email-token links
-that point to the callback open the same confirmation page. The callback
-still exchanges PKCE authorization codes when the browser opens it.
+The token and type travel in the link fragment. The browser clears it and
+shows a button that POSTs the token to `/auth/callback`, so a mail scanner
+that opens the link cannot spend it. Older email links with query tokens
+redirect to a fragment on the confirmation page, whether they first land on
+the confirmation page or the callback. The callback still exchanges PKCE
+authorization codes when the browser opens it.
 The POST is accepted only from our own pages
 (`sameSitePost`), so another site cannot sign a visitor into its account.
 
