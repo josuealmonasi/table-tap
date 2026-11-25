@@ -7,6 +7,8 @@ export function cashCases(fx) {
   const r = restaurant.id;
   // One request, sent twice: before and after a manager removes what it wrote.
   const retiredRef = crypto.randomUUID();
+  // The opening's reference: sent again, it answers the same shift (bl39 #5).
+  const openRef = crypto.randomUUID();
   const retiredRequest = async f => {
     const { data } = await f.admin.from("cash_shifts").select("id").eq("restaurant_id", r).is("closed_at", null).single();
     return { kind: "withdrawal", amount: 12, note: `${MARK} retired`, ref: retiredRef, shiftId: data.id };
@@ -22,15 +24,21 @@ export function cashCases(fx) {
       path: "/api/cash-drawer", body: { kind: "withdrawal", amount: 50 }, expect: [409],
       expectError: /turno abierto|shift is open/i },
     { name: "POST /api/cash-shift (the cashier opens a shift)", as: "cashier", method: "POST",
-      path: "/api/cash-shift", body: { action: "open", amount: "1,250.50" }, expect: [200],
+      path: "/api/cash-shift", body: { action: "open", amount: "1,250.50", ref: openRef }, expect: [200],
       check: async (d, f) => {
         const { data } = await f.admin.from("cash_shifts").select("opening_amount, opened_by, closed_at").eq("id", d.id).maybeSingle();
         return Number(data?.opening_amount) === 1250.5 && data?.opened_by === "demo-cashier@tabletap.shop" && data?.closed_at === null
           || `stored ${JSON.stringify(data)}`;
       } },
     { name: "POST /api/cash-shift (a second one while it is open)", as: "manager", method: "POST",
-      path: "/api/cash-shift", body: { action: "open", amount: 100 }, expect: [409],
+      path: "/api/cash-shift", body: { action: "open", amount: 100, ref: crypto.randomUUID() }, expect: [409],
       expectError: /ya hay un turno|already open/i },
+    { name: "POST /api/cash-shift (the opening's retry answers the same shift)", as: "cashier", method: "POST",
+      path: "/api/cash-shift", body: { action: "open", amount: "1,250.50", ref: openRef }, expect: [200],
+      check: async (d, f) => {
+        const { data } = await f.admin.from("cash_shifts").select("id").eq("restaurant_id", r).is("closed_at", null).maybeSingle();
+        return d.id === data?.id && d.closed === false || `answered ${JSON.stringify(d)} with ${data?.id} open`;
+      } },
     { name: "POST /api/cash-drawer (a withdrawal, in the open shift)", as: "manager", method: "POST",
       path: "/api/cash-drawer", body: { kind: "withdrawal", amount: 120, note: `${MARK} supplier` }, expect: [200],
       save: d => ({ cashWithdrawal: d.id }),
@@ -48,7 +56,7 @@ export function cashCases(fx) {
     { name: "POST /api/cash-drawer (a waiter refused)", as: "waiter", method: "POST",
       path: "/api/cash-drawer", body: { kind: "withdrawal", amount: 50 }, expect: [403] },
     { name: "POST /api/cash-shift (the kitchen refused)", as: "kitchen", method: "POST",
-      path: "/api/cash-shift", body: { action: "open", amount: 50 }, expect: [403] },
+      path: "/api/cash-shift", body: { action: "open", amount: 50, ref: crypto.randomUUID() }, expect: [403] },
     { name: "DELETE /api/cash-drawer (a cashier cannot strike off a withdrawal)", as: "cashier", method: "DELETE",
       path: "/api/cash-drawer", body: (_f, saved) => ({ id: saved.cashWithdrawal }), expect: [403] },
     { name: "DELETE /api/cash-drawer (a manager strikes it off)", as: "manager", method: "DELETE",

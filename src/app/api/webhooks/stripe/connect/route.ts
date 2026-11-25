@@ -66,7 +66,7 @@ export async function POST(req: NextRequest) {
   if (event!.type === "charge.refunded"
     || (["refund.created", "refund.updated"].includes(event!.type)
       && (event!.data.object as Stripe.Refund).status === "succeeded")) {
-    await enqueueRefundFee(event!.data.object as Stripe.Refund | Stripe.Charge, event!.account);
+    await enqueueRefundFee(event!.data.object as Stripe.Refund | Stripe.Charge, event!.account, event!.livemode);
   }
 
   if (DISPUTE_EVENTS.has(event!.type)) await ingestDispute(event!);

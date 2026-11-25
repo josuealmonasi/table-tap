@@ -17,11 +17,13 @@ function withRestaurant() {
   return f;
 }
 
-it("does not enqueue a refund of a charge TableTap never made", async () => {
+it("does not enqueue a refund of a charge no record explains, but keeps the notice for a later settlement", async () => {
   const { enqueueRefundFee } = await import("../fee-queue");
   const f = withRestaurant();
-  await enqueueRefundFee({ payment_intent: "pi_outside" } as never, "acct_1");
-  expect(f.rpc).not.toHaveBeenCalled();
+  await enqueueRefundFee({ payment_intent: "pi_outside" } as never, "acct_1", true);
+  // bl43 finding 4: the charge may be a checkout whose completion is still on its way.
+  expect(f.rpc).toHaveBeenCalledExactlyOnceWith("note_unmatched_refund_v1",
+    { p_restaurant: "r1", p_account: "acct_1", p_live: true, p_intent: "pi_outside" });
 });
 
 it("bg9: one restaurant per connected account, and an unknown account is answered without an error", async () => {
@@ -30,7 +32,7 @@ it("bg9: one restaurant per connected account, and an unknown account is answere
   expect(sql).toContain("create unique index if not exists restaurants_stripe_account_unique\n  on restaurants (stripe_account_id) where stripe_account_id is not null;");
   const { enqueueRefundFee } = await import("../fee-queue");
   const f = withRestaurant();
-  await expect(enqueueRefundFee({ payment_intent: "pi" } as never, "acct_unknown")).resolves.toBeUndefined();
+  await expect(enqueueRefundFee({ payment_intent: "pi" } as never, "acct_unknown", false)).resolves.toBeUndefined();
   expect(f.rpc).not.toHaveBeenCalled();
 });
 
@@ -39,7 +41,7 @@ it("enqueues a refund of a charge a TableTap payment or checkout recorded", asyn
   for (const table of ["payments", "diner_checkouts"]) {
     const f = withRestaurant();
     f.tables[table] = [{ id: "x", restaurant_id: "r1", stripe_payment_intent: "pi_ours", stripe_account_id: "acct_1" }];
-    await enqueueRefundFee({ payment_intent: "pi_ours" } as never, "acct_1");
+    await enqueueRefundFee({ payment_intent: "pi_ours" } as never, "acct_1", false);
     expect(f.rpc).toHaveBeenCalledWith("enqueue_fee_reconcile", { p_restaurant: "r1", p_intent: "pi_ours" });
   }
 });

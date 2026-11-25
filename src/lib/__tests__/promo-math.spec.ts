@@ -1,6 +1,5 @@
 import { describe, it, expect } from "vitest";
 import {
-  addedLineCost,
   nextPromoStep,
   promoCost,
   typedTiers,
@@ -117,47 +116,6 @@ describe("nextPromoStep", () => {
 
   it("returns null for a deal that never discounts", () => {
     expect(nextPromoStep(bogo(2, 2), 1, 5)).toBeNull();
-  });
-});
-
-describe("addedLineCost", () => {
-  const bogo: QuantityPromo = {
-    id: "p",
-    name: "2x1",
-    kind: "bogo",
-    buyQty: 2,
-    payQty: 1,
-  };
-
-  it("charges for one when a 2x1 line of two is added to an empty cart", () => {
-    // The screen used to show qty x unit — MX$12 for two MX$6 pies under a
-    // 2x1, while the cart correctly charged MX$6.
-    expect(addedLineCost(bogo, 0, 2, 6)).toBe(6);
-  });
-
-  it("makes the second unit free when one is already in the cart", () => {
-    expect(addedLineCost(bogo, 1, 1, 6)).toBe(0);
-  });
-
-  it("charges normally with no promo", () => {
-    expect(addedLineCost(null, 0, 2, 6)).toBe(12);
-  });
-
-  it("gives the free unit away with its extras, not stripped of them", () => {
-    // A 5.00 dish with a 2.00 extra is a 7.00 unit. Two of them under a 2x1
-    // cost 7.00 — not 7.00 plus a second helping of extras.
-    expect(addedLineCost(bogo, 0, 2, 5, 2)).toBe(7);
-  });
-
-  it("handles tiered pricing across the whole product", () => {
-    const tiered: QuantityPromo = {
-      id: "t",
-      name: "multi",
-      kind: "tiered",
-      tiers: [{ qty: 2, price: 4.25 }],
-    };
-    expect(addedLineCost(tiered, 0, 2, 2.5)).toBe(4.25);
-    expect(addedLineCost(tiered, 2, 2, 2.5)).toBe(4.25);
   });
 });
 

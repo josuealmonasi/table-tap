@@ -42,6 +42,13 @@ drop function if exists public.accept_terms_v1(uuid, uuid, text, text, text);
 drop function if exists public.accept_terms_v1(uuid, uuid, text, text, text, text, text);
 drop function if exists public.signup_restaurant_with_terms_v1(text, uuid, text, text, text, text, timestamptz);
 drop function if exists public.signup_restaurant_with_terms_v1(text, uuid, text, text, text, text, text, text, timestamptz);
+-- Cash shift fixes (bl39 2, 3, 5): wrappers before the functions they call.
+drop function if exists public.open_cash_shift_v2(uuid, text, numeric, uuid);
+drop function if exists public.record_offline_sale_v2(uuid,uuid,jsonb,text,text,timestamptz,text,jsonb,text,text,text,text,text);
+drop function if exists public.offline_pricing_revision_v1(uuid);
+drop function if exists public.ring_pos_sale_v3(uuid, uuid, jsonb, text, text, text, timestamptz, text, jsonb, boolean, int, uuid);
+drop trigger if exists keep_cash_shift_binding on payments;
+drop function if exists public.keep_cash_shift_binding_v1();
 drop table if exists account_movements cascade;
 -- Required-parameter review overloads; drop before their legacy callees.
 drop function if exists public.collect_split_slots_v1(uuid, uuid, int, int[], int, text, int, text, text, text, boolean);
@@ -496,3 +503,11 @@ drop function if exists public.schedule_plan_price_change(text, numeric, timesta
 drop table if exists plan_price_notices cascade;
 drop table if exists plan_price_changes cascade;
 drop function if exists public.admin_restaurant_last_sign_in_v1(uuid);
+-- Stripe reconcile (Codex bl43 findings 1, 4, 5).
+drop function if exists public.adopt_settled_intent_v1(uuid, text, boolean, text);
+drop function if exists public.note_unmatched_refund_v1(uuid, text, boolean, text);
+drop table if exists unmatched_refund_notices cascade;
+drop function if exists public.reconcile_refund_due_send_v1(uuid, uuid, uuid, text, jsonb, int, text[]);
+drop table if exists refund_due_reviews cascade;
+drop function if exists public.start_refund_due_attempt_v3(uuid, uuid, int, text[]);
+alter table if exists refund_due_attempts drop column if exists charge_refund_ids;

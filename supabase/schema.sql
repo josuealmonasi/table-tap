@@ -12093,6 +12093,15 @@ revoke all on cash_withdrawal_retired_refs from anon;
 revoke all on cash_withdrawal_retired_refs from authenticated;
 grant all on cash_withdrawal_retired_refs to service_role;
 
+-- The shift that collected a cash sale (bl39 finding 2). created_at is when
+-- the money was posted, and recorded_at when the server wrote it; neither says
+-- which drawer holds the cash. A sale captured while shift A was open and
+-- posted after A closed went into shift B's window: A showed an overage, B a
+-- matching shortage. Null on older rows and on sales rung with no shift open,
+-- which keep the timestamp window. Set once, by ring_pos_sale_v3.
+alter table payments add column if not exists cash_shift_id uuid references cash_shifts(id) on delete set null;
+create index if not exists payments_cash_shift_idx on payments(cash_shift_id) where cash_shift_id is not null;
+
 -- One calculation for both the signed close and the later review. Aggregate
 -- inside Postgres: PostgREST's row cap must never cut a busy shift short.
 create or replace function public.cash_shift_totals(p_restaurant uuid, p_shift uuid, p_until timestamptz)
@@ -12106,7 +12115,11 @@ returns jsonb language sql stable security definer set search_path = public as $
     select coalesce(sum(p.amount), 0) amount, coalesce(sum(p.tip), 0) tip from payments p, s
       where p.restaurant_id = p_restaurant and p.currency = s.currency
         and p.method = 'cash' and nullif(p.actor_email, '') is not null
-        and p.created_at between s.opened_at and s.until_at
+        -- A sale bound to the shift that collected it counts there, even when
+        -- it was posted after that shift closed; never in the next one
+        -- (bl39 finding 2). Unbound rows keep the timestamp window.
+        and (p.cash_shift_id = s.id and p.created_at <= p_until
+          or p.cash_shift_id is null and p.created_at between s.opened_at and s.until_at)
   ), returns as (
     -- The tip part of a cash return comes out of the shift's tips too: MX$110
     -- with MX$10 tip, refunded whole, read "sales MX$0, of which tips MX$10"
@@ -12331,7 +12344,8 @@ returns setof public.cash_shifts language sql stable security definer set search
     or exists(select 1 from payments p where p.restaurant_id = p_restaurant and p.currency = s.currency
       and p.method = 'cash' and nullif(p.actor_email, '') is not null
       and p.recorded_at >= p_day_start and p.recorded_at > s.closed_at
-      and p.created_at between s.opened_at and s.closed_at)
+      and (p.cash_shift_id = s.id
+        or p.cash_shift_id is null and p.created_at between s.opened_at and s.closed_at))
     -- Held cash retained or returned, received into a shift already closed and
     -- counted there as an approval would be: that shift's count changed today
     -- too (full review M1).
@@ -16812,4 +16826,326 @@ create or replace view daily_digests_due_v2 with (security_invoker = true) as
   where b.status = 'pending';
 revoke all on daily_digests_due_v2 from public, anon, authenticated, service_role;
 grant select on daily_digests_due_v2 to service_role;
+-- Codex bl43 finding 1: a refund made by hand in Stripe while TableTap is
+-- between reading the charge and sending its own refund. A MX$100 due on a
+-- MX$200 charge, MX$40 returned in the dashboard in that gap: Stripe still
+-- accepted MX$100 and the diner got MX$140 back. Every attempt now freezes
+-- the refunds the charge had when its amount was decided; right before the
+-- POST the charge is listed again, and a refund that was not there stops it.
+alter table refund_due_attempts add column if not exists charge_refund_ids text[];
+
+-- start_refund_due_attempt_v2, plus the refunds the charge had when the
+-- attempt's amount was decided. Only an attempt opened by this call is
+-- stamped (created_at = now() is this transaction's start): a resumed one was
+-- decided earlier, against a charge nobody recorded, so it keeps null and the
+-- send guard treats every refund not yet counted for the due as new.
+create or replace function public.start_refund_due_attempt_v3(
+  p_restaurant uuid, p_due uuid, p_refundable_cents int, p_refund_ids text[]
+) returns jsonb language plpgsql security definer set search_path = public as $$
+declare v jsonb;
+begin
+  if p_refund_ids is null then raise exception 'charge refunds required'; end if;
+  v := public.start_refund_due_attempt_v2(p_restaurant, p_due, p_refundable_cents);
+  if v is null or v ? 'outcome' then return v; end if;
+  update refund_due_attempts set charge_refund_ids = p_refund_ids
+    where id = (v->>'id')::uuid and restaurant_id = p_restaurant and charge_refund_ids is null and created_at = now();
+  select to_jsonb(a) into v from refund_due_attempts a where a.id = (v->>'id')::uuid;
+  return v;
+end;
+$$;
+revoke all on function public.start_refund_due_attempt_v3(uuid, uuid, int, text[]) from public, anon, authenticated;
+grant execute on function public.start_refund_due_attempt_v3(uuid, uuid, int, text[]) to service_role;
+
+-- A due whose refund was stopped because nothing is left to send while the
+-- diner is still owed: a person has to look (Stripe dashboard, cash).
+create table if not exists refund_due_reviews (
+  restaurant_id uuid not null,
+  due_id uuid primary key,
+  reason text not null,
+  outstanding_cents int not null check (outstanding_cents >= 0),
+  created_at timestamptz not null default now(),
+  foreign key (restaurant_id, due_id) references refunds_due(restaurant_id, id) on delete cascade
+);
+alter table refund_due_reviews enable row level security;
+revoke all on refund_due_reviews from anon, authenticated, public;
+grant select, insert, update, delete on refund_due_reviews to service_role;
+
+-- Refunds that appeared on the charge since the unsent attempt froze its
+-- amount. p_new carries only those (untagged, or this due's own from another
+-- attempt), each with its provider status.
+--   send      none of them is new to this due: send the attempt as frozen
+--   hold      one is still pending: it may yet be this due's money; wait
+--   completed the succeeded ones cover the due; nothing is sent
+--   retry     the attempt is retired unsent and a new one opens for what is
+--             still owed, capped at what Stripe has left
+--   review    the diner is still owed but Stripe has nothing left to send
+--   stale     the attempt is no longer the unsent latest one
+create or replace function public.reconcile_refund_due_send_v1(
+  p_restaurant uuid, p_due uuid, p_attempt uuid, p_actor text, p_new jsonb, p_refundable_cents int, p_refund_ids text[]
+) returns jsonb language plpgsql security definer set search_path = public as $$
+declare d refunds_due; a refund_due_attempts; e jsonb; v_unknown jsonb := '[]'::jsonb;
+  v_due int; v_covered int; v_send int;
+begin
+  if p_new is null or jsonb_typeof(p_new) <> 'array' then raise exception 'provider evidence required'; end if;
+  if p_refund_ids is null then raise exception 'charge refunds required'; end if;
+  if p_refundable_cents is null or p_refundable_cents < 0 then raise exception 'invalid refundable amount'; end if;
+  perform public.lock_restaurant_money(p_restaurant);
+  select * into d from refunds_due where id = p_due and restaurant_id = p_restaurant for update;
+  if d.id is null then return jsonb_build_object('outcome', 'missing'); end if;
+  select * into a from refund_due_attempts where due_id = d.id order by attempt_no desc limit 1;
+  if a.id is distinct from p_attempt or a.stripe_refund_id is not null or a.provider_status is not null
+      or d.refunded_at is not null then
+    return jsonb_build_object('outcome', 'stale');
+  end if;
+  for e in select * from jsonb_array_elements(p_new) loop
+    if coalesce(e->>'id', '') = '' or (e->>'amount_cents')::int is null or (e->>'amount_cents')::int <= 0 then
+      raise exception 'invalid refund evidence';
+    end if;
+    -- A return's refund, a failed one, or one this due already counts.
+    continue when public.refund_owned_by_return_v1(p_restaurant, e->>'id');
+    continue when exists (select 1 from refund_failures f where f.restaurant_id = p_restaurant and f.stripe_refund_id = e->>'id');
+    continue when exists (select 1 from refund_due_coverage c where c.due_id = d.id and c.stripe_refund_id = e->>'id');
+    v_unknown := v_unknown || jsonb_build_array(e);
+  end loop;
+  if jsonb_array_length(v_unknown) = 0 then
+    update refund_due_attempts set charge_refund_ids = p_refund_ids, updated_at = now() where id = a.id;
+    return jsonb_build_object('outcome', 'send');
+  end if;
+  if exists (select 1 from jsonb_array_elements(v_unknown) x where x->>'status' is distinct from 'succeeded') then
+    return jsonb_build_object('outcome', 'hold');
+  end if;
+  -- Never sent (the caller found no refund tagged with it): retire it, count
+  -- what the restaurant already gave back, and reopen for the rest.
+  update refund_due_attempts set provider_status = 'canceled', updated_at = now() where id = a.id;
+  for e in select * from jsonb_array_elements(v_unknown) loop
+    insert into refund_due_coverage (restaurant_id, due_id, attempt_id, stripe_refund_id, amount_cents, active)
+      values (p_restaurant, d.id, null, e->>'id', (e->>'amount_cents')::int, true)
+      on conflict (due_id, stripe_refund_id) do nothing;
+  end loop;
+  v_due := round(d.amount * 100);
+  select coalesce(sum(amount_cents), 0) into v_covered from refund_due_coverage where due_id = d.id and active;
+  if v_covered >= v_due then
+    update refunds_due set refunded_at = now(), refunded_by = p_actor,
+      stripe_refund_id = coalesce(d.stripe_refund_id, v_unknown->0->>'id'), fee_verification_pending = true
+      where id = d.id;
+    return jsonb_build_object('outcome', 'completed', 'marked', true, 'outstanding_cents', 0);
+  end if;
+  v_send := least(v_due - v_covered, p_refundable_cents);
+  if v_send <= 0 then
+    insert into refund_due_reviews (restaurant_id, due_id, reason, outstanding_cents)
+      values (p_restaurant, d.id, 'nothing_refundable', v_due - v_covered)
+      on conflict (due_id) do update set reason = excluded.reason, outstanding_cents = excluded.outstanding_cents, created_at = now();
+    return jsonb_build_object('outcome', 'review', 'outstanding_cents', v_due - v_covered);
+  end if;
+  insert into refund_due_attempts(restaurant_id, due_id, attempt_no, idempotency_key, amount, stripe_account_id,
+      stripe_payment_intent, charge_refund_ids)
+    values (p_restaurant, d.id, a.attempt_no + 1, 'refund-due-' || d.id || '-' || (a.attempt_no + 1), v_send / 100.0,
+      a.stripe_account_id, a.stripe_payment_intent, p_refund_ids)
+    returning * into a;
+  return jsonb_build_object('outcome', 'retry', 'attempt', to_jsonb(a));
+end;
+$$;
+revoke all on function public.reconcile_refund_due_send_v1(uuid, uuid, uuid, text, jsonb, int, text[]) from public, anon, authenticated;
+grant execute on function public.reconcile_refund_due_send_v1(uuid, uuid, uuid, text, jsonb, int, text[]) to service_role;
+
+-- Codex bl43 findings 4 and 5: Stripe's events arrive in any order. A refund
+-- or a dispute reported before the checkout that owns its PaymentIntent
+-- settled found no local sale: the refund's fee return was never queued, and
+-- the dispute was set aside as review with its event done. Unmatched refund
+-- notices are kept here; settlement, once it binds the intent, adopts them.
+create table if not exists unmatched_refund_notices (
+  restaurant_id uuid not null references restaurants(id) on delete cascade,
+  stripe_account_id text not null,
+  livemode boolean not null,
+  stripe_payment_intent text not null,
+  first_seen_at timestamptz not null default now(),
+  primary key (stripe_account_id, livemode, stripe_payment_intent)
+);
+alter table unmatched_refund_notices enable row level security;
+revoke all on unmatched_refund_notices from anon, authenticated, public;
+grant select, insert, update, delete on unmatched_refund_notices to service_role;
+
+create or replace function public.note_unmatched_refund_v1(
+  p_restaurant uuid, p_account text, p_live boolean, p_intent text
+) returns void language plpgsql security definer set search_path = public as $$
+begin
+  if p_account is null or p_live is null or p_intent is null then raise exception 'invalid refund notice'; end if;
+  if not exists (select 1 from restaurants where id = p_restaurant and stripe_account_id = p_account) then
+    raise exception 'refund notice account does not match the restaurant';
+  end if;
+  insert into unmatched_refund_notices (restaurant_id, stripe_account_id, livemode, stripe_payment_intent)
+    values (p_restaurant, p_account, p_live, p_intent)
+    on conflict (stripe_account_id, livemode, stripe_payment_intent) do nothing;
+end;
+$$;
+revoke all on function public.note_unmatched_refund_v1(uuid, text, boolean, text) from public, anon, authenticated;
+grant execute on function public.note_unmatched_refund_v1(uuid, text, boolean, text) to service_role;
+
+-- Called once verified settlement has bound the intent to this restaurant's
+-- checkout. Queues the fee reconciliation an early refund could not, and
+-- sends the latest event of each early dispute set aside as review back to
+-- the dispute worker, which now finds the sale.
+create or replace function public.adopt_settled_intent_v1(
+  p_restaurant uuid, p_account text, p_live boolean, p_intent text
+) returns jsonb language plpgsql security definer set search_path = public as $$
+declare v_fee boolean := false; v_disputes int := 0;
+begin
+  if p_account is null or p_live is null or p_intent is null then raise exception 'invalid settled intent'; end if;
+  if not exists (select 1 from diner_checkouts where restaurant_id = p_restaurant and stripe_account_id = p_account
+      and livemode = p_live and stripe_payment_intent = p_intent) then
+    raise exception 'intent is not settled by this restaurant';
+  end if;
+  delete from unmatched_refund_notices where restaurant_id = p_restaurant and stripe_account_id = p_account
+    and livemode = p_live and stripe_payment_intent = p_intent;
+  if found then
+    perform public.enqueue_fee_reconcile(p_restaurant, p_intent);
+    v_fee := true;
+  end if;
+  update stripe_dispute_events e set state = 'pending', attempts = 0, last_error = null, claim_token = null, lease_until = null
+    where e.id in (
+      select distinct on (x.stripe_dispute_id) x.id from stripe_dispute_events x
+        join stripe_disputes s on s.stripe_account_id = x.stripe_account_id and s.livemode = x.livemode
+          and s.stripe_dispute_id = x.stripe_dispute_id
+        where s.stripe_account_id = p_account and s.livemode = p_live and s.stripe_payment_intent = p_intent
+          and s.reconciliation_state = 'review'
+        order by x.stripe_dispute_id, x.provider_created_at desc, x.created_at desc)
+      and e.state = 'done';
+  get diagnostics v_disputes = row_count;
+  return jsonb_build_object('fee_queued', v_fee, 'disputes_requeued', v_disputes);
+end;
+$$;
+revoke all on function public.adopt_settled_intent_v1(uuid, text, boolean, text) from public, anon, authenticated;
+grant execute on function public.adopt_settled_intent_v1(uuid, text, boolean, text) to service_role;
 revoke truncate, references, trigger on all tables in schema public from authenticated;
+-- ============================================================================
+-- Cash shifts: the collecting shift, priced offline receipts, and retries
+-- (Codex bl39 review, findings 2, 3, 5 and 6)
+-- ============================================================================
+
+-- A receipt's shift is set once: rebinding it would move counted cash from one
+-- signed drawer to another. A cascade from a deleted shift may still clear it.
+create or replace function public.keep_cash_shift_binding_v1()
+returns trigger language plpgsql security definer set search_path = public as $$
+begin
+  if pg_trigger_depth() > 1 then return new; end if;
+  if old.cash_shift_id is not null and new.cash_shift_id is distinct from old.cash_shift_id then
+    raise exception 'receipt shift is immutable';
+  end if;
+  return new;
+end;
+$$;
+revoke all on function public.keep_cash_shift_binding_v1() from public, anon, authenticated, service_role;
+drop trigger if exists keep_cash_shift_binding on payments;
+create trigger keep_cash_shift_binding before update on payments
+  for each row execute function public.keep_cash_shift_binding_v1();
+
+-- Finding 2. A till cash sale carries the shift that was open when the route
+-- received it (p_cash_shift, null when none was). Under the money lock, after
+-- the sale is rung, its cash receipt is bound to that shift. If the shift
+-- closed while the sale was on its way, the receipt still belongs to it: the
+-- shift's record shows it as cash that arrived after the count, for the
+-- manager to review there, instead of a shortage in the next shift's count.
+-- ring_pos_sale_v2 stays for the deployed route.
+create or replace function public.ring_pos_sale_v3(
+  p_restaurant uuid, p_ref uuid, p_order jsonb, p_method text, p_actor text,
+  p_status text, p_at timestamptz, p_terminal text, p_demand jsonb,
+  p_inventory boolean, p_threshold int, p_cash_shift uuid
+) returns jsonb language plpgsql security definer set search_path = public as $$
+declare v_ticket jsonb; s cash_shifts;
+begin
+  perform public.lock_restaurant_money(p_restaurant);
+  v_ticket := public.ring_pos_sale_v2(p_restaurant, p_ref, p_order, p_method, p_actor,
+    p_status, p_at, p_terminal, p_demand, p_inventory, p_threshold);
+  if v_ticket->>'outcome' = 'settled' and not coalesce((v_ticket->>'repeat')::boolean, false)
+    and p_method = 'cash' and p_at is null and p_cash_shift is not null then
+    select * into s from cash_shifts where restaurant_id = p_restaurant and id = p_cash_shift;
+    if found then
+      update payments set cash_shift_id = s.id
+        where restaurant_id = p_restaurant and order_id = p_ref and method = 'cash'
+          and cash_shift_id is null and currency = s.currency;
+      v_ticket := v_ticket || jsonb_build_object('lateForShift', s.closed_at is not null);
+    end if;
+  end if;
+  return v_ticket;
+end;
+$$;
+revoke all on function public.ring_pos_sale_v3(uuid, uuid, jsonb, text, text, text, timestamptz, text, jsonb, boolean, int, uuid) from public, anon, authenticated;
+grant execute on function public.ring_pos_sale_v3(uuid, uuid, jsonb, text, text, text, timestamptz, text, jsonb, boolean, int, uuid) to service_role;
+
+-- Finding 3. Everything an offline receipt's price comparison reads: the
+-- restaurant's charges, every dish's price, discount and modifiers, add-ons,
+-- and promotions with their items. Not availability or stock, which a sale
+-- that already happened ignores. Row text keeps a null apart from a value.
+create or replace function public.offline_pricing_revision_v1(p_restaurant uuid)
+returns text language sql stable security definer set search_path = public as $$
+  select md5(row(
+    (select row(r.currency, r.tax_pct, r.service_pct, r.service_enabled)::text from restaurants r where r.id = p_restaurant),
+    (select string_agg(row(m.id, m.price, m.discount_pct, m.modifiers, m.is_addon)::text, ',' order by m.id)
+      from menu_items m where m.restaurant_id = p_restaurant),
+    (select string_agg(row(a.product_id, a.addon_id)::text, ',' order by a.product_id, a.addon_id)
+      from item_addons a join menu_items m on m.id = a.product_id where m.restaurant_id = p_restaurant),
+    (select string_agg(row(p.id, p.kind, p.combo_price, p.buy_qty, p.pay_qty, p.tiers, p.active, p.sort_order)::text, ',' order by p.id)
+      from promotions p where p.restaurant_id = p_restaurant),
+    (select string_agg(row(i.promotion_id, i.item_id, i.qty)::text, ',' order by i.promotion_id, i.item_id)
+      from promotion_items i join promotions p on p.id = i.promotion_id where p.restaurant_id = p_restaurant)
+  )::text);
+$$;
+revoke all on function public.offline_pricing_revision_v1(uuid) from public, anon, authenticated;
+grant execute on function public.offline_pricing_revision_v1(uuid) to service_role;
+
+-- The route compares the receipt with today's menu, then settles it. A price
+-- changed between the two posted the old price automatically with zero drift.
+-- The route reads the revision before its comparison; under the money lock it
+-- must still be the same, or the receipt goes to a manager (outcome
+-- 'pricing_changed'). A manager's approval (p_manager) accepts the collected
+-- price as it is and skips the check. A receipt already rung answers as before.
+-- record_offline_sale stays for the deployed route.
+create or replace function public.record_offline_sale_v2(
+  p_restaurant uuid, p_ref uuid, p_order jsonb, p_method text, p_actor text,
+  p_at timestamptz, p_terminal text, p_demand jsonb,
+  p_manager text, p_reason text, p_original_at text, p_authority text, p_pricing_revision text
+) returns jsonb language plpgsql security definer set search_path = public as $$
+begin
+  perform public.lock_restaurant_money(p_restaurant);
+  if p_manager is null and public.pos_ticket(p_restaurant, p_ref) is null
+    and p_pricing_revision is distinct from public.offline_pricing_revision_v1(p_restaurant) then
+    return jsonb_build_object('outcome', 'pricing_changed');
+  end if;
+  return public.record_offline_sale(p_restaurant, p_ref, p_order, p_method, p_actor, p_at, p_terminal,
+    p_demand, p_manager, p_reason, p_original_at, p_authority);
+end;
+$$;
+revoke all on function public.record_offline_sale_v2(uuid,uuid,jsonb,text,text,timestamptz,text,jsonb,text,text,text,text,text) from public,anon,authenticated;
+grant execute on function public.record_offline_sale_v2(uuid,uuid,jsonb,text,text,timestamptz,text,jsonb,text,text,text,text,text) to service_role;
+
+-- Finding 5. An opening carries the dialog's reference. A retry whose first
+-- send committed returns that shift, open or since closed, instead of
+-- starting a second one with the same float. The same reference with another
+-- amount or opener is a different request (PT409). open_cash_shift stays for
+-- the deployed route.
+alter table cash_shifts add column if not exists open_ref uuid;
+create unique index if not exists cash_shifts_open_once on cash_shifts(restaurant_id, open_ref) where open_ref is not null;
+create or replace function public.open_cash_shift_v2(p_restaurant uuid, p_actor text, p_amount numeric, p_ref uuid)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare s cash_shifts; v_id uuid;
+begin
+  perform public.lock_restaurant_money(p_restaurant);
+  if p_ref is null then raise exception 'opening reference required'; end if;
+  select * into s from cash_shifts where restaurant_id = p_restaurant and open_ref = p_ref;
+  if found then
+    if s.opening_amount is distinct from p_amount or s.opened_by is distinct from p_actor then
+      raise exception 'reference belongs to another opening' using errcode = 'PT409';
+    end if;
+    return jsonb_build_object('id', s.id, 'replayed', true, 'closed', s.closed_at is not null);
+  end if;
+  if exists (select 1 from cash_shifts where restaurant_id = p_restaurant and closed_at is null) then
+    return null;
+  end if;
+  insert into cash_shifts (restaurant_id, opened_by, opening_amount, opened_at, open_ref)
+  values (p_restaurant, p_actor, p_amount, clock_timestamp(), p_ref)
+  returning id into v_id;
+  return jsonb_build_object('id', v_id, 'replayed', false, 'closed', false);
+end;
+$$;
+revoke all on function public.open_cash_shift_v2(uuid, text, numeric, uuid) from public, anon, authenticated;
+grant execute on function public.open_cash_shift_v2(uuid, text, numeric, uuid) to service_role;
