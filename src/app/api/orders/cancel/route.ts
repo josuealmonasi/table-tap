@@ -39,7 +39,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   if (!adjustmentId) {
     const read = await readCancel(db, actor.restaurantId, body.id);
     if ("error" in read) return await apiError(read.error, read.status);
-    const { data, error } = await checkoutPageRpc("prepare_order_refund", {
+    const { data, error } = await checkoutPageRpc("prepare_order_refund_v2", {
       p_restaurant: actor.restaurantId, p_order: body.id, p_actor: actor.email,
       p_legacy_demand: await legacyStockDemand(actor.restaurantId, read.order),
       p_expected_paid: read.order.paid, p_expected_account: read.order.account_id ?? null,
