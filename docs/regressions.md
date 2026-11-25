@@ -8694,6 +8694,25 @@ to 2 L turned two packs for MX$100 into 4 L at MX$25/L. `record_purchase_v2` and
 `apiErr.purchasePackChanged`, which now asks to reload), after answering a retry
 already saved. Check: `terminal-waste-pack-races.spec.ts`.
 
+### Promotions price the same on the till and the phone (2026-11-25)
+
+Three pairs that had to agree. First, the order the deals arrive in and the
+deal a product gets: the loader sorted by `sort_order` only and `priceCart`
+took the first deal covering a product, even one that saved nothing, so two
+MX$100 dishes under a tied 2x1 and 3x2 cost MX$100 on one screen and MX$200 on
+another. `fetchPromotions` now orders by `sort_order` then `id`, and
+`bestPromoFor` gives each product the deal that saves the most for the cart
+(ties by that order); the phone, the till, the waiter's order, checkout and
+offline pricing all reach it through `priceCart`. Second, the dish screen's
+quote and the cart: with a plain MX$10 dish in the cart under 2x1, a second
+with a MX$5 extra was quoted MX$0 while the cart went up by MX$5. The quote is
+now `quoteItemLine` (`src/lib/item-quote.ts`), the cart priced by `priceCart`
+before and after the line, and the till and waiter screens get the same quote
+and deal callout. Third, the quantity charged and the quantity discounted: the
+charge read the 99-unit cap and the deal maths the raw quantity, so a 100-unit
+line was charged MX$990 and discounted MX$1,000; every step now reads one
+capped `lineQty`. Check: `promo-selection.spec.ts`, `item-quote.spec.ts`,
+`deal-callout.spec.tsx`.
 ### Daily digest eligibility, retries and stop links (2026-11-25)
 
 A removed manager or stopped outside address could remain in a queued batch.
