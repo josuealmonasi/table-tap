@@ -24,7 +24,7 @@ const request = (authorization?: string) => new NextRequest("https://test/api/cr
 });
 beforeEach(() => {
   vi.clearAllMocks();
-  githubAuth.mockResolvedValue(false);
+  githubAuth.mockResolvedValue("unauthorized");
   vi.stubEnv("CRON_SECRET", "cron-test-secret");
   context.mockReturnValue({});
   Object.values(jobs).forEach(job => job.mockResolvedValue(clean));
@@ -56,16 +56,28 @@ it("runs every job without a user session and returns uncached per-job counts", 
 });
 it("accepts the verified scheduler identity without a shared cron secret", async () => {
   vi.stubEnv("CRON_SECRET", undefined);
-  githubAuth.mockResolvedValue(true);
+  githubAuth.mockResolvedValue("authorized");
   expect((await GET(request("Bearer fixture-identity"))).status).toBe(200);
   expect(githubAuth).toHaveBeenCalledOnce();
   expect(context).toHaveBeenCalledTimes(11);
+});
+it.each([
+  ["unauthorized", 401, "Unauthorized"],
+  ["unavailable", 503, "Service unavailable"],
+])("refuses GitHub authorization result %s before starting recovery", async (result, status, error) => {
+  githubAuth.mockResolvedValue(result);
+  const response = await GET(request("Bearer fixture-identity"));
+  expect(response.status).toBe(status);
+  expect(await response.json()).toEqual({ error });
+  expect(context).not.toHaveBeenCalled();
+  expect(drain).not.toHaveBeenCalled();
+  Object.values(jobs).forEach(job => expect(job).not.toHaveBeenCalled());
 });
 it("audit #648: the database's five-minute job POSTs with the same bearer, and nothing else gets in", async () => {
   const post = (authorization?: string) => new NextRequest("https://test/api/cron/recover", { method: "POST", headers: authorization ? { authorization } : {} });
   expect((await POST(post("Bearer cron-test-secret"))).status).toBe(200);
   expect(context).toHaveBeenCalledTimes(11);
-  vi.clearAllMocks(); githubAuth.mockResolvedValue(false);
+  vi.clearAllMocks(); githubAuth.mockResolvedValue("unauthorized");
   for (const authorization of [undefined, "Bearer wrong", "Bearer cron-test-secreT"]) expect((await POST(post(authorization))).status).toBe(401);
   expect(context).not.toHaveBeenCalled();
 });

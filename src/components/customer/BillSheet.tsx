@@ -274,7 +274,7 @@ export default function BillSheet({
               restaurantId={restaurant.id}
               currency={currency}
               couponOffered={!alreadyDiscounted && Boolean(restaurant.coupons_enabled)}
-              food={amounts.food}
+              food={Math.max(0, amounts.dishes)}
               coupon={coupon}
               onCoupon={setCoupon}
               tipPct={tipPct}
