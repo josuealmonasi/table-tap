@@ -88,7 +88,8 @@ export async function openDinerAttempt(stripe: Stripe, params: Stripe.Checkout.S
     // The quote acquired no scope. Sending it to Stripe would open a page
     // that the database refused to own, alongside the unresolved first one.
     await releaseFee(String(params.metadata?.fee_id ?? ""));
-    throw new DinerAttemptRejected("Could not open checkout attempt: paying");
+    // Another phone's page on these orders is being paid: the same answer as a busy scope.
+    throw new DinerScopeBusy("Could not open checkout attempt: paying");
   }
   if (error) {
     // A database timeout can also have committed. Only a SQL error proves
