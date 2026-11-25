@@ -8693,3 +8693,16 @@ to 2 L turned two packs for MX$100 into 4 L at MX$25/L. `record_purchase_v2` and
 `record_purchase_once_v3` compare it under the ingredient row lock (PT412, 409
 `apiErr.purchasePackChanged`, which now asks to reload), after answering a retry
 already saved. Check: `terminal-waste-pack-races.spec.ts`.
+
+### Daily digest eligibility, retries and stop links (2026-11-25)
+
+A removed manager or stopped outside address could remain in a queued batch.
+The worker now checks membership, opt-in and confirmation again before every
+send. With 101 addresses, an accepted first batch used to hide the refused
+last address. Delivery state now follows each batch and report date, so the
+worker can retry that address after midnight. An uncertain submission keeps
+its claim. Staff and outside subscriptions to the same normalized mailbox
+share one copy and one restaurant-scoped stop. Opting in renews the staff link
+version, and equivalent UUID spellings share one recipient resend quota.
+Check: `daily-digest.spec.ts`, `digest-schema.spec.ts`,
+`digest-stop.react-component.spec.tsx`, and `digest-resend.spec.ts`.

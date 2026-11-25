@@ -10,7 +10,7 @@ import { useT } from "@/lib/i18n/context";
  * (own-row RLS); email and password go through Supabase auth, which handles
  * them safely — an email change must be confirmed from the new inbox.
  */
-export function useProfile(userId: string) {
+export function useProfile(userId: string, saveDigestAction: (enabled: boolean) => Promise<boolean>) {
   const supabase = createClient();
   const toast = useToast();
   const t = useT();
@@ -62,8 +62,7 @@ export function useProfile(userId: string) {
   const saveDigest = useCallback(async (digest: boolean): Promise<boolean> => {
     setSaving(true);
     try {
-      const { error } = await supabase.auth.updateUser({ data: { digest } });
-      if (error) throw error;
+      if (!await saveDigestAction(digest)) throw new Error("Digest preference refused");
       toast(t("done.profileSaved"));
       return true;
     } catch {
@@ -72,7 +71,7 @@ export function useProfile(userId: string) {
     } finally {
       setSaving(false);
     }
-  }, [supabase, t, toast]);
+  }, [saveDigestAction, t, toast]);
 
   return { saving, saveName, saveEmail, savePassword, saveDigest };
 }
