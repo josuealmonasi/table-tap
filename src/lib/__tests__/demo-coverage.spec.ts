@@ -39,6 +39,7 @@ const NOT_DEMO_DATA = new Set([
   "rate_limits", // throttling counters
   "recovery_nonces", // replay protection for real scheduled calls
   "recovery_runs", // health of the real scheduler, never seeded
+  "cron_token_claims", // replay protection for verified GitHub tokens
   "menus",
   "categories",
   "menu_items",

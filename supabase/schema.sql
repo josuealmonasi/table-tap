@@ -15509,6 +15509,17 @@ alter table public.recovery_runs enable row level security;
 revoke all on recovery_nonces from anon, authenticated, public;
 revoke all on recovery_runs from anon, authenticated, public;
 grant select, insert, delete on public.recovery_nonces, public.recovery_runs to service_role;
+
+-- Claim verified GitHub recovery tokens once, including across concurrent requests.
+create table if not exists cron_token_claims (
+  jti text primary key,
+  claimed_at timestamptz not null default now(),
+  expires_at timestamptz not null
+);
+alter table public.cron_token_claims enable row level security;
+revoke all on cron_token_claims from anon, authenticated, public;
+grant select, insert, delete on public.cron_token_claims to service_role;
+
 revoke truncate, references, trigger on all tables in schema public from authenticated;
 create extension if not exists pg_cron;
 create extension if not exists pg_net;

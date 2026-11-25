@@ -8467,6 +8467,14 @@ GHSA-pc58-hwjq-p385 (cross-client response injection) and GHSA-7qx7-33qx-rqx2
 (SVG rejection bypass in the image optimiser), all fixed in 15.5.29. Next and
 eslint-config-next now pin 15.5.29, and the framework floor in
 `security-headers.spec.ts` rises to it, so a downgrade fails the unit tests.
+## A GitHub recovery token could start more than one run (2026-11-24)
+
+The route now claims the verified token's `jti` with a unique insert before
+starting recovery. Missing token IDs and duplicate claims return the usual
+401. A failed claim write returns 503 before any recovery jobs start. A
+successful claim also attempts to delete claims that expired over a day ago.
+Checks in `github-cron-auth.spec.ts` and `recovery/__tests__/route.spec.ts`
+cover claim handling and the route response.
 
 ### What the public and staff roles could reach directly (security sweep 2026-11-24)
 
