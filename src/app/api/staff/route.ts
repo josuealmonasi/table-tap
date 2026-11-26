@@ -10,6 +10,7 @@ import { logUserChange } from "@/lib/user-log";
 import { getPlan, allPlans } from "@/lib/plan-server";
 import { assignableRoles, cheapestWith, planLabel, type TeamRole } from "@/lib/plan";
 import { siteOrigin } from "@/lib/site-origin";
+import { normalizeEmail } from "@/lib/email";
 import { accountsOpenedBy, rotateAccountCodes, rotatePrintToken } from "@/lib/staff-removal";
 
 export const runtime = "nodejs";
@@ -50,9 +51,13 @@ export async function POST(req: NextRequest) {
 
   const body = await jsonBody<{ email?: string; role?: string }>(req);
   if (!body) return await apiError("apiErr.invalidRequest", 400);
-  const { email, role } = body;
+  const { role } = body;
+  // Stored as the login stores it: Auth lowercases the address, and the
+  // activity log names people by their login's address. A typed
+  // "Ana@Example.com" kept as typed never matched its own log rows.
+  const email = typeof body.email === "string" ? normalizeEmail(body.email) : null;
 
-  if (typeof email !== "string" || !/^\S+@\S+\.\S+$/.test(email)) {
+  if (email === null || !/^\S+@\S+\.\S+$/.test(email)) {
     return await apiError("apiErr.email", 400);
   }
   if (!role || !ROLES.includes(role)) {
