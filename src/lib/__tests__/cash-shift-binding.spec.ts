@@ -36,7 +36,7 @@ it("the till binds the receipt under the money lock, to the shift even if it clo
 
 it("the shift sum and the day's shifts count a bound receipt in its own shift, not by its time", () => {
   const totals = fn("cash_shift_totals");
-  expect(totals).toContain("p.cash_shift_id = s.id and p.created_at <= p_until");
+  expect(totals).toContain("p.cash_shift_id = s.id and coalesce(p.recorded_at, p.created_at) <= p_until");
   expect(totals).toContain("p.cash_shift_id is null and p.created_at between s.opened_at and s.until_at");
   expect(fn("cash_shifts_for_day")).toContain("p.cash_shift_id = s.id");
   // Added before the function that reads it, or the schema does not load.

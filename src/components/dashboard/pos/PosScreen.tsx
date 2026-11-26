@@ -154,6 +154,7 @@ export default function PosScreen({
     restaurant,
     collectorContext,
     collector,
+    cashShiftId: shiftOpen ? shiftId : undefined,
     cart,
     details,
     canEmailReceipt,

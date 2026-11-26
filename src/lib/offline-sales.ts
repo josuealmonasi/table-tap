@@ -46,6 +46,11 @@ export interface HeldSale {
   note?: string;
   terminalRef?: string;
   /**
+   * A cash sale: the shift this till had open when it was taken, which holds
+   * the money. Absent when none was open, and on sales held by older tills.
+   */
+  cashShiftId?: string;
+  /**
    * The currency it was charged in. Absent on a sale held by a till from
    * before this was recorded.
    */
@@ -147,7 +152,7 @@ export function replayBody(sale: HeldSale): Record<string, unknown> {
     skipTicketEmail: sale.skipTicketEmail,
     posRef: sale.posRef, restaurantId: sale.restaurantId, items: sale.items, method: sale.method,
     tipPct: sale.tipPct, tipAmount: sale.tipAmount, customerName: sale.customerName, note: sale.note,
-    terminalRef: sale.terminalRef, currency: sale.currency, collectorContext: sale.collectorContext, noReceipt: true,
+    terminalRef: sale.terminalRef, cashShiftId: sale.cashShiftId, currency: sale.currency, collectorContext: sale.collectorContext, noReceipt: true,
     offline: { at: sale.at, ...sale.charge, ...(sale.preparationPending !== undefined ? { preparationPending: sale.preparationPending } : {}) },
   };
 }

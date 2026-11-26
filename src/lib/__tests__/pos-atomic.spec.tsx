@@ -75,7 +75,7 @@ it("W1.1 keeps a committed offline sale when its response is lost", async () => 
   state.lost = true;
   await ringOffline(actor, body());
   expect(state.ops.filter(o => o.op === "delete")).toEqual([]);
-  expect(state.calls.map(c => c.name)).toEqual(["record_offline_sale_v2"]);
+  expect(state.calls.map(c => c.name)).toEqual(["record_offline_sale_v3"]);
   state.lost = false;
   const replay = await ringOffline(actor, body());
   expect(await replay.json()).toMatchObject({ orderId: id, total: 100, settled: true, repeat: true });
@@ -84,7 +84,7 @@ it("W1.1 keeps a committed offline sale when its response is lost", async () => 
 it("W1.6 commits offline stock and money in the same RPC", async () => {
   const res = await ringOffline(actor, body());
   expect(res.status).toBe(200);
-  expect(state.calls.map(c => c.name)).toEqual(["record_offline_sale_v2"]);
+  expect(state.calls.map(c => c.name)).toEqual(["record_offline_sale_v3"]);
   expect(state.calls[0].args.p_demand).toEqual([{ item_id: "x", qty: 1 }]);
   expect(state.ops.filter(o => o.op === "insert")).toEqual([]);
 });
@@ -146,7 +146,7 @@ it("a replay records the lines as sold and takes a combo's parts from stock", as
   const items = [{ itemId: "promo-1", name: "Combo", price: 90, qty: 2, mods: {}, emoji: "", comboId: "promo-1",
     components: [{ itemId: "burger", name: "Burger", emoji: "", qty: 1 }, { itemId: "fries", name: "Fries", emoji: "", qty: 1 }] }];
   await ringOffline(actor, { ...body(), posRef: crypto.randomUUID(), items }, { reason: "Original combo receipt verified" });
-  const args = state.calls.find(c => c.name === "record_offline_sale_v2")?.args as { p_order: { items: { price: number }[] }; p_demand: unknown };
+  const args = state.calls.find(c => c.name === "record_offline_sale_v3")?.args as { p_order: { items: { price: number }[] }; p_demand: unknown };
   expect(args.p_order.items[0].price).toBe(90);
   expect(args.p_demand).toEqual(expect.arrayContaining([
     expect.objectContaining({ item_id: "burger", qty: 2 }), expect.objectContaining({ item_id: "fries", qty: 2 }),

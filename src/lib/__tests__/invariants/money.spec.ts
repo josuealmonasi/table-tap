@@ -151,7 +151,7 @@ describe("every route that settles an order records the payment", () => {
     expect(src, "the till writes the ledger outside settle_sale").not.toMatch(/recordPayments?\(/);
     expect(src, "the till inserts outside its transaction").not.toMatch(/\.insert\(/);
     const offline = read("src/lib/pos-offline.ts");
-    expect(offline).toMatch(/rpc\("record_offline_sale_v2"/);
+    expect(offline).toMatch(/rpc\("record_offline_sale_v3"/);
     expect(offline, "offline stock is still a second request").not.toMatch(/rpc\("take_stock_floor"/);
     const schema = read("supabase/schema.sql");
     expect(schema).toContain("v_ticket := public.ring_pos_sale_v2(p_restaurant");
