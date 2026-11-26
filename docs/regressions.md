@@ -9208,3 +9208,49 @@ still throws, so a hung page is never read as "no dialog". Readiness
 timeouts are still not retried. Checks: `browser-ready.spec.ts` ("lets the
 last sample of a window answer…", "still fails a page that never stops
 changing", and the hung-sample case for an optional window).
+
+### Order paths are inventoried; prices agree across paths (2026-11-26)
+
+Almost every bug in the 2026-11-26 reviews was one rule enforced separately
+on several paths with one path missing it: coupons judged on dishes on the
+diner path but on dishes plus service on the staff path; the sitting lock on
+the waiter's round but not on the diner's pay-later; plan gates missing on a
+few desk writes. Two guards now make that drift fail a test.
+
+**Order creation inventory** (`invariants/order-creation.spec.ts`, list in
+`invariants/order-paths.ts`). It finds, from the source alone, every SQL
+function that inserts into `orders` (directly or by calling one that does),
+every file that inserts directly or names one of those functions, and every
+API route whose import closure reaches such a file. All three must match the
+list. Each listed path decides nine preconditions — not suspended, not
+closing, plan allows the channel, menu open, item available, a plain line is
+not an extra (`is_addon`), prices verified (`verifiedLines`/`priceCart`, or
+the offline repricing), stock reserved, and an open sitting under lock for
+table orders — as `enforced` (grep-level probes on the route, the helpers it
+imports and the SQL bodies must all pass), `expected-gap` (a known hole: a
+probe must fail, so the test goes red when the fix lands) or `exempt` (with
+the reason). It also checks no order-creating function is executable by a
+browser role. Known gaps at the time of writing: the diner's table order is
+not saved under the sitting's lock (claude/diner-paylater-guard), and plain
+cart lines do not check `is_addon` (claude/coupon-base-addon).
+
+To add a path: add the route to `ORDER_PATHS` and any new SQL function to
+`ORDER_SQL` (entry, internal or legacy), and decide all nine preconditions.
+A route that reaches a writer but cannot create (pos/upload queues only) is
+listed too, with a probe that proves it cannot.
+
+**Cross-path price parity** (`invariants/price-parity.spec.ts`). Eleven fixed
+carts (plain, an extra, 2x1, a 3x2 tie, item discount plus a deal, a combo,
+coupon minimums met and missed, service and tip) go through `verifiedLines`
+and then every pricing entry point the routes call: `priceCart` as checkout,
+the till and the waiter round call it, `checkoutOrderRow` and
+`checkoutLineItems` (Stripe), `currentOfflinePrice`/`sameOfflinePrice`,
+`tableBill`/`billAmounts`, `sharesFor`, and the staff coupon base
+(`discountableOrders`/`billTotal`). Dish subtotal, discounts, coupon base, tip
+and total must agree wherever paths are meant to agree. Encoded differences:
+the till never takes a coupon; the waiter round has no tip; a coupon applied
+at payment does not re-price the service already charged on the stored
+order, so the bill total exceeds the checkout total by that service. The
+staff coupon base including service is marked `expected-gap`. To add a
+pricing path: call it in the per-cart test with the arguments its route
+passes, and assert what it must agree with.
