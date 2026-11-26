@@ -50,7 +50,7 @@ it("suspends with the reason and who did it, and writes it in the restaurant's l
 it("refuses to suspend twice, and to lift what is not suspended", async () => {
   await setSuspension(fakeDb(), "r1", { reason: "abuse" }, "a@x.dev");
   expect(await setSuspension(fakeDb(), "r1", { reason: "abuse" }, "a@x.dev")).toEqual({ ok: false, error: "apiErr.alreadySuspended", status: 409 });
-  await setSuspension(fakeDb(), "r1", null, "a@x.dev");
+  await setSuspension(fakeDb(), "r1", null, "a@x.dev", row.suspended_at as string);
   expect(row).toMatchObject({ suspended_at: null, suspended_reason: null, suspended_by: null });
   expect(await setSuspension(fakeDb(), "r1", null, "a@x.dev")).toEqual({ ok: false, error: "apiErr.notSuspended", status: 409 });
 });
@@ -68,7 +68,7 @@ it("a delayed lift does not clear a newer suspension applied after its read (rev
   row = suspendedAt(A);
   // Another admin lifts A and applies B while this lift is in flight.
   between = () => Object.assign(row, suspendedAt(B, "non_payment"));
-  expect(await setSuspension(fakeDb(), "r1", null, "slow@x.dev")).toEqual({ ok: false, error: "apiErr.suspensionChangedMeanwhile", status: 409 });
+  expect(await setSuspension(fakeDb(), "r1", null, "slow@x.dev", A)).toEqual({ ok: false, error: "apiErr.suspensionChangedMeanwhile", status: 409 });
   expect(row).toMatchObject({ suspended_at: B, suspended_reason: "non_payment" });
   expect(logged).toEqual([]);
 });
@@ -80,6 +80,13 @@ it("a lift for the suspension the admin saw refuses a different one, and lifts t
   // The same instant in another notation is the same suspension.
   expect(await setSuspension(fakeDb(), "r1", null, "a@x.dev", "2026-11-25T10:05:00.654Z")).toEqual({ ok: true });
   expect(row).toMatchObject({ suspended_at: null, suspended_reason: null, suspended_by: null });
+});
+
+it("a lift that names no suspension clears nothing (admin recheck, stale-lift guard)", async () => {
+  row = suspendedAt(A);
+  expect(await setSuspension(fakeDb(), "r1", null, "a@x.dev")).toEqual({ ok: false, error: "apiErr.suspensionChangedMeanwhile", status: 409 });
+  expect(row).toMatchObject({ suspended_at: A, suspended_reason: "abuse" });
+  expect(logged).toEqual([]);
 });
 
 it("has the reload message in both languages", async () => {

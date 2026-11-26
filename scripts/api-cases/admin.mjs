@@ -205,8 +205,10 @@ export function adminOwnerCases(fx) {
       expect: [401, 403] },
     { name: "GET /api/admin/restaurants/usage", as: "platformAdmin", method: "GET",
       path: `/api/admin/restaurants/usage?id=${r}`, expect: [200],
-      check: d => Number.isInteger(d.staff) && Number.isInteger(d.last30?.orders) && Number.isInteger(d.month?.orders)
-        || "usage figures missing" },
+      check: async (d, f) => {
+        if (!(Number.isInteger(d.staff) && Number.isInteger(d.last30?.orders) && Number.isInteger(d.month?.orders))) return "usage figures missing";
+        return await viewAudited(f, r, "usage");
+      } },
     { name: "GET /api/admin/restaurants/usage (owner refused)", as: "owner", method: "GET",
       path: `/api/admin/restaurants/usage?id=${r}`, expect: [403] },
     // A platform admin moves a restaurant to another plan, and its team with
@@ -266,10 +268,15 @@ export function adminOwnerCases(fx) {
         const { data } = await f.admin.from("restaurants").select("suspended_at, suspended_reason").eq("id", r).single();
         if (!data?.suspended_at || data.suspended_reason !== "owner_request") return "the restaurant was not suspended";
         const res = await fetch(f.base + "/api/admin/restaurants/suspend", { method: "DELETE",
-          headers: { "Content-Type": "application/json", cookie: f.who.platformAdmin }, body: JSON.stringify({ id: r }) });
+          headers: { "Content-Type": "application/json", cookie: f.who.platformAdmin },
+          body: JSON.stringify({ id: r, suspendedAt: data.suspended_at }) });
         const { data: after } = await f.admin.from("restaurants").select("suspended_at").eq("id", r).single();
         return (res.status === 200 && after?.suspended_at === null) || `lifting answered ${res.status}`;
       } },
+    // A lift must name the suspension the admin saw; without it nothing is cleared.
+    { name: "DELETE /api/admin/restaurants/suspend (no suspendedAt refused)", as: "platformAdmin", method: "DELETE",
+      path: "/api/admin/restaurants/suspend", body: { id: r }, expect: [400],
+      expectError: /qué suspensión estás viendo|which suspension you are looking at/i },
     { name: "POST /api/admin/restaurants/suspend (an owner refused)", as: "owner", method: "POST",
       path: "/api/admin/restaurants/suspend", body: { id: r, reason: "abuse" }, expect: [403] },
     { name: "POST /api/admin/restaurants/suspend (unknown reason refused)", as: "platformAdmin", method: "POST",
@@ -325,7 +332,8 @@ export function adminOwnerCases(fx) {
       check: async (_d, f) => {
         const res = await fetch(`${f.base}/api/admin/restaurants/notes?id=${r}`, { headers: { cookie: f.who.platformAdmin } });
         const { notes } = await res.json();
-        return notes?.some(n => n.body.startsWith("apicheck note")) || "the note was not read back";
+        if (!notes?.some(n => n.body.startsWith("apicheck note"))) return "the note was not read back";
+        return await viewAudited(f, r, "notes");
       } },
     { name: "GET  /api/admin/restaurants/notes (an owner refused)", as: "owner", method: "GET",
       path: `/api/admin/restaurants/notes?id=${r}`, expect: [403] },
@@ -351,4 +359,16 @@ export function adminOwnerCases(fx) {
       path: "/api/admin/restaurants", body: async f => ({ id: f.restaurant.id }),
       expect: [401, 403] },
   ];
+}
+
+// An admin read of a restaurant's figures or notes leaves a restaurant.view
+// audit row naming the view, and none of what was read.
+async function viewAudited(f, restaurant, view) {
+  const since = new Date(Date.now() - 60_000).toISOString();
+  const { data, error } = await f.admin.from("platform_admin_audit").select("outcome, after_facts")
+    .eq("target_id", restaurant).eq("action", "restaurant.view").gte("created_at", since);
+  if (error) return "could not read the audit";
+  return data.some(row => row.outcome === "succeeded" && row.after_facts?.view === view
+    && Object.keys(row.after_facts).every(key => key === "view" || key === "read_only"))
+    || `the ${view} read left no restaurant.view audit row`;
 }
