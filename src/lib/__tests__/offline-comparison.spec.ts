@@ -1,13 +1,13 @@
 import { beforeEach, expect, it, vi } from "vitest";
 import type { QueuedOfflineSale } from "@/lib/offline-review";
-const state = vi.hoisted(() => ({ missing: false, failed: false, restaurantCurrency: "MXN", restaurants: [] as string[], menu: [] as string[] }));
+const state = vi.hoisted(() => ({ addon: false, missing: false, failed: false, restaurantCurrency: "MXN", restaurants: [] as string[], menu: [] as string[] }));
 vi.mock("@/lib/promotions-on-sale", () => ({ promotionsOnSale: async () => [] }));
 vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({ from: (table: string) => {
   const q: Record<string, unknown> = {};
   for (const key of ["select", "in"]) q[key] = () => q;
   q.eq = (key: string, value: string) => { if (table === "restaurants" && key === "id") state.restaurants.push(value); if (table === "menu_items" && key === "restaurant_id") state.menu.push(value); return q; };
   const result = () => ({ data: table === "restaurants" ? { currency: state.restaurantCurrency, service_pct: 10, service_enabled: true }
-    : state.missing ? [] : [{ id: "dish", name: "Dish", emoji: "", price: 100, available: false, discount_pct: 0, modifiers: null, category_id: null }],
+    : state.missing ? [] : [{ id: "dish", name: "Dish", emoji: "", price: 100, available: false, discount_pct: 0, modifiers: null, category_id: null, is_addon: state.addon }],
     error: state.failed ? { message: "offline" } : null });
   q.single = async () => result();
   q.then = (resolve: (value: unknown) => unknown) => Promise.resolve(result()).then(resolve);
@@ -19,7 +19,7 @@ const sale: QueuedOfflineSale = { pos_ref: "sale", collector: "cashier@example.c
   reason: "apiErr.offlineApproval", approved_by: null, approved_at: null, body: { method: "cash", tipAmount: 5,
     items: [{ itemId: "dish", name: "Dish", emoji: "", price: 80, qty: 1, mods: {} }],
     offline: { at: "2026-10-20T12:00:00Z", subtotal: 80, serviceFee: 8, tip: 5, discount: 0, total: 93 } } };
-beforeEach(() => { state.missing = false; state.failed = false; state.restaurantCurrency = "MXN"; state.restaurants = []; state.menu = []; });
+beforeEach(() => { state.addon = false; state.missing = false; state.failed = false; state.restaurantCurrency = "MXN"; state.restaurants = []; state.menu = []; });
 it("compares the stored receipt against server menu prices and service, including sold-out dishes", async () => {
   const before = JSON.stringify(sale);
   const comparison = await compareOfflineSale(createAdminClient(), "r", sale);
@@ -36,5 +36,9 @@ it("reports no comparison for missing products, failed reads, unknown currency o
   state.failed = false;
   expect(await compareOfflineSale(createAdminClient(), "r", { ...sale, currency: null })).toBeNull();
   state.restaurantCurrency = "USD";
+  expect(await compareOfflineSale(createAdminClient(), "r", sale)).toBeNull();
+});
+it("treats a held sale with an extra rung alone as the online till would: no price, so a manager decides", async () => {
+  state.addon = true;
   expect(await compareOfflineSale(createAdminClient(), "r", sale)).toBeNull();
 });

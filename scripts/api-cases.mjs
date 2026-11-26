@@ -22,6 +22,7 @@ import { dinerCases } from "./api-cases/diner.mjs";
 import { loyaltyCases } from "./api-cases/loyalty.mjs";
 import { splitsCases } from "./api-cases/splits.mjs";
 import { checkoutCardCases, checkoutCounterCases, checkoutPlanCases, billPayCases } from "./api-cases/checkout.mjs";
+import { dinerPayLaterCases } from "./api-cases/diner-paylater.mjs";
 import { cashCases } from "./api-cases/cash.mjs";
 import { ingredientsCases } from "./api-cases/ingredients.mjs";
 import { inventoryCases } from "./api-cases/inventory.mjs";
@@ -62,6 +63,7 @@ export function cases(fx) {
     ...inventoryCases(fx),
     ...refundDueCases(fx),
     ...checkoutCounterCases(fx),
+    ...dinerPayLaterCases(fx),
     ...notificationsCases(fx),
     ...orderBoardCases(fx),
     ...paymentCounterCases(fx),

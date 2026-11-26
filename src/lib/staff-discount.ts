@@ -1,5 +1,6 @@
 import type { Order } from "@/lib/types";
 import { round2 } from "@/lib/money";
+import { couponBase, dishesOf } from "@/lib/coupon-base";
 
 /**
  * A discount the floor applies to a bill that is already open.
@@ -44,11 +45,6 @@ export function discountableOrders(orders: Order[]): Order[] {
   );
 }
 
-/** Eligible principal before the discount; gratuities stay owed in full. */
-export function billTotal(orders: Order[]): number {
-  return round2(orders.reduce((sum, o) => sum + Math.max(0, Number(o.total) - Number(o.tip ?? 0)), 0));
-}
-
 /**
  * Splits `amount` across the orders in proportion to what each is worth.
  *
@@ -56,14 +52,15 @@ export function billTotal(orders: Order[]): number {
  * total below zero: a bill can be reduced to nothing, but not past it.
  */
 export function spreadDiscount(orders: Order[], amount: number): DiscountShare[] {
-  const total = billTotal(orders);
+  // Spread on the dishes alone: service and gratuities stay owed in full.
+  const total = couponBase(orders);
   if (orders.length === 0 || amount <= 0 || total <= 0) {
     return orders.map(o => ({ orderId: o.id, amount: 0, total: round2(Number(o.total)) }));
   }
 
   const capped = Math.min(round2(amount), total);
   const shares = orders.map(o => {
-    const own = Math.max(0, Number(o.total) - Number(o.tip ?? 0));
+    const own = dishesOf(o);
     return {
       orderId: o.id,
       amount: round2((capped * own) / total),
@@ -80,7 +77,7 @@ export function spreadDiscount(orders: Order[], amount: number): DiscountShare[]
 
   return shares.map((share, i) => {
     const own = Number(orders[i].total);
-    const amount = Math.min(share.amount, Math.max(0, own - Number(orders[i].tip ?? 0)));
+    const amount = Math.min(share.amount, dishesOf(orders[i]));
     return { orderId: share.orderId, amount, total: round2(own - amount) };
   });
 }

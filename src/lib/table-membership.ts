@@ -29,11 +29,15 @@ export interface JoinState {
  * v3: a waiting phone keeps its slot only while it polls. One left unseen for
  * `PENDING_PHONE_MINUTES` is purged, so a copied QR cannot hold the five
  * slots of the queue for the rest of the sitting (Codex review bl40, finding 2).
+ *
+ * v4: the phone let in that way is marked `auto_approved`. Its card order may
+ * never be paid, so it may not put food on the bill until the sitting has a
+ * paid order (`diner_pay_later_refusal_v1`, 2026-11-26).
  */
 export async function requestTableMember(
   restaurantId: string, tableId: string, hash: string, open = false, firstApproved = true,
 ): Promise<JoinState> {
-  const { data, error } = await createAdminClient().rpc("request_table_member_v3", {
+  const { data, error } = await createAdminClient().rpc("request_table_member_v4", {
     p_restaurant: restaurantId, p_table: tableId, p_hash: hash, p_open: open, p_first_approved: firstApproved,
   });
   if (error || !data) throw new Error("Could not join the table");

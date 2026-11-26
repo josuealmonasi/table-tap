@@ -271,7 +271,7 @@ describe("a sitting lasts as long in SQL as in the app", () => {
     // a sitting the bill no longer shows, or kept out of one it still owes on.
     const hours = Number(/export const OPEN_BILL_HOURS = (\d+);/.exec(read("src/lib/table-bill.ts"))?.[1]);
     expect(hours, "OPEN_BILL_HOURS moved").toBeGreaterThan(0);
-    for (const name of ["request_table_member", "decide_table_member"]) {
+    for (const name of ["request_table_member", "decide_table_member", "request_table_member_v4", "decide_table_member_v2"]) {
       const start = schema.indexOf(`create or replace function public.${name}(`);
       expect(start, name).toBeGreaterThan(-1);
       const body = schema.slice(start, schema.indexOf("$$;", schema.indexOf("$$", start) + 2));

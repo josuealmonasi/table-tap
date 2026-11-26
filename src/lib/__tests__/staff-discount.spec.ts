@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { billTotal, discountableOrders, spreadDiscount } from "@/lib/staff-discount";
+import { discountableOrders, spreadDiscount } from "@/lib/staff-discount";
+import { couponBase } from "@/lib/coupon-base";
 import { matchesBill, openBills } from "@/lib/open-bills";
 import type { Order } from "@/lib/types";
 
@@ -73,7 +74,7 @@ describe("spreading a discount across a table's orders", () => {
   });
 
   it("totals a bill across its orders", () => {
-    expect(billTotal([order("a", 10.005), order("b", 10.005)])).toBe(20.01);
+    expect(couponBase([order("a", 10.005), order("b", 10.005)])).toBe(20.01);
   });
 });
 

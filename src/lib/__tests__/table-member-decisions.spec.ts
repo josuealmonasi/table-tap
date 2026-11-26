@@ -25,7 +25,7 @@ it.each(["owner", "manager", "cashier", "waiter"])("lets %s approve or reject th
   state.role = role;
   expect((await PATCH(request())).status).toBe(200);
   expect((await PATCH(request(false))).status).toBe(200);
-  expect(state.rpc).toHaveBeenLastCalledWith("decide_table_member", expect.objectContaining({ p_approve: false, p_restaurant: r, p_table: t, p_staff: "staff@test", p_hash: null }));
+  expect(state.rpc).toHaveBeenLastCalledWith("decide_table_member_v2", expect.objectContaining({ p_approve: false, p_restaurant: r, p_table: t, p_staff: "staff@test", p_hash: null }));
 });
 it("never lets a kitchen login approve, even when the body claims owner", async () => {
   state.role = "kitchen";
@@ -41,7 +41,7 @@ it("lets an approved phone decide through its credential, without claiming a sta
   state.member = true;
   state.role = "kitchen";
   expect((await PATCH(request())).status).toBe(200);
-  expect(state.rpc).toHaveBeenCalledWith("decide_table_member", expect.objectContaining({ p_member: memberId, p_staff: null, p_hash: expect.stringMatching(/^[0-9a-f]{64}$/) }));
+  expect(state.rpc).toHaveBeenCalledWith("decide_table_member_v2", expect.objectContaining({ p_member: memberId, p_staff: null, p_hash: expect.stringMatching(/^[0-9a-f]{64}$/) }));
 });
 it("does not report success for a decision on a closed or already-decided request", async () => {
   state.rpc.mockResolvedValueOnce({ data: false });

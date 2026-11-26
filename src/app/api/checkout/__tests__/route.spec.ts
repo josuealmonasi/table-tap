@@ -30,7 +30,13 @@ const step = {
   openCard: vi.fn(async () => ({ id: "cs_1", url: "https://stripe.test/cs_1" })),
   logCoupon: vi.fn(async () => undefined),
   saveSession: vi.fn(async () => ({ error: null })),
+  /** `create_diner_order_v1`: a table order under its sitting's lock. Answers as insertOrder unless told otherwise. */
+  dinerInsert: vi.fn<(args: Record<string, unknown>) => Promise<{ data: unknown; error: unknown }>>(async (): Promise<{ data: unknown; error: unknown }> => {
+    const r: { data: { id: string } | null; error: unknown } = await step.insertOrder();
+    return { data: r.data ? { orderId: r.data.id } : null, error: r.error };
+  }),
 };
+const dinerInsertDefault = step.dinerInsert.getMockImplementation()!;
 const releaseCoupon = vi.fn<(id: string) => Promise<void>>(async () => undefined);
 const releaseStock = vi.fn<(restaurantId: string, lines: unknown) => Promise<void>>(async () => undefined);
 const deleteOrder = vi.fn(async () => ({ error: null }));
@@ -104,7 +110,8 @@ vi.mock("@/lib/checkout/cart-error", () => ({
 }));
 vi.mock("@/lib/supabase/admin", () => ({
   createAdminClient: () => ({
-    rpc: () => step.counterFull(),
+    rpc: (name: string, args: Record<string, unknown>) =>
+      name === "create_diner_order_v1" ? step.dinerInsert(args) : step.counterFull(),
     from: (table: string) => {
       if (table === "notifications") {
         const filters: Record<string, unknown> = {};
@@ -171,6 +178,7 @@ beforeEach(() => {
   step.openCard.mockImplementation(async () => ({ id: "cs_1", url: "https://stripe.test/cs_1" }));
   step.logCoupon.mockImplementation(async () => undefined);
   step.saveSession.mockImplementation(async () => ({ error: null }));
+  step.dinerInsert.mockImplementation(dinerInsertDefault);
 });
 
 describe("a suspended restaurant", () => {
@@ -387,5 +395,73 @@ describe("never charges more than the diner reviewed (A2, end-to-end review)", (
     const res = await checkout({ reviewedTotal: 1_000_000 });
     expect(res.status).not.toBe(409);
     expect(step.insertOrder).toHaveBeenCalled();
+  });
+});
+
+describe("a diner's table order goes in under its sitting's lock (2026-11-26)", () => {
+  it("passes the member and the payment mode to the locked writer", async () => {
+    expect((await checkout({ payLater: true })).status).toBe(200);
+    expect(step.dinerInsert).toHaveBeenCalledWith(expect.objectContaining({
+      p_restaurant: "r1", p_member: "member-1", p_deferred: true,
+      p_order: expect.objectContaining({ session_id: "sitting-1", stock_reservation_id: "reservation-1", status: "received" }),
+    }));
+  });
+  it("sends a card order at a table through the same lock, not pay-later rules", async () => {
+    expect((await checkout()).status).toBe(200);
+    expect(step.dinerInsert).toHaveBeenCalledWith(expect.objectContaining({ p_deferred: false }));
+  });
+  it.each([
+    ["payLaterNeedsStaff", 409, "apiErr.payLaterNeedsStaff"],
+    ["sittingPayLaterFull", 409, "apiErr.tablePayLaterFull"],
+    ["sittingClosed", 409, "apiErr.tableBillClosedScan"],
+    ["notMember", 403, "apiErr.tableJoin"],
+  ])("answers %s and gives the stock and the coupon back", async (refusal, status, key) => {
+    step.dinerInsert.mockResolvedValueOnce({ data: { [refusal]: true }, error: null });
+    const response = await checkout({ payLater: true });
+    expect(response.status).toBe(status);
+    expect(await response.json()).toEqual({ error: key });
+    expect(releaseStock).toHaveBeenCalledOnce();
+    expect(releaseCoupon).toHaveBeenCalledOnce();
+    expect(step.notify).not.toHaveBeenCalled();
+    expect(step.logCoupon).not.toHaveBeenCalled();
+  });
+  it("refuses a card order onto a just-closed sitting before Stripe is asked", async () => {
+    step.dinerInsert.mockResolvedValueOnce({ data: { sittingClosed: true }, error: null });
+    const response = await checkout();
+    expect(response.status).toBe(409);
+    expect(await response.json()).toEqual({ error: "apiErr.tableBillClosedScan" });
+    expect(step.openCard).not.toHaveBeenCalled();
+    expect(deleteOrder).not.toHaveBeenCalled();
+    expect(releaseStock).toHaveBeenCalledOnce();
+    expect(releaseCoupon).toHaveBeenCalledOnce();
+  });
+  it("keeps counter orders on the plain insert", async () => {
+    expect((await checkout({ tableId: null, payLater: true })).status).toBe(200);
+    expect(step.dinerInsert).not.toHaveBeenCalled();
+    expect(step.insertOrder).toHaveBeenCalledOnce();
+  });
+});
+
+describe("a diner's referenced table order names its member to the atomic writer (2026-11-26)", () => {
+  const ref = "00000000-0000-4000-8000-0000000000f2";
+  it("asks for the locked diner writer at a table and the counter writer without one", async () => {
+    expect((await checkout({ payLater: true, ref })).status).toBe(200);
+    expect(step.intent).toHaveBeenLastCalledWith(expect.anything(), expect.objectContaining({ dinerMember: "member-1" }));
+    expect((await checkout({ tableId: null, payLater: true, ref })).status).toBe(200);
+    expect(step.intent).toHaveBeenLastCalledWith(expect.anything(), expect.objectContaining({ dinerMember: undefined }));
+  });
+  it.each([
+    ["payLaterNeedsStaff", "apiErr.payLaterNeedsStaff"],
+    ["sittingPayLaterFull", "apiErr.tablePayLaterFull"],
+    ["sittingClosed", "apiErr.tableBillClosedScan"],
+  ])("answers %s with nothing kept and no order claimed", async (refusal, key) => {
+    step.intent.mockResolvedValueOnce({ [refusal]: true } as never);
+    const response = await checkout({ payLater: true, ref });
+    expect(response.status).toBe(409);
+    expect(await response.json()).toEqual({ error: key });
+    // The writer rolled back its own stock and coupon; the route held neither.
+    expect(releaseCoupon).not.toHaveBeenCalled();
+    expect(releaseStock).not.toHaveBeenCalled();
+    expect(step.notify).not.toHaveBeenCalled();
   });
 });

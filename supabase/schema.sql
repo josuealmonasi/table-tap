@@ -17652,3 +17652,336 @@ end;
 $$;
 revoke all on function public.record_offline_sale_v3(uuid,uuid,jsonb,text,text,timestamptz,text,jsonb,text,text,text,text,text,uuid) from public,anon,authenticated;
 grant execute on function public.record_offline_sale_v3(uuid,uuid,jsonb,text,text,timestamptz,text,jsonb,text,text,text,text,text,uuid) to service_role;
+
+-- ── Diner pay-later: who let the phone in, and an open sitting (2026-11-26) ──
+-- The phone that opens an empty table is let in without staff only when its
+-- order is paid by card. That order could be abandoned on Stripe's page, and
+-- the approval stayed: the same cookie then sent unlimited pay-later orders to
+-- the kitchen. `auto_approved` remembers that nobody vouched for the phone; it
+-- may order on the bill only once the sitting has a paid order. A phone it
+-- admits inherits the flag, so a second cookie of the same person gains
+-- nothing; a staff decision clears it.
+alter table table_session_members add column if not exists auto_approved boolean not null default false;
+
+-- v4: v3 plus `auto_approved` on the phone that opened the sitting unaided.
+create or replace function public.request_table_member_v4(
+  p_restaurant uuid, p_table uuid, p_hash text, p_open boolean, p_first_approved boolean
+) returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  v_session uuid;
+  v_created boolean := false;
+  v_known boolean;
+  v_member table_session_members%rowtype;
+begin
+  if p_hash is null or p_hash !~ '^[0-9a-f]{64}$' then raise exception 'Invalid member credential'; end if;
+  perform 1 from restaurant_tables where id = p_table and restaurant_id = p_restaurant for update;
+  if not found then raise exception 'Table not found'; end if;
+  if p_open then
+    update table_sessions set closed_at = now(), close_reason = 'expired'
+      where table_id = p_table and restaurant_id = p_restaurant and closed_at is null
+        and opened_at < now() - interval '8 hours';
+  end if;
+  select id into v_session from table_sessions
+    where table_id = p_table and restaurant_id = p_restaurant and closed_at is null
+      and opened_at >= now() - interval '8 hours';
+  if v_session is null and not p_open then
+    return jsonb_build_object('status', 'empty', 'sessionId', null, 'diner', null);
+  end if;
+  if v_session is null then
+    insert into table_sessions(restaurant_id, table_id) values (p_restaurant, p_table)
+      on conflict do nothing returning id into v_session;
+    v_created := v_session is not null;
+    if v_session is null then
+      select id into v_session from table_sessions
+        where table_id = p_table and restaurant_id = p_restaurant and closed_at is null;
+    end if;
+  end if;
+  if v_session is null then raise exception 'Could not open sitting'; end if;
+  update table_session_members set seen_at = now()
+    where session_id = v_session and token_hash = p_hash and status = 'pending';
+  delete from table_session_members
+    where session_id = v_session and status = 'pending'
+      and coalesce(seen_at, created_at) < now() - interval '10 minutes';
+  select * into v_member from table_session_members where session_id = v_session and token_hash = p_hash;
+  v_known := found;
+  if not v_known and not v_created and
+    (select count(*) from table_session_members where session_id = v_session and status = 'pending') >= 5 then
+    return jsonb_build_object('status', 'full', 'sessionId', v_session, 'diner', null);
+  end if;
+  insert into table_session_members(session_id, token_hash, status, decided_at, seen_at, auto_approved)
+    values (v_session, p_hash, case when v_created and p_first_approved then 'approved' else 'pending' end,
+      case when v_created and p_first_approved then now() else null end, now(), v_created and p_first_approved)
+    on conflict (session_id, token_hash) do nothing;
+  select * into strict v_member from table_session_members where session_id = v_session and token_hash = p_hash;
+  return jsonb_build_object('status', v_member.status, 'sessionId', v_session, 'diner', v_member.id);
+end; $$;
+revoke all on function public.request_table_member_v4(uuid, uuid, text, boolean, boolean) from public, anon, authenticated;
+grant execute on function public.request_table_member_v4(uuid, uuid, text, boolean, boolean) to service_role;
+
+-- v2: as decide_table_member, and the admitted phone carries its approver's
+-- `auto_approved`; a staff decision vouches for it (false).
+create or replace function public.decide_table_member_v2(
+  p_member uuid, p_restaurant uuid, p_table uuid, p_approve boolean,
+  p_staff text, p_hash text
+) returns boolean language plpgsql security definer set search_path = public as $$
+declare v_session uuid; v_unvouched boolean := false;
+begin
+  select s.id into v_session from table_sessions s join table_session_members m on m.session_id = s.id
+    where m.id = p_member and s.restaurant_id = p_restaurant and s.table_id = p_table
+      and s.closed_at is null and s.opened_at >= now() - interval '8 hours' for update of s;
+  if v_session is null then return false; end if;
+  if p_staff is null then
+    select auto_approved into v_unvouched from table_session_members
+      where session_id = v_session and token_hash = p_hash and status = 'approved';
+    if not found then return false; end if;
+  end if;
+  update table_session_members set status = case when p_approve then 'approved' else 'rejected' end,
+    decided_at = now(), decided_by = coalesce(p_staff, 'member'), auto_approved = coalesce(v_unvouched, false)
+    where id = p_member and session_id = v_session and status = 'pending';
+  return found;
+end; $$;
+revoke all on function public.decide_table_member_v2(uuid, uuid, uuid, boolean, text, text) from public, anon, authenticated;
+grant execute on function public.decide_table_member_v2(uuid, uuid, uuid, boolean, text, text) to service_role;
+
+-- Why this member may not put another order on the bill, or null. Called under
+-- the restaurant's money lock and the sitting's share lock, so two phones at
+-- once cannot both pass the ceiling.
+create or replace function public.diner_pay_later_refusal_v1(
+  p_restaurant uuid, p_session uuid, p_member uuid
+) returns text language sql stable security definer set search_path = public as $$
+  select case
+    when not exists (select 1 from table_session_members
+      where id = p_member and session_id = p_session and status = 'approved') then 'notMember'
+    when exists (select 1 from table_session_members where id = p_member and auto_approved)
+      and not exists (select 1 from orders where restaurant_id = p_restaurant and session_id = p_session
+        and paid and status <> 'cancelled') then 'payLaterNeedsStaff'
+    when (select count(*) from orders where restaurant_id = p_restaurant and session_id = p_session
+        and diner is not null and not paid and not written_off
+        and status not in ('cancelled', 'pending_payment')) >= 15 then 'sittingPayLaterFull'
+  end;
+$$;
+revoke all on function public.diner_pay_later_refusal_v1(uuid, uuid, uuid) from public, anon, authenticated;
+grant execute on function public.diner_pay_later_refusal_v1(uuid, uuid, uuid) to service_role;
+
+-- A diner's pay-later order with a retry reference, saved only into an open
+-- sitting and only for a member who may order on the bill. A replay answers
+-- first, as create_table_order_intent_v2 does; then the sitting is held FOR
+-- SHARE while create_order_intent writes stock, coupon and ticket together.
+create or replace function public.create_diner_order_intent_v1(
+  p_restaurant uuid, p_ref uuid, p_scope text, p_order jsonb, p_demand jsonb,
+  p_inventory boolean, p_threshold int, p_coupon jsonb, p_member uuid
+) returns jsonb language plpgsql security definer set search_path = public as $$
+declare v_result jsonb; v_session uuid := (p_order->>'session_id')::uuid; v_refusal text;
+begin
+  perform public.lock_restaurant_money(p_restaurant);
+  perform pg_advisory_xact_lock(hashtextextended(p_restaurant::text || p_ref::text, 20));
+  v_result := public.order_intent_result(p_restaurant, p_ref, p_scope);
+  if v_result is not null then return v_result; end if;
+  if v_session is null or p_order->>'table_id' is null then raise exception 'diner table order needs a sitting'; end if;
+  perform 1 from table_sessions
+   where id = v_session and restaurant_id = p_restaurant
+     and table_id = (p_order->>'table_id')::uuid and closed_at is null
+   for share;
+  if not found then return '{"sittingClosed":true}'::jsonb; end if;
+  v_refusal := public.diner_pay_later_refusal_v1(p_restaurant, v_session, p_member);
+  if v_refusal is not null then return jsonb_build_object(v_refusal, true); end if;
+  return public.create_order_intent(p_restaurant, p_ref, p_scope, p_order, p_demand, p_inventory, p_threshold, p_coupon);
+end;
+$$;
+revoke all on function public.create_diner_order_intent_v1(uuid, uuid, text, jsonb, jsonb, boolean, int, jsonb, uuid) from public, anon, authenticated;
+grant execute on function public.create_diner_order_intent_v1(uuid, uuid, text, jsonb, jsonb, boolean, int, jsonb, uuid) to service_role;
+
+-- A diner's table order without a retry reference (older phones, and every
+-- card order), saved only into an open sitting. Stock and the coupon are
+-- claimed by the route before this; on a refusal it gives them back. A
+-- pay-later order is also judged by diner_pay_later_refusal_v1, under the
+-- money lock that keeps the per-sitting ceiling exact.
+create or replace function public.create_diner_order_v1(
+  p_restaurant uuid, p_order jsonb, p_member uuid, p_deferred boolean
+) returns jsonb language plpgsql security definer set search_path = public as $$
+declare v_session uuid := (p_order->>'session_id')::uuid; v_refusal text; v_id uuid;
+begin
+  if v_session is null or p_order->>'table_id' is null then raise exception 'diner table order needs a sitting'; end if;
+  if p_deferred then perform public.lock_restaurant_money(p_restaurant); end if;
+  perform 1 from table_sessions
+   where id = v_session and restaurant_id = p_restaurant
+     and table_id = (p_order->>'table_id')::uuid and closed_at is null
+   for share;
+  if not found then return '{"sittingClosed":true}'::jsonb; end if;
+  if p_deferred then
+    v_refusal := public.diner_pay_later_refusal_v1(p_restaurant, v_session, p_member);
+    if v_refusal is not null then return jsonb_build_object(v_refusal, true); end if;
+  end if;
+  insert into orders(restaurant_id, request_ref, request_scope, table_id, table_label, session_id, diner,
+    stock_managed, stock_reservation_id, status, paid, subtotal, service_fee, tip, tax_pct,
+    discount, platform_fee, coupon_code, promo_detail, total, currency, items, note, customer_name)
+  values(p_restaurant, (p_order->>'request_ref')::uuid, p_order->>'request_scope',
+    (p_order->>'table_id')::uuid, p_order->>'table_label', v_session, p_order->>'diner',
+    coalesce((p_order->>'stock_managed')::boolean, false), (p_order->>'stock_reservation_id')::uuid,
+    case when p_deferred then 'received' else 'pending_payment' end, false,
+    (p_order->>'subtotal')::numeric, (p_order->>'service_fee')::numeric, (p_order->>'tip')::numeric,
+    (p_order->>'tax_pct')::numeric, (p_order->>'discount')::numeric, 0, p_order->>'coupon_code',
+    p_order->'promo_detail', (p_order->>'total')::numeric, p_order->>'currency', p_order->'items',
+    p_order->>'note', p_order->>'customer_name')
+  returning id into v_id;
+  return jsonb_build_object('orderId', v_id);
+end;
+$$;
+revoke all on function public.create_diner_order_v1(uuid, jsonb, uuid, boolean) from public, anon, authenticated;
+grant execute on function public.create_diner_order_v1(uuid, jsonb, uuid, boolean) to service_role;
+-- Staff coupons are judged on the dishes, as the diner's are (2026-11-26).
+-- The writers above priced a staff discount on total - tip, which still holds
+-- the service charge: MX$90 of food and MX$15 of service passed a MX$100
+-- minimum at the till that the diner's own bill screen refused, and a percent
+-- coupon took a share of the service charge too. These versions use
+-- greatest(total - tip - service_fee, 0) for the minimum, the amount and each
+-- order's share, so service and gratuities stay owed in full. The app's rule
+-- is `couponBase` (src/lib/coupon-base.ts); the old versions are kept.
+create or replace function public.approve_discount_request_v3(
+  p_request uuid, p_restaurant uuid, p_actor text, p_amount numeric
+) returns text language plpgsql security definer set search_path = public as $$
+declare
+  v_request discount_requests%rowtype;
+  v_coupon coupons%rowtype;
+  v_count int;
+  v_total numeric;
+  v_amount numeric;
+  v_allocated numeric;
+begin
+  perform public.lock_restaurant_money(p_restaurant);
+  perform set_config('tabletap.allocation_writer', 'v1', true);
+  if p_restaurant is not null then perform public.backfill_payment_allocations(p_restaurant); end if;
+  perform set_config('tabletap.allocation_scope', '', true);
+  select * into v_request from discount_requests
+   where id = p_request and restaurant_id = p_restaurant for update;
+  if not found or v_request.status <> 'pending' then return 'gone'; end if;
+  if p_amount is null or p_amount <= 0 or v_request.amount <> p_amount then return 'changed'; end if;
+  perform 1 from orders where id = any(v_request.order_ids) and restaurant_id = p_restaurant
+   order by id for update;
+  select count(*), coalesce(sum(greatest(total - tip - service_fee, 0)), 0) into v_count, v_total from orders
+   where id = any(v_request.order_ids) and restaurant_id = p_restaurant
+     and paid = false and written_off = false and status not in ('cancelled', 'pending_payment')
+     and coupon_code is null and account_id is null;
+  if v_count <> cardinality(v_request.order_ids) or v_total <= 0 then return 'changed'; end if;
+  -- A card page still open on these orders was quoted the current total; the
+  -- debt may not change under it (unresolved-checkout contract, verification 1).
+  if public.whole_bill_card_open_v1(p_restaurant, v_request.order_ids) then return 'paying'; end if;
+  -- Paid in part since it was asked for: a lower total would sit under money
+  -- already collected (paths audit #2). The guard would raise; this says why.
+  if exists (select 1 from unnest(v_request.order_ids) o(id)
+    where public.retained_order_coverage(p_restaurant, o.id) > 0) then return 'part_paid'; end if;
+  -- Orders a live split has frozen are paid by its slots: lowering their total
+  -- under a held card attempt left the charge unallocatable (split audit #1).
+  if exists (select 1 from bill_splits b where b.restaurant_id = p_restaurant and b.status = 'locked'
+    and b.order_ids && v_request.order_ids) then return 'split'; end if;
+  select * into v_coupon from coupons
+   where restaurant_id = p_restaurant and upper(code) = upper(v_request.code) for update;
+  if not found or not v_coupon.active
+     or v_coupon.starts_at > now() or v_coupon.ends_at <= now()
+     or v_total < v_coupon.min_subtotal
+     or v_coupon.uses_count >= v_coupon.max_uses then return 'changed'; end if;
+  if exists (select 1 from orders o where o.restaurant_id = p_restaurant
+    and o.id = any(v_request.order_ids) and (o.total < o.tip or o.tip < 0)) then return 'changed'; end if;
+
+  v_amount := greatest(0, least(v_total, round(case when v_coupon.kind = 'percent'
+    then v_total * v_coupon.value / 100 else v_coupon.value end, 2)));
+  if v_amount <> p_amount then return 'changed'; end if;
+  if redeem_coupon(v_coupon.id) is null then return 'changed'; end if;
+
+  -- Whole cents first; award spare cents by largest remainder, with stable ties.
+  with shares as (
+    select id, floor(p_amount * 100 * greatest(total - tip - service_fee, 0) / v_total) cents,
+      mod(p_amount * 100 * greatest(total - tip - service_fee, 0), v_total) remainder
+    from orders where id = any(v_request.order_ids) and restaurant_id = p_restaurant
+     and account_id is null
+  ), ranked as (
+    select *, row_number() over (order by remainder desc, id) position from shares
+  ), amounts as (
+    select id, (cents + case when position <= round(p_amount * 100) - sum(cents) over ()
+      then 1 else 0 end) / 100.0 amount from ranked
+  ), updated as (
+    update orders o set coupon_code = v_coupon.code,
+      discount = round(coalesce(o.discount, 0) + a.amount, 2), total = round(o.total - a.amount, 2)
+      from amounts a where o.id = a.id and o.restaurant_id = p_restaurant
+        and not (o.total - a.amount < o.tip + o.service_fee)
+      returning a.amount
+  )
+  select coalesce(sum(amount), 0) into v_allocated from updated;
+  if v_allocated <> p_amount then raise exception 'discount shares do not match approved amount'; end if;
+  insert into coupon_redemptions (restaurant_id, coupon_id, order_id, code, amount, confirmed_at)
+  values (p_restaurant, v_coupon.id, v_request.order_ids[1], v_coupon.code, p_amount, now());
+  update discount_requests set status = 'approved', decided_by = p_actor, decided_at = now()
+   where id = p_request and restaurant_id = p_restaurant and status = 'pending';
+  return 'approved';
+end; $$;
+revoke all on function public.approve_discount_request_v3(uuid, uuid, text, numeric) from public, anon, authenticated;
+grant execute on function public.approve_discount_request_v3(uuid, uuid, text, numeric) to service_role;
+
+create or replace function public.apply_bill_discount_v2(
+  p_restaurant uuid, p_orders uuid[], p_coupon uuid, p_amount numeric
+) returns text language plpgsql security definer set search_path = public as $$
+declare
+  v_coupon coupons%rowtype;
+  v_count int;
+  v_total numeric;
+  v_amount numeric;
+  v_allocated numeric;
+begin
+  perform public.lock_restaurant_money(p_restaurant);
+  perform set_config('tabletap.allocation_writer', 'v1', true);
+  perform public.backfill_payment_allocations(p_restaurant);
+  perform set_config('tabletap.allocation_scope', '', true);
+  perform 1 from orders where id = any(p_orders) and restaurant_id = p_restaurant order by id for update;
+  select count(*), coalesce(sum(greatest(total - tip - service_fee, 0)), 0) into v_count, v_total from orders
+   where id = any(p_orders) and restaurant_id = p_restaurant
+     and paid = false and written_off = false and status not in ('cancelled', 'pending_payment')
+     and coupon_code is null and account_id is null;
+  -- Orders a live split has frozen are paid by its slots: lowering their total
+  -- under a held card attempt left the charge unallocatable (split audit #1).
+  if exists (select 1 from bill_splits b where b.restaurant_id = p_restaurant and b.status = 'locked'
+    and b.order_ids && p_orders) then return 'split'; end if;
+  -- A card page still open on these orders was quoted the current total; the
+  -- debt may not change under it (unresolved-checkout contract, verification 1).
+  if public.whole_bill_card_open_v1(p_restaurant, p_orders) then return 'paying'; end if;
+  if v_count = 0 or v_count <> cardinality(p_orders) or v_total <= 0 then return 'changed'; end if;
+  if p_amount is null or p_amount <= 0 or p_amount > v_total then return 'changed'; end if;
+  if exists (select 1 from unnest(p_orders) o(id)
+    where public.retained_order_coverage(p_restaurant, o.id) > 0) then return 'part_paid'; end if;
+  select * into v_coupon from coupons where id = p_coupon and restaurant_id = p_restaurant for update;
+  if not found or not v_coupon.active
+     or v_coupon.starts_at > now() or v_coupon.ends_at <= now()
+     or v_total < v_coupon.min_subtotal
+     or v_coupon.uses_count >= v_coupon.max_uses then return 'changed'; end if;
+  if exists (select 1 from orders o where o.restaurant_id = p_restaurant
+    and o.id = any(p_orders) and (o.total < o.tip or o.tip < 0)) then return 'changed'; end if;
+
+  v_amount := greatest(0, least(v_total, round(case when v_coupon.kind = 'percent'
+    then v_total * v_coupon.value / 100 else v_coupon.value end, 2)));
+  if v_amount <> p_amount then return 'changed'; end if;
+  if redeem_coupon(v_coupon.id) is null then return 'changed'; end if;
+
+  -- Whole cents first; award spare cents by largest remainder, with stable ties.
+  with shares as (
+    select id, floor(p_amount * 100 * greatest(total - tip - service_fee, 0) / v_total) cents,
+      mod(p_amount * 100 * greatest(total - tip - service_fee, 0), v_total) remainder
+    from orders where id = any(p_orders) and restaurant_id = p_restaurant
+  ), ranked as (
+    select *, row_number() over (order by remainder desc, id) position from shares
+  ), amounts as (
+    select id, (cents + case when position <= round(p_amount * 100) - sum(cents) over ()
+      then 1 else 0 end) / 100.0 amount from ranked
+  ), updated as (
+    update orders o set coupon_code = v_coupon.code,
+      discount = round(coalesce(o.discount, 0) + a.amount, 2), total = round(o.total - a.amount, 2)
+      from amounts a where o.id = a.id and o.restaurant_id = p_restaurant
+        and not (o.total - a.amount < o.tip + o.service_fee)
+      returning a.amount
+  )
+  select coalesce(sum(amount), 0) into v_allocated from updated;
+  if v_allocated <> p_amount then raise exception 'discount shares do not match approved amount'; end if;
+  insert into coupon_redemptions (restaurant_id, coupon_id, order_id, code, amount, confirmed_at)
+  values (p_restaurant, v_coupon.id, p_orders[1], v_coupon.code, p_amount, now());
+  return 'applied';
+end; $$;
+revoke all on function public.apply_bill_discount_v2(uuid, uuid[], uuid, numeric) from public, anon, authenticated;
+grant execute on function public.apply_bill_discount_v2(uuid, uuid[], uuid, numeric) to service_role;

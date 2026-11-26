@@ -9254,3 +9254,54 @@ order, so the bill total exceeds the checkout total by that service. The
 staff coupon base including service is marked `expected-gap`. To add a
 pricing path: call it in the per-cart test with the arguments its route
 passes, and assert what it must agree with.
+### An abandoned card page let a phone run a tab; a diner order on a closed bill (2026-11-26)
+
+Two pairs that had to agree. First, the approval the first phone at an empty
+table gets and the payment that earned it: since the 2026-11-24 sweep that
+phone is let in unaided only for a card order, but nothing remembered why.
+Leaving the Stripe page unpaid kept the approval, and the same cookie then sent
+pay-later orders to the kitchen with no limit while every real diner at the
+table waited for it to let them in. `request_table_member_v4` now marks that
+phone `auto_approved`; `diner_pay_later_refusal_v1` refuses its pay-later
+orders until the sitting has a paid order (409 `apiErr.payLaterNeedsStaff`,
+"pay this one by card or ask your waiter"). A phone it admits inherits the mark
+(`decide_table_member_v2`), so a second cookie gains nothing, and a staff
+decision clears it. Every sitting also stops at 15 unpaid diner orders (409
+`apiErr.tablePayLaterFull`), like the counter's `counter_pay_later_full`.
+Waiter rounds use no diner membership and are unaffected; a diner who paid up
+front can still add pay-later rounds. Second, the sitting a diner's order joins
+and the cashier closing it, as #750 fixed for waiter rounds: `create_order_intent`
+and the route's plain insert held no sitting, so a pay-later order sent as the
+bill closed went to the kitchen on a settled bill. Both now go through
+`create_diner_order_intent_v1` / `create_diner_order_v1`, which hold the sitting
+FOR SHARE and answer `sittingClosed`; the route answers 409
+`apiErr.tableBillClosedScan` ("scan again") and gives back stock and coupon as
+its other failures do. Check: `diner-paylater-guard.spec.ts`, checkout
+`route.spec.ts`, and the api gate's `POST /api/checkout` pay-later cases.
+### Staff coupons still counted the service charge; an extra could be its own cart line (2026-11-26)
+
+The 2026-11-24 sweep moved the diner's coupon base to the dishes alone, but
+the floor's discount (`bill/discount`, its approval, its list of options and
+the SQL writers behind them) still judged `total - tip`, which holds the
+service charge. MX$90 of food and MX$15 of service passed a MX$100 minimum at
+the till that the diner's own bill refused, and a percent coupon took a share
+of the service. The options list was worse: the screen sent the whole bill
+total, tips included. Now one helper, `couponBase` / `dishesOf`
+(`src/lib/coupon-base.ts`), is the base for `bill/discount`, its approval,
+`bill/pay` and the bill screen (`billAmounts`); the options route reads the
+bill itself with the apply route's reader (`readDiscountableBill`) instead of
+taking a figure from the screen. The SQL writers are new versions,
+`apply_bill_discount_v2` and `approve_discount_request_v3`, which price the
+minimum, the amount and each order's share on
+`greatest(total - tip - service_fee, 0)`; the old ones are kept.
+
+Separately, `verifyCart` checked a plain line only for availability and the
+open menu, never `is_addon`, so a forged cart could order an extra (cheese at
+MX$20) as a dish of its own. No menu offers one alone — the till's grid and
+quick row both drop add-ons — so it is refused as unavailable everywhere,
+the till included. The offline replay goes through the same check, so a held
+sale with an extra rung alone gets no current price and waits for a manager.
+Checks: `coupon-base-parity.spec.ts` (the same bill through the staff route
+and the diner's bill must agree on the minimum and the amount),
+`staff-discount-tip.spec.ts`, `bill-discount-schema.spec.ts`,
+`verify-cart.spec.ts`, `offline-comparison.spec.ts`.
