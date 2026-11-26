@@ -73,7 +73,7 @@ export async function recordDinerCheckout(
     await checkScope(record);
     const db = createAdminClient();
     const { error } = expected.attemptId
-      ? await db.rpc("diner_checkout_bind", { p_attempt: expected.attemptId, p_record: record })
+      ? await db.rpc("diner_checkout_bind_open_v1", { p_attempt: expected.attemptId, p_record: record })
       : await db.from("diner_checkouts").insert(record);
     if (error) throw new Error(`Could not save checkout provenance: ${error.message}`);
   } catch (error) {

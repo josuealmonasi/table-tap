@@ -19,6 +19,15 @@ it.each(["reserved", "taken"])("a %s selected part resolves only its owner, then
   expect(resolve).toHaveBeenCalledWith("r1", { checkoutIds: ["attempt-0"], splitId: "split" });
   expect(rpc).toHaveBeenCalledTimes(2); expect(rpc.mock.calls[1]).toEqual(rpc.mock.calls[0]);
 });
+// The card reservation answers `reserved` when it SUCCEEDS. Resolving that
+// replayed the asking attempt's own Stripe request and, on a refusal, retired
+// it under the caller, so the next reservation answered "invalid" (bl43 #3).
+it("a successful card reservation never resolves the page that just reserved it", async () => {
+  rpc.mockResolvedValue({ data: { outcome: "reserved" }, error: null });
+  const args = { p_restaurant: "r1", p_split: "split", p_slots: [0], p_checkout: "attempt-0" };
+  expect((await splitRpc("reserve_split_slots_v1", args)).outcome).toBe("reserved");
+  expect(resolve).not.toHaveBeenCalled(); expect(rpc).toHaveBeenCalledTimes(1);
+});
 it.each(["unresolved", "unverified"])("a %s part keeps the selection refused", async outcome => {
   resolve.mockResolvedValue(outcome); rpc.mockResolvedValue({ data: { outcome: "reserved" }, error: null });
   expect((await splitRpc("collect_split_slots_v1", { p_restaurant: "r1", p_split: "split", p_slots: [0] })).outcome).toBe("reserved");

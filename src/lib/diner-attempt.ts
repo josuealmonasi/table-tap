@@ -21,13 +21,41 @@ export class DinerAttemptRejected extends Error {}
 export class DinerScopeBusy extends DinerAttemptRejected {}
 export class DinerCouponChanged extends DinerAttemptRejected {}
 class DinerAttemptExpired extends Error {}
+/** Stripe refused the saved request outright and the attempt was closed; `cause` is Stripe's answer. */
+class DinerAttemptRefused extends DinerAttemptExpired {}
 interface AttemptRecord {
   id: string; restaurant_id: string; stripe_account_id: string; currency: string;
   amount_cents: number; order_ids: string[]; stripe_session_id: string | null;
   idempotency_key: string; stripe_params: Stripe.Checkout.SessionCreateParams;
+  created_at?: string;
+}
+/** Stripe keeps an idempotency key at least 24 hours; the same margin as `whole-bill-pages`. */
+const KEY_WINDOW_MS = 23 * 3600 * 1000;
+
+/**
+ * Durable proof that this attempt never produced a session: no page was ever
+ * bound, and replaying its saved key was refused outright. Within the key's
+ * life, a session made under it would have been replayed instead of refused.
+ * An attempt this request just opened needs no window; an older one does.
+ */
+function neverMadeASession(attempt: AttemptRecord, error: unknown, justOpened: boolean): boolean {
+  if (attempt.stripe_session_id || !stripeRefusedOutright(error)) return false;
+  if (justOpened) return true;
+  const age = Date.now() - new Date(attempt.created_at ?? "").getTime();
+  return Number.isFinite(age) && age >= 0 && age < KEY_WINDOW_MS;
 }
 
-async function deliver(stripe: Stripe, attempt: AttemptRecord): Promise<Stripe.Checkout.Session> {
+/** Give back what a never-created page held: share, coupon and fee. */
+async function closeRefusedAttempt(attempt: AttemptRecord): Promise<void> {
+  if (attempt.stripe_params?.metadata?.split_model === "2") {
+    await retireSplitAttempt(attempt.restaurant_id, attempt.id);
+    return;
+  }
+  await finishAttempt(attempt.id, false);
+  await releaseFee(String(attempt.stripe_params?.metadata?.fee_id ?? ""));
+}
+
+async function deliver(stripe: Stripe, attempt: AttemptRecord, justOpened = false): Promise<Stripe.Checkout.Session> {
   const options = { stripeAccount: attempt.stripe_account_id };
   await prepareSplitSlots(attempt);
   // The full request is durable too: a retry must not change its tip, fee or expiry.
@@ -37,10 +65,14 @@ async function deliver(stripe: Stripe, attempt: AttemptRecord): Promise<Stripe.C
       ? await stripe.checkout.sessions.retrieve(attempt.stripe_session_id, {}, options)
       : await stripe.checkout.sessions.create(attempt.stripe_params, { ...options, idempotencyKey: attempt.idempotency_key });
   } catch (error) {
-    if (attempt.stripe_params?.metadata?.split_model === "2" && !attempt.stripe_session_id && stripeRefusedOutright(error)) {
-      await retireSplitAttempt(attempt.restaurant_id, attempt.id);
-    }
-    throw error;
+    // A timeout, 409 or 429 can still have created a payable session: keep its
+    // scope, coupon and fee reserved; the next request replays the same key.
+    if (!neverMadeASession(attempt, error, justOpened)) throw error;
+    // A saved request Stripe will never accept again (its expiry passed, say)
+    // is retired here, so the caller quotes a fresh attempt with a new key and
+    // a new expiry instead of replaying the refused one forever (bl43 #3).
+    await closeRefusedAttempt(attempt);
+    throw new DinerAttemptRefused("Stripe refused the saved checkout; the bill can be quoted again", { cause: error });
   }
   await recordDinerCheckout(session, {
     restaurantId: attempt.restaurant_id, stripeAccount: attempt.stripe_account_id,
@@ -108,14 +140,10 @@ export async function openDinerAttempt(stripe: Stripe, params: Stripe.Checkout.S
   const attempt = data as AttemptRecord;
   if (attempt.id !== id) await releaseFee(String(params.metadata?.fee_id ?? ""));
   try {
-    return await deliver(stripe, attempt);
+    return await deliver(stripe, attempt, attempt.id === id);
   } catch (error) {
-    // A timeout can still have created a payable session. Keep its scope and
-    // coupon reserved; the next request repeats the exact persisted request.
-    if (attempt.id === id && attempt.stripe_params.metadata?.split_model !== "2" && !attempt.stripe_session_id && stripeRefusedOutright(error)) {
-      await finishAttempt(attempt.id, false);
-      await releaseFee(String(attempt.stripe_params.metadata?.fee_id ?? ""));
-    }
+    // Callers read Stripe's own refusal (e.g. an amount below the minimum).
+    if (error instanceof DinerAttemptRefused) throw error.cause;
     throw error;
   }
 }
