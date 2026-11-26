@@ -908,8 +908,16 @@ dishes on a bill the restaurant has just cancelled.
   the shift open when the route received it (`payments.cash_shift_id`, set
   once by `ring_pos_sale_v3`): it counts in that shift whatever its date, and
   one posted after that shift closed shows on the shift's record as cash that
-  arrived after the count, never in the next shift. Unbound receipts (older
-  rows, offline sales, sales with no shift open) count by their date. Offline
+  arrived after the count, never in the next shift. A cash sale the till holds
+  offline saves the shift the till had open (`cashShiftId`), and
+  `record_offline_sale_v3` binds it there under the money lock if that shift
+  is the restaurant's, in the sale's currency, and still open. One whose shift
+  closed before it arrived waits in Held sales (`apiErr.offlineShiftClosed`),
+  where the manager confirms the shift — the one it was taken in, if the sale's
+  time falls inside it, or the open one. Bound receipts count by when the
+  server wrote them (`recorded_at`), so a fast device clock cannot push one
+  past its shift's close. Unbound receipts (older rows, offline receipts from
+  older tills, sales with no shift open) count by their date. Offline
   receipts retain the date the cash was taken. An offline receipt is posted
   automatically only if the menu's pricing (`offline_pricing_revision_v1`) is
   unchanged under the money lock since the route compared it; otherwise it

@@ -12165,7 +12165,9 @@ returns jsonb language sql stable security definer set search_path = public as $
         -- A sale bound to the shift that collected it counts there, even when
         -- it was posted after that shift closed; never in the next one
         -- (bl39 finding 2). Unbound rows keep the timestamp window.
-        and (p.cash_shift_id = s.id and p.created_at <= p_until
+        -- Bound rows by when the server wrote them: an offline sale is dated
+        -- by its device clock, which may run minutes ahead of the close.
+        and (p.cash_shift_id = s.id and coalesce(p.recorded_at, p.created_at) <= p_until
           or p.cash_shift_id is null and p.created_at between s.opened_at and s.until_at)
   ), returns as (
     -- The tip part of a cash return comes out of the shift's tips too: MX$110
@@ -17523,3 +17525,51 @@ end;
 $$;
 revoke all on function public.open_cash_shift_v2(uuid, text, numeric, uuid) from public, anon, authenticated;
 grant execute on function public.open_cash_shift_v2(uuid, text, numeric, uuid) to service_role;
+
+-- ============================================================================
+-- Offline cash sales bound to the shift the till knew (bl39 finding 2, the
+-- offline half)
+-- ============================================================================
+
+-- A cash sale rung offline carries the shift the till had open when it was
+-- taken (p_cash_shift, null on receipts from older tills, which keep their
+-- device time). Under the money lock the shift must be this restaurant's, in
+-- the sale's currency, and either still open or open at the sale's time. A
+-- shift that closed before the receipt arrived is never left for the next
+-- shift's window: the device is told 'shift_closed' and queues the receipt for
+-- Held sales, where a manager confirms the shift (p_manager set), and that
+-- closed shift is accepted when the confirmed time falls inside it. Anything
+-- else answers 'shift_mismatch'. A receipt already rung answers as before and
+-- is never rebound. record_offline_sale_v2 stays for the deployed route.
+create or replace function public.record_offline_sale_v3(
+  p_restaurant uuid, p_ref uuid, p_order jsonb, p_method text, p_actor text,
+  p_at timestamptz, p_terminal text, p_demand jsonb,
+  p_manager text, p_reason text, p_original_at text, p_authority text, p_pricing_revision text,
+  p_cash_shift uuid
+) returns jsonb language plpgsql security definer set search_path = public as $$
+declare v_ticket jsonb; s cash_shifts; v_new boolean;
+begin
+  perform public.lock_restaurant_money(p_restaurant);
+  v_new := public.pos_ticket(p_restaurant, p_ref) is null;
+  if v_new and p_cash_shift is not null and p_method = 'cash' then
+    select * into s from cash_shifts where restaurant_id = p_restaurant and id = p_cash_shift;
+    if not found or s.currency is distinct from p_order->>'currency'
+      or (s.closed_at is not null and (p_at is null or p_at < s.opened_at or p_at > s.closed_at)) then
+      return jsonb_build_object('outcome', 'shift_mismatch');
+    end if;
+    if p_manager is null and s.closed_at is not null then
+      return jsonb_build_object('outcome', 'shift_closed');
+    end if;
+  end if;
+  v_ticket := public.record_offline_sale_v2(p_restaurant, p_ref, p_order, p_method, p_actor, p_at, p_terminal,
+    p_demand, p_manager, p_reason, p_original_at, p_authority, p_pricing_revision);
+  if v_new and s.id is not null and v_ticket->>'outcome' = 'settled' then
+    update payments set cash_shift_id = s.id
+      where restaurant_id = p_restaurant and order_id = p_ref and method = 'cash'
+        and cash_shift_id is null and currency = s.currency;
+  end if;
+  return v_ticket;
+end;
+$$;
+revoke all on function public.record_offline_sale_v3(uuid,uuid,jsonb,text,text,timestamptz,text,jsonb,text,text,text,text,text,uuid) from public,anon,authenticated;
+grant execute on function public.record_offline_sale_v3(uuid,uuid,jsonb,text,text,timestamptz,text,jsonb,text,text,text,text,text,uuid) to service_role;

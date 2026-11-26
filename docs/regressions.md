@@ -9074,3 +9074,25 @@ the corte. That is the sweep 9 design (`report-discounts.spec.ts`, "keeps
 accepted checkout savings after a later cancellation without changing drawer
 lines"): the sale's payment stays in the ledger and its hand-back is a
 separate line on its own day, so the discount stays with the day it was given.
+### Offline cash sales bound to the till's shift (2026-11-25)
+
+The offline half of bl39 finding 2: the shift that took an offline cash sale
+and the shift that counted it. #756 bound online cash sales; an offline one
+was still placed by its device clock, so MX$80 taken at 11:59 and uploaded
+after a noon close, or rung on a tablet three minutes fast, read as an
+overage in one shift and a shortage in the next. The till now saves the shift
+it had open with every held cash sale (`HeldSale.cashShiftId`, sent by
+`replayBody` on replay and upload), and `record_offline_sale_v3` checks it
+under the money lock: the restaurant's, in the sale's currency, and still open
+(or, on a manager's approval, closed with the sale's time inside it). The
+payment is bound once (`payments.cash_shift_id`), never on a repeat. A shift
+that closed before the upload answers `shift_closed`; intake queues it for
+Held sales with `apiErr.offlineShiftClosed` instead of letting it fall into
+the next shift's window, and the review asks the manager to confirm the shift
+(`HeldShiftPicker`: the one it was taken in, or the open one), which the
+approval records it in. `cash_shift_totals` counts a bound row by
+`recorded_at`, as the money gate already did, so a fast clock cannot push a
+bound sale past the close and out of every shift. Receipts from older tills
+carry no shift and keep their device time; `record_offline_sale_v2` stays for
+the deployed route. Check: `offline-shift-binding.spec.ts`,
+`pos-offline-shift.spec.tsx`.

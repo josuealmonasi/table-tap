@@ -24,7 +24,23 @@ async function pricingRevision(db: ReturnType<typeof createAdminClient>, restaur
 }
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-export interface OfflineApproval { reason: string; collector?: string; at?: string; currency?: string }
+export interface OfflineApproval { reason: string; collector?: string; at?: string; currency?: string; cashShiftId?: string }
+
+/** Held for Held sales: the shift the till took the cash in closed before it arrived. */
+const shiftReview = () => apiError("apiErr.offlineShiftClosed", 409, undefined, { held: true, reviewReason: "apiErr.offlineShiftClosed" });
+
+/**
+ * The shift a cash receipt is recorded in (bl39 finding 2): the one the till
+ * had open when it took the sale, or on approval the one the manager confirms.
+ * Null keeps the device time, as receipts from older tills always did;
+ * undefined is a receipt that cannot be placed without review.
+ */
+function cashShiftOf(body: PosSaleBody, approval?: OfflineApproval): string | null | undefined {
+  const claimed = body.method === "cash" ? body.cashShiftId ?? null : null;
+  if (claimed === null) return null;
+  if (approval) return approval.cashShiftId && UUID.test(approval.cashShiftId) ? approval.cashShiftId : undefined;
+  return typeof claimed === "string" && UUID.test(claimed) ? claimed : undefined;
+}
 
 /**
  * A sale the till rang without a connection, sent now that it has one.
@@ -55,6 +71,8 @@ export async function ringOffline(actor: Actor, body: PosSaleBody & { offline?: 
   const db = createAdminClient();
   const already = await existingTicket(db, posRef, actor.restaurantId, body);
   if (already) return already;
+  const cashShift = cashShiftOf(body, approval);
+  if (cashShift === undefined) return approval ? await apiError("apiErr.offlineRecoveryDetails", 400) : await shiftReview();
 
   const context = readOfflineContext(body.collectorContext, actor.restaurantId);
   const collector = context?.collector ?? approval?.collector;
@@ -100,8 +118,8 @@ export async function ringOffline(actor: Actor, body: PosSaleBody & { offline?: 
   const preparationPending = interrupted && (!plan || can(plan.limits, "kitchenBoard")) && stationsOf({ items: lines }).length > 0;
   const loyalty = await saleCard(actor.restaurantId, body.loyaltyCode, true);
   if (loyalty.error) return loyalty.error;
-  const { data: ticket, error } = await db.rpc("record_offline_sale_v2", {
-    p_pricing_revision: revision,
+  const { data: ticket, error } = await db.rpc("record_offline_sale_v3", {
+    p_pricing_revision: revision, p_cash_shift: cashShift,
     p_restaurant: actor.restaurantId, p_ref: posRef, p_method: body.method, p_actor: collector,
     p_at: charge.at, p_terminal: body.method === "card" ? terminalRef(body.terminalRef) : null,
     p_demand: toDemandPayload(stockDemand(lines)),
@@ -124,6 +142,10 @@ export async function ringOffline(actor: Actor, body: PosSaleBody & { offline?: 
     return await apiError("apiErr.restaurantClosing", 409, undefined, { held: true, reviewReason: "apiErr.restaurantClosing" });
   }
   if (error || !ticket) return await apiError("apiErr.orderCreate", 503, undefined, { held: true });
+  // Never moved into the next shift's window: a manager confirms where it goes.
+  if (ticket.outcome === "shift_closed" || ticket.outcome === "shift_mismatch") {
+    return approval ? await apiError("apiErr.offlineShiftMismatch", 409) : await shiftReview();
+  }
   if (ticket.outcome === "pricing_changed") {
     return await apiError("apiErr.offlineApproval", 409, undefined, { held: true, reviewReason: "apiErr.offlineApproval" });
   }

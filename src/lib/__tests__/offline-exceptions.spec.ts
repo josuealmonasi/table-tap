@@ -30,7 +30,7 @@ vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({
     if (name === "offline_pricing_revision_v1") return { data: "rev", error: null };
     state.calls.push({ name, args });
     if (name === "queue_offline_sale") return { data: { queued: true, orderId: args.p_ref, receipt: args.p_body }, error: null };
-    if (name === "record_offline_sale_v2" && state.priceMoved && !args.p_manager) return { data: { outcome: "pricing_changed" }, error: null };
+    if (name === "record_offline_sale_v3" && state.priceMoved && !args.p_manager) return { data: { outcome: "pricing_changed" }, error: null };
     return { data: { outcome: "settled", settled: true, orderId: args.p_ref, total: 80, currency: "USD", method: "cash" }, error: null };
   },
 }) }));
@@ -85,7 +85,7 @@ it("approves only the stored amount, original collector and original currency af
   const res = await recovery.POST(request({ posRef: original.posRef, restaurantId: "r", offline: { total: 999 },
     approval: { confirmed: true, reason: "Original receipt checked", currency: "USD", collector: "original@example.com" } }));
   expect(res.status).toBe(200);
-  expect(state.calls[0]).toMatchObject({ name: "record_offline_sale_v2", args: { p_actor: "original@example.com", p_manager: state.email,
+  expect(state.calls[0]).toMatchObject({ name: "record_offline_sale_v3", args: { p_actor: "original@example.com", p_manager: state.email,
     p_order: { total: 80, currency: "USD", offline_drift: null } } });
 });
 it("refuses attempts to replace the original collector or currency on an already queued receipt", async () => {
@@ -150,7 +150,7 @@ it("C5: manager recovery preserves an interrupted kitchen sale's pending prepara
   state.queued = { body: original, collector: "cashier@example.com", currency: "MXN" };
   expect((await recovery.POST(request({ posRef: original.posRef, restaurantId: "r",
     approval: { confirmed: true, reason: "Original receipt checked" } }))).status).toBe(200);
-  expect(state.calls[0]).toMatchObject({ name: "record_offline_sale_v2", args: { p_order: { preparation_pending: true } } });
+  expect(state.calls[0]).toMatchObject({ name: "record_offline_sale_v3", args: { p_order: { preparation_pending: true } } });
 });
 
 it("C5: a till without a kitchen board still finishes an interrupted counter sale", async () => {
@@ -159,7 +159,7 @@ it("C5: a till without a kitchen board still finishes an interrupted counter sal
   state.queued = { body: original, collector: "cashier@example.com", currency: "MXN" };
   expect((await recovery.POST(request({ posRef: original.posRef, restaurantId: "r",
     approval: { confirmed: true, reason: "Original receipt checked" } }))).status).toBe(200);
-  expect(state.calls[0]).toMatchObject({ name: "record_offline_sale_v2", args: { p_order: { preparation_pending: false } } });
+  expect(state.calls[0]).toMatchObject({ name: "record_offline_sale_v3", args: { p_order: { preparation_pending: false } } });
 });
 
 it("N4: approved interrupted combos keep their preparation notes and component extras", async () => {
@@ -171,7 +171,7 @@ it("N4: approved interrupted combos keep their preparation notes and component e
   state.queued = { body: original, collector: "cashier@example.com", currency: "MXN" };
   expect((await recovery.POST(request({ posRef: original.posRef, restaurantId: "r",
     approval: { confirmed: true, reason: "Original kitchen instructions checked" } }))).status).toBe(200);
-  expect(state.calls[0]).toMatchObject({ name: "record_offline_sale_v2", args: { p_order: { preparation_pending: true,
+  expect(state.calls[0]).toMatchObject({ name: "record_offline_sale_v3", args: { p_order: { preparation_pending: true,
     items: [expect.objectContaining({ notes: "No peanuts", extras: [extra], components: [expect.objectContaining({ extras: [extra] })] })] } } });
 });
 
@@ -184,7 +184,7 @@ it("bl39 #3: a price changed after the comparison queues the receipt instead of 
   const res = await POST(request(sent));
   expect(res.status).toBe(200);
   expect(await res.json()).toMatchObject({ queued: true, receipt: sent });
-  expect(state.calls.map(c => c.name)).toEqual(["record_offline_sale_v2", "queue_offline_sale"]);
+  expect(state.calls.map(c => c.name)).toEqual(["record_offline_sale_v3", "queue_offline_sale"]);
   expect(state.calls[0]!.args).toMatchObject({ p_pricing_revision: "rev", p_manager: null });
   expect(state.calls[1]!.args.p_reason).toBe("apiErr.offlineApproval");
 });
@@ -195,7 +195,7 @@ it("bl39 #3: a manager can still approve the collected price after it changed", 
   state.queued = { body: original, collector: "cashier@example.com", currency: "MXN" };
   expect((await recovery.POST(request({ posRef: original.posRef, restaurantId: "r",
     approval: { confirmed: true, reason: "Collected price checked" } }))).status).toBe(200);
-  expect(state.calls[0]).toMatchObject({ name: "record_offline_sale_v2", args: { p_pricing_revision: null, p_manager: state.email } });
+  expect(state.calls[0]).toMatchObject({ name: "record_offline_sale_v3", args: { p_pricing_revision: null, p_manager: state.email } });
 });
 
 it("bl39 #3: the writer checks the revision under the money lock, before it records, and skips it for a manager", () => {
