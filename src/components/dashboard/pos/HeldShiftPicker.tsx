@@ -22,7 +22,7 @@ export default function HeldShiftPicker({ shifts, value, onChange }: HeldShiftPi
   if (!taken && !open) return <p className="tt-field-error" role="alert">{t("recovery.shiftNone")}</p>;
   return <fieldset className="tt-field">
     <legend>{t("recovery.shift")}</legend>
-    {taken && <label><input type="radio" name="held-shift" checked={value === taken.id} onChange={() => onChange(taken.id)} />{" "}
+    {taken && <label style={{ display: "block" }}><input type="radio" name="held-shift" checked={value === taken.id} onChange={() => onChange(taken.id)} />{" "}
       {t("recovery.shiftTaken", { from: when(taken.opened_at), to: when(taken.closed_at!) })}</label>}
     {open && <label style={{ display: "block" }}><input type="radio" name="held-shift" checked={value === open.id} onChange={() => onChange(open.id)} />{" "}
       {t("recovery.shiftOpen", { from: when(open.opened_at) })}</label>}
