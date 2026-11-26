@@ -139,10 +139,12 @@ export function splitsCases(fx) {
     // used to open beside it fee-free, and a diner who paid both paid twice.
     // A share whose checkout is already open is resumed, never opened twice:
     // two payable pages for one share is a diner charged twice. The open
-    // attempt is planted as the route records one (before Stripe answers), and
-    // the case is judged by effect: still exactly one open attempt for the
-    // share. Resuming asks Stripe for that session, which the borrowed reader's
-    // account cannot answer here, so the route's own answer is a 502.
+    // attempt is planted with its Stripe page already bound, and the case is
+    // judged by effect: still exactly one open attempt for the share. Resuming
+    // asks Stripe for that session, which the borrowed reader's account cannot
+    // answer here, so the route's own answer is a 502. Planted without a page,
+    // a resend Stripe refuses outright is proof none exists, and the attempt
+    // is rightly closed and quoted again (bl43 #3): that is not this case.
     { name: "POST /api/split/pay (a share whose checkout is already open)", as: "diner", method: "POST",
       path: "/api/split/pay",
       arrange: async f => {
@@ -156,6 +158,7 @@ export function splitsCases(fx) {
           restaurant_id: r, stripe_account_id: "acct_api_check", livemode: false, currency: "MXN",
           amount_cents: 5000, metadata: { restaurant_id: r }, order_ids: [food.id], status: "open",
           scope_key: f.openShareScope, idempotency_key: `${MARK}-${f.openShareScope}`,
+          stripe_session_id: `cs_test_${MARK}_open_share_${food.id}`,
           stripe_params: { mode: "payment" },
         }).select("id").single();
         if (error) throw new Error(`could not plant the open attempt: ${error.message}`);

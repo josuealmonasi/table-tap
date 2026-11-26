@@ -29,12 +29,40 @@ beforeEach(() => {
   accountLookup.mockReset().mockResolvedValue({ id: "a1", name: "Sam", credit_limit: 200, restaurant_id: "r1" });
   statementRead.mockReset(); timezoneRead.mockReset();
 });
+// Backlog 35, finding 2: a MX$500 review saved after the restaurant switched
+// to USD stored a US$500 ceiling, because the request carried only the number.
+describe("a ceiling is approved in the currency the manager saw", () => {
+  it("sends the reviewed currency to the database, which decides whether it still holds", async () => {
+    rpc.mockResolvedValue({ data: { outcome: "currency", currency: "USD" }, error: null });
+    const res = await patch({ action: "limit", limit: 500, currency: "MXN" });
+    expect(res.status).toBe(409);
+    expect(await res.json()).toEqual({ error: "apiErr.accountLimitCurrencyChanged" });
+    expect(rpc).toHaveBeenCalledWith("account_set_limit_v1", expect.objectContaining({ p_limit: 500, p_currency: "MXN" }));
+    expect(logEvent).not.toHaveBeenCalled();
+  });
+  it("refreshes a screen that sends no currency, and never asks the database", async () => {
+    const res = await patch({ action: "limit", limit: 500 });
+    expect(res.status).toBe(409);
+    expect(await res.json()).toEqual({ error: "apiErr.refreshToApproveLimit" });
+    expect(rpc).not.toHaveBeenCalled();
+  });
+  it("refuses a currency no bill can carry", async () => {
+    expect((await patch({ action: "limit", limit: 500, currency: "JPY" })).status).toBe(400);
+    expect(rpc).not.toHaveBeenCalled();
+  });
+  it("refuses a ceiling over debt in two currencies", async () => {
+    rpc.mockResolvedValue({ data: { outcome: "mixed_currency" }, error: null });
+    const res = await patch({ action: "limit", limit: 500, currency: "MXN" });
+    expect(await res.json()).toEqual({ error: "apiErr.accountLimitMixed" });
+  });
+});
+
 describe("account changes racing a new charge", () => {
   it("refuses a ceiling below debt that arrived after the account was read", async () => {
     rpc.mockResolvedValue({ data: { outcome: "limit", owed: 150 }, error: null });
-    expect((await patch({ action: "limit", limit: 100 })).status).toBe(409);
-    expect(rpc).toHaveBeenCalledWith("account_change_v2", {
-      p_restaurant: "r1", p_account: "a1", p_action: "limit", p_limit: 100, p_actor: "ana",
+    expect((await patch({ action: "limit", limit: 100, currency: "MXN" })).status).toBe(409);
+    expect(rpc).toHaveBeenCalledWith("account_set_limit_v1", {
+      p_restaurant: "r1", p_account: "a1", p_limit: 100, p_currency: "MXN", p_actor: "ana",
     });
     expect(update).not.toHaveBeenCalled();
     expect(logEvent).not.toHaveBeenCalled();
@@ -46,7 +74,7 @@ describe("account changes racing a new charge", () => {
   });
   it("logs a successful change using the locked previous ceiling", async () => {
     rpc.mockResolvedValue({ data: { outcome: "changed", previous_limit: 300 }, error: null });
-    expect((await patch({ action: "limit", limit: 400 })).status).toBe(200);
+    expect((await patch({ action: "limit", limit: 400, currency: "MXN" })).status).toBe(200);
     expect(logEvent).toHaveBeenCalledWith(expect.objectContaining({ detail: expect.stringContaining("300.00") }));
   });
   it("keeps ceiling changes restricted to management", async () => {

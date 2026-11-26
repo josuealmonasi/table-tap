@@ -9,7 +9,7 @@ export type ChargeResult =
   | { outcome: "charged"; amount: number; owed: number }
   | { outcome: "limit"; owed: number; limit: number; currency?: string }
   | { outcome: "limit_currency"; limit: number; limitCurrency: string; currency: string }
-  | { outcome: "closed" | "stale" | "partly_paid" | "paying" | "mixed_currency" };
+  | { outcome: "closed" | "stale" | "partly_paid" | "paying" | "mixed_currency" | "limit_unapproved" };
 
 /**
  * Puts orders on an account, under the account's lock in the database. Shared
@@ -23,7 +23,7 @@ export async function chargeAccount(
   expected: number,
   actor: string,
 ): Promise<ChargeResult> {
-  const { data, error } = await checkoutPageRpc("account_charge_v2", {
+  const { data, error } = await checkoutPageRpc("account_charge_v3", {
     p_restaurant: restaurantId,
     p_account: accountId,
     p_orders: orderIds,
@@ -37,7 +37,7 @@ export async function chargeAccount(
   if (r.outcome === "limit_currency") {
     return { outcome: "limit_currency", limit: Number(r.limit), limitCurrency: String(r.limit_currency), currency: String(r.currency) };
   }
-  return { outcome: r.outcome as "closed" | "stale" | "partly_paid" | "paying" | "mixed_currency" };
+  return { outcome: r.outcome as "closed" | "stale" | "partly_paid" | "paying" | "mixed_currency" | "limit_unapproved" };
 }
 
 /** The sentence for a charge the database turned down — each one says what to do. */
@@ -60,6 +60,9 @@ export async function chargeRefusal(
         limit: formatMoney(Number(result.limit), result.limitCurrency ?? (result as { limit_currency?: string }).limit_currency ?? currency),
         currency: result.currency ?? currency,
       });
+    case "limit_unapproved":
+      // A legacy ceiling no one approved in any currency (backlog 35, finding 2).
+      return await apiError("apiErr.accountLimitUnapproved", 409);
     case "closed":
       return await apiError("apiErr.accountClosed", 409);
     case "partly_paid":

@@ -21,6 +21,7 @@ const { POST: settle } = await import("@/app/api/accounts/settle/route");
 const { POST: open } = await import("@/app/api/account/pay/route");
 const request = (body: unknown) => new NextRequest("https://test/api/account", { method: "POST", body: JSON.stringify(body) });
 beforeEach(() => { vi.clearAllMocks(); resolve.mockResolvedValue("closed"); });
+const ORDER = "00000000-0000-4000-8000-000000000001";
 
 it("account collection without the currency it showed is refreshed, never settled (sweep 8, finding 1)", async () => {
   const res = await settle(request({ accountId: "a1", expected: 100, tip: 10, method: "cash", ref: "same" }));
@@ -30,7 +31,7 @@ it("account collection without the currency it showed is refreshed, never settle
 it.each(["MXN"])("account collection retries its exact %s quote after expiry", async currency => {
   rpc.mockResolvedValueOnce({ data: { outcome: "paying" }, error: null })
     .mockResolvedValueOnce({ data: { outcome: "paid", amount: 110, tip: 10 }, error: null });
-  const res = await settle(request({ accountId: "a1", expected: 100, tip: 10, method: "cash", ref: "same", currency }));
+  const res = await settle(request({ accountId: "a1", expected: 100, tip: 10, method: "cash", ref: "same", currency, orderIds: [ORDER] }));
   expect(res.status).toBe(200); expect(rpc).toHaveBeenCalledTimes(2);
   expect(rpc.mock.calls[1]).toEqual(rpc.mock.calls[0]);
   expect(rpc.mock.calls[0][1]).toMatchObject({ p_expected: 100, p_tip: 10, p_ref: "account:same" });
@@ -39,7 +40,7 @@ it.each(["MXN"])("account collection retries its exact %s quote after expiry", a
 });
 it.each(["unresolved", "unverified"])("a %s account page leaves collection refused", async result => {
   resolve.mockResolvedValue(result); rpc.mockResolvedValue({ data: { outcome: "paying" }, error: null });
-  const res = await settle(request({ accountId: "a1", expected: 100, method: "cash", currency: "MXN" }));
+  const res = await settle(request({ accountId: "a1", expected: 100, method: "cash", currency: "MXN", ref: "page", orderIds: [ORDER] }));
   expect(res.status).toBe(409); expect(await res.json()).toEqual({ error: "apiErr.accountPayingOnline" });
   expect(rpc).toHaveBeenCalledTimes(1); expect(log).not.toHaveBeenCalled();
 });

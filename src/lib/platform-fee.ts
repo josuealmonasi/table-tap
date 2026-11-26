@@ -79,16 +79,26 @@ export function feeMetadata(hold: FeeHold, restaurantId: string): Record<string,
   return hold.id ? { fee_id: hold.id, fee_cents: String(hold.cents), restaurant_id: restaurantId } : {};
 }
 
+/** Answers that never say "nothing was made": the same key may still be at work. */
+const AMBIGUOUS_STATUSES = new Set([409, 429]);
+
 /**
- * Stripe answered that it made nothing: a 4xx. A dropped connection or a 5xx
- * may have made the session anyway (Stripe calls those indeterminate), and so
- * may a 409 — the same idempotency key still being worked on, which the SDK's
- * own retries can run into — so their fee stays counted until Stripe's expiry
- * says otherwise.
+ * Stripe answered that it made nothing: a 4xx it would give again. A dropped
+ * connection or a 5xx may have made the session anyway (Stripe calls those
+ * indeterminate). So may a 409 or a 429: the same idempotency key still being
+ * worked on, or a lock or rate limit hit while another request on it was in
+ * flight, which the SDK's own retries and a diner's retry both run into. So
+ * may an idempotency error or anything Stripe marks retryable. Their
+ * reservations stay counted until Stripe's expiry, or a replay of the saved
+ * request, says otherwise (bl43 #2).
  */
 export function stripeRefusedOutright(err: unknown): boolean {
-  const status = err && typeof err === "object" && "statusCode" in err ? Number((err as { statusCode?: unknown }).statusCode) : NaN;
-  return status >= 400 && status < 500 && status !== 409;
+  if (!err || typeof err !== "object") return false;
+  const e = err as { statusCode?: unknown; type?: unknown; code?: unknown; headers?: Record<string, unknown> };
+  const status = Number(e.statusCode);
+  if (!(status >= 400 && status < 500) || AMBIGUOUS_STATUSES.has(status)) return false;
+  if (e.type === "StripeIdempotencyError" || e.code === "idempotency_key_in_use") return false;
+  return String(e.headers?.["stripe-should-retry"] ?? "") !== "true";
 }
 
 /** Give back a reservation whose session was never created, or that expired. */

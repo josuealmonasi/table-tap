@@ -8694,6 +8694,31 @@ to 2 L turned two packs for MX$100 into 4 L at MX$25/L. `record_purchase_v2` and
 `apiErr.purchasePackChanged`, which now asks to reload), after answering a retry
 already saved. Check: `terminal-waste-pack-races.spec.ts`.
 
+### Till retry after a reload, and oversized held sales (2026-11-25)
+
+Two pairs that had to agree (bl39 findings 1 and 4). First, the request a till
+sent and the one it sends after a reload. An account charge kept its retry
+request only in memory: the cashier charged MX$120 to an account, lost the
+answer, reloaded, and the restored cart was charged again under a new
+reference, owing MX$240. The exact request and its reference are now saved
+next to the cart before they leave (`tt-pos-cart:<id>:account`,
+`usePosCart().holdAccount`) and restored into the retry panel, so the retry is
+byte-for-byte the first request and `existingTicket` answers it with the sale
+already rung (same `pos_ref`, same `request_scope`). Cash and card had the
+same gap from the other side: the till dropped its charging marker when the
+headers came back, before reading the body, so a reload during a stalled body
+restored the cart while the held receipt was still replaying. The marker now
+goes only with the cart, together and synchronously (`clear()`), once the
+attempt is resolved, or on a refusal that keeps the cart. Second, the lines a
+till cart could hold and the lines offline intake accepts: a 101-line cash sale
+was collected and held, then refused before the review queue on every replay,
+so it stayed on the tablet where no manager could reach it. The cart now
+stops at `MAX_TILL_LINES` (100, `cart-limits.ts`, the same constant intake
+uses) before payment is asked, with `pos.tooManyLines`; a receipt already held
+with more is queued whole for manager review (`apiErr.offlineTooManyLines`)
+and an approval records every line, up to `MAX_CART_LINES`. Check:
+`pos-charge-reload.spec.tsx`, `pos-cart-charging.spec.ts`,
+`held-intake.spec.ts`.
 ### Promotions price the same on the till and the phone (2026-11-25)
 
 Three pairs that had to agree. First, the order the deals arrive in and the
@@ -8792,6 +8817,65 @@ drawer read MX$100 cash in the mail and MX$70 on the corte. Both now read
 their adjustments (logged write-offs and refunds, plus completed return
 events) from one reader, `readCorteAdjustments` in `corte-adjustments.ts`.
 Check: `signup-mail-ceiling.spec.ts`, `digest-figures.spec.ts`.
+### Checkout attempts: a 429 freed a live share; a refused retry held the bill (2026-11-25)
+
+Two pairs that had to agree (bl43 review, findings 2 and 3). First, what
+counts as "Stripe made nothing" and what a retry may give back:
+`stripeRefusedOutright` (`platform-fee.ts`) called every 4xx but 409 a
+refusal, so a retry that met a 429 (a rate limit, or a lock timeout on the
+idempotency key the first request was still creating) retired the split share,
+coupon and fee, and the first request then bound and showed its still-payable
+page: staff could collect the freed share in cash while the diner paid it by
+card. A 429, an idempotency error and any answer Stripe marks retryable now
+keep the reservation, and an attempt's page binds through
+`diner_checkout_bind_open_v1`, which refuses an attempt that is no longer open
+(`checkout_attempt_closed`); `recordDinerCheckout` then expires that late page
+instead of exposing it. Second, a saved whole-bill request and a resume that
+can never send it: the request died before Stripe, the diner retried after the
+saved `expires_at` had passed, Stripe refused it, and only an attempt the
+current call had just inserted was ever cleaned up, so the bill, its coupon
+and its fee stayed held with no session whose expiry could free them. `deliver`
+(`diner-attempt.ts`) now closes an attempt on durable proof it made no session
+(no bound page, an outright refusal of its saved key, and either just opened
+or younger than Stripe's 23-hour key window): the share is retired, or the
+attempt is finished unpaid and its fee released, and resume returns null so the
+caller quotes a fresh attempt with a new key and expiry. Uncertain answers stay
+reserved: the next resume replays the same key (returning the page, which
+binds and expires through the webhook, or a refusal, which closes it), and
+`resolveCheckoutPages` does the same replay for unbound pages under 23 hours.
+That replay exposed a third pair: `splitRpc` treated `reserved` as a refusal
+to resolve for every split RPC, but `reserve_split_slots_v1` answers
+`reserved` on success, so each card reservation replayed its own attempt's
+Stripe request from inside itself; once a refusal could close the attempt,
+the reservation's retry answered `invalid` (400) instead of the 502 the
+refusal deserves. A successful card reservation is no longer resolved.
+Checks: `checkout-attempt-refusal.spec.ts`, `diner-checkout.spec.ts`,
+`platform-fee.spec.ts`, `split-page-recovery.spec.ts`.
+### Account collections and ceilings bound to what was reviewed (2026-11-25)
+
+Two pairs that had to agree (backlog 35, Codex findings 1 and 2). First, an
+in-person account collection and the debt the cashier showed. `ref` was
+optional, so a MX$100 collection whose answer was lost, retried after another
+MX$100 order reached the account, recorded a second payment; and a late first
+try collected replacement debt of the same total, because only the sum was
+compared. `/api/accounts/settle` now requires a nonblank `ref` and the unpaid
+`orderIds` the screen showed (none: 409 refresh), and
+`account_settle_reviewed_v1` answers a replayed ref first, then refuses a
+different order set with the same total (`orders_changed`, 409
+`apiErr.accountOrdersChanged`) before any money is written.
+`SettleAccountDialog` keeps one ref per review and starts a new one when the
+statement's `openOrders` change. Second, a credit ceiling and the currency the
+manager saw. The limit request carried only the number, so a MX$500 review
+saved after the restaurant switched to USD stored US$500; and a legacy ceiling
+with no `credit_currency` and no charge took the menu's currency of the day on
+its first charge. Opening an account and moving a ceiling now send the currency
+the form named; `account_set_limit_v1` compares it with the account's debt
+currency (or the restaurant's when it owes nothing) under the money lock
+(`currency`, 409 `apiErr.accountLimitCurrencyChanged`), and
+`account_charge_v3`/`ring_pos_account_v3` refuse an unconfirmed legacy ceiling
+(`limit_unapproved`, 409 `apiErr.accountLimitUnapproved`) until a manager saves
+it again. Check: `backlog35-account-money.spec.ts`,
+`settle-account-review.spec.tsx`, the api gate's account cases.
 ### A waiter's round, an expired card page and a stale station "done" (2026-11-25)
 
 ### Table admission and waiter calls (2026-11-25)

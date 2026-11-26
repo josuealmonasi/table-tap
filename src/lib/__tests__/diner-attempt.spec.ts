@@ -128,9 +128,9 @@ it("E8 an outright initial Stripe refusal closes only its own attempt", async ()
   await expect(openDinerAttempt(stripe, params, quote)).rejects.toBeDefined();
   expect(state.calls).toContainEqual({ fn: "finish_diner_checkout", args: { p_attempt: state.attempts[0].id, p_paid: false } });
 });
-it("E8 a refusal while reusing an uncertain attempt never releases its coupon or fee", async () => {
+it("E8 a refusal while reusing an attempt past Stripe's key window never releases its coupon or fee", async () => {
   state.attempts = [{ id: "older", scope_key: quote.scopeKey, stripe_session_id: null,
-    stripe_params: params, idempotency_key: "persisted" }];
+    stripe_params: params, idempotency_key: "persisted", created_at: new Date(Date.now() - 25 * 3600 * 1000).toISOString() }];
   create.mockRejectedValueOnce({ statusCode: 400 });
   await expect(openDinerAttempt(stripe, params, quote)).rejects.toBeDefined();
   expect(state.calls.some(c => c.fn === "finish_diner_checkout")).toBe(false);
