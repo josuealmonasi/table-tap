@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseCsv } from "@/lib/csv";
+import { CsvRowLimitError, parseCsv } from "@/lib/csv";
 import { planImport, readPrice, sectionsOf } from "@/lib/menu-import";
 
 /**
@@ -20,6 +20,12 @@ describe("a CSV file", () => {
 
   it("reads the semicolons Excel writes in Spanish", () => {
     expect(parseCsv("nombre;precio\nCapuchino;48,50")).toEqual([["nombre", "precio"], ["Capuchino", "48,50"]]);
+  });
+
+  it("counts CSV records instead of quoted or blank lines and refuses the first over-limit row", () => {
+    const csv = 'name,price\r\n\r\n"Cold\nCoffee",20\r\n';
+    expect(parseCsv(csv, 2)).toHaveLength(2);
+    expect(() => parseCsv(csv + "Latte,30", 2)).toThrow(CsvRowLimitError);
   });
 
 });
@@ -66,6 +72,17 @@ describe("a sheet planned for import", () => {
       { line: 5, name: "latte", reason: "duplicate" },
       { line: 6, name: "Americano", reason: "exists" },
     ]);
+  });
+
+  it("refuses oversized categories and emojis while accepting both limits", () => {
+    const plan = planImport([
+      ["name", "price", "category", "emoji"],
+      ["Allowed", "20", "C".repeat(60), "🍽".repeat(16)],
+      ["Long category", "20", "C".repeat(61), "🍽"],
+      ["Long emoji", "20", "C", "🍽".repeat(17)],
+    ], []);
+    expect(plan.rows.map(row => row.name)).toEqual(["Allowed"]);
+    expect(plan.problems.map(problem => problem.reason)).toEqual(["tooLong", "tooLong"]);
   });
 
   it("names each section once, in the order the sheet does", () => {

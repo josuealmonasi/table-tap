@@ -10,7 +10,7 @@ vi.mock("@/lib/verify-cart", () => ({ cartReferences: () => ({ ok: true, ids: ["
 vi.mock("@/lib/table-session", () => ({ openSession: async () => "s" }));
 vi.mock("@/lib/activity-log", () => ({ logEvent: async () => {} }));
 vi.mock("@/lib/stock-service", () => ({ reserveStock: state.reserve, releaseStock: async () => {}, raiseStockNotifications: state.notify }));
-vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({ from: (table: string) => {
+vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({ rpc: async () => ({ data: "o", error: null }), from: (table: string) => {
   const result = () => ({ error: null, data: table === "restaurants"
     ? { id: "r", currency: "MXN", low_stock_alerts_enabled: state.enabled, low_stock_threshold: 2 }
     : table === "restaurant_tables" ? { id: "00000000-0000-4000-8000-0000000000f3", label: "1" } : table === "orders" ? { id: "o" } : [] });

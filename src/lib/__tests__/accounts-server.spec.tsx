@@ -4,35 +4,49 @@ import type { AccountRow } from "@/lib/accounts-server";
 interface Row { [key: string]: unknown }
 const tables: Record<string, Row[]> = {};
 const reads: { table: string; from: number; orders: string[] }[] = [];
-let failedPage = -1;
+const statementReads: { p_restaurant: string; p_account: string }[] = [];
 let failedTable: string | null = null;
 let holdOrders: Promise<void> | undefined;
 vi.mock("@/lib/supabase/admin", () => ({
-  createAdminClient: () => ({ from: (table: string) => {
-    const filters: ((r: Row) => boolean)[] = [];
-    const orders: string[] = [];
-    let from = 0;
-    let limit = 1000;
-    const q = {
-      select: () => q,
-      returns: () => q,
-      eq: (k: string, v: unknown) => { filters.push(r => r[k] === v); return q; },
-      in: (k: string, values: unknown[]) => { filters.push(r => values.includes(r[k])); return q; },
-      neq: (k: string, v: unknown) => { filters.push(r => r[k] !== v); return q; },
-      not: (k: string) => { filters.push(r => r[k] != null); return q; },
-      order: (k: string) => { orders.push(k); return q; },
-      limit: (value: number) => { limit = value; return q; },
-      range: (a: number) => { from = a; return q; },
-      then: (resolve: (v: unknown) => unknown) => {
-        reads.push({ table, from, orders });
-        const result = table === failedTable || (table === "orders" && from === failedPage)
-          ? { data: null, error: { message: "page failed" } }
-          : { data: (tables[table] ?? []).filter(r => filters.every(f => f(r))).slice(from, from + limit), error: null };
-        return Promise.resolve(table === "orders" ? holdOrders : undefined).then(() => result).then(resolve);
-      },
-    };
-    return q;
-  } }),
+  createAdminClient: () => ({
+    rpc: async (name: string, args: { p_restaurant: string; p_account: string }) => {
+      expect(name).toBe("account_statement_v1");
+      statementReads.push(args);
+      const belongs = (row: Row) => row.restaurant_id === args.p_restaurant && row.account_id === args.p_account;
+      const result = failedTable === "statement" ? { data: null, error: { message: "page failed" } }
+        : { data: {
+          orders: tables.orders.filter(row => belongs(row) && !row.paid && !row.written_off && row.status !== "cancelled").map(row => ({ ...row })),
+          payments: tables.payments.filter(belongs).slice(0, 20).map(row => ({ ...row })),
+        }, error: null };
+      await holdOrders;
+      return result;
+    },
+    from: (table: string) => {
+      const filters: ((r: Row) => boolean)[] = [];
+      const orders: string[] = [];
+      let from = 0;
+      let limit = 1000;
+      const q = {
+        select: () => q,
+        returns: () => q,
+        eq: (k: string, v: unknown) => { filters.push(r => r[k] === v); return q; },
+        in: (k: string, values: unknown[]) => { filters.push(r => values.includes(r[k])); return q; },
+        neq: (k: string, v: unknown) => { filters.push(r => r[k] !== v); return q; },
+        not: (k: string) => { filters.push(r => r[k] != null); return q; },
+        order: (k: string) => { orders.push(k); return q; },
+        limit: (value: number) => { limit = value; return q; },
+        range: (a: number) => { from = a; return q; },
+        then: (resolve: (v: unknown) => unknown) => {
+          reads.push({ table, from, orders });
+          const result = table === failedTable
+            ? { data: null, error: { message: "page failed" } }
+            : { data: (tables[table] ?? []).filter(r => filters.every(f => f(r))).slice(from, from + limit), error: null };
+          return Promise.resolve(table === "orders" ? holdOrders : undefined).then(() => result).then(resolve);
+        },
+      };
+      return q;
+    },
+  }),
 }));
 const { statementOf, listAccounts } = await import("@/lib/accounts-server");
 const account = { id: "a1", restaurant_id: "r1", credit_limit: 200000 } as AccountRow;
@@ -47,12 +61,12 @@ beforeEach(() => {
   tables.refund_operations = [];
   tables.customer_accounts = [account as unknown as Row];
   reads.length = 0;
-  failedPage = -1;
+  statementReads.length = 0;
   failedTable = null;
   holdOrders = undefined;
 });
 
-it.each([null, "orders", "payments", "refund_operations", "order_adjustments"])("starts all statement reads together and preserves history or failure for %s", async table => {
+it.each([null, "statement", "refund_operations", "order_adjustments"])("starts all statement reads together and preserves history or failure for %s", async table => {
   const at = "2026-10-01T18:00:00Z";
   const order = { ...charge("food"), total: 70, currency: "MXN", created_at: at, table_label: "Patio" };
   tables.orders = [order];
@@ -69,8 +83,9 @@ it.each([null, "orders", "payments", "refund_operations", "order_adjustments"])(
   release();
   const result = await pending;
   await new Promise<void>(resolve => setImmediate(resolve));
-  const names: Record<string, string> = { orders: "orders", payments: "payments", refund_operations: "returns", order_adjustments: "credits" };
-  expect({ started, result }).toEqual({ started: ["order_adjustments", "orders", "payments", "refund_operations"],
+  const names: Record<string, string> = { statement: "statement", refund_operations: "returns", order_adjustments: "credits" };
+  expect(statementReads).toEqual([{ p_restaurant: "r1", p_account: "a1" }]);
+  expect({ started, result }).toEqual({ started: ["order_adjustments", "refund_operations"],
     result: table ? { error: `Could not read the account's ${names[table]}: page failed` } : { statement: {
       currency: "MXN", balances: [{ currency: "MXN", amount: 70 }], tipBalances: [{ currency: "MXN", amount: 70 }], owed: 70, chargedBy: { food: "ana" }, openOrders: { MXN: ["food"] },
       days: [{ day: "2026-10-02", currency: "MXN", total: 70, charges: [{ orderId: "food", currency: "MXN", at, tableLabel: "Patio", lines: [], total: 70, creditable: true,
@@ -90,17 +105,25 @@ describe("account statement and list agree about debt", () => {
     expect(statement.days.map(d => [d.currency,d.total])).toEqual([["USD",100],["MXN",100]]);
     expect((await listAccounts("r1"))[0]).toMatchObject({ owed: 0, balances: statement.balances });
   });
-  it("counts all 1001 charges, with a unique page order", async () => {
+  it("counts all 1001 charges without separate database pages", async () => {
     tables.orders = Array.from({ length: 1001 }, (_, i) => charge(String(i)));
     expect((await statementOf(account)).owed).toBe(100100);
-    expect(reads.filter(r => r.table === "orders").map(r => r.from)).toEqual([0, 1000, 1001]);
-    expect(reads.filter(r => r.table === "orders").every(r => r.orders.includes("id"))).toBe(true);
+    expect(statementReads).toHaveLength(1);
+    expect(reads.some(read => read.table === "orders" || read.table === "payments")).toBe(false);
   });
-  it("refuses an incomplete statement when a later page fails", async () => {
-    tables.orders = Array.from({ length: 1001 }, (_, i) => charge(String(i)));
-    failedPage = 1000;
-    await expect(statementOf(account)).rejects.toThrow("page failed");
+
+  it("does not mix pre-settlement debt with the new payment receipt", async () => {
+    tables.orders = [{ ...charge("food"), currency: "MXN" }];
+    let release!: () => void;
+    holdOrders = new Promise(resolve => { release = resolve; });
+    const before = statementOf(account);
+    tables.orders[0].paid = true;
+    tables.payments = [{ ...tables.orders[0], amount: 100, tip: 0, method: "cash" }];
+    release();
+    expect(await before).toMatchObject({ owed: 100, payments: [] });
+    expect(await statementOf(account)).toMatchObject({ owed: 0, payments: [{ amount: 100 }] });
   });
+
   it("leaves waived debt out of both the statement and the list", async () => {
     tables.orders = [charge("food"), charge("waived", true)];
     expect((await statementOf(account)).owed).toBe(100);

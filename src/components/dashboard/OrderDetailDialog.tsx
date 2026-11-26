@@ -81,7 +81,8 @@ export default function OrderDetailDialog({
         return;
       }
       if (to === "kitchen") {
-        toast(t("orders.sentToKitchen"));
+        if (data.queued === true) toast(t("orders.sentToKitchen"));
+        else toast(t("orders.kitchenCopyNotQueued"), "error");
         return;
       }
       if (typeof data.html !== "string" || !data.html.trim()) throw new Error("Missing receipt");

@@ -1,10 +1,11 @@
+import { readFileSync } from "node:fs";
 import { beforeEach, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
 import { issueOfflineContext } from "@/lib/offline-authority";
 
 const state = vi.hoisted(() => ({
   board: true, role: "cashier", email: "cashier@example.com", blocked: false, matching: false, calls: [] as { name: string; args: Record<string, unknown> }[],
-  queued: null as Record<string, unknown> | null,
+  queued: null as Record<string, unknown> | null, priceMoved: false,
 }));
 vi.mock("@/lib/api-guard", () => ({
   actingStaff: async () => ({ restaurantId: "r", role: state.role, email: state.email }),
@@ -14,7 +15,7 @@ vi.mock("@/lib/api-error", () => ({ apiError: async (error: string, status: numb
 vi.mock("@/lib/plan-guard", () => ({ frozenBlocks: async () => state.blocked ? Response.json({ error: "frozen" }, { status: 402 }) : null,
   planBlocks: async () => state.blocked ? Response.json({ error: "plan" }, { status: 403 }) : null }));
 vi.mock("@/lib/plan-server", () => ({ getPlan: async () => ({ limits: { allows_kitchen_board: state.board } }) }));
-vi.mock("@/lib/offline-pricing", () => ({ currentOfflinePrice: async () => ({ price: { subtotal: 100, serviceFee: 0, tip: 0, discount: 0, total: 100 }, lines: [] }), sameOfflinePrice: () => state.matching }));
+vi.mock("@/lib/offline-pricing", () => ({ currentOfflinePrice: async () => ({ price: { subtotal: 100, serviceFee: 0, tip: 0, discount: 0, total: 100 }, lines: [] }), sameOfflinePrice: () => state.matching, offlineRevenueLines: (saved: unknown[]) => saved }));
 vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({
   from: (table: string) => {
     const q: Record<string, unknown> = {};
@@ -26,8 +27,10 @@ vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({
     return q;
   },
   rpc: async (name: string, args: Record<string, unknown>) => {
+    if (name === "offline_pricing_revision_v1") return { data: "rev", error: null };
     state.calls.push({ name, args });
     if (name === "queue_offline_sale") return { data: { queued: true, orderId: args.p_ref, receipt: args.p_body }, error: null };
+    if (name === "record_offline_sale_v2" && state.priceMoved && !args.p_manager) return { data: { outcome: "pricing_changed" }, error: null };
     return { data: { outcome: "settled", settled: true, orderId: args.p_ref, total: 80, currency: "USD", method: "cash" }, error: null };
   },
 }) }));
@@ -40,7 +43,7 @@ const body = () => ({ posRef: "6b1f0c2e-0000-4000-8000-000000000001", restaurant
   offline: { at: new Date().toISOString(), subtotal: 80, serviceFee: 0, tip: 0, discount: 0, total: 80 },
 });
 const request = (data: unknown) => new NextRequest("http://localhost/api/pos/order", { method: "POST", body: JSON.stringify(data) });
-beforeEach(() => { state.calls = []; state.board = true; state.role = "cashier"; state.email = "cashier@example.com"; state.blocked = false; state.matching = false; state.queued = null; process.env.SUPABASE_SECRET_KEY = "test-offline-secret"; });
+beforeEach(() => { state.calls = []; state.board = true; state.role = "cashier"; state.email = "cashier@example.com"; state.blocked = false; state.matching = false; state.queued = null; state.priceMoved = false; process.env.SUPABASE_SECRET_KEY = "test-offline-secret"; });
 
 it("queues a price difference as collected instead of leaving it on the device", async () => {
   const sent = body();
@@ -82,7 +85,7 @@ it("approves only the stored amount, original collector and original currency af
   const res = await recovery.POST(request({ posRef: original.posRef, restaurantId: "r", offline: { total: 999 },
     approval: { confirmed: true, reason: "Original receipt checked", currency: "USD", collector: "original@example.com" } }));
   expect(res.status).toBe(200);
-  expect(state.calls[0]).toMatchObject({ name: "record_offline_sale", args: { p_actor: "original@example.com", p_manager: state.email,
+  expect(state.calls[0]).toMatchObject({ name: "record_offline_sale_v2", args: { p_actor: "original@example.com", p_manager: state.email,
     p_order: { total: 80, currency: "USD", offline_drift: null } } });
 });
 it("refuses attempts to replace the original collector or currency on an already queued receipt", async () => {
@@ -147,7 +150,7 @@ it("C5: manager recovery preserves an interrupted kitchen sale's pending prepara
   state.queued = { body: original, collector: "cashier@example.com", currency: "MXN" };
   expect((await recovery.POST(request({ posRef: original.posRef, restaurantId: "r",
     approval: { confirmed: true, reason: "Original receipt checked" } }))).status).toBe(200);
-  expect(state.calls[0]).toMatchObject({ name: "record_offline_sale", args: { p_order: { preparation_pending: true } } });
+  expect(state.calls[0]).toMatchObject({ name: "record_offline_sale_v2", args: { p_order: { preparation_pending: true } } });
 });
 
 it("C5: a till without a kitchen board still finishes an interrupted counter sale", async () => {
@@ -156,7 +159,7 @@ it("C5: a till without a kitchen board still finishes an interrupted counter sal
   state.queued = { body: original, collector: "cashier@example.com", currency: "MXN" };
   expect((await recovery.POST(request({ posRef: original.posRef, restaurantId: "r",
     approval: { confirmed: true, reason: "Original receipt checked" } }))).status).toBe(200);
-  expect(state.calls[0]).toMatchObject({ name: "record_offline_sale", args: { p_order: { preparation_pending: false } } });
+  expect(state.calls[0]).toMatchObject({ name: "record_offline_sale_v2", args: { p_order: { preparation_pending: false } } });
 });
 
 it("N4: approved interrupted combos keep their preparation notes and component extras", async () => {
@@ -168,6 +171,48 @@ it("N4: approved interrupted combos keep their preparation notes and component e
   state.queued = { body: original, collector: "cashier@example.com", currency: "MXN" };
   expect((await recovery.POST(request({ posRef: original.posRef, restaurantId: "r",
     approval: { confirmed: true, reason: "Original kitchen instructions checked" } }))).status).toBe(200);
-  expect(state.calls[0]).toMatchObject({ name: "record_offline_sale", args: { p_order: { preparation_pending: true,
+  expect(state.calls[0]).toMatchObject({ name: "record_offline_sale_v2", args: { p_order: { preparation_pending: true,
     items: [expect.objectContaining({ notes: "No peanuts", extras: [extra], components: [expect.objectContaining({ extras: [extra] })] })] } } });
+});
+
+it("bl39 #3: a price changed after the comparison queues the receipt instead of posting it", async () => {
+  // The receipt matched the menu when the route compared it; a manager changed
+  // the price before the writer took the money lock. The writer re-reads the
+  // pricing revision there and refuses, and the receipt goes to Held sales.
+  state.matching = true; state.priceMoved = true;
+  const sent = body();
+  const res = await POST(request(sent));
+  expect(res.status).toBe(200);
+  expect(await res.json()).toMatchObject({ queued: true, receipt: sent });
+  expect(state.calls.map(c => c.name)).toEqual(["record_offline_sale_v2", "queue_offline_sale"]);
+  expect(state.calls[0]!.args).toMatchObject({ p_pricing_revision: "rev", p_manager: null });
+  expect(state.calls[1]!.args.p_reason).toBe("apiErr.offlineApproval");
+});
+
+it("bl39 #3: a manager can still approve the collected price after it changed", async () => {
+  state.role = "manager"; state.priceMoved = true;
+  const original = body();
+  state.queued = { body: original, collector: "cashier@example.com", currency: "MXN" };
+  expect((await recovery.POST(request({ posRef: original.posRef, restaurantId: "r",
+    approval: { confirmed: true, reason: "Collected price checked" } }))).status).toBe(200);
+  expect(state.calls[0]).toMatchObject({ name: "record_offline_sale_v2", args: { p_pricing_revision: null, p_manager: state.email } });
+});
+
+it("bl39 #3: the writer checks the revision under the money lock, before it records, and skips it for a manager", () => {
+  const sql = readFileSync("supabase/schema.sql", "utf8");
+  const v2 = sql.split("create or replace function public.record_offline_sale_v2(")[1]!.split("$$;")[0]!;
+  expect(v2).toContain("p_authority text, p_pricing_revision text\n");
+  const lock = v2.indexOf("perform public.lock_restaurant_money(p_restaurant);");
+  const check = v2.indexOf("p_pricing_revision is distinct from public.offline_pricing_revision_v1(p_restaurant)");
+  expect(lock).toBeGreaterThan(-1);
+  expect(check).toBeGreaterThan(lock);
+  expect(check).toBeLessThan(v2.indexOf("public.record_offline_sale("));
+  expect(v2).toContain("if p_manager is null and public.pos_ticket(p_restaurant, p_ref) is null");
+  const revision = sql.split("create or replace function public.offline_pricing_revision_v1(")[1]!.split("$$;")[0]!;
+  for (const read of ["m.price", "m.discount_pct", "m.modifiers", "item_addons", "p.combo_price", "p.tiers", "promotion_items", "r.service_pct"]) {
+    expect(revision).toContain(read);
+  }
+  // Availability is waived for a sale that already happened: a sold-out dish
+  // must not send every receipt to review.
+  expect(revision).not.toContain("available");
 });

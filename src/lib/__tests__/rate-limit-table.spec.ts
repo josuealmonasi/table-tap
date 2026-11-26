@@ -38,6 +38,15 @@ describe("a diner's write, counted per table with a ceiling for the room", () =>
     expect(refused).toEqual([]);
   });
 
+  it("counts an upper-case spelling of a table as the same table", async () => {
+    // The database matches a UUID in any case; a second spelling must not be
+    // a second allowance (Codex review bl40, finding 5).
+    const lower = "abcdef00-0000-4000-8000-00000000000a";
+    for (let i = 0; i < 5; i++) expect(await write("189.203.14.7", lower)).toBe(false);
+    for (let i = 0; i < 5; i++) expect(await write("189.203.14.7", lower.toUpperCase())).toBe(false);
+    expect(await write("189.203.14.7", lower.toUpperCase())).toBe(true);
+  });
+
   it("still stops one client hammering one table", async () => {
     for (let i = 0; i < 10; i++) expect(await write("189.203.14.7", TABLE(1))).toBe(false);
     expect(await write("189.203.14.7", TABLE(1))).toBe(true);

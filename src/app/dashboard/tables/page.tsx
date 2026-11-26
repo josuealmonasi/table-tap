@@ -47,7 +47,7 @@ export default async function TablesPage() {
   // because nothing unpaid could be read. The error screen offers a retry.
   const tables = unwrap(tablesRes, "the tables");
   const openOrders = unwrap(openOrdersRes, "what the tables owe");
-  const tableList = (tables as RestaurantTable[]) ?? [];
+  const tableList = (tables as (RestaurantTable & { qr_key?: string | null })[]) ?? [];
 
   // Absolute base URL so scanned QRs reach the deployed site (dev: localhost).
   const h = await headers();
@@ -61,7 +61,9 @@ export default async function TablesPage() {
 
   const tableQrs: TableWithQr[] = await Promise.all(
     tableList.map(async table => {
-      const url = `${origin}/r/${r.id}/t/${table.id}`;
+      // The key lets a phone that has not been let in yet call the waiter.
+      // Renaming the table rotates it, and this QR changes with it.
+      const url = `${origin}/r/${r.id}/t/${table.id}${table.qr_key ? `?k=${table.qr_key}` : ""}`;
       return { table, qr: { url, svg: await qrSvg(url) } };
     }),
   );

@@ -11,8 +11,12 @@ vi.mock("@/lib/checkout/orderable-now", () => ({ orderableNow: async () => ({ cl
 vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({ from: (table: string) => {
   const q = { select: () => q, eq: () => q, gte: () => q, limit: async () => ({ data: [] }),
     single: async () => ({ data: table === "restaurants" ? { accepting_orders: true } : { id: "00000000-0000-4000-8000-0000000000f4", label: "1" } }),
+    maybeSingle: async () => ({ data: { id: "00000000-0000-4000-8000-0000000000f4", qr_key: null } }),
     insert: (...args: unknown[]) => { insert(...args); return Promise.resolve({ error: null }); },
   }; return q;
+}, rpc: async (fn: string, args: unknown) => {
+  if (fn === "raise_service_request_v1") { insert(args); return { data: { status: "created" }, error: null }; }
+  return { data: null, error: { message: "unexpected" } };
 } }) }));
 const { POST: checkout } = await import("@/app/api/checkout/route");
 const { POST: request } = await import("@/app/api/service-requests/route");
@@ -25,10 +29,10 @@ it("D10 refuses a new prepaid table order without dine-in before reserving anyth
   expect(insert).not.toHaveBeenCalled();
 });
 it("D10 refuses waiter calls without dine-in", async () => {
-  expect((await request(req({ restaurantId: "r1", tableId: "00000000-0000-4000-8000-0000000000f4", kind: "waiter" }))).status).toBe(403);
+  expect((await request(req({ restaurantId: "00000000-0000-4000-8000-0000000000a1", tableId: "00000000-0000-4000-8000-0000000000f4", kind: "waiter" }))).status).toBe(403);
   expect(insert).not.toHaveBeenCalled();
 });
 it.each(["bill", "pay"])("D10 preserves %s requests for existing debts", async kind => {
-  expect((await request(req({ restaurantId: "r1", tableId: "00000000-0000-4000-8000-0000000000f4", kind }))).status).toBe(200);
+  expect((await request(req({ restaurantId: "00000000-0000-4000-8000-0000000000a1", tableId: "00000000-0000-4000-8000-0000000000f4", kind }))).status).toBe(200);
   expect(insert).toHaveBeenCalledOnce();
 });

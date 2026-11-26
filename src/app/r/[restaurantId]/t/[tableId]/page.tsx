@@ -10,6 +10,7 @@ import { getPlan } from "@/lib/plan-server";
 import type { RestaurantTable } from "@/lib/types";
 import { offerAt } from "@/lib/loyalty/pass";
 import { openSittingAt } from "@/lib/table-membership";
+import { QR_KEY } from "@/lib/table-qr-key";
 
 export const dynamic = "force-dynamic";
 
@@ -17,9 +18,11 @@ export const dynamic = "force-dynamic";
 async function Menu({
   restaurantId,
   tableId,
+  qrKey,
 }: {
   restaurantId: string;
   tableId: string;
+  qrKey?: string;
 }) {
   // Read with the secret key, scoped to both ids in the URL. Tables are not
   // readable with the publishable key on purpose — listable table ids would let
@@ -29,7 +32,8 @@ async function Menu({
     loadOrderingData(restaurantId),
     createAdminClient()
       .from("restaurant_tables")
-      .select("*")
+      // Never `*`: the stored QR key must not reach the browser (see qrKey).
+      .select("id, restaurant_id, label")
       .eq("id", tableId)
       .eq("restaurant_id", restaurantId)
       .single(),
@@ -57,7 +61,7 @@ async function Menu({
   // fault has already thrown, rather than telling the customer their QR code
   // points at nothing.
   if (!data.restaurant) notFound();
-  const seatedAt = dineIn ? table : null;
+  const seatedAt = dineIn && table ? { ...table, qrKey } : null;
   // Whether a party is eating here decides the visit card's pass: an empty
   // table offers it before ordering, somebody else's meal only after the phone
   // is let in. A failed read is treated as somebody's meal: no pass, menu intact.
@@ -91,10 +95,14 @@ async function Menu({
 // see the note on the fast-food route.
 export default async function TablePage({
   params,
+  searchParams,
 }: {
   params: Promise<{ restaurantId: string; tableId: string }>;
+  searchParams: Promise<{ k?: string | string[] }>;
 }) {
   const { restaurantId, tableId } = await params;
+  const { k } = await searchParams;
+  const qrKey = typeof k === "string" && QR_KEY.test(k) ? k : undefined;
   const [{ exists, cover }, loyalty] = await Promise.all([
     loadCoverState(restaurantId),
     menuShowsLoyalty(restaurantId),
@@ -103,7 +111,7 @@ export default async function TablePage({
 
   return (
     <Suspense fallback={<MenuSkeleton table cover={cover} loyalty={loyalty} />}>
-      <Menu restaurantId={restaurantId} tableId={tableId} />
+      <Menu restaurantId={restaurantId} tableId={tableId} qrKey={qrKey} />
     </Suspense>
   );
 }

@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import { randomUUID } from "node:crypto";
 import { apiError } from "@/lib/api-error";
 import { isRoomLimited } from "@/lib/rate-limit";
 import { jsonBody } from "@/lib/json-body";
@@ -72,37 +71,12 @@ export async function POST(req: NextRequest) {
   if (orderId && !order) return await apiError("apiErr.orderNotFound", 404);
 
   if (to === "kitchen") {
-    const { data: place } = await db
-      .from("restaurants")
-      .select("print_token")
-      .eq("id", actor.restaurantId)
-      .maybeSingle();
-    // Queuing a ticket for a printer that does not exist would look like it
-    // worked and print nothing, forever.
-    if (!place?.print_token) return await apiError("apiErr.noPrinter", 409);
-
-    // Re-arm rather than insert. `print_jobs_once` is unique on
-    // (order_id, kind) — it exists so a repeated trigger cannot put the same
-    // ticket on the paper twice, and a second insert here would be refused by
-    // it. Asking again deliberately is a different act from asking twice by
-    // accident: the row goes back in the queue, unclaimed and unprinted, with
-    // a new delivery token so an old copy's confirmation cannot close it.
-    const { error } = await db
-      .from("print_jobs")
-      .upsert(
-        {
-          restaurant_id: actor.restaurantId,
-          order_id: order!.id as string,
-          kind: "kitchen",
-          delivery_token: randomUUID(),
-          claimed_at: null,
-          printed_at: null,
-          created_at: new Date().toISOString(),
-        },
-        { onConflict: "order_id,kind" },
-      );
+    const { data: queued, error } = await db.rpc("rearm_kitchen_print_v1", {
+      p_restaurant: actor.restaurantId, p_order: order!.id,
+    });
     if (error) return await apiError("apiErr.generic", 500);
-    return NextResponse.json({ queued: true });
+    if (queued === null) return await apiError("apiErr.noPrinter", 409);
+    return NextResponse.json({ queued });
   }
 
   let source: ReceiptSource;

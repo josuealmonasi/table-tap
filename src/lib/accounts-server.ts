@@ -126,16 +126,18 @@ interface StatementOrder {
   charged_by: string | null;
 }
 
+interface StatementSnapshot {
+  orders: StatementOrder[];
+  payments: {
+    amount: number; tip: number; currency: string; method: "cash" | "card"; created_at: string;
+  }[];
+}
+
 /** An account's statement: its unpaid orders by the restaurant's day, and its payments. */
 export async function statementOf(account: AccountRow, timeZone?: string | null | PromiseLike<string | null | undefined>): Promise<Statement> {
   const db = createAdminClient();
-  const ordersRead = everyRow<StatementOrder>((a, b) => db.from("orders").select("id, items, total, currency, table_label, created_at, charged_at, charged_by, status, service_fee, tip")
-    .eq("restaurant_id", account.restaurant_id).eq("account_id", account.id).eq("paid", false).eq("written_off", false).neq("status", "cancelled")
-    .order("id").range(a, b), "the account's orders");
-  const [orders, paymentsRes, returns, credits, resolvedTimeZone] = await Promise.all([
-    ordersRead,
-    db.from("payments").select("amount, tip, currency, method, created_at")
-      .eq("restaurant_id", account.restaurant_id).eq("account_id", account.id).order("created_at", { ascending: false }).limit(20),
+  const [snapshotRes, returns, credits, resolvedTimeZone] = await Promise.all([
+    db.rpc("account_statement_v1", { p_restaurant: account.restaurant_id, p_account: account.id }),
     everyRow<{ id: string; amount: number; currency: string; status: string; created_at: string }>((a, b) => db
       .from("refund_operations").select("id, amount, currency, status, created_at, order_adjustments!inner(orders!inner(account_id))")
       .eq("restaurant_id", account.restaurant_id).eq("order_adjustments.orders.account_id", account.id)
@@ -143,6 +145,9 @@ export async function statementOf(account: AccountRow, timeZone?: string | null 
     readAccountCredits(db, account.restaurant_id, account.id),
     timeZone,
   ]);
+  const snapshot = unwrap<StatementSnapshot>(snapshotRes, "the account's statement");
+  if (!snapshot) throw new Error("The account statement snapshot is missing");
+  const { orders, payments } = snapshot;
   const charges: StatementCharge[] = orders.map(o => ({
     currency: o.currency,
     orderId: o.id,
@@ -152,9 +157,6 @@ export async function statementOf(account: AccountRow, timeZone?: string | null 
     lines: linesOf(o.items),
     total: Number(o.total),
   }));
-  const payments = (unwrap(paymentsRes, "the account's payments") ?? []) as {
-    amount: number; tip: number; currency: string; method: "cash" | "card"; created_at: string;
-  }[];
   const balances = currencyBalances(orders.map(o => ({ currency: o.currency, amount: Number(o.total) })));
   return {
     currency: balances.length === 1 ? balances[0].currency : null,

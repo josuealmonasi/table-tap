@@ -109,6 +109,13 @@ describe("dinerPathFromScan", () => {
     expect(dinerPathFromScan(`https://a.test/r/${R}/t/${T}`)).toBe(`/r/${R}/t/${T}`);
     expect(dinerPathFromScan(`https://a.test/r/${R}`)).toBe(`/r/${R}`);
   });
+  it("keeps a table QR's key and drops anything that is not one", () => {
+    // Without it, a phone not yet let in could not call the waiter from the
+    // table it just scanned (Codex review bl40, finding 3).
+    const key = "0123456789abcdef0123456789abcdef";
+    expect(dinerPathFromScan(`https://a.test/r/${R}/t/${T}?k=${key}`)).toBe(`/r/${R}/t/${T}?k=${key}`);
+    expect(dinerPathFromScan(`https://a.test/r/${R}/t/${T}?k=x%26next%3D%2F%2Fevil`)).toBe(`/r/${R}/t/${T}`);
+  });
   it("never keeps the host a code names", () => {
     // A sticker over the table's QR can name any site; the path is all that is used.
     expect(dinerPathFromScan(`https://evil.example/r/${R}`)).toBe(`/r/${R}`);

@@ -9,7 +9,11 @@ export const runtime = "nodejs";
 
 // POST /api/orders/station — one station has finished its part of an order.
 //
-// { id, station: "kitchen" | "bar" }
+// { id, station: "kitchen" | "bar", revision }
+//
+// `revision` is the preparation cycle the screen showed (orders.prep_revision).
+// Sending a ticket back starts a new cycle, so a "done" sent before the rewind
+// and delivered after it is refused instead of counting toward the new one.
 //
 // The people who move orders on the board (not the floor). The database does
 // the rest under the order's lock: it records the station, and moves the
@@ -18,10 +22,14 @@ export const runtime = "nodejs";
 export async function POST(req: NextRequest) {
   const actor = await actingStaff();
   if (!actor || !MOVES_ORDERS(actor.role)) return await apiError("apiErr.notYourStage", 403);
-  const body = await jsonBody<{ id?: unknown; station?: unknown }>(req);
+  const body = await jsonBody<{ id?: unknown; station?: unknown; revision?: unknown }>(req);
   const id = typeof body?.id === "string" && /^[0-9a-f-]{36}$/i.test(body.id) ? body.id : null;
   const station = body?.station === "kitchen" || body?.station === "bar" ? body.station : null;
   if (!id || !station) return await apiError("apiErr.invalidRequest", 400);
+  // A screen loaded before revisions existed sends none: it cannot prove which
+  // cycle it saw, so it is told to look again rather than trusted.
+  const revision = Number.isInteger(body?.revision) && (body?.revision as number) >= 0 ? body?.revision as number : null;
+  if (revision === null) return await apiError("apiErr.stationStale", 409);
 
   const db = createAdminClient();
   let orderId = id;
@@ -33,10 +41,11 @@ export async function POST(req: NextRequest) {
     if (!order) return await apiError("apiErr.orderNotFound", 404);
     orderId = order.id;
   }
-  const { data, error } = await db.rpc("mark_station_ready", {
+  const { data, error } = await db.rpc("mark_station_ready_v2", {
     p_restaurant: actor.restaurantId,
     p_order: orderId,
     p_station: station,
+    p_revision: revision,
   });
   if (error) return await apiError("apiErr.orderData", 500);
   const result = data as { outcome: string; status?: string; stations_ready?: string[] };
@@ -46,6 +55,7 @@ export async function POST(req: NextRequest) {
     return await apiError("apiErr.orderInactive", 409, undefined, { inactive: true });
   }
   if (result.outcome === "moved") return await apiError("apiErr.orderMovedOn", 409);
+  if (result.outcome === "stale") return await apiError("apiErr.stationStale", 409);
   if (result.outcome === "notHere") return await apiError("apiErr.stationNotInOrder", 409);
   if (result.outcome !== "ok") return await apiError("apiErr.invalidRequest", 400);
   return NextResponse.json({ ok: true, status: result.status, stationsReady: result.stations_ready });

@@ -86,7 +86,10 @@ export async function isRateLimited(
  */
 function tableKey(address: string, tableId: string | null | undefined): string {
   return createHmac("sha256", process.env.SUPABASE_SECRET_KEY ?? "")
-    .update(`${address}|${tableId || "counter"}`)
+    // One table, one counter: the database matches a UUID in any case, so an
+    // upper-case spelling of the same id opened a second allowance (Codex
+    // review bl40, finding 5).
+    .update(`${address}|${tableId?.toLowerCase() || "counter"}`)
     .digest("hex")
     .slice(0, 20);
 }

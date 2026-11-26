@@ -207,10 +207,11 @@ describe("staff write only the columns their screens write", () => {
     expect(grant).toBeGreaterThan(revoke);
   });
 
-  it("matches a duplicate call within its own restaurant", () => {
-    const route = read("src/app/api/service-requests/route.ts");
-    const lookup = route.slice(route.indexOf('.from("service_requests")'), route.indexOf(".limit(1)"));
-    expect(lookup).toContain('.eq("restaurant_id", restaurantId)');
+  it("matches a duplicate call within its own restaurant, table and sitting", () => {
+    const fn = schema.slice(schema.indexOf("create or replace function public.raise_service_request_v1"));
+    const lookup = fn.slice(fn.indexOf("select id into v_id from service_requests"), fn.indexOf("limit 1"));
+    expect(lookup).toContain("where restaurant_id = p_restaurant and table_id = p_table and kind = p_kind");
+    expect(lookup).toContain("session_id is not distinct from p_session");
   });
 });
 

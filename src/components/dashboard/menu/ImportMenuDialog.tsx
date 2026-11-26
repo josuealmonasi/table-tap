@@ -1,12 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Modal } from "@/components/ui/Modal";
 import { useT } from "@/lib/i18n/context";
 import { formatMoney } from "@/lib/format";
 import { useToast } from "@/components/ui/Toast";
-import { parseCsv } from "@/lib/csv";
-import { planImport, sectionsOf, type ImportPlan, type ImportRow } from "@/lib/menu-import";
+import { CsvRowLimitError, parseCsv } from "@/lib/csv";
+import { MAX_IMPORT_BYTES, MAX_IMPORT_ROWS, planImport, sectionsOf, type ImportPlan, type ImportRow } from "@/lib/menu-import";
 import { SEP } from "@/lib/separator";
 
 interface ImportMenuDialogProps {
@@ -41,21 +41,57 @@ export default function ImportMenuDialog({
   const t = useT();
   const toast = useToast();
   const [plan, setPlan] = useState<ImportPlan | null>(null);
+  const [fileError, setFileError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [wasOpen, setWasOpen] = useState(false);
+  const fileRead = useRef(0);
 
-  const fromText = (text: string) => setPlan(planImport(parseCsv(text), existingNames));
+  useEffect(() => () => { fileRead.current++; }, [open]);
+
+  function fromText(text: string): void {
+    setFileError(null);
+    try {
+      setPlan(planImport(parseCsv(text, MAX_IMPORT_ROWS + 1), existingNames));
+    } catch (error) {
+      if (!(error instanceof CsvRowLimitError)) throw error;
+      setPlan(null);
+      setFileError(t("menuImport.tooManyRows", { n: MAX_IMPORT_ROWS }));
+    }
+  }
 
   // Each time it opens it starts afresh — with the template already read in
   // when that is what was asked for.
   if (open !== wasOpen) {
     setWasOpen(open);
-    if (open) setPlan(withTemplate ? planImport(parseCsv(t("menuImport.cafeCsv")), existingNames) : null);
+    if (open) {
+      if (withTemplate) fromText(t("menuImport.cafeCsv"));
+      else {
+        setPlan(null);
+        setFileError(null);
+      }
+    }
   }
 
   async function readFile(file: File | undefined): Promise<void> {
     if (!file) return;
-    fromText(await file.text());
+    const read = ++fileRead.current;
+    setPlan(null);
+    setFileError(null);
+    if (file.size > MAX_IMPORT_BYTES) {
+      setFileError(t("menuImport.fileTooLarge"));
+      return;
+    }
+    try {
+      const content = await file.text();
+      if (read === fileRead.current) fromText(content);
+    } catch {
+      if (read === fileRead.current) setFileError(t("menuImport.fileReadFailed"));
+    }
+  }
+
+  function loadTemplate(): void {
+    fileRead.current++;
+    fromText(t("menuImport.cafeCsv"));
   }
 
   /** The template as a file: the format, with a café's menu in it. */
@@ -101,12 +137,13 @@ export default function ImportMenuDialog({
             <button type="button" className="tt-btn tt-btn-ghost tt-btn-sm" onClick={download}>
               {t("menuImport.download")}
             </button>
-            <button type="button" className="tt-btn tt-btn-ghost tt-btn-sm" onClick={() => fromText(t("menuImport.cafeCsv"))}>
+            <button type="button" className="tt-btn tt-btn-ghost tt-btn-sm" onClick={loadTemplate}>
               {t("menuImport.useTemplate")}
             </button>
           </div>
         </div>
 
+        {fileError && <p className="tt-field-error" role="alert">{fileError}</p>}
         {plan?.missingColumns && <p className="tt-field-error" role="alert">{t("menuImport.missingColumns")}</p>}
 
         {plan && !plan.missingColumns && (
