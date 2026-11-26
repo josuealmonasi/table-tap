@@ -779,12 +779,26 @@ dishes on a bill the restaurant has just cancelled.
   in `fee_reconcile_queue` before the webhook answers. An ack removes only the
   generation it reconciled. This is how a refund the restaurant made by hand in
   Stripe gets our fee share back automatically, as the terms promise.
+  A refund event for a charge no local record explains yet (its checkout's
+  completion webhook still on the way) is kept in `unmatched_refund_notices`
+  by account, livemode and PaymentIntent. When verified checkout settlement
+  binds that intent (`verifyDinerCheckout` → `adoptSettledIntent`,
+  `adopt_settled_intent_v1`), the notice becomes a `fee_reconcile_queue` row.
   An absent Stripe application fee stays pending when our fee ledger or saved
   checkout proves a positive fee; only local zero-fee evidence permits zero
   verification. The platform webhook also enqueues `application_fee.created`,
   resolving its charge on the original connected account before acknowledging.
   Duplicate-charge refunds record every contributing refund in
   `refund_due_coverage`, and complete only when the active ones pay it all.
+  Each attempt freezes the charge's live refund ids when its amount is
+  decided (`refund_due_attempts.charge_refund_ids`, `start_refund_due_attempt_v3`).
+  Right before every refund POST the charge is listed again
+  (`src/lib/refunds/due-send-guard.ts`); a refund made by hand since then goes
+  to `reconcile_refund_due_send_v1`, which holds while it is pending, counts
+  it once it succeeded, retires the unsent attempt and reopens one (new
+  idempotency key) for only what is still owed. If the diner is still owed
+  and the charge has nothing refundable left, the due stays open and a row in
+  `refund_due_reviews` asks a person to look.
   Its exact fee request
   is saved before Stripe is called and provider
   metadata recovers lost responses after idempotency expires. The obligation
@@ -890,8 +904,18 @@ dishes on a bill the restaurant has just cancelled.
   creation and withdrawal deletion share the restaurant money lock and check
   the exact open shift inside the transaction that writes the change.
   Online receipts are dated after their money lock, so a collection waiting
-  behind a close is dated after that close. Offline receipts retain the date
-  the cash was taken. Closing rechecks unapproved offline cash under the same
+  behind a close is dated after that close. A till cash sale is also bound to
+  the shift open when the route received it (`payments.cash_shift_id`, set
+  once by `ring_pos_sale_v3`): it counts in that shift whatever its date, and
+  one posted after that shift closed shows on the shift's record as cash that
+  arrived after the count, never in the next shift. Unbound receipts (older
+  rows, offline sales, sales with no shift open) count by their date. Offline
+  receipts retain the date the cash was taken. An offline receipt is posted
+  automatically only if the menu's pricing (`offline_pricing_revision_v1`) is
+  unchanged under the money lock since the route compared it; otherwise it
+  waits in Held sales. An opening carries the dialog's reference
+  (`open_cash_shift_v2`), so a retry returns the shift it opened. A close
+  retry is answered with its saved, signed result before the held-cash check. Closing rechecks unapproved offline cash under the same
   lock as queue submission and refuses to sign until it is reviewed. A
   difference ("Sobrante" / "Faltante") is
   explained once, by the closer or a manager. Withdrawals (`cash_movements`)
@@ -1216,7 +1240,9 @@ The menu editor's "Importar desde una hoja de cálculo" reads a CSV in the
 browser (`src/lib/csv.ts`: commas or the semicolons Spanish Excel writes,
 quotes, CRLF, a byte order mark) and plans it (`src/lib/menu-import.ts`):
 headers in Spanish or English, only name and price required, prices read as
-people type them. Before anything is written it shows what will be added,
+people type them. A file can have up to 2 MB and 1,000 product rows.
+Category names can have 60 characters and emojis can have 16. Before
+anything is written it shows what will be added,
 the sections it will make, and every line that will not go in and why. The
 write is the editor's own, through the dashboard's Supabase client like
 adding a product: the missing sections, then every product in one insert, so
@@ -3487,6 +3513,11 @@ the original connected account; out-of-order event payloads never establish
 status or money. Each provider balance transaction is recorded once, with its
 signed principal, fee, net, currency, fee details and provider date. Provider
 transaction identity and monetary evidence cannot be overwritten by a retry.
+A dispute that arrives before its checkout settled matches no sale and is kept
+as review with its event done; when settlement binds the PaymentIntent
+(`adopt_settled_intent_v1`), the latest event of every review dispute on the
+same account, livemode and intent goes back to `pending`, so the worker
+re-reads it and puts its money in the restaurant's books.
 
 `stripe_disputes`, `stripe_dispute_movements` and `stripe_dispute_events` have
 RLS, service-only access, composite tenant references and Stripe identities

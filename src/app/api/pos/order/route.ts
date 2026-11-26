@@ -32,6 +32,7 @@ import { existingTicket, otherRestaurant, terminalRef, type PosSaleBody } from "
 import { receiveOffline } from "@/lib/offline-intake";
 import { orderableNow } from "@/lib/checkout/orderable-now";
 import { verifiedLines } from "@/lib/checkout/verified-lines";
+import { collectingShiftId } from "@/lib/collecting-shift";
 
 export const runtime = "nodejs";
 
@@ -102,6 +103,8 @@ export async function POST(req: NextRequest) {
   }
 
   const db = createAdminClient();
+  // The drawer this cash goes into, captured as the sale starts.
+  const cashShift = method === "cash" ? await collectingShiftId(db, actor.restaurantId) : null;
 
   // The same sale, sent twice. Answer with the ticket that already exists
   // rather than ringing it again — and only this restaurant's ticket.
@@ -212,8 +215,8 @@ export async function POST(req: NextRequest) {
   // the subscription is what pays for the till (`platform_fee` is 0 in SQL).
   const { data: ticket, error } = onAccount
     ? await db.rpc("ring_pos_account_v2", { ...common, p_account: body.accountId })
-    : await db.rpc("ring_pos_sale_v2", {
-        ...common, p_method: method, p_at: null,
+    : await db.rpc("ring_pos_sale_v3", {
+        ...common, p_method: method, p_at: null, p_cash_shift: cashShift,
         p_terminal: method === "card" ? terminalRef(body.terminalRef) : null,
       });
   // The transaction owns cleanup: a lost response may already have committed.

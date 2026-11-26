@@ -59,5 +59,5 @@ it("keeps drawer opening separate from withdrawal purposes", async () => {
   expect(state.ui.all("select")).toHaveLength(0);
   state.ui.change(state.ui.all("input")[0], "100"); await state.ui.submit();
   expect(state.fetch.mock.calls[0][0]).toBe("/api/cash-shift");
-  expect(body()).toEqual({ action: "open", amount: "100" });
+  expect(body()).toEqual({ action: "open", amount: "100", ref: expect.stringMatching(/^[0-9a-f-]{36}$/) });
 });

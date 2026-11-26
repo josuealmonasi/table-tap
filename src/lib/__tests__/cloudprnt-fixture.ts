@@ -1,3 +1,5 @@
+import { randomUUID } from "node:crypto";
+
 export interface PrintJob extends Record<string, unknown> {
   id: string;
   restaurant_id: string;
@@ -36,12 +38,6 @@ class Query implements PromiseLike<Result> {
   order() { return this; }
   limit() { return this; }
   update(values: Record<string, unknown>) { this.values = values; return this; }
-  async upsert(values: Record<string, unknown>) {
-    if (state.failWrite) return { error: { message: "write failed" } };
-    const found = state.jobs.find(row => row.order_id === values.order_id);
-    if (found) Object.assign(found, values);
-    return { error: null };
-  }
   async maybeSingle(): Promise<Result> { return this.execute(); }
   private execute(): Result {
     if (this.values?.claimed_at && state.beforeClaim) {
@@ -61,4 +57,13 @@ class Query implements PromiseLike<Result> {
     reject?: ((reason: unknown) => TResult2 | PromiseLike<TResult2>) | null,
   ): PromiseLike<TResult1 | TResult2> { return Promise.resolve(this.execute()).then(resolve, reject); }
 }
-export const database = { from: (table: string) => new Query(table) };
+export const database = {
+  from: (table: string) => new Query(table),
+  async rpc(name: string, args: { p_restaurant: string; p_order: string }) {
+    if (name !== "rearm_kitchen_print_v1" || state.failWrite) return { data: null, error: { message: "write failed" } };
+    const found = state.jobs.find(row => row.restaurant_id === args.p_restaurant && row.order_id === args.p_order);
+    if (!found || found.order_status === "cancelled") return { data: false, error: null };
+    Object.assign(found, { delivery_token: randomUUID(), created_at: new Date().toISOString(), claimed_at: null, printed_at: null });
+    return { data: true, error: null };
+  },
+};

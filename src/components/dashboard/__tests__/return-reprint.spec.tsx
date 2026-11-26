@@ -64,3 +64,10 @@ it("does not open a browser window for kitchen paper", async () => {
   await act(async () => [...host.querySelectorAll("button")].find(b => b.textContent === "orders.printKitchen")!.click());
   expect(window.open).not.toHaveBeenCalled();
 });
+
+it("reports an unqueued kitchen copy without a success toast", async () => {
+  vi.mocked(fetch).mockResolvedValue(Response.json({ queued: false }));
+  await act(async () => root.render(<OrderDetailDialog order={order} currency="MXN" open onClose={vi.fn()} />));
+  await act(async () => [...host.querySelectorAll("button")].find(b => b.textContent === "orders.printKitchen")!.click());
+  expect(toast).toHaveBeenCalledExactlyOnceWith("orders.kitchenCopyNotQueued", "error");
+});

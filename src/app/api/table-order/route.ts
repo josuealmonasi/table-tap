@@ -163,6 +163,12 @@ export async function POST(req: NextRequest) {
     await releaseStock(actor.restaurantId, reservation.reservationId);
     throw error;
   }
+  // No sitting, no order: a round saved without one is on nobody's bill, and
+  // the table would eat it for free (bl33 #1).
+  if (!sessionId) {
+    await releaseStock(actor.restaurantId, reservation.reservationId);
+    return await apiError("apiErr.tableBillUnavailable", 503);
+  }
 
   const orderRow = {
     restaurant_id: actor.restaurantId,
@@ -195,10 +201,11 @@ export async function POST(req: NextRequest) {
     const plan = await getPlan(actor.restaurantId);
     const result = await writeOrderIntent(intent, {
       order: orderRow, lines: verified, inventory: Boolean(plan && can(plan.limits, "inventory")),
-      threshold: Number(restaurant.low_stock_threshold) || 0,
+      threshold: Number(restaurant.low_stock_threshold) || 0, openSitting: true,
     });
     if ("closing" in result) return await apiError("apiErr.restaurantClosing", 409);
     if (result.conflict) return await apiError("apiErr.retryConflict", 409);
+    if (result.sittingClosed) return await apiError("apiErr.tableBillClosed", 409);
     if (result.short) return NextResponse.json({ short: result.short, code: "outOfStock" }, { status: 409 });
     if ((result.low ?? []).some(w => w.stock === 0)) invalidatePublicMenu(actor.restaurantId);
     if (!result.repeat && restaurant.low_stock_alerts_enabled) await raiseStockNotifications(actor.restaurantId, result.low ?? []);
@@ -207,18 +214,20 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ...result, code: orderCode(result.orderId) });
   }
 
-  const { data: order, error } = await db
-    .from("orders")
-    .insert({ stock_managed: true, stock_reservation_id: reservation.reservationId, ...orderRow })
-    .select("id")
-    .single();
+  // Saved under the sitting's lock, so a cashier closing the bill cannot slip
+  // between opening it above and this insert (bl33 #1).
+  const { data: orderId, error } = await db.rpc("create_table_order_v2", {
+    p_restaurant: actor.restaurantId,
+    p_order: { ...orderRow, stock_reservation_id: reservation.reservationId },
+  });
 
-  if (error || !order) {
+  if (error || !orderId) {
     // The food was never ordered, so it goes back on the shelf.
     await releaseStock(actor.restaurantId, reservation.reservationId);
     if (error?.code === RESTAURANT_CLOSING_CODE) return await apiError("apiErr.restaurantClosing", 409);
-    return await apiError("apiErr.orderCreate", 500);
+    return error ? await apiError("apiErr.orderCreate", 500) : await apiError("apiErr.tableBillClosed", 409);
   }
+  const order = { id: orderId as string };
 
   if (restaurant.low_stock_alerts_enabled) {
     await raiseStockNotifications(actor.restaurantId, reservation.low);

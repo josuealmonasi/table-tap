@@ -273,6 +273,8 @@ export type Order = {
   status: OrderStatus;
   /** The stations that have finished their part (see src/lib/stations.ts). */
   stations_ready?: string[];
+  /** The preparation cycle; sending the ticket back starts a new one. */
+  prep_revision?: number;
   subtotal: number;
   service_fee: number;
   /** When a card checkout for this order last went to Stripe (see service-reprice). */

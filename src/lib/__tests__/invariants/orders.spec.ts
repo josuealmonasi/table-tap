@@ -15,6 +15,11 @@ describe("an order stores only verified choices and a validated destination", ()
           node.expression.name.text === "insert" && /\.from\("orders"\)/.test(node.expression.expression.getText(source))) {
           writesOrder = true;
         }
+        // The waiter's round is inserted in SQL, under its sitting's lock.
+        if (ts.isCallExpression(node) && ts.isPropertyAccessExpression(node.expression) &&
+          node.expression.name.text === "rpc" && node.arguments[0]?.getText(source) === '"create_table_order_v2"') {
+          writesOrder = true;
+        }
         if (ts.isPropertyAssignment(node) && node.name.getText(source) === "p_order" &&
           ts.isObjectLiteralExpression(node.initializer) && node.initializer.properties.some(property =>
             ts.isPropertyAssignment(property) && property.name.getText(source) === "items")) writesOrder = true;
@@ -153,9 +158,9 @@ describe("a sale is handed back once", () => {
     // succeed, both log, and the sale leaves the drawer twice — while the
     // stock it held goes back on the shelf twice.
     const src = read("src/app/api/orders/cancel/route.ts");
-    expect(src).toContain('checkoutPageRpc("prepare_order_refund"');
-    expect(src.indexOf('data?.outcome !== "cancelled"')).toBeGreaterThan(src.indexOf('checkoutPageRpc("prepare_order_refund"'));
-    expect(src.indexOf('await executeOrderRefund')).toBeGreaterThan(src.indexOf('checkoutPageRpc("prepare_order_refund"'));
+    expect(src).toContain('checkoutPageRpc("prepare_order_refund_v2"');
+    expect(src.indexOf('data?.outcome !== "cancelled"')).toBeGreaterThan(src.indexOf('checkoutPageRpc("prepare_order_refund_v2"'));
+    expect(src.indexOf('await executeOrderRefund')).toBeGreaterThan(src.indexOf('checkoutPageRpc("prepare_order_refund_v2"'));
     expect(src).not.toContain('action: "refunded"');
     const executor = read("src/lib/refunds/operations.ts");
     expect(executor).toContain('rpc("start_refund_attempt"');
@@ -249,7 +254,7 @@ describe("a customer account's orders are never a table's", () => {
 
     // The same, in the two functions that decide what a sitting owes.
     const schema = read("supabase/schema.sql");
-    for (const fn of ["close_session_if_clear", "collect_on_sitting_v2"]) {
+    for (const fn of ["close_session_if_clear_v2", "collect_on_sitting_v2"]) {
       const start = schema.indexOf(`create or replace function public.${fn}(`);
       expect(start, `${fn} is not in the schema`).toBeGreaterThan(-1);
       const body = schema.slice(start, schema.indexOf("$$;", start));
