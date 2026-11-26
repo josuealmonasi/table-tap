@@ -18,7 +18,7 @@ export type SuspendAnswer = { ok: true } | { ok: false; error: string; status: n
  */
 export async function setSuspension(
   db: Db, restaurantId: string, suspend: { reason: SuspensionReason } | null, adminEmail: string,
-  /** For a lift: the suspension the admin saw. A different one answers 409. */
+  /** For a lift (required): the suspension the admin saw. A different one answers 409. */
   seenSuspendedAt?: string,
 ): Promise<SuspendAnswer> {
   const { data: restaurant, error: readError } = await db.from("restaurants")
@@ -30,8 +30,8 @@ export async function setSuspension(
   // The admin's screen showed one suspension; another admin may have lifted
   // it and applied a new one since. Lifting must never clear a suspension
   // nobody here has seen.
-  if (!suspend && seenSuspendedAt !== undefined
-    && Date.parse(seenSuspendedAt) !== Date.parse(restaurant.suspended_at as string)) {
+  if (!suspend && (seenSuspendedAt === undefined
+    || Date.parse(seenSuspendedAt) !== Date.parse(restaurant.suspended_at as string))) {
     return { ok: false, error: "apiErr.suspensionChangedMeanwhile", status: 409 };
   }
 

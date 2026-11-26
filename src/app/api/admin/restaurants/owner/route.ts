@@ -19,14 +19,15 @@ const ANSWERS: Record<string, [string, number]> = {
 
 // POST /api/admin/restaurants/owner { id, userId } — the restaurant becomes
 // userId's; they must already be on its team. The former owner stays on as a
-// manager. Written in the restaurant's activity log.
+// manager, and the extra digest addresses the former owner confirmed are
+// cleared (the new owner re-adds them). Written in the restaurant's activity log.
 async function transfer(_req: NextRequest, { body }: AdminAuditContext) {
   const admin = await getPlatformAdmin();
   if (!admin) return await apiError("apiErr.forbidden", 403);
   if (!body || typeof body.id !== "string" || typeof body.userId !== "string" || !UUID.test(body.id) || !UUID.test(body.userId)) {
     return await apiError("apiErr.invalidRequest", 400);
   }
-  const { data, error } = await createAdminClient().rpc("admin_transfer_ownership", { p_restaurant: body.id, p_new_owner: body.userId });
+  const { data, error } = await createAdminClient().rpc("admin_transfer_ownership_v2", { p_restaurant: body.id, p_new_owner: body.userId });
   if (error) return await apiError("apiErr.generic", 500);
   if (data !== "transferred") {
     const [key, status] = ANSWERS[String(data)] ?? ["apiErr.generic", 500];

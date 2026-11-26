@@ -9127,3 +9127,35 @@ triggers), and the change only narrows behaviour, so deployed code calling
 them is unaffected and no new version is needed. Check:
 `entitlement-schema.spec.ts` ("the visit card's gates read the effective
 plan").
+### Admin console: unaudited reads, optional lift guard, digest after transfer (2026-11-25)
+
+Three places that had to agree with the rest of the admin console. First,
+reads: opening the owner view wrote a `restaurant.view` audit row, but the
+usage dialog (`GET /api/admin/restaurants/usage`, a restaurant's revenue) and
+the support notes (`GET /api/admin/restaurants/notes`) read with the service
+key and left no trace. Both now go through `auditedAdminRead`
+(`src/lib/admin-read-audit.ts`): a `started` row before the read, then
+`succeeded`, `refused` (no such restaurant) or `uncertain` (the read threw).
+When the first row cannot be written the route answers 503
+(`apiErr.adminAuditUnavailable`) and reads nothing. The row names the
+restaurant (`target_id`) and the view (`after_facts.view`), never the figures
+or a note's text. Checks: `admin-usage.spec.ts`, the notes `route.spec.ts`,
+and the api gate's usage and notes cases read the row back.
+
+Second, lifting a suspension: `suspendedAt` was optional, so a lift that left
+it out cleared whichever suspension existed, including one applied by another
+admin after the screen loaded. The route now refuses a lift without a valid
+`suspendedAt` with 400 (`apiErr.suspendedAtRequired`, both languages), and
+`setSuspension` treats a missing one as a mismatch. The admin screen already
+sent it (only a suspended row offers the lift); its type is now required.
+Checks: suspend `route.spec.ts`, `admin-suspend.spec.ts`, the api gate's
+"no suspendedAt refused" case.
+
+Third, owner transfer: `admin_transfer_ownership` moved `owner_id` but left
+`digest_recipients` alone, so addresses the former owner added and confirmed
+kept receiving the restaurant's daily sales. `admin_transfer_ownership_v2`
+does the same transfer under the same row lock and then deletes the
+restaurant's digest recipients; the new owner re-adds and re-confirms whoever
+should get it. v1 stays for the deployed route. Not changed: the former
+owner, now a manager, still gets the digest only if they opted in as a
+manager (`daily_digest_recipients`). Check: `admin-owner-transfer.spec.ts`.
