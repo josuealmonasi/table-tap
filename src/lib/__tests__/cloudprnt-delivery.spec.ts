@@ -22,6 +22,11 @@ beforeEach(() => {
 });
 
 describe("a cancelled order never reaches the kitchen printer (sweep 4, finding 4)", () => {
+  it("reports a cancelled kitchen reprint as unqueued and keeps its existing delivery generation", async () => {
+    state.jobs[0].order_status = "cancelled";
+    expect(await (await queueCopy()).json()).toEqual({ queued: false });
+    expect(state.jobs[0].delivery_token).toBe(A);
+  });
   it("is skipped by the queue, which goes on to the next ticket", async () => {
     state.jobs[0].order_status = "cancelled";
     expect((await (await POST(request(), ctx)).json()).jobToken).toBe(B);

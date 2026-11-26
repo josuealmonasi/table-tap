@@ -66,6 +66,9 @@ export function tableFromScan(raw: string | null | undefined): ScannedTable | nu
   return { restaurantId: parts[1], tableId: parts[3] };
 }
 
+/** `restaurant_tables.qr_key`: a UUID without dashes (kept here so this file stays pure). */
+const QR_KEY = /^[0-9a-f]{32}$/;
+
 /** Twelve Crockford base32 characters: the code of an account or a visit card. */
 const CODE = /^[0-9A-HJKMNP-TV-Z]{12}$/;
 
@@ -107,7 +110,12 @@ export function dinerPathFromScan(raw: string | null | undefined): string | null
     return CODE.test(card) ? `/rewards?c=${card}` : null;
   }
   const table = tableFromScan(raw);
-  if (table) return `/r/${table.restaurantId}/t/${table.tableId}`;
+  if (table) {
+    // The table's QR key rides along: without it a phone not yet let in
+    // could not call the waiter from the table it just scanned.
+    const key = url.searchParams.get("k") ?? "";
+    return `/r/${table.restaurantId}/t/${table.tableId}${QR_KEY.test(key) ? `?k=${key}` : ""}`;
+  }
   const parts = url.pathname.split("/").filter(Boolean);
   if (parts.length === 2 && parts[0] === "r" && UUID.test(parts[1])) return `/r/${parts[1]}`;
   return null;

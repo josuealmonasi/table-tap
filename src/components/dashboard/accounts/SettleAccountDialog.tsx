@@ -19,6 +19,8 @@ interface SettleAccountDialogProps {
   /** The balance on screen: what the customer is paying. */
   owed: number;
   currency: string;
+  /** The unpaid orders behind `owed`: the collection is refused if they changed. */
+  orderIds: string[];
   onSettled: () => void;
   onRefresh?: () => void | Promise<void>;
 }
@@ -29,7 +31,7 @@ interface SettleAccountDialogProps {
  * whether they pay here or on their phone; then cash or the terminal.
  */
 export default function SettleAccountDialog({
-  open, onClose, accountId, name, owed, currency, onSettled, onRefresh = onSettled,
+  open, onClose, accountId, name, owed, currency, orderIds, onSettled, onRefresh = onSettled,
 }: SettleAccountDialogProps) {
   const t = useT();
   const toast = useToast();
@@ -37,8 +39,10 @@ export default function SettleAccountDialog({
   const [tipCustom, setTipCustom] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  // One reference per attempt: a second tap is the same payment, not another.
-  const ref = useMemo(() => (open ? crypto.randomUUID() : ""), [open]);
+  // One reference per review: a second tap, or a retry after a lost answer, is
+  // the same payment, not another. A refreshed balance is a new review.
+  const reviewed = orderIds.length > 0 ? `${owed}:${orderIds.join(",")}` : "";
+  const ref = useMemo(() => (open && reviewed ? crypto.randomUUID() : ""), [open, reviewed]);
   const paymentCheck = usePaymentCheck(onRefresh, `${open}:${accountId}`);
 
   const tip = tipCustom ?? Math.round(owed * tipPct) / 100;
@@ -53,7 +57,7 @@ export default function SettleAccountDialog({
       const res = await fetch("/api/accounts/settle", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ accountId, expected: owed, currency, tip: safeTip, method, ref }),
+        body: JSON.stringify({ accountId, expected: owed, currency, tip: safeTip, method, ref, orderIds }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
@@ -96,10 +100,10 @@ export default function SettleAccountDialog({
       {paymentCheck.action}
       {error && <p className="tt-field-error" role="alert">{error}</p>}
       <div className="tt-bill-actions">
-        <button type="button" className="tt-btn tt-btn-primary tt-btn-lg" style={{ width: "100%" }} disabled={busy || tip > owed} onClick={() => void collect("cash")}>
+        <button type="button" className="tt-btn tt-btn-primary tt-btn-lg" style={{ width: "100%" }} disabled={busy || tip > owed || !ref} onClick={() => void collect("cash")}>
           {t("settle.cash")}
         </button>
-        <button type="button" className="tt-btn tt-btn-ghost tt-btn-lg" style={{ width: "100%", marginTop: 8 }} disabled={busy || tip > owed} onClick={() => void collect("card")}>
+        <button type="button" className="tt-btn tt-btn-ghost tt-btn-lg" style={{ width: "100%", marginTop: 8 }} disabled={busy || tip > owed || !ref} onClick={() => void collect("card")}>
           {t("settle.card")}
         </button>
       </div>

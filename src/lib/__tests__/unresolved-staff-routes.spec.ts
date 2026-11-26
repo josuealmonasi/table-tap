@@ -17,7 +17,7 @@ vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({
     if (s.calls.length === 1 || !s.verified) return name === "settle_orders_v2"
       ? { data: null, error: { message: "paying" } } : { data: { outcome: "paying" }, error: null };
     return { data: name === "settle_orders_v2" ? 1 : {
-      outcome: name === "account_charge_v2" ? "charged" : "written", amount: 100, tip: 0, owed: 0, currency: "MXN",
+      outcome: name === "account_charge_v3" ? "charged" : "written", amount: 100, tip: 0, owed: 0, currency: "MXN",
     }, error: null };
   },
   from: () => {
@@ -46,7 +46,7 @@ it.each(cases)("%s retries only after resolution, using the same quote", async (
   const res = await post(new NextRequest("https://test/api/collect", { method: "POST", body: JSON.stringify(body) }));
   expect(res.status).toBe(200); expect(s.calls).toHaveLength(2); expect(s.calls[1]).toEqual(s.calls[0]);
   expect(s.events.slice(0, 3)).toEqual(["write", "resolve", "write"]);
-  if (s.calls[0].name === "account_charge_v2") {
+  if (s.calls[0].name === "account_charge_v3") {
     expect(resolve.mock.calls[0][1]).toMatchObject({ orderIds: ["o1"], accountId: undefined });
   }
 });

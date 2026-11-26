@@ -5,7 +5,7 @@ import { DRAWER_ERA, time } from "./money-drawer-values.mjs";
 const columns = {
   cash_shifts: "id, restaurant_id, currency, opened_at, closed_at, opening_amount, expected_cash, counted_cash, difference",
   cash_movements: "id, restaurant_id, shift_id, currency, kind, amount, status, created_at",
-  payments: "id, restaurant_id, order_id, currency, method, actor_email, amount, tip, created_at, recorded_at, stripe_payment_intent, allocation_origin",
+  payments: "id, restaurant_id, order_id, currency, method, actor_email, amount, tip, created_at, recorded_at, stripe_payment_intent, allocation_origin, cash_shift_id",
   refund_operations: "id, restaurant_id, currency, source, status, completed_at, payout_actor, amount, historical_log_id",
   user_logs: "id, restaurant_id, action, detail, created_at",
   orders: "id, restaurant_id, currency, status, cancelled_at, total, tip",

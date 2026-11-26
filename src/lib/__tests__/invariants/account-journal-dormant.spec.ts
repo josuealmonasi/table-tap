@@ -26,7 +26,7 @@ it("only the reviewed callers reach the private append helpers", () => {
   const sql = read("supabase/schema.sql");
   const callers = (name: string): string[] => [...sql.matchAll(/create or replace function public\.(\w+)\([\s\S]*?\$\$;/gi)]
     .filter(match => match[1] !== name && match[0].includes(`public.${name}(`)).map(match => match[1]).sort();
-  expect(callers("append_account_collection_v1")).toEqual(["account_checkout_settle_v2", "account_settle_currency_v1", "account_settle_v2"]);
+  expect(callers("append_account_collection_v1")).toEqual(["account_checkout_settle_v2", "account_settle_currency_v1", "account_settle_reviewed_v1", "account_settle_v2"]);
   expect(callers("append_account_credit_movement_v1")).toEqual(["account_credit_v1", "cancel_order_v2", "prepare_order_refund"]);
 });
 

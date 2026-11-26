@@ -19,6 +19,8 @@ export interface AccountRow {
   email: string | null;
   code: string;
   credit_limit: number;
+  /** The currency the ceiling was approved in; null on a legacy ceiling nobody confirmed. */
+  credit_currency: string | null;
   status: "open" | "closed";
   opened_by: string;
   opened_at: string;
@@ -28,7 +30,7 @@ export interface AccountRow {
 }
 
 const ACCOUNT_COLUMNS =
-  "id, restaurant_id, name, email, code, credit_limit, status, opened_by, opened_at, closed_at, checkout_until";
+  "id, restaurant_id, name, email, code, credit_limit, credit_currency, status, opened_by, opened_at, closed_at, checkout_until";
 
 /** An account and what it owes, as the staff list shows it. */
 export interface AccountSummary extends AccountRow {
@@ -102,6 +104,11 @@ export interface Statement {
   payments: StatementPayment[];
   /** Who charged each order — for the staff's view, never the customer's. */
   chargedBy: Record<string, string | null>;
+  /**
+   * The unpaid orders behind each currency's balance — what a collection at
+   * the till binds itself to. For the staff's view, never the customer's.
+   */
+  openOrders: Record<string, string[]>;
   returns: { id: string; amount: number; currency: string; status: string; created_at: string }[];
 }
 
@@ -119,16 +126,18 @@ interface StatementOrder {
   charged_by: string | null;
 }
 
+interface StatementSnapshot {
+  orders: StatementOrder[];
+  payments: {
+    amount: number; tip: number; currency: string; method: "cash" | "card"; created_at: string;
+  }[];
+}
+
 /** An account's statement: its unpaid orders by the restaurant's day, and its payments. */
 export async function statementOf(account: AccountRow, timeZone?: string | null | PromiseLike<string | null | undefined>): Promise<Statement> {
   const db = createAdminClient();
-  const ordersRead = everyRow<StatementOrder>((a, b) => db.from("orders").select("id, items, total, currency, table_label, created_at, charged_at, charged_by, status, service_fee, tip")
-    .eq("restaurant_id", account.restaurant_id).eq("account_id", account.id).eq("paid", false).eq("written_off", false).neq("status", "cancelled")
-    .order("id").range(a, b), "the account's orders");
-  const [orders, paymentsRes, returns, credits, resolvedTimeZone] = await Promise.all([
-    ordersRead,
-    db.from("payments").select("amount, tip, currency, method, created_at")
-      .eq("restaurant_id", account.restaurant_id).eq("account_id", account.id).order("created_at", { ascending: false }).limit(20),
+  const [snapshotRes, returns, credits, resolvedTimeZone] = await Promise.all([
+    db.rpc("account_statement_v1", { p_restaurant: account.restaurant_id, p_account: account.id }),
     everyRow<{ id: string; amount: number; currency: string; status: string; created_at: string }>((a, b) => db
       .from("refund_operations").select("id, amount, currency, status, created_at, order_adjustments!inner(orders!inner(account_id))")
       .eq("restaurant_id", account.restaurant_id).eq("order_adjustments.orders.account_id", account.id)
@@ -136,6 +145,9 @@ export async function statementOf(account: AccountRow, timeZone?: string | null 
     readAccountCredits(db, account.restaurant_id, account.id),
     timeZone,
   ]);
+  const snapshot = unwrap<StatementSnapshot>(snapshotRes, "the account's statement");
+  if (!snapshot) throw new Error("The account statement snapshot is missing");
+  const { orders, payments } = snapshot;
   const charges: StatementCharge[] = orders.map(o => ({
     currency: o.currency,
     orderId: o.id,
@@ -145,9 +157,6 @@ export async function statementOf(account: AccountRow, timeZone?: string | null 
     lines: linesOf(o.items),
     total: Number(o.total),
   }));
-  const payments = (unwrap(paymentsRes, "the account's payments") ?? []) as {
-    amount: number; tip: number; currency: string; method: "cash" | "card"; created_at: string;
-  }[];
   const balances = currencyBalances(orders.map(o => ({ currency: o.currency, amount: Number(o.total) })));
   return {
     currency: balances.length === 1 ? balances[0].currency : null,
@@ -158,5 +167,6 @@ export async function statementOf(account: AccountRow, timeZone?: string | null 
     payments: payments.map(p => ({ at: p.created_at, amount: Number(p.amount), tip: Number(p.tip), method: p.method, currency: p.currency })),
     returns: returns.map(r => ({ id: r.id, amount: Number(r.amount), currency: r.currency, status: r.status, created_at: r.created_at })),
     chargedBy: Object.fromEntries(orders.map(o => [o.id, o.charged_by])),
+    openOrders: Object.fromEntries(balances.map(b => [b.currency, orders.filter(o => o.currency === b.currency).map(o => o.id)])),
   };
 }

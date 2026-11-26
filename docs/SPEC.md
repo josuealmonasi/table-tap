@@ -280,8 +280,12 @@ definitively refused batch stays pending for the original report day.
 
 ## The two ways in
 
-- **A table QR** → `/r/<restaurantId>/t/<tableId>`. The order knows its table,
-  the bill can stay open, and a waiter collects at the end.
+- **A table QR** → `/r/<restaurantId>/t/<tableId>?k=<qr_key>`. The order knows
+  its table, the bill can stay open, and a waiter collects at the end. The key
+  (`restaurant_tables.qr_key`) lets a phone not yet let in call the waiter;
+  renaming or moving the table rotates it, and the dashboard's QR changes with
+  it. Tables created before keys existed have none, and their printed QRs keep
+  calling the waiter until the table is renamed.
 - **The general QR** → `/r/<restaurantId>`. No table: the diner pays online, or
   walks to the till with a code. Counter orders can carry a name so the cashier
   can call it out.
@@ -335,7 +339,18 @@ the verified member id; a browser-supplied `diner` never proves identity.
 At most five new phones may wait for approval in a sitting. The table lock
 serializes admission; existing pending, approved and rejected phones keep
 their rows and polling. A sixth phone gets a 429 asking it to speak to the
-waiter, with no pending row. Approving or rejecting a phone frees a place.
+waiter, with no pending row. Approving or rejecting a phone frees a place, and
+so does leaving: a waiting phone refreshes `seen_at` on every poll, and one
+unseen for `PENDING_PHONE_MINUTES` (ten) is hidden from the lists and purged
+by the next admission at that table (`request_table_member_v3`).
+
+A call for the waiter, the bill or collection (`/api/service-requests`) is
+written by `raise_service_request_v1`, which checks for an open call and
+inserts under the table's lock, so two taps make one alert. The call records
+the sitting of the phone that raised it (`service_requests.session_id`), and
+only an approved phone of the LIVE sitting (open, under eight hours) may ask
+for the bill or collection; a pending phone may call the waiter only with the
+table's current QR key. Duplicates are matched within that sitting.
 
 Membership ends with the sitting. An approved phone retains read/payment
 access to its own closed sitting's orders without an age cutoff, never the
@@ -889,8 +904,18 @@ dishes on a bill the restaurant has just cancelled.
   creation and withdrawal deletion share the restaurant money lock and check
   the exact open shift inside the transaction that writes the change.
   Online receipts are dated after their money lock, so a collection waiting
-  behind a close is dated after that close. Offline receipts retain the date
-  the cash was taken. Closing rechecks unapproved offline cash under the same
+  behind a close is dated after that close. A till cash sale is also bound to
+  the shift open when the route received it (`payments.cash_shift_id`, set
+  once by `ring_pos_sale_v3`): it counts in that shift whatever its date, and
+  one posted after that shift closed shows on the shift's record as cash that
+  arrived after the count, never in the next shift. Unbound receipts (older
+  rows, offline sales, sales with no shift open) count by their date. Offline
+  receipts retain the date the cash was taken. An offline receipt is posted
+  automatically only if the menu's pricing (`offline_pricing_revision_v1`) is
+  unchanged under the money lock since the route compared it; otherwise it
+  waits in Held sales. An opening carries the dialog's reference
+  (`open_cash_shift_v2`), so a retry returns the shift it opened. A close
+  retry is answered with its saved, signed result before the held-cash check. Closing rechecks unapproved offline cash under the same
   lock as queue submission and refuses to sign until it is reviewed. A
   difference ("Sobrante" / "Faltante") is
   explained once, by the closer or a manager. Withdrawals (`cash_movements`)
@@ -1215,7 +1240,9 @@ The menu editor's "Importar desde una hoja de cálculo" reads a CSV in the
 browser (`src/lib/csv.ts`: commas or the semicolons Spanish Excel writes,
 quotes, CRLF, a byte order mark) and plans it (`src/lib/menu-import.ts`):
 headers in Spanish or English, only name and price required, prices read as
-people type them. Before anything is written it shows what will be added,
+people type them. A file can have up to 2 MB and 1,000 product rows.
+Category names can have 60 characters and emojis can have 16. Before
+anything is written it shows what will be added,
 the sections it will make, and every line that will not go in and why. The
 write is the editor's own, through the dashboard's Supabase client like
 adding a product: the missing sections, then every product in one insert, so
@@ -2457,8 +2484,15 @@ lean on who is trusted with what:
   not, and neither is its page: an account opened on a paid tier still owes
   after a move down, and money owed is always collectable.
 - **A ceiling on every account**, set by whoever opens it
-  (`customer_accounts.credit_limit`). Only a manager or owner moves it, never
-  below what is already owed, and every change is logged.
+  (`customer_accounts.credit_limit`), in the currency the form named
+  (`credit_currency`, sent with the request). Only a manager or owner moves it,
+  never below what is already owed, and every change is logged.
+  `account_set_limit_v1` stores a new ceiling only in the currency the account
+  owes in, or the restaurant's when it owes nothing; a screen that showed
+  another currency reviews again. A legacy ceiling with no currency and no
+  charge history is refused on the next charge (`account_charge_v3`,
+  `ring_pos_account_v3`) until a manager saves it again: it never inherits the
+  menu's current currency.
 - **Account boundaries are checked at the write too.** Table discounts,
   write-offs and their approval requests exclude account orders, even when an
   order kept its table ID. Waived orders never enter account balances or
@@ -2483,9 +2517,12 @@ lean on who is trusted with what:
   "En cuenta", not "No pagado".
 - **Paid whole, any day.** In person: the Accounts page (or the customer's QR,
   scanned there) → "Cobrar", with the same tip chips as the cart, cash or
-  card, through `account_settle()` — one payment row with `account_id` for the
-  whole balance, the tip on the latest order, the orders marked paid, a
-  retried tap answered as the same payment. Online: the statement's "Pagar en
+  card, through `account_settle_reviewed_v1()` — one payment row with
+  `account_id` for the whole balance, the tip on the latest order, the orders
+  marked paid. The request must carry a nonblank `ref` (one per review, kept
+  across retries) and the unpaid order ids the screen showed: a retried tap is
+  answered as the same payment, and the same total over different orders is
+  refused (`orders_changed`). Online: the statement's "Pagar en
   línea" opens `account_checkout_open()`, which snapshots exactly the orders
   owed and holds that debt against another collection until Stripe confirms
   expiry or its verified webhook records payment. The hold names its checkout

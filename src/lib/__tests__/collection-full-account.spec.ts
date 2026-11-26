@@ -29,9 +29,9 @@ it("S21 whole-table cash returns the actual original-currency receipt", async ()
 });
 it("S21 account collection writes only the reviewed USD debt and confirms the recorded tip", async () => {
   mocks.rpc.mockResolvedValue({ data: { outcome: "paid", amount: 110, tip: 10 }, error: null });
-  const result = await account.POST(request({ accountId: "a", expected: 100, tip: 10, method: "cash", currency: "USD", ref: "one" }));
+  const result = await account.POST(request({ accountId: "a", expected: 100, tip: 10, method: "cash", currency: "USD", ref: "one", orderIds: ["00000000-0000-4000-8000-000000000001"] }));
   expect(result.status).toBe(200);
-  expect(mocks.rpc).toHaveBeenCalledWith("account_settle_currency_v1", expect.objectContaining({ p_currency: "USD", p_expected: 100, p_tip: 10 }));
+  expect(mocks.rpc).toHaveBeenCalledWith("account_settle_reviewed_v1", expect.objectContaining({ p_currency: "USD", p_expected: 100, p_tip: 10, p_reviewed_orders: ["00000000-0000-4000-8000-000000000001"] }));
   expect(await result.json()).toMatchObject({ amount: 110, tip: 10, currency: "USD" });
 });
 

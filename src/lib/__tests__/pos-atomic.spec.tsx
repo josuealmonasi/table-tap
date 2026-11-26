@@ -16,18 +16,19 @@ const id = "6b1f0c2e-0000-4000-8000-000000000001";
 vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({
   from: (table: string) => {
     const q: Record<string, unknown> = {};
-    for (const key of ["select", "eq", "in", "lt"]) q[key] = () => q;
+    for (const key of ["select", "eq", "in", "lt", "is"]) q[key] = () => q;
     for (const op of ["insert", "update", "delete"]) q[op] = (value?: Record<string, unknown>) => {
       state.ops.push({ table, op, value }); return q;
     };
     const result = () => ({ data: table === "offline_sale_queue" ? (state.queued ? { received_at: "2026-11-16T00:00:00Z" } : null)
-      : table === "orders" ? state.ticket : table === "restaurants"
+      : table === "orders" ? state.ticket : table === "cash_shifts" ? { id: "open-shift" } : table === "restaurants"
       ? { currency: "MXN", service_pct: 0, tax_pct: 0, suspended_at: state.suspended ? state.suspendedAt : null } : [], error: null });
     q.single = q.maybeSingle = async () => result();
     q.then = (resolve: (v: unknown) => unknown) => Promise.resolve(result()).then(resolve);
     return q;
   },
   rpc: async (name: string, args: Record<string, unknown>) => {
+    if (name === "offline_pricing_revision_v1") return { data: "rev", error: null };
     if (name === "pos_ticket") return { error: null, data: state.ticket && {
       outcome: "settled", settled: true, repeat: true, orderId: state.ticket.id, total: state.ticket.total,
       currency: state.ticket.currency, method: state.ticket.pay_method, handedOver: state.ticket.status === "completed",
@@ -35,10 +36,10 @@ vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({
     } };
     state.calls.push({ name, args });
     if (state.reply) return { data: state.reply, error: null };
-    state.ticket = { id: args.p_ref, total: 100, currency: "MXN", pay_method: args.p_method, paid: name !== "ring_pos_account_v2", status: "completed",
-      ...(name === "ring_pos_account_v2" ? { account_id: args.p_account, request_scope: (args.p_order as Record<string, unknown>)?.request_scope, charged_at: "now", customer_accounts: { name: "Guest" } } : {}) };
+    state.ticket = { id: args.p_ref, total: 100, currency: "MXN", pay_method: args.p_method, paid: name !== "ring_pos_account_v3", status: "completed",
+      ...(name === "ring_pos_account_v3" ? { account_id: args.p_account, request_scope: (args.p_order as Record<string, unknown>)?.request_scope, charged_at: "now", customer_accounts: { name: "Guest" } } : {}) };
     if (state.lost) return { data: null, error: { message: "response lost after commit" } };
-    return { data: { outcome: "settled", orderId: args.p_ref, total: 100, settled: true, ...(name === "ring_pos_account_v2" ? { onAccount: { name: "Guest", owed: 100 } } : {}) }, error: null };
+    return { data: { outcome: "settled", orderId: args.p_ref, total: 100, settled: true, ...(name === "ring_pos_account_v3" ? { onAccount: { name: "Guest", owed: 100 } } : {}) }, error: null };
   },
 }) }));
 vi.mock("@/lib/api-error", () => ({
@@ -74,7 +75,7 @@ it("W1.1 keeps a committed offline sale when its response is lost", async () => 
   state.lost = true;
   await ringOffline(actor, body());
   expect(state.ops.filter(o => o.op === "delete")).toEqual([]);
-  expect(state.calls.map(c => c.name)).toEqual(["record_offline_sale"]);
+  expect(state.calls.map(c => c.name)).toEqual(["record_offline_sale_v2"]);
   state.lost = false;
   const replay = await ringOffline(actor, body());
   expect(await replay.json()).toMatchObject({ orderId: id, total: 100, settled: true, repeat: true });
@@ -83,20 +84,22 @@ it("W1.1 keeps a committed offline sale when its response is lost", async () => 
 it("W1.6 commits offline stock and money in the same RPC", async () => {
   const res = await ringOffline(actor, body());
   expect(res.status).toBe(200);
-  expect(state.calls.map(c => c.name)).toEqual(["record_offline_sale"]);
+  expect(state.calls.map(c => c.name)).toEqual(["record_offline_sale_v2"]);
   expect(state.calls[0].args.p_demand).toEqual([{ item_id: "x", qty: 1 }]);
   expect(state.ops.filter(o => o.op === "insert")).toEqual([]);
 });
 it("W1.5 uses the device reference as the online order identity", async () => {
   const { offline: _, ...online } = body(); void _;
   await POST(new NextRequest("http://localhost/api/pos/order", { method: "POST", body: JSON.stringify(online) }));
-  expect(state.calls.find(c => c.name === "ring_pos_sale_v2")?.args.p_ref).toBe(id);
+  expect(state.calls.find(c => c.name === "ring_pos_sale_v3")?.args.p_ref).toBe(id);
+  // bl39 #2: the cash goes to the shift open when the sale arrived.
+  expect(state.calls.find(c => c.name === "ring_pos_sale_v3")?.args.p_cash_shift).toBe("open-shift");
 });
 it("W1.7 never publishes an account ticket before atomic credit approval", async () => {
   const { offline: _, ...online } = body(); void _;
   await POST(new NextRequest("http://localhost/api/pos/order", { method: "POST", body: JSON.stringify({ ...online, method: "account", accountId: id }) }));
   expect(state.ops.filter(o => o.table === "orders" && o.op === "insert")).toEqual([]);
-  expect(state.calls.find(c => c.name === "ring_pos_account_v2")?.args.p_ref).toBe(id);
+  expect(state.calls.find(c => c.name === "ring_pos_account_v3")?.args.p_ref).toBe(id);
 });
 
 it("refuses an online collected amount that differs before recording money", async () => {
@@ -143,7 +146,7 @@ it("a replay records the lines as sold and takes a combo's parts from stock", as
   const items = [{ itemId: "promo-1", name: "Combo", price: 90, qty: 2, mods: {}, emoji: "", comboId: "promo-1",
     components: [{ itemId: "burger", name: "Burger", emoji: "", qty: 1 }, { itemId: "fries", name: "Fries", emoji: "", qty: 1 }] }];
   await ringOffline(actor, { ...body(), posRef: crypto.randomUUID(), items }, { reason: "Original combo receipt verified" });
-  const args = state.calls.find(c => c.name === "record_offline_sale")?.args as { p_order: { items: { price: number }[] }; p_demand: unknown };
+  const args = state.calls.find(c => c.name === "record_offline_sale_v2")?.args as { p_order: { items: { price: number }[] }; p_demand: unknown };
   expect(args.p_order.items[0].price).toBe(90);
   expect(args.p_demand).toEqual(expect.arrayContaining([
     expect.objectContaining({ item_id: "burger", qty: 2 }), expect.objectContaining({ item_id: "fries", qty: 2 }),
@@ -162,7 +165,7 @@ it("an atomic account refusal never causes a second cleanup request", async () =
   const res = await POST(new NextRequest("http://localhost/api/pos/order", { method: "POST", body: JSON.stringify({ ...online, method: "account", accountId: id }) }));
   expect(res.status).toBe(409);
   expect(state.ops).toEqual([]);
-  expect(state.calls.map(c => c.name)).toEqual(["ring_pos_account_v2"]);
+  expect(state.calls.map(c => c.name)).toEqual(["ring_pos_account_v3"]);
 });
 
 it("an account owing in another currency is a final refusal, not a held sale (cross-review 4)", async () => {
@@ -212,7 +215,7 @@ it("records a sale the till collected before the suspension started, when the se
   state.suspendedAt = new Date(new Date((collected as { at: string }).at).getTime() + 60_000).toISOString();
   const res = await POST(new NextRequest("http://localhost/api/pos/order", { method: "POST", body: JSON.stringify({ ...online, collected }) }));
   expect(res.status).toBe(200);
-  expect(state.calls.some(call => call.name === "ring_pos_sale_v2")).toBe(true);
+  expect(state.calls.some(call => call.name === "ring_pos_sale_v3")).toBe(true);
 });
 
 it("holds a sale dated before the suspension that the server never saw before it (security sweep 2026-11-24)", async () => {

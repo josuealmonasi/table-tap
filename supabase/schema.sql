@@ -2059,12 +2059,25 @@ grant execute on function public.open_table_session(uuid, uuid, int, text) to se
 
 -- Closes a sitting once nothing on it is owed. Called after every way money
 -- stops being outstanding: a card, cash at the table, or a debt written off.
-create or replace function public.close_session_if_clear(
+--
+-- Holds the sitting row for update BEFORE it counts what is owed. A waiter's
+-- round is inserted under a share lock on the same row
+-- (create_table_order_v2), so the two serialize: either the round commits
+-- first and the count sees it, or the sitting closes first and the round is
+-- refused instead of reaching the kitchen under a closed bill (bl33 #1).
+create or replace function public.close_session_if_clear_v2(
   p_session uuid,
   p_reason text
 ) returns boolean language plpgsql security definer set search_path = public as $$
-declare v_owing int;
+declare v_owing int; v_restaurant uuid;
 begin
+  select restaurant_id into v_restaurant from table_sessions where id = p_session;
+  if v_restaurant is null then return false; end if;
+  -- Money first, then the sitting: the order every other writer takes them in.
+  perform public.lock_restaurant_money(v_restaurant);
+  perform 1 from table_sessions where id = p_session and closed_at is null for update;
+  if not found then return false; end if;
+
   select count(*) into v_owing
     from orders
    where session_id = p_session
@@ -2088,9 +2101,53 @@ begin
    where id = p_session and closed_at is null;
   return true;
 end; $$;
+revoke all on function public.close_session_if_clear_v2(uuid, text)
+  from public, anon, authenticated;
+grant execute on function public.close_session_if_clear_v2(uuid, text) to service_role;
+
+-- The deployed signature, kept for the deploy window and for account_charge_v2.
+-- It takes the same locks, so no caller closes a sitting under a waiter's round.
+create or replace function public.close_session_if_clear(
+  p_session uuid,
+  p_reason text
+) returns boolean language sql security definer set search_path = public as $$
+  select public.close_session_if_clear_v2(p_session, p_reason);
+$$;
 revoke all on function public.close_session_if_clear(uuid, text)
   from public, anon, authenticated;
 grant execute on function public.close_session_if_clear(uuid, text) to service_role;
+
+-- A waiter's round, saved only into a sitting that is still open.
+--
+-- The sitting row is held FOR SHARE while the order is inserted, so
+-- close_session_if_clear_v2 (FOR UPDATE) cannot count the bill between the
+-- check and the insert. Returns the order id, or null when the sitting is
+-- closed or is not this table's: the route refuses and puts the stock back.
+create or replace function public.create_table_order_v2(
+  p_restaurant uuid, p_order jsonb
+) returns uuid language plpgsql security definer set search_path = public as $$
+declare v_session uuid := (p_order->>'session_id')::uuid; v_id uuid;
+begin
+  if v_session is null or p_order->>'table_id' is null then raise exception 'table order needs a sitting'; end if;
+  perform public.lock_restaurant_money(p_restaurant);
+  perform 1 from table_sessions
+   where id = v_session and restaurant_id = p_restaurant
+     and table_id = (p_order->>'table_id')::uuid and closed_at is null
+   for share;
+  if not found then return null; end if;
+  insert into orders(restaurant_id, table_id, table_label, session_id, status, paid, pay_method,
+    subtotal, service_fee, tip, tax_pct, discount, platform_fee, promo_detail, total, currency,
+    items, note, stock_managed, stock_reservation_id)
+  values(p_restaurant, (p_order->>'table_id')::uuid, p_order->>'table_label', v_session,
+    'received', false, null, (p_order->>'subtotal')::numeric, (p_order->>'service_fee')::numeric,
+    (p_order->>'tip')::numeric, (p_order->>'tax_pct')::numeric, (p_order->>'discount')::numeric,
+    0, p_order->'promo_detail', (p_order->>'total')::numeric, p_order->>'currency',
+    p_order->'items', p_order->>'note', true, (p_order->>'stock_reservation_id')::uuid)
+  returning id into v_id;
+  return v_id;
+end; $$;
+revoke all on function public.create_table_order_v2(uuid, jsonb) from public, anon, authenticated;
+grant execute on function public.create_table_order_v2(uuid, jsonb) to service_role;
 
 -- Orders that predate sittings still have to belong to one, or a debt already
 -- on the floor becomes invisible to the diner who owes it. Idempotent: it only
@@ -3314,6 +3371,29 @@ create unique index if not exists print_jobs_once
 -- what the kitchen is printing, and staff read the board, not this table.
 alter table print_jobs enable row level security;
 revoke all on print_jobs from anon, authenticated;
+
+-- Serialize reprints with cancellation at the order row. A fresh generation
+-- keeps an old printer confirmation from closing the newly queued copy.
+create or replace function public.rearm_kitchen_print_v1(p_restaurant uuid, p_order uuid)
+returns boolean language plpgsql security invoker set search_path = '' as $$
+begin
+  perform 1 from public.orders
+    where id = p_order and restaurant_id = p_restaurant and status <> 'cancelled'
+    for update;
+  if not found then return false; end if;
+  if not exists (select 1 from public.restaurants where id = p_restaurant and print_token is not null) then
+    return null;
+  end if;
+  insert into public.print_jobs (restaurant_id, order_id, kind, created_at)
+    values (p_restaurant, p_order, 'kitchen', clock_timestamp())
+  on conflict (order_id, kind) do update set
+    delivery_token = excluded.delivery_token, created_at = excluded.created_at,
+    claimed_at = null, printed_at = null;
+  return true;
+end;
+$$;
+revoke all on function public.rearm_kitchen_print_v1(uuid, uuid) from public, anon, authenticated;
+grant execute on function public.rearm_kitchen_print_v1(uuid, uuid) to service_role;
 
 -- An order reaches the pass from several directions — a diner paying online, a
 -- table ordering to settle later, a cashier ringing a sale — and every one of
@@ -4847,6 +4927,53 @@ end;
 $$;
 revoke all on function public.mark_station_ready(uuid, uuid, text) from public, anon, authenticated;
 grant execute on function public.mark_station_ready(uuid, uuid, text) to service_role;
+
+-- Which preparation cycle the order is on. Sending a ticket back on the board
+-- starts a new one: every station has to finish again. A station's "done"
+-- carries the revision its screen showed, so a completion sent before the
+-- rewind and delivered after it cannot count toward the new cycle and call
+-- the order ready while the other station is still cooking (bl33 #3).
+alter table orders add column if not exists prep_revision int not null default 0;
+
+-- Bumped in the same write as the backward move, whoever makes it.
+create or replace function public.bump_prep_revision_v1()
+returns trigger language plpgsql set search_path = public as $$
+begin
+  if array_position(array['received', 'preparing', 'ready'], new.status)
+     < array_position(array['received', 'preparing', 'ready'], old.status) then
+    new.prep_revision := old.prep_revision + 1;
+  end if;
+  return new;
+end; $$;
+revoke all on function public.bump_prep_revision_v1() from public, anon, authenticated;
+drop trigger if exists orders_bump_prep_revision on orders;
+create trigger orders_bump_prep_revision before update of status on orders
+  for each row execute function public.bump_prep_revision_v1();
+
+-- mark_station_ready, refusing a completion from an earlier preparation cycle.
+-- Checked under the order's lock, after the stage checks, so a stale "done"
+-- answers `stale` and changes nothing.
+create or replace function public.mark_station_ready_v2(
+  p_restaurant uuid, p_order uuid, p_station text, p_revision int
+) returns jsonb language plpgsql security definer set search_path = public as $$
+declare v_order orders;
+begin
+  if p_station not in ('kitchen', 'bar') then return jsonb_build_object('outcome', 'invalid'); end if;
+  select * into v_order from orders where id = p_order and restaurant_id = p_restaurant for update;
+  if v_order.id is null then return jsonb_build_object('outcome', 'missing'); end if;
+  if v_order.written_off then return jsonb_build_object('outcome', 'inactive'); end if;
+  if v_order.status not in ('received', 'preparing') then
+    return jsonb_build_object('outcome', 'moved', 'status', v_order.status);
+  end if;
+  if p_revision is distinct from v_order.prep_revision then
+    return jsonb_build_object('outcome', 'stale', 'revision', v_order.prep_revision);
+  end if;
+  -- Same transaction, same lock: the original writer does the rest.
+  return public.mark_station_ready(p_restaurant, p_order, p_station);
+end;
+$$;
+revoke all on function public.mark_station_ready_v2(uuid, uuid, text, int) from public, anon, authenticated;
+grant execute on function public.mark_station_ready_v2(uuid, uuid, text, int) to service_role;
 
 -- ── Last, on purpose ────────────────────────────────────────────────────────
 -- The table-shaping privileges, taken from every table once more. The revoke
@@ -6842,6 +6969,37 @@ end;
 $$;
 revoke all on function public.prepare_order_refund(uuid, uuid, text, jsonb, boolean, uuid, timestamptz, uuid) from public, anon, authenticated;
 grant execute on function public.prepare_order_refund(uuid, uuid, text, jsonb, boolean, uuid, timestamptz, uuid) to service_role;
+
+-- The same cancellation, but an unpaid order still on an open whole-bill card
+-- page answers `paying`, decided under the order lock. prepare_order_refund
+-- answered `changed` there, and checkoutPageRpc only asks Stripe whether a
+-- page really closed on `paying`: a page Stripe had expired kept blocking the
+-- manager's cancel for ever (bl33 #2). Locks in prepare_order_refund's order
+-- (money, account, order); the call below takes them again in this transaction.
+create or replace function public.prepare_order_refund_v2(
+  p_restaurant uuid, p_order uuid, p_actor text, p_legacy_demand jsonb,
+  p_expected_paid boolean, p_expected_account uuid, p_expected_hold timestamptz, p_expected_checkout uuid
+) returns jsonb language plpgsql security definer set search_path = public as $$
+declare o orders;
+begin
+  perform public.lock_restaurant_money(p_restaurant);
+  perform public.backfill_payment_allocations(p_restaurant);
+  if p_expected_account is not null then
+    perform 1 from customer_accounts where id = p_expected_account and restaurant_id = p_restaurant for update;
+  end if;
+  select * into o from orders where restaurant_id = p_restaurant and id = p_order for update;
+  if o.id is not null and not o.paid
+    and not exists (select 1 from order_adjustments where order_id = o.id and kind = 'cancel')
+    and not coalesce((public.order_coverage(p_restaurant, array[o.id])->0->>'unresolved')::boolean, false)
+    and public.whole_bill_card_open_v1(p_restaurant, array[o.id]) then
+    return jsonb_build_object('outcome', 'paying');
+  end if;
+  return public.prepare_order_refund(p_restaurant, p_order, p_actor, p_legacy_demand,
+    p_expected_paid, p_expected_account, p_expected_hold, p_expected_checkout);
+end;
+$$;
+revoke all on function public.prepare_order_refund_v2(uuid, uuid, text, jsonb, boolean, uuid, timestamptz, uuid) from public, anon, authenticated;
+grant execute on function public.prepare_order_refund_v2(uuid, uuid, text, jsonb, boolean, uuid, timestamptz, uuid) to service_role;
 
 -- An attempt is saved before a provider is called. The same immutable request
 -- and key survive a lost HTTP response, process crash, or repeated button tap.
@@ -10117,6 +10275,8 @@ create table if not exists kitchen_tickets (
   created_at timestamptz not null
 );
 create index if not exists kitchen_tickets_board on kitchen_tickets(restaurant_id, status, created_at);
+-- The preparation cycle the pass is looking at (orders.prep_revision).
+alter table kitchen_tickets add column if not exists prep_revision int not null default 0;
 alter table kitchen_tickets enable row level security;
 revoke all on kitchen_tickets from anon;
 revoke all on kitchen_tickets from public, authenticated;
@@ -10168,9 +10328,32 @@ begin
 end; $$;
 revoke all on function public.sync_kitchen_ticket() from public, anon, authenticated;
 grant execute on function public.sync_kitchen_ticket() to service_role;
+
+-- The same copy, carrying the preparation revision the station's "done" must
+-- send back (mark_station_ready_v2).
+create or replace function public.sync_kitchen_ticket_v2()
+returns trigger language plpgsql security definer set search_path = public as $$
+begin
+  if new.status <> 'pending_payment' then
+    insert into kitchen_tickets (id, restaurant_id, code, table_label, customer_name,
+      status, stations_ready, prep_revision, items, note, created_at)
+    values (new.kitchen_ticket_id, new.restaurant_id, left(replace(new.id::text, '-', ''), 4),
+      new.table_label, new.customer_name,
+      case when new.written_off then 'cancelled' else new.status end, new.stations_ready,
+      new.prep_revision, kitchen_items(new.items), new.note, new.created_at)
+    on conflict (id) do update set restaurant_id = excluded.restaurant_id,
+      code = excluded.code, table_label = excluded.table_label, customer_name = excluded.customer_name,
+      status = excluded.status, stations_ready = excluded.stations_ready,
+      prep_revision = excluded.prep_revision,
+      items = excluded.items, note = excluded.note, created_at = excluded.created_at;
+  end if;
+  return new;
+end; $$;
+revoke all on function public.sync_kitchen_ticket_v2() from public, anon, authenticated;
+grant execute on function public.sync_kitchen_ticket_v2() to service_role;
 drop trigger if exists orders_sync_kitchen_ticket on orders;
 create trigger orders_sync_kitchen_ticket after insert or update on orders
-  for each row execute function public.sync_kitchen_ticket();
+  for each row execute function public.sync_kitchen_ticket_v2();
 
 -- Lock the initial copy against concurrent moves, or an older snapshot could
 -- overwrite a newer trigger result on a busy pass during rollout.
@@ -11933,6 +12116,15 @@ revoke all on cash_withdrawal_retired_refs from anon;
 revoke all on cash_withdrawal_retired_refs from authenticated;
 grant all on cash_withdrawal_retired_refs to service_role;
 
+-- The shift that collected a cash sale (bl39 finding 2). created_at is when
+-- the money was posted, and recorded_at when the server wrote it; neither says
+-- which drawer holds the cash. A sale captured while shift A was open and
+-- posted after A closed went into shift B's window: A showed an overage, B a
+-- matching shortage. Null on older rows and on sales rung with no shift open,
+-- which keep the timestamp window. Set once, by ring_pos_sale_v3.
+alter table payments add column if not exists cash_shift_id uuid references cash_shifts(id) on delete set null;
+create index if not exists payments_cash_shift_idx on payments(cash_shift_id) where cash_shift_id is not null;
+
 -- One calculation for both the signed close and the later review. Aggregate
 -- inside Postgres: PostgREST's row cap must never cut a busy shift short.
 create or replace function public.cash_shift_totals(p_restaurant uuid, p_shift uuid, p_until timestamptz)
@@ -11946,7 +12138,11 @@ returns jsonb language sql stable security definer set search_path = public as $
     select coalesce(sum(p.amount), 0) amount, coalesce(sum(p.tip), 0) tip from payments p, s
       where p.restaurant_id = p_restaurant and p.currency = s.currency
         and p.method = 'cash' and nullif(p.actor_email, '') is not null
-        and p.created_at between s.opened_at and s.until_at
+        -- A sale bound to the shift that collected it counts there, even when
+        -- it was posted after that shift closed; never in the next one
+        -- (bl39 finding 2). Unbound rows keep the timestamp window.
+        and (p.cash_shift_id = s.id and p.created_at <= p_until
+          or p.cash_shift_id is null and p.created_at between s.opened_at and s.until_at)
   ), returns as (
     -- The tip part of a cash return comes out of the shift's tips too: MX$110
     -- with MX$10 tip, refunded whole, read "sales MX$0, of which tips MX$10"
@@ -12171,7 +12367,8 @@ returns setof public.cash_shifts language sql stable security definer set search
     or exists(select 1 from payments p where p.restaurant_id = p_restaurant and p.currency = s.currency
       and p.method = 'cash' and nullif(p.actor_email, '') is not null
       and p.recorded_at >= p_day_start and p.recorded_at > s.closed_at
-      and p.created_at between s.opened_at and s.closed_at)
+      and (p.cash_shift_id = s.id
+        or p.cash_shift_id is null and p.created_at between s.opened_at and s.closed_at))
     -- Held cash retained or returned, received into a shift already closed and
     -- counted there as an approval would be: that shift's count changed today
     -- too (full review M1).
@@ -12485,6 +12682,32 @@ end;
 $$;
 revoke all on function public.create_order_intent(uuid, uuid, text, jsonb, jsonb, boolean, int, jsonb) from public, anon, authenticated;
 grant execute on function public.create_order_intent(uuid, uuid, text, jsonb, jsonb, boolean, int, jsonb) to service_role;
+
+-- A waiter's round with a retry reference, saved only into an open sitting.
+-- A replay answers first (its order is already on the bill, whatever the
+-- sitting did since); a new round holds the sitting FOR SHARE while
+-- create_order_intent inserts it, in this same transaction (bl33 #1).
+create or replace function public.create_table_order_intent_v2(
+  p_restaurant uuid, p_ref uuid, p_scope text, p_order jsonb, p_demand jsonb,
+  p_inventory boolean, p_threshold int
+) returns jsonb language plpgsql security definer set search_path = public as $$
+declare v_result jsonb; v_session uuid := (p_order->>'session_id')::uuid;
+begin
+  perform public.lock_restaurant_money(p_restaurant);
+  perform pg_advisory_xact_lock(hashtextextended(p_restaurant::text || p_ref::text, 20));
+  v_result := public.order_intent_result(p_restaurant, p_ref, p_scope);
+  if v_result is not null then return v_result; end if;
+  if v_session is null or p_order->>'table_id' is null then raise exception 'table order needs a sitting'; end if;
+  perform 1 from table_sessions
+   where id = v_session and restaurant_id = p_restaurant
+     and table_id = (p_order->>'table_id')::uuid and closed_at is null
+   for share;
+  if not found then return '{"sittingClosed":true}'::jsonb; end if;
+  return public.create_order_intent(p_restaurant, p_ref, p_scope, p_order, p_demand, p_inventory, p_threshold, null);
+end;
+$$;
+revoke all on function public.create_table_order_intent_v2(uuid, uuid, text, jsonb, jsonb, boolean, int) from public, anon, authenticated;
+grant execute on function public.create_table_order_intent_v2(uuid, uuid, text, jsonb, jsonb, boolean, int) to service_role;
 
 -- Required purpose and role, as create_cash_withdrawal above: pending for a
 -- cashier, capped at the drawer. A reference a manager retired by removing its
@@ -16438,6 +16661,306 @@ create or replace view daily_digests_due with (security_invoker = true) as
 revoke all on daily_digests_due from anon, authenticated, public, service_role;
 grant select on daily_digests_due to service_role;
 
+-- ── Account money bound to what was reviewed (backlog 35, findings 1 and 2) ──
+-- An in-person collection carries a reference that is never blank and the
+-- unpaid orders the cashier showed. A retry whose first try committed is the
+-- same payment; a late first try against replacement debt of the same total
+-- is refused. Deployed callers keep account_settle_currency_v1.
+create or replace function public.account_settle_reviewed_v1(
+  p_restaurant uuid,
+  p_account    uuid,
+  p_expected   numeric,
+  p_tip        numeric,
+  p_method     text,
+  p_actor      text,
+  p_ref        text,
+  p_currency   text,
+  p_reviewed_orders uuid[]
+) returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  v_account customer_accounts;
+  v_ids     uuid[];
+  v_payment uuid;
+  v_owed    numeric;
+  v_recorded_tip numeric;
+  v_tip     numeric := greatest(coalesce(p_tip, 0), 0);
+begin
+  if p_currency is null or p_currency not in ('MXN', 'USD') then raise exception 'invalid account currency'; end if;
+  if p_ref is null or btrim(p_ref) = '' then raise exception 'an account collection needs a reference'; end if;
+  if p_reviewed_orders is null or cardinality(p_reviewed_orders) = 0 then
+    raise exception 'an account collection needs the reviewed orders';
+  end if;
+  perform public.lock_restaurant_money(p_restaurant);
+  perform set_config('tabletap.allocation_writer', 'v1', true);
+  if p_restaurant is not null then perform public.backfill_payment_allocations(p_restaurant); end if;
+  perform set_config('tabletap.allocation_scope', '', true);
+  select * into v_account from customer_accounts
+   where id = p_account and restaurant_id = p_restaurant for update;
+  if v_account.id is null then return jsonb_build_object('outcome', 'missing'); end if;
+  if exists (select 1 from payments where restaurant_id = p_restaurant and client_ref = p_ref) then
+    if exists(select 1 from payments where restaurant_id = p_restaurant and client_ref = p_ref
+      and (account_id is distinct from p_account or currency is distinct from p_currency or amount <> p_expected + p_tip)) then
+      raise exception 'account collection reference differs';
+    end if;
+    return (select jsonb_build_object('outcome','duplicate','amount',amount,'tip',tip,'currency',currency)
+      from payments where restaurant_id = p_restaurant and client_ref = p_ref);
+  end if;
+  if public.unresolved_account_page_v1(p_restaurant, p_account) then
+    return jsonb_build_object('outcome', 'paying');
+  end if;
+
+  perform 1 from orders where restaurant_id = p_restaurant and currency = p_currency and account_id = p_account
+    and paid = false and written_off = false and status <> 'cancelled' order by id for update;
+  select coalesce(sum(total), 0), array_agg(id order by created_at desc)
+    into v_owed, v_ids
+    from orders where restaurant_id = p_restaurant and currency = p_currency and account_id = p_account
+      and paid = false and written_off = false and status <> 'cancelled';
+  if v_owed <= 0 then return jsonb_build_object('outcome', 'nothing'); end if;
+  if abs(v_owed - p_expected) > 0.005 then
+    return jsonb_build_object('outcome', 'changed', 'owed', v_owed);
+  end if;
+  -- The same total is not the same debt: an order paid elsewhere and a new
+  -- one of the same price would be collected on a review of the old one.
+  if cardinality(v_ids) <> cardinality(p_reviewed_orders)
+    or not (v_ids <@ p_reviewed_orders and p_reviewed_orders <@ v_ids) then
+    return jsonb_build_object('outcome', 'orders_changed', 'owed', v_owed);
+  end if;
+  v_tip := least(v_tip, v_owed);
+
+  perform set_config('tabletap.allocation_scope',to_json(v_ids)::text,true);
+  insert into payments (restaurant_id, account_id, amount, tip, method, actor_email, client_ref, account_added_tip_cents, account_tip_order_id, created_at)
+  values (p_restaurant, p_account, v_owed + v_tip,
+    v_tip + (select coalesce(sum(tip), 0) from orders where id = any(v_ids) and written_off = false), p_method, p_actor, p_ref, round(v_tip * 100),
+    case when v_tip > 0 then v_ids[1] end, clock_timestamp()) returning id, tip into v_payment, v_recorded_tip;
+  update orders set paid = true, pay_method = p_method where id = any(v_ids);
+  if v_tip > 0 then
+    update orders set tip = tip + v_tip, total = total + v_tip where id = v_ids[1];
+  end if;
+  perform public.append_account_collection_v1(v_payment);
+  perform set_config('tabletap.allocation_scope','',true);
+  return jsonb_build_object('outcome', 'paid', 'amount', v_owed + v_tip, 'tip', v_recorded_tip, 'currency', p_currency);
+end;
+$$;
+revoke all on function public.account_settle_reviewed_v1(uuid, uuid, numeric, numeric, text, text, text, text, uuid[]) from public, anon, authenticated;
+grant execute on function public.account_settle_reviewed_v1(uuid, uuid, numeric, numeric, text, text, text, text, uuid[]) to service_role;
+
+-- A ceiling is stored in the currency the manager saw when approving it. The
+-- account's debt decides that currency, or the restaurant's when it owes
+-- nothing; a screen that showed another one reviews again. Deployed callers
+-- keep account_change_v2.
+create or replace function public.account_set_limit_v1(
+  p_restaurant uuid, p_account uuid, p_limit numeric, p_currency text, p_actor text
+) returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  v_account customer_accounts;
+  v_owed numeric;
+  v_debt_currencies text[];
+  v_target text;
+begin
+  if p_currency is null or p_currency !~ '^[A-Z]{3}$' then raise exception 'a ceiling needs the currency it was approved in'; end if;
+  perform public.lock_restaurant_money(p_restaurant);
+  perform set_config('tabletap.allocation_writer', 'v1', true);
+  if p_restaurant is not null then perform public.backfill_payment_allocations(p_restaurant); end if;
+  perform set_config('tabletap.allocation_scope', '', true);
+  select * into v_account from customer_accounts
+   where id = p_account and restaurant_id = p_restaurant for update;
+  if v_account.id is null then return jsonb_build_object('outcome', 'missing'); end if;
+  if p_limit is null or p_limit <= 0 or p_limit > 1000000 then
+    return jsonb_build_object('outcome', 'invalid');
+  end if;
+  select array_agg(distinct currency) into v_debt_currencies from orders
+   where restaurant_id = p_restaurant and account_id = p_account
+     and not paid and written_off = false and status <> 'cancelled';
+  if cardinality(v_debt_currencies) > 1 then
+    return jsonb_build_object('outcome', 'mixed_currency');
+  end if;
+  v_target := coalesce(v_debt_currencies[1], (select currency from restaurants where id = p_restaurant));
+  if p_currency is distinct from v_target then
+    return jsonb_build_object('outcome', 'currency', 'currency', v_target);
+  end if;
+  v_owed := public.account_owed(p_account);
+  if p_limit < v_owed then return jsonb_build_object('outcome', 'limit', 'owed', v_owed); end if;
+  update customer_accounts set credit_limit = p_limit, credit_currency = p_currency where id = p_account;
+  return jsonb_build_object('outcome', 'changed', 'previous_limit', v_account.credit_limit,
+    'previous_currency', v_account.credit_currency);
+end;
+$$;
+revoke all on function public.account_set_limit_v1(uuid, uuid, numeric, text, text) from public, anon, authenticated;
+grant execute on function public.account_set_limit_v1(uuid, uuid, numeric, text, text) to service_role;
+
+-- A ceiling from before credit_currency, on an account never charged, has no
+-- currency anyone approved: it used to take the menu's currency of the day.
+-- It is refused until a manager sets it again (account_set_limit_v1). An
+-- account charged before keeps its last charge's currency, as v2 decides.
+create or replace function public.account_limit_unapproved_v1(p_restaurant uuid, p_account uuid)
+returns boolean language sql stable security definer set search_path = public as $$
+  select exists (
+    select 1 from customer_accounts a
+     where a.id = p_account and a.restaurant_id = p_restaurant and a.credit_currency is null
+       and not exists (select 1 from orders o where o.account_id = a.id and o.written_off = false));
+$$;
+revoke all on function public.account_limit_unapproved_v1(uuid, uuid) from public, anon, authenticated;
+grant execute on function public.account_limit_unapproved_v1(uuid, uuid) to service_role;
+
+create or replace function public.account_charge_v3(
+  p_restaurant uuid,
+  p_account    uuid,
+  p_orders     uuid[],
+  p_expected   numeric,
+  p_actor      text
+) returns jsonb language plpgsql security definer set search_path = public as $$
+begin
+  perform public.lock_restaurant_money(p_restaurant);
+  perform 1 from customer_accounts where id = p_account and restaurant_id = p_restaurant for update;
+  if public.account_limit_unapproved_v1(p_restaurant, p_account) then
+    return jsonb_build_object('outcome', 'limit_unapproved');
+  end if;
+  return public.account_charge_v2(p_restaurant, p_account, p_orders, p_expected, p_actor);
+end;
+$$;
+revoke all on function public.account_charge_v3(uuid, uuid, uuid[], numeric, text) from public, anon, authenticated;
+grant execute on function public.account_charge_v3(uuid, uuid, uuid[], numeric, text) to service_role;
+
+-- A sale rung onto an account: the same refusal before anything is inserted.
+-- A sale already rung charged the account, which stamped its currency, so a
+-- retry never reaches the refusal.
+create or replace function public.ring_pos_account_v3(
+  p_restaurant uuid, p_ref uuid, p_order jsonb, p_account uuid, p_actor text,
+  p_status text, p_demand jsonb, p_inventory boolean, p_threshold int
+) returns jsonb language plpgsql security definer set search_path = public as $$
+begin
+  perform public.lock_restaurant_money(p_restaurant);
+  perform 1 from customer_accounts where id = p_account and restaurant_id = p_restaurant for update;
+  if public.account_limit_unapproved_v1(p_restaurant, p_account) then
+    return jsonb_build_object('outcome', 'limit_unapproved');
+  end if;
+  return public.ring_pos_account_v2(p_restaurant, p_ref, p_order, p_account, p_actor,
+    p_status, p_demand, p_inventory, p_threshold);
+end;
+$$;
+revoke all on function public.ring_pos_account_v3(uuid, uuid, jsonb, uuid, text, text, jsonb, boolean, int) from public, anon, authenticated;
+grant execute on function public.ring_pos_account_v3(uuid, uuid, jsonb, uuid, text, text, jsonb, boolean, int) to service_role;
+-- ── Table calls and admission (Codex review bl40, findings 2–6) ─────────────
+-- A waiting phone holds one of the five admission slots only while it keeps
+-- asking. A copied QR could fill all five and walk away; the party then waited
+-- for staff to clear them or for the sitting to end. `seen_at` moves on every
+-- poll; a pending row unseen for ten minutes no longer counts and is purged.
+alter table table_session_members add column if not exists seen_at timestamptz default now();
+
+-- The key printed in a table's QR (`?k=`). Existing tables keep none, so the
+-- stickers already on them keep working; new tables get one, and renaming or
+-- moving a table rotates it, so a QR printed for "Mesa 4" stops summoning
+-- staff to the same record once it becomes "Patio 2".
+alter table restaurant_tables add column if not exists qr_key text;
+alter table restaurant_tables alter column qr_key set default replace(gen_random_uuid()::text, '-', '');
+
+create or replace function public.rotate_table_qr_key()
+returns trigger language plpgsql set search_path = public as $$
+begin
+  if new.label is distinct from old.label or new.restaurant_id is distinct from old.restaurant_id then
+    new.qr_key := replace(gen_random_uuid()::text, '-', '');
+  end if;
+  return new;
+end; $$;
+revoke all on function public.rotate_table_qr_key() from public, anon, authenticated;
+grant execute on function public.rotate_table_qr_key() to service_role;
+drop trigger if exists restaurant_tables_rotate_qr_key on restaurant_tables;
+create trigger restaurant_tables_rotate_qr_key before update on restaurant_tables
+  for each row execute function public.rotate_table_qr_key();
+
+-- v3: v2 plus the ten-minute life of a waiting phone (see `seen_at` above).
+create or replace function public.request_table_member_v3(
+  p_restaurant uuid, p_table uuid, p_hash text, p_open boolean, p_first_approved boolean
+) returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  v_session uuid;
+  v_created boolean := false;
+  v_known boolean;
+  v_member table_session_members%rowtype;
+begin
+  if p_hash is null or p_hash !~ '^[0-9a-f]{64}$' then raise exception 'Invalid member credential'; end if;
+  perform 1 from restaurant_tables where id = p_table and restaurant_id = p_restaurant for update;
+  if not found then raise exception 'Table not found'; end if;
+  if p_open then
+    update table_sessions set closed_at = now(), close_reason = 'expired'
+      where table_id = p_table and restaurant_id = p_restaurant and closed_at is null
+        and opened_at < now() - interval '8 hours';
+  end if;
+  select id into v_session from table_sessions
+    where table_id = p_table and restaurant_id = p_restaurant and closed_at is null
+      and opened_at >= now() - interval '8 hours';
+  if v_session is null and not p_open then
+    return jsonb_build_object('status', 'empty', 'sessionId', null, 'diner', null);
+  end if;
+  if v_session is null then
+    insert into table_sessions(restaurant_id, table_id) values (p_restaurant, p_table)
+      on conflict do nothing returning id into v_session;
+    v_created := v_session is not null;
+    if v_session is null then
+      select id into v_session from table_sessions
+        where table_id = p_table and restaurant_id = p_restaurant and closed_at is null;
+    end if;
+  end if;
+  if v_session is null then raise exception 'Could not open sitting'; end if;
+  -- This phone is still here: refresh its own wait before purging abandoned ones.
+  update table_session_members set seen_at = now()
+    where session_id = v_session and token_hash = p_hash and status = 'pending';
+  delete from table_session_members
+    where session_id = v_session and status = 'pending'
+      and coalesce(seen_at, created_at) < now() - interval '10 minutes';
+  select * into v_member from table_session_members where session_id = v_session and token_hash = p_hash;
+  v_known := found;
+  -- Existing phones keep their admission and polling even when five wait.
+  -- New phones share the table lock above, so they cannot overfill the list.
+  if not v_known and not v_created and
+    (select count(*) from table_session_members where session_id = v_session and status = 'pending') >= 5 then
+    return jsonb_build_object('status', 'full', 'sessionId', v_session, 'diner', null);
+  end if;
+  insert into table_session_members(session_id, token_hash, status, decided_at, seen_at)
+    values (v_session, p_hash, case when v_created and p_first_approved then 'approved' else 'pending' end,
+      case when v_created and p_first_approved then now() else null end, now())
+    on conflict (session_id, token_hash) do nothing;
+  select * into strict v_member from table_session_members where session_id = v_session and token_hash = p_hash;
+  return jsonb_build_object('status', v_member.status, 'sessionId', v_session, 'diner', v_member.id);
+end; $$;
+revoke all on function public.request_table_member_v3(uuid, uuid, text, boolean, boolean) from public, anon, authenticated;
+grant execute on function public.request_table_member_v3(uuid, uuid, text, boolean, boolean) to service_role;
+
+-- A call belongs to the sitting that raised it. Without this an open "bring
+-- the bill" from the last party answered "already asked" to the next one.
+alter table service_requests add column if not exists session_id uuid references table_sessions(id) on delete set null;
+
+-- The duplicate check and the insert, under the table's lock: two taps at once
+-- both read "no open call" and the floor saw two alerts. A named sitting must
+-- still be live (open, under eight hours) when the call is written.
+create or replace function public.raise_service_request_v1(
+  p_restaurant uuid, p_table uuid, p_kind text, p_session uuid
+) returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  v_label text;
+  v_id uuid;
+begin
+  if p_kind is null or p_kind not in ('waiter', 'bill', 'pay') then raise exception 'Invalid request kind'; end if;
+  select label into v_label from restaurant_tables
+    where id = p_table and restaurant_id = p_restaurant for update;
+  if not found then return jsonb_build_object('status', 'no_table'); end if;
+  if p_session is not null and not exists (
+    select 1 from table_sessions where id = p_session and restaurant_id = p_restaurant
+      and table_id = p_table and closed_at is null and opened_at >= now() - interval '8 hours'
+  ) then
+    return jsonb_build_object('status', 'closed');
+  end if;
+  select id into v_id from service_requests
+    where restaurant_id = p_restaurant and table_id = p_table and kind = p_kind and status = 'open'
+      and created_at >= now() - interval '8 hours' and session_id is not distinct from p_session
+    limit 1;
+  if v_id is not null then return jsonb_build_object('status', 'duplicate', 'id', v_id); end if;
+  insert into service_requests(restaurant_id, table_id, table_label, kind, session_id)
+    values (p_restaurant, p_table, v_label, p_kind, p_session) returning id into v_id;
+  return jsonb_build_object('status', 'created', 'id', v_id);
+end; $$;
+revoke all on function public.raise_service_request_v1(uuid, uuid, text, uuid) from public, anon, authenticated;
+grant execute on function public.raise_service_request_v1(uuid, uuid, text, uuid) to service_role;
 -- Digest consent belongs to a normalized mailbox at one restaurant. Keep the
 -- address fingerprint instead of a copy of the address after it unsubscribes.
 create or replace function public.digest_address_key(p_email text) returns text
@@ -16817,3 +17340,162 @@ $$;
 revoke all on function public.adopt_settled_intent_v1(uuid, text, boolean, text) from public, anon, authenticated;
 grant execute on function public.adopt_settled_intent_v1(uuid, text, boolean, text) to service_role;
 revoke truncate, references, trigger on all tables in schema public from authenticated;
+-- Aggregate the debt and recent payments in one MVCC snapshot. The debt
+-- array has no row cap; only payment history is limited to the latest 20.
+create or replace function public.account_statement_v1(p_restaurant uuid, p_account uuid)
+returns jsonb language sql stable security invoker set search_path = '' as $$
+  select jsonb_build_object(
+    'orders', coalesce((
+      select jsonb_agg(to_jsonb(o) order by o.id)
+      from (
+        select id, items, total, currency, table_label, created_at, charged_at, charged_by, status, service_fee, tip
+        from public.orders
+        where restaurant_id = p_restaurant and account_id = p_account
+          and not paid and not written_off and status <> 'cancelled'
+      ) o
+    ), '[]'::jsonb),
+    'payments', coalesce((
+      select jsonb_agg(to_jsonb(p) - 'id' order by p.created_at desc, p.id desc)
+      from (
+        select id, amount, tip, currency, method, created_at
+        from public.payments
+        where restaurant_id = p_restaurant and account_id = p_account
+        order by created_at desc, id desc limit 20
+      ) p
+    ), '[]'::jsonb)
+  );
+$$;
+revoke all on function public.account_statement_v1(uuid, uuid) from public, anon, authenticated;
+grant execute on function public.account_statement_v1(uuid, uuid) to service_role;
+-- ============================================================================
+-- Cash shifts: the collecting shift, priced offline receipts, and retries
+-- (Codex bl39 review, findings 2, 3, 5 and 6)
+-- ============================================================================
+
+-- A receipt's shift is set once: rebinding it would move counted cash from one
+-- signed drawer to another. A cascade from a deleted shift may still clear it.
+create or replace function public.keep_cash_shift_binding_v1()
+returns trigger language plpgsql security definer set search_path = public as $$
+begin
+  if pg_trigger_depth() > 1 then return new; end if;
+  if old.cash_shift_id is not null and new.cash_shift_id is distinct from old.cash_shift_id then
+    raise exception 'receipt shift is immutable';
+  end if;
+  return new;
+end;
+$$;
+revoke all on function public.keep_cash_shift_binding_v1() from public, anon, authenticated, service_role;
+drop trigger if exists keep_cash_shift_binding on payments;
+create trigger keep_cash_shift_binding before update on payments
+  for each row execute function public.keep_cash_shift_binding_v1();
+
+-- Finding 2. A till cash sale carries the shift that was open when the route
+-- received it (p_cash_shift, null when none was). Under the money lock, after
+-- the sale is rung, its cash receipt is bound to that shift. If the shift
+-- closed while the sale was on its way, the receipt still belongs to it: the
+-- shift's record shows it as cash that arrived after the count, for the
+-- manager to review there, instead of a shortage in the next shift's count.
+-- ring_pos_sale_v2 stays for the deployed route.
+create or replace function public.ring_pos_sale_v3(
+  p_restaurant uuid, p_ref uuid, p_order jsonb, p_method text, p_actor text,
+  p_status text, p_at timestamptz, p_terminal text, p_demand jsonb,
+  p_inventory boolean, p_threshold int, p_cash_shift uuid
+) returns jsonb language plpgsql security definer set search_path = public as $$
+declare v_ticket jsonb; s cash_shifts;
+begin
+  perform public.lock_restaurant_money(p_restaurant);
+  v_ticket := public.ring_pos_sale_v2(p_restaurant, p_ref, p_order, p_method, p_actor,
+    p_status, p_at, p_terminal, p_demand, p_inventory, p_threshold);
+  if v_ticket->>'outcome' = 'settled' and not coalesce((v_ticket->>'repeat')::boolean, false)
+    and p_method = 'cash' and p_at is null and p_cash_shift is not null then
+    select * into s from cash_shifts where restaurant_id = p_restaurant and id = p_cash_shift;
+    if found then
+      update payments set cash_shift_id = s.id
+        where restaurant_id = p_restaurant and order_id = p_ref and method = 'cash'
+          and cash_shift_id is null and currency = s.currency;
+      v_ticket := v_ticket || jsonb_build_object('lateForShift', s.closed_at is not null);
+    end if;
+  end if;
+  return v_ticket;
+end;
+$$;
+revoke all on function public.ring_pos_sale_v3(uuid, uuid, jsonb, text, text, text, timestamptz, text, jsonb, boolean, int, uuid) from public, anon, authenticated;
+grant execute on function public.ring_pos_sale_v3(uuid, uuid, jsonb, text, text, text, timestamptz, text, jsonb, boolean, int, uuid) to service_role;
+
+-- Finding 3. Everything an offline receipt's price comparison reads: the
+-- restaurant's charges, every dish's price, discount and modifiers, add-ons,
+-- and promotions with their items. Not availability or stock, which a sale
+-- that already happened ignores. Row text keeps a null apart from a value.
+create or replace function public.offline_pricing_revision_v1(p_restaurant uuid)
+returns text language sql stable security definer set search_path = public as $$
+  select md5(row(
+    (select row(r.currency, r.tax_pct, r.service_pct, r.service_enabled)::text from restaurants r where r.id = p_restaurant),
+    (select string_agg(row(m.id, m.price, m.discount_pct, m.modifiers, m.is_addon)::text, ',' order by m.id)
+      from menu_items m where m.restaurant_id = p_restaurant),
+    (select string_agg(row(a.product_id, a.addon_id)::text, ',' order by a.product_id, a.addon_id)
+      from item_addons a join menu_items m on m.id = a.product_id where m.restaurant_id = p_restaurant),
+    (select string_agg(row(p.id, p.kind, p.combo_price, p.buy_qty, p.pay_qty, p.tiers, p.active, p.sort_order)::text, ',' order by p.id)
+      from promotions p where p.restaurant_id = p_restaurant),
+    (select string_agg(row(i.promotion_id, i.item_id, i.qty)::text, ',' order by i.promotion_id, i.item_id)
+      from promotion_items i join promotions p on p.id = i.promotion_id where p.restaurant_id = p_restaurant)
+  )::text);
+$$;
+revoke all on function public.offline_pricing_revision_v1(uuid) from public, anon, authenticated;
+grant execute on function public.offline_pricing_revision_v1(uuid) to service_role;
+
+-- The route compares the receipt with today's menu, then settles it. A price
+-- changed between the two posted the old price automatically with zero drift.
+-- The route reads the revision before its comparison; under the money lock it
+-- must still be the same, or the receipt goes to a manager (outcome
+-- 'pricing_changed'). A manager's approval (p_manager) accepts the collected
+-- price as it is and skips the check. A receipt already rung answers as before.
+-- record_offline_sale stays for the deployed route.
+create or replace function public.record_offline_sale_v2(
+  p_restaurant uuid, p_ref uuid, p_order jsonb, p_method text, p_actor text,
+  p_at timestamptz, p_terminal text, p_demand jsonb,
+  p_manager text, p_reason text, p_original_at text, p_authority text, p_pricing_revision text
+) returns jsonb language plpgsql security definer set search_path = public as $$
+begin
+  perform public.lock_restaurant_money(p_restaurant);
+  if p_manager is null and public.pos_ticket(p_restaurant, p_ref) is null
+    and p_pricing_revision is distinct from public.offline_pricing_revision_v1(p_restaurant) then
+    return jsonb_build_object('outcome', 'pricing_changed');
+  end if;
+  return public.record_offline_sale(p_restaurant, p_ref, p_order, p_method, p_actor, p_at, p_terminal,
+    p_demand, p_manager, p_reason, p_original_at, p_authority);
+end;
+$$;
+revoke all on function public.record_offline_sale_v2(uuid,uuid,jsonb,text,text,timestamptz,text,jsonb,text,text,text,text,text) from public,anon,authenticated;
+grant execute on function public.record_offline_sale_v2(uuid,uuid,jsonb,text,text,timestamptz,text,jsonb,text,text,text,text,text) to service_role;
+
+-- Finding 5. An opening carries the dialog's reference. A retry whose first
+-- send committed returns that shift, open or since closed, instead of
+-- starting a second one with the same float. The same reference with another
+-- amount or opener is a different request (PT409). open_cash_shift stays for
+-- the deployed route.
+alter table cash_shifts add column if not exists open_ref uuid;
+create unique index if not exists cash_shifts_open_once on cash_shifts(restaurant_id, open_ref) where open_ref is not null;
+create or replace function public.open_cash_shift_v2(p_restaurant uuid, p_actor text, p_amount numeric, p_ref uuid)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare s cash_shifts; v_id uuid;
+begin
+  perform public.lock_restaurant_money(p_restaurant);
+  if p_ref is null then raise exception 'opening reference required'; end if;
+  select * into s from cash_shifts where restaurant_id = p_restaurant and open_ref = p_ref;
+  if found then
+    if s.opening_amount is distinct from p_amount or s.opened_by is distinct from p_actor then
+      raise exception 'reference belongs to another opening' using errcode = 'PT409';
+    end if;
+    return jsonb_build_object('id', s.id, 'replayed', true, 'closed', s.closed_at is not null);
+  end if;
+  if exists (select 1 from cash_shifts where restaurant_id = p_restaurant and closed_at is null) then
+    return null;
+  end if;
+  insert into cash_shifts (restaurant_id, opened_by, opening_amount, opened_at, open_ref)
+  values (p_restaurant, p_actor, p_amount, clock_timestamp(), p_ref)
+  returning id into v_id;
+  return jsonb_build_object('id', v_id, 'replayed', false, 'closed', false);
+end;
+$$;
+revoke all on function public.open_cash_shift_v2(uuid, text, numeric, uuid) from public, anon, authenticated;
+grant execute on function public.open_cash_shift_v2(uuid, text, numeric, uuid) to service_role;

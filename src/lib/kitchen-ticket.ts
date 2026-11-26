@@ -23,6 +23,8 @@ export interface KitchenTicket {
   customer_name?: string | null;
   status: OrderStatus;
   stations_ready?: string[];
+  /** The preparation cycle a station's "done" must name (orders.prep_revision). */
+  prep_revision?: number;
   items: KitchenLine[];
   note: string | null;
   created_at: string;

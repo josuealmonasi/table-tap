@@ -13,11 +13,19 @@ interface PendingRow {
   table_sessions: { table_id: string; restaurant_tables: { label: string } | null };
 }
 
+/**
+ * How long a waiting phone keeps its admission slot without asking again. It
+ * asks every few seconds while its page is open; the SQL purges and the list
+ * below hides a phone unseen for longer (`request_table_member_v3`).
+ */
+export const PENDING_PHONE_MINUTES = 10;
+
 /** No credential or other bill details ever leave this staff/member projection. */
 export async function pendingPhones(restaurantId: string, sessionId?: string): Promise<PendingPhone[]> {
   let query = createAdminClient().from("table_session_members")
     .select("id, created_at, table_sessions!inner(id, restaurant_id, table_id, closed_at, opened_at, restaurant_tables(label))")
     .eq("status", "pending").eq("table_sessions.restaurant_id", restaurantId)
+    .gte("seen_at", new Date(Date.now() - PENDING_PHONE_MINUTES * 60000).toISOString())
     .is("table_sessions.closed_at", null)
     .gte("table_sessions.opened_at", new Date(Date.now() - 8 * 3600000).toISOString())
     .order("created_at");

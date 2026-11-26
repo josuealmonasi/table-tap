@@ -84,6 +84,12 @@ it("5 / Q8: a zero-row import cannot claim a dish was added", async () => {
   expect(await importActions(context()).importRows("m", [{ line: 1, name: "Dish", price: 10, category: null, description: "", emoji: "" }])).toBe(0);
   expect(mocks.toast).toHaveBeenCalledWith("write.importMenu", "error");
 });
+it.each([{ category: "C".repeat(61) }, { emoji: "🍽".repeat(17) }])("validates import fields before any database writes: %j", async fields => {
+  const rows = [{ line: 2, name: "Dish", price: 10, category: "New category", description: "", emoji: "🍽", ...fields }];
+  expect(await importActions(context()).importRows("m", rows)).toBe(0);
+  expect(mocks.from).not.toHaveBeenCalled();
+  expect(mocks.toast).toHaveBeenCalledWith("write.importMenu", "error");
+});
 it("5 / Q8: a bulk delete cannot confirm after changing only one of two rows", async () => {
   query({ data: [{ id: "a" }], error: null });
   expect(await addonActions(context()).deleteItems(["a", "b"])).toBe(false);

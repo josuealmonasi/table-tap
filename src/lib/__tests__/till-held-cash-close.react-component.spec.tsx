@@ -42,7 +42,12 @@ it("the till reads the same restaurant-wide count the close refuses on, and pass
   const page = readFileSync("src/app/dashboard/pos/page.tsx", "utf8");
   const route = readFileSync("src/app/api/cash-shift/route.ts", "utf8");
   expect(page).toContain("heldCashWaiting(createAdminClient(), membership.restaurant.id)");
-  expect(route).toContain("heldCashWaiting(db, actor.restaurantId)");
+  // The close refuses in SQL, on the same queue rows heldCashWaiting counts
+  // (bl39 finding 6: the route no longer pre-reads them).
+  expect(route).toContain('data.outcome === "held_cash"');
+  expect(readFileSync("supabase/schema.sql", "utf8")).toContain(
+    "where restaurant_id = p_restaurant and approved_at is null and resolved_at is null and body->>'method' = 'cash'");
+  expect(readFileSync("src/lib/held-cash.ts", "utf8")).toContain('.is("approved_at", null).is("resolved_at", null).eq("body->>method", "cash")');
   expect(page).toContain("heldCashWaiting={heldCash}");
   expect(readFileSync("src/components/dashboard/pos/PosScreen.tsx", "utf8")).toContain("heldCash={heldCashWaiting}");
   for (const locale of ["en", "es"] as const) {

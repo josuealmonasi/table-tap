@@ -44,6 +44,10 @@ export default function CashMovementDialog({ kind, currency, shiftId, onClose, o
   const attempt = useRetryIntent();
   const inFlight = useRef(false);
   const reviewedCurrency = useRef(currency);
+  // One opening, one reference: a send whose reply was lost is sent again with
+  // it, even after the dialog was closed and opened again, and the server
+  // answers with the shift it already opened (bl39 finding 5).
+  const openRef = useRef<string | null>(null);
   const toast = useToast();
   const [amount, setAmount] = useState("");
   const [note, setNote] = useState("");
@@ -71,21 +75,25 @@ export default function CashMovementDialog({ kind, currency, shiftId, onClose, o
     inFlight.current = true;
     setBusy(true);
     setError(null);
+    if (shownKind === "opening") openRef.current ??= crypto.randomUUID();
     try {
       const res = await fetch(shownKind === "opening" ? "/api/cash-shift" : "/api/cash-drawer", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: shownKind === "opening" ? JSON.stringify({ action: "open", amount })
+        body: shownKind === "opening" ? JSON.stringify({ action: "open", amount, ref: openRef.current })
           : attempt.body({ kind: "withdrawal", shiftId, amount, note, purpose }),
       });
       const data = await res.json();
       if (shownKind === "withdrawal" && ((res.ok && data.id) || (!res.ok && attempt.settles(res.status)))) attempt.clear();
+      // Kept through a lost reply or a busy server, so the next send can find
+      // the shift; a definite answer (opened, refused) lets the next one be new.
+      if (shownKind === "opening" && (res.ok || [400, 403, 409].includes(res.status))) openRef.current = null;
       if (!res.ok) {
         setError(data.error ?? t("apiErr.generic"));
         return;
       }
       if (!data.id) throw new Error("Missing movement result");
-      toast(shownKind === "opening" ? t("shift.opened") : t(withdrawalOutcome(data)));
+      toast(shownKind === "opening" ? t(data.closed ? "shift.openedAlreadyClosed" : "shift.opened") : t(withdrawalOutcome(data)));
       onSaved();
       onClose();
     } catch {

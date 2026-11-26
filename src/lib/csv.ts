@@ -10,13 +10,25 @@
  *
  * Pure. Blank lines are dropped.
  */
-export function parseCsv(text: string): string[][] {
+export class CsvRowLimitError extends Error {}
+
+export function parseCsv(text: string, maxRows = Infinity): string[][] {
   const source = text.replace(/^﻿/, "");
   const separator = guessSeparator(source);
   const rows: string[][] = [];
   let row: string[] = [];
   let cell = "";
   let quoted = false;
+
+  function finishRow(): void {
+    row.push(cell);
+    if (row.some(c => c.trim() !== "")) {
+      if (rows.length === maxRows) throw new CsvRowLimitError();
+      rows.push(row);
+    }
+    row = [];
+    cell = "";
+  }
 
   for (let i = 0; i < source.length; i++) {
     const ch = source[i];
@@ -35,15 +47,11 @@ export function parseCsv(text: string): string[][] {
       cell = "";
     } else if (ch === "\n" || ch === "\r") {
       if (ch === "\r" && source[i + 1] === "\n") i++;
-      row.push(cell);
-      rows.push(row);
-      row = [];
-      cell = "";
+      finishRow();
     } else cell += ch;
   }
-  row.push(cell);
-  rows.push(row);
-  return rows.filter(r => r.some(c => c.trim() !== ""));
+  finishRow();
+  return rows;
 }
 
 /** Semicolons when the first line has more of them than commas, else commas. */
