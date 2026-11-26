@@ -33,7 +33,10 @@ do $$ begin
 end $$;
 drop trigger if exists provision_pending_signup on auth.users;
 drop function if exists public.provision_pending_signup_v1();
+drop function if exists public.request_pending_signup_v2(text, text, text, text, text, text);
+drop function if exists public.release_stale_signup_login_v1(text);
 drop function if exists public.request_pending_signup_v1(text, text, text, text, text, text);
+alter table if exists restaurants drop constraint if exists restaurants_name_length;
 drop table if exists pending_signups cascade;
 drop table if exists terms_acceptances cascade;
 drop function if exists public.capture_legacy_terms_v1() cascade;

@@ -5,6 +5,7 @@ import { PRIVACY_PATH, TERMS_PATH } from "@/lib/legal";
 import Link from "next/link";
 import SignupVerification from "./SignupVerification";
 import { useT } from "@/lib/i18n/context";
+import { RESTAURANT_NAME_MAX } from "@/lib/restaurant-name";
 
 /** Request the link the owner will use to set their password. */
 export default function SignupForm() {
@@ -59,6 +60,7 @@ export default function SignupForm() {
             type="text"
             placeholder={t("auth.restaurantNamePlaceholder")}
             value={restaurantName}
+            maxLength={RESTAURANT_NAME_MAX}
             onChange={e => setRestaurantName(e.target.value)}
             style={{ marginBottom: 12 }}
             required

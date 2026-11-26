@@ -16583,6 +16583,58 @@ $$;
 revoke all on function public.request_pending_signup_v1(text, text, text, text, text, text) from public, anon, authenticated;
 grant execute on function public.request_pending_signup_v1(text, text, text, text, text, text) to service_role;
 
+-- A direct call to Auth's public signup leaves an unconfirmed login under
+-- somebody else's address, and v1 counted it as an account, so the real owner
+-- could never sign up. A login is stale when nothing vouches for it: never
+-- confirmed, never invited, no staff seat, no restaurant, not a platform admin,
+-- and older than a minute (a staff invite creates its login a moment before
+-- its seat). Under a lock on the address, the row lock is taken first and the
+-- delete reads a fresh snapshot, so a seat committed meanwhile keeps the login.
+create or replace function public.release_stale_signup_login_v1(p_email text)
+returns boolean language plpgsql security definer set search_path = '' as $$
+declare v_id uuid;
+begin
+  perform pg_advisory_xact_lock(hashtextextended('signup-email:' || p_email, 0));
+  for v_id in select u.id from auth.users u where u.email = p_email for update loop
+    delete from auth.users u
+      where u.id = v_id
+        and u.email_confirmed_at is null
+        and u.invited_at is null
+        and u.created_at < clock_timestamp() - interval '1 minute'
+        and not exists (select 1 from public.staff s where s.user_id = u.id)
+        and not exists (select 1 from public.restaurants r where r.owner_id = u.id)
+        and not exists (select 1 from public.platform_admins a where a.user_id = u.id);
+  end loop;
+  return not exists (select 1 from auth.users u where u.email = p_email);
+end;
+$$;
+revoke all on function public.release_stale_signup_login_v1(text) from public, anon, authenticated;
+grant execute on function public.release_stale_signup_login_v1(text) to service_role;
+
+-- v1 with the stale login released first, inside the same transaction and lock.
+create or replace function public.request_pending_signup_v2(
+  p_email text, p_token_hash text, p_restaurant_name text, p_locale text,
+  p_terms_version text, p_terms_text_hash text
+) returns boolean language plpgsql security definer set search_path = '' as $$
+begin
+  if not public.release_stale_signup_login_v1(p_email) then return true; end if;
+  insert into public.pending_signups (email_hash, payload, token_hash)
+  values (encode(sha256(convert_to(p_email, 'UTF8')), 'hex'),
+    jsonb_build_object('email', p_email, 'restaurantName', p_restaurant_name,
+      'locale', p_locale, 'termsVersion', p_terms_version, 'termsTextHash', p_terms_text_hash),
+    p_token_hash);
+  return false;
+end;
+$$;
+revoke all on function public.request_pending_signup_v2(text, text, text, text, text, text) from public, anon, authenticated;
+grant execute on function public.request_pending_signup_v2(text, text, text, text, text, text) to service_role;
+
+-- A restaurant's name is printed on tickets, mail subjects and the menu header.
+-- NOT VALID: existing rows are neither scanned nor rejected, new writes are.
+alter table restaurants drop constraint if exists restaurants_name_length;
+alter table restaurants add constraint restaurants_name_length
+  check (char_length(btrim(name)) between 1 and 80) not valid;
+
 -- Only the Auth admin can set this app metadata. GoTrue confirms the email
 -- before committing user creation, so a failed provision rolls back Auth too.
 create or replace function public.provision_pending_signup_v1()
