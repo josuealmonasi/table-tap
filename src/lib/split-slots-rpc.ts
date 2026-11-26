@@ -17,7 +17,12 @@ export async function splitRpc(name: string, args: Record<string, unknown>): Pro
   // already expired is closed here and the call tried once more (#576 R1).
   if (result.outcome === "paying" && typeof args.p_restaurant === "string"
     && await closeExpiredWholeBillPages(args.p_restaurant, args)) return await callSplit(name, args);
-  if (["taken", "reserved"].includes(result.outcome) && typeof args.p_restaurant === "string"
+  // `reserved` is a refusal from a collection, but success from the card
+  // reservation: resolving it there replayed the asking checkout's own
+  // Stripe request from inside its reservation, and a refusal then retired
+  // the attempt under the caller, which answered "invalid" (bl43 #3 follow-up).
+  const refused = result.outcome === "taken" || (result.outcome === "reserved" && name !== "reserve_split_slots_v1");
+  if (refused && typeof args.p_restaurant === "string"
     && typeof args.p_split === "string" && Array.isArray(args.p_slots)
     && await resolveSelectedSplitPages(args.p_restaurant, args.p_split, args.p_slots) === "closed") {
     return await callSplit(name, args);

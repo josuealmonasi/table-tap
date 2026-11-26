@@ -18,13 +18,21 @@ beforeEach(() => {
 
 // A reservation is released when its Stripe session was never made. Stripe
 // says plainly when it made nothing (a 4xx); a dropped connection, a 5xx, or a
-// 409 — the same idempotency key still being worked on — may still be a
+// 409 or 429 — the same idempotency key still being worked on — may still be a
 // session, so the fee stays counted until Stripe's expiry releases it.
 describe("when a failed Stripe call means no session was made", () => {
   it("is an outright refusal on a 4xx", () => {
     expect(stripeRefusedOutright({ type: "StripeInvalidRequestError", statusCode: 400 })).toBe(true);
     expect(stripeRefusedOutright({ type: "StripePermissionError", statusCode: 403 })).toBe(true);
-    expect(stripeRefusedOutright({ type: "StripeRateLimitError", statusCode: 429 })).toBe(true);
+  });
+
+  // bl43 #2: a 429 is a rate limit or a lock timeout on a key another request
+  // is still creating; releasing on it freed a split share whose page was live.
+  it("is unknown on a 429, an idempotency error, or an answer Stripe marks retryable", () => {
+    expect(stripeRefusedOutright({ type: "StripeRateLimitError", statusCode: 429 })).toBe(false);
+    expect(stripeRefusedOutright({ type: "StripeRateLimitError", statusCode: 429, code: "lock_timeout" })).toBe(false);
+    expect(stripeRefusedOutright({ type: "StripeIdempotencyError", statusCode: 400 })).toBe(false);
+    expect(stripeRefusedOutright({ type: "StripeInvalidRequestError", statusCode: 400, headers: { "stripe-should-retry": "true" } })).toBe(false);
   });
 
   it("is unknown on a 409, a 5xx, a dropped connection, or anything else", () => {

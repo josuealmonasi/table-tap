@@ -91,7 +91,10 @@ it("a failed retirement is retried whole after the same positive refusal", async
   s.failure = 400; s.retireError = true;
   await expect(openDinerAttempt(stripe, params, quote)).rejects.toThrow("retirement lost");
   s.retireError = false; s.outcome = "repeat";
-  await expect(resumeDinerAttempt(stripe, "r", quote.scopeKey)).rejects.toThrow("provider");
+  // A saved row carries its creation time; within Stripe's key window the
+  // repeated refusal is proof, and the retired share is quoted again (bl43 #3).
+  s.attempt!.created_at = new Date().toISOString();
+  expect(await resumeDinerAttempt(stripe, "r", quote.scopeKey)).toBeNull();
   expect(s.calls.filter(n => n === "retire_split_attempt_v1")).toHaveLength(2);
   expect(s.calls).not.toContain("release_fee");
   expect(s.calls).not.toContain("finish_diner_checkout");
