@@ -1851,6 +1851,7 @@ foundingLeftBody: "Subscribe now and keep this subscription price for as long as
     newPassword8: "New password must be at least 8 characters.",
     pickRestaurant: "Pick a restaurant (or name a new one for an owner).",
     signupFields: "Restaurant name and email are required.",
+    restaurantNameLength: "The restaurant name must be between 1 and {n} characters.",
     restaurantDelete: "Could not delete the restaurant.",
     restaurantDeleteRefund: "This restaurant still has refunds to finish. Complete them before deleting it.",
     restaurantDeleteRefundWindow: "Stripe can still report a recent refund as failed. Wait 30 days after the latest refund before deleting this restaurant. You can try again from {date}, once no payments or refunds are pending.",

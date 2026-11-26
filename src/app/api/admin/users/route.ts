@@ -3,6 +3,7 @@ import { auditedAdminAction, type AdminAuditContext } from "@/lib/admin-audit";
 import { NextRequest, NextResponse } from "next/server";
 import { apiError } from "@/lib/api-error";
 import { passwordTooShort } from "@/lib/password";
+import { cleanRestaurantName, RESTAURANT_NAME_MAX } from "@/lib/restaurant-name";
 import { getPlatformAdmin } from "@/lib/admin";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { logUserChange } from "@/lib/user-log";
@@ -45,6 +46,11 @@ async function createUser(req: NextRequest, audit: AdminAuditContext<{
     !(role === "owner" && restaurantName?.trim())
   ) {
     return await apiError("apiErr.pickRestaurant", 400);
+  }
+  // Checked before the login exists, so a name the database refuses never
+  // leaves a login with no restaurant.
+  if (role === "owner" && !restaurantId && !cleanRestaurantName(restaurantName)) {
+    return await apiError("apiErr.restaurantNameLength", 400, { n: RESTAURANT_NAME_MAX });
   }
 
   const db = createAdminClient();

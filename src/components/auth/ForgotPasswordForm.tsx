@@ -1,9 +1,7 @@
 "use client";
 
-import { authErrorKey } from "@/lib/auth-error";
 import { useState } from "react";
 import Link from "next/link";
-import { createClient } from "@/lib/supabase/client";
 import { useT } from "@/lib/i18n/context";
 
 /** Requests a password-reset email. Never reveals whether the email exists. */
@@ -17,16 +15,20 @@ export default function ForgotPasswordForm() {
   async function handleSubmit(e: React.FormEvent): Promise<void> {
     e.preventDefault();
     setLoading(true);
-    // The email link returns to /auth/callback, which establishes the session
-    // and forwards to the reset form.
+    // The server sends the mail and gives every address the same answer, so
+    // nothing here can tell whether an account exists.
     setError(null);
     try {
-      const { error } = await createClient().auth.resetPasswordForEmail(email.trim(), {
-        redirectTo: `${window.location.origin}/auth/callback?next=/reset-password`,
+      const res = await fetch("/api/password-reset", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: email.trim() }),
       });
-      const key = error ? authErrorKey(error, true) : null;
-      if (key) { setError(t(key)); return; }
-      // Always show the same confirmation, whether or not the account exists.
+      if (!res.ok) {
+        const data = await res.json().catch(() => null) as { error?: string } | null;
+        setError(data?.error ?? t("auth.unavailable"));
+        return;
+      }
       setSent(true);
     } catch {
       setError(t("auth.unavailable"));

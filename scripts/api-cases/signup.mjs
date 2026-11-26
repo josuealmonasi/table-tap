@@ -45,6 +45,23 @@ export function signupCases() {
       path: "/api/signup/resend", body: {}, expect: [400, 429] },
     { name: "POST /api/signup (rejects an empty form)", as: "diner", method: "POST",
       path: "/api/signup", body: {}, expect: [400, 429] },
+    { name: "POST /api/signup (refuses a restaurant name over 80 characters)", as: "diner", method: "POST",
+      path: "/api/signup", arrange: f => arrangeSignup(f),
+      body: f => ({ restaurantName: "x".repeat(81), email: f.signupEmail, acceptedTerms: true }),
+      expect: [400], expectError: /80/, known: "five signups a minute is the ceiling; this run spent it",
+      effect: async f => {
+        const { data, error } = await f.admin.from("pending_signups").select("id").eq("email_hash", hash(f.signupEmail));
+        if (error) return error.message;
+        return data.length ? "stored a pending signup for a refused name" : true;
+      } },
+    { name: "POST /api/password-reset (rejects an empty address)", as: "diner", method: "POST",
+      path: "/api/password-reset", body: {}, expect: [400, 429] },
+    // An address with no account: the answer must be the one a real account
+    // gets, and Auth sends nothing, so the case leaves no mail behind.
+    { name: "POST /api/password-reset (answers the same for an unknown address)", as: "diner", method: "POST",
+      path: "/api/password-reset", body: { email: `${MARK}-reset-${randomBytes(6).toString("hex")}@example.com` },
+      expect: [200], known: "five reset requests a minute is the ceiling; this run spent it",
+      check: data => JSON.stringify(data) === JSON.stringify({ ok: true }) || `answered ${JSON.stringify(data)}` },
     { name: "POST /api/signup (keeps only a pending signup)", as: "diner", method: "POST",
       path: "/api/signup", arrange: f => arrangeSignup(f),
       body: f => ({ restaurantName: f.signupName, email: f.signupEmail, acceptedTerms: true }),

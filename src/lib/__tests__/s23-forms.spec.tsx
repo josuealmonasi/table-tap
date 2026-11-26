@@ -84,22 +84,24 @@ it("K21: POS fields cap the name and kitchen note at the shared limits", () => {
   expect(field(form, "value", "Ana").maxLength).toBe(40);
   expect(field(form, "value", "No onion").maxLength).toBe(150);
 });
-it("K22: a recovery answer never says whether the account exists (cross-review 2)", async () => {
-  // Supabase rate-limits recovery per existing address, and answers a missing
-  // one with success: showing its 429 told anyone which emails had accounts.
-  for (const error of [null, { code: "over_email_send_rate_limit", status: 429 }, { code: "user_not_found", status: 400 },
-    { code: "unexpected_failure", status: 500 }]) {
-    state.values = []; resetHooks();
-    mocks.auth.mockResolvedValue({ error });
-    await field(ForgotPasswordForm(), "tag", "form").onSubmit(event);
-    resetHooks(); const form = ForgotPasswordForm();
-    expect(nodes(form).some(p => p.tag === "form"), JSON.stringify(error)).toBe(false);
-    expect(nodes(form).some(p => p.children === "auth.checkEmail"), JSON.stringify(error)).toBe(true);
-  }
+it("K22: the recovery form asks the server, which answers every address alike", async () => {
+  // Supabase rate-limits recovery per existing address, so asking it from the
+  // browser told a script which emails had accounts. The form now asks
+  // /api/password-reset, whose 200 is the same for every address.
+  vi.mocked(fetch).mockResolvedValue(new Response(JSON.stringify({ ok: true })));
+  field(ForgotPasswordForm(), "type", "email").onChange({ target: { value: " owner@example.com " } });
+  resetHooks(); await field(ForgotPasswordForm(), "tag", "form").onSubmit(event);
+  expect(fetch).toHaveBeenCalledExactlyOnceWith("/api/password-reset", expect.objectContaining({
+    method: "POST", body: JSON.stringify({ email: "owner@example.com" }),
+  }));
+  expect(mocks.auth).not.toHaveBeenCalled();
+  resetHooks(); const form = ForgotPasswordForm();
+  expect(nodes(form).some(p => p.tag === "form")).toBe(false);
+  expect(nodes(form).some(p => p.children === "auth.checkEmail")).toBe(true);
 });
 it("K22: a recovery request that got no answer says the service is unavailable", async () => {
   // No answer at all says nothing about the address, so it is safe to say.
-  mocks.auth.mockRejectedValue(new Error("network down"));
+  vi.mocked(fetch).mockRejectedValue(new Error("network down"));
   await field(ForgotPasswordForm(), "tag", "form").onSubmit(event);
   resetHooks(); const form = ForgotPasswordForm();
   expect(nodes(form).some(p => p.tag === "form")).toBe(true);
@@ -165,18 +167,13 @@ it("K25: a ratings network failure is retryable, and success still closes", asyn
   await field(RateDishesSheet(props), "children", "rating.submit").onClick();
   expect(close).toHaveBeenCalledOnce();
 });
-it("K22: no answer keeps the form; any provider answer gets the same confirmation", async () => {
-  // A provider 503 can be a failed delivery to an existing address, so it is
-  // answered like a missing one (cross-review 2). Only no answer is reported.
-  for (const outcome of [new Error("offline")]) {
+it("K22: a refusal that does not depend on the address keeps the form and shows its words", async () => {
+  // The route's only non-200 answers are a malformed address and the per-IP
+  // limit; neither depends on whether an account exists.
+  for (const status of [400, 429]) {
     state.values = []; state.refs = []; resetHooks();
-    if (outcome instanceof Error) mocks.auth.mockRejectedValue(outcome); else mocks.auth.mockResolvedValue(outcome);
+    vi.mocked(fetch).mockResolvedValue(new Response(JSON.stringify({ error: `refused ${status}` }), { status }));
     await field(ForgotPasswordForm(), "tag", "form").onSubmit(event); resetHooks();
-    expect(nodes(ForgotPasswordForm()).some(p => p.children === "auth.unavailable")).toBe(true);
-  }
-  for (const error of [null, { code: "user_not_found" }, { status: 503 }]) {
-    state.values = []; state.refs = []; resetHooks(); mocks.auth.mockResolvedValue({ error });
-    await field(ForgotPasswordForm(), "tag", "form").onSubmit(event); resetHooks();
-    expect(nodes(ForgotPasswordForm()).some(p => p.children === "auth.checkEmail")).toBe(true);
+    expect(nodes(ForgotPasswordForm()).some(p => p.children === `refused ${status}`)).toBe(true);
   }
 });

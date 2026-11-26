@@ -6,6 +6,7 @@ import { jsonBody } from "@/lib/json-body";
 import { TERMS_VERSION } from "@/lib/legal";
 import { newSignupToken, signupHash } from "@/lib/pending-signup";
 import { clientKey, isRateLimited } from "@/lib/rate-limit";
+import { cleanRestaurantName, RESTAURANT_NAME_MAX } from "@/lib/restaurant-name";
 import { sendSignupMail } from "@/lib/signup-confirmation";
 import { isSignupMailCapped } from "@/lib/signup-mail-ceiling";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -21,15 +22,19 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   const body = await jsonBody<{ restaurantName?: unknown; email?: unknown; acceptedTerms?: unknown }>(req);
   if (!body) return await apiError("apiErr.invalidRequest", 400);
   if (body.acceptedTerms !== true) return await apiError("auth.termsRequired", 400);
-  const restaurantName = typeof body.restaurantName === "string" ? body.restaurantName.trim() : "";
+  const typedName = typeof body.restaurantName === "string" ? body.restaurantName.trim() : "";
   const email = typeof body.email === "string" ? normalizeEmail(body.email) : "";
-  if (!restaurantName || !isValidEmail(email)) return await apiError("apiErr.signupFields", 400);
+  if (!typedName || !isValidEmail(email)) return await apiError("apiErr.signupFields", 400);
+  const restaurantName = cleanRestaurantName(typedName);
+  if (!restaurantName) return await apiError("apiErr.restaurantNameLength", 400, { n: RESTAURANT_NAME_MAX });
   // Over the inbox's ceiling: the same answer, and nothing stored or sent.
   if (await isSignupMailCapped(email)) return NextResponse.json({ ok: true, pendingVerification: true });
 
   const token = newSignupToken();
+  // v2 also releases an unconfirmed login nobody vouches for (one made by
+  // calling Auth's public signup directly), so it cannot squat the address.
   const locale = requestLocale(req);
-  const { data: existing, error } = await createAdminClient().rpc("request_pending_signup_v1", {
+  const { data: existing, error } = await createAdminClient().rpc("request_pending_signup_v2", {
     p_email: email,
     p_token_hash: signupHash(token),
     p_restaurant_name: restaurantName,

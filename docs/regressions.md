@@ -9096,6 +9096,30 @@ bound sale past the close and out of every shift. Receipts from older tills
 carry no shift and keep their device time; `record_offline_sale_v2` stays for
 the deployed route. Check: `offline-shift-binding.spec.ts`,
 `pos-offline-shift.spec.tsx`.
+### Signup squatting, the mail ceiling's spelling, recovery enumeration and the name limit (2026-11-26)
+
+Four pairs that had to agree. First, what Auth holds and what signup counts as
+an account: `request_pending_signup_v1` treated any `auth.users` row as one, so
+a stranger calling Auth's public `/auth/v1/signup` left an unconfirmed login
+and the real owner could never sign up. `request_pending_signup_v2` and
+`/api/signup/confirm` (before `createUser`) call
+`release_stale_signup_login_v1`, which deletes, under an advisory lock on the
+address and a row lock, an unconfirmed, uninvited login with no staff seat, no
+restaurant and no platform-admin row that is over a minute old. A pending staff
+invite has a seat and `invited_at`, so it stays. Second, the signup mail
+ceiling and the inbox: it was keyed by the exact string, so `owner+1@`,
+`owner+2@` and Gmail's dotted spellings each got a fresh budget. It is keyed by
+`canonicalInbox` now; mail still goes to the address as typed. Third, what the
+forgot-password form answered and what Supabase answered: the browser called
+`resetPasswordForEmail`, whose 429 revealed registered addresses. The form now
+calls `POST /api/password-reset`, which answers the same 200 for every
+well-formed address and sends the Auth reset email in `after()` under its own
+per-inbox ceiling. Fourth, the signup and settings name and the database:
+neither route bounded the name. Both refuse an empty or over-80-character name
+(`apiErr.restaurantNameLength`, ES and EN), and `restaurants_name_length`
+enforces it on new writes. Check: `stale-signup-login.spec.ts`,
+`canonical-inbox.spec.ts`, `signup-mail-ceiling.spec.ts`,
+`password-reset/__tests__/route.spec.ts`, `restaurant-name-length.spec.ts`.
 
 ### Desk writes and the visit card's SQL ignored a locked plan (2026-11-25)
 
@@ -9159,3 +9183,28 @@ restaurant's digest recipients; the new owner re-adds and re-confirms whoever
 should get it. v1 stays for the deployed route. Not changed: the former
 owner, now a manager, still gets the digest only if they opted in as a
 manager (`daily_digest_recipients`). Check: `admin-owner-transfer.spec.ts`.
+
+### Browser gates: the last sample of a window raced what was left of it (2026-11-26)
+
+Three CI runs failed one visit each on the orders board — layout at 1280px
+as the kitchen (#752, #760) and dialogs at 360px as the cashier (#764) —
+with «readiness sample timed out after 6ms» (then 31 ms, then 296 ms), and
+passed on rerun. The message had no «in flight:» list, which every `ready()`
+failure carries, so it was not the 30 s readiness wait: it came from an
+`overlay()` window. The layout visit had just closed «order detail» and was
+looking for «completed sale return», which the kitchen never has; the
+dialogs sweep was checking whether a button opened anything. Both windows
+are `required: false`: "nothing opened" is a legitimate answer.
+
+`observe()` gave each sample only what was left of its window, so the last
+sample raced a timer of a few milliseconds. The orders board is the heaviest
+DOM the gates open, so its samples are the slowest, and once in a few hundred
+windows one started too close to the end, lost the race, and threw instead of
+answering. Now a started sample gets at least `SAMPLE_FLOOR` (2 s) to answer:
+the window decides when to stop starting samples, not how long one may take.
+A required window that ends unanswered fails as «did not become ready», a page
+that never stops changing still fails, and a sample that hangs past the floor
+still throws, so a hung page is never read as "no dialog". Readiness
+timeouts are still not retried. Checks: `browser-ready.spec.ts` ("lets the
+last sample of a window answer…", "still fails a page that never stops
+changing", and the hung-sample case for an optional window).

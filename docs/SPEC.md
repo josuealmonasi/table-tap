@@ -1428,7 +1428,9 @@ audit counts, and print navigation/readiness/audit/auth worker seconds plus wall
 time. Readiness observes route/content, completed data, absent skeletons, fonts,
 images and stable geometry; dialog no-ops retain bounded observation windows.
 Each visit bounds context/page creation, preparation, auth, navigation, readiness,
-audit and close, including individual readiness samples. Failed cleanup stops the
+audit and close, including individual readiness samples (a sample that has
+started gets at least 2 s to answer, so the last one in a window is not cut off
+by what remains of it). Failed cleanup stops the
 pool; unreported visits fail explicitly. A 90-minute watchdog covers the whole
 script, including setup, the overlap control, final fingerprints and shutdown.
 Development pools pause admission while the target port is unreachable, share a
@@ -3470,6 +3472,30 @@ pending signup commit together. The email is confirmed, and the 30-day
 Servicio trial begins when the restaurant opens. The owner can then sign in.
 Existing in-flight Supabase confirmation links and `/signup/complete` still
 work for signups from before this flow.
+
+The restaurant name is 1 to 80 characters after trimming, at signup, on the
+settings rename and on admin-created founding owners (`RESTAURANT_NAME_MAX`);
+the database holds the same limit as `restaurants_name_length` (NOT VALID, so
+older rows are not rescanned, but any write to a row must satisfy it).
+An unconfirmed login that nothing vouches for (never confirmed or invited, no
+staff seat, no owned restaurant, not a platform admin, older than a minute) is
+what a direct call to Auth's public signup leaves behind. It does not count as
+an account: `request_pending_signup_v2` and `/api/signup/confirm` release it
+through `release_stale_signup_login_v1` under a lock on the address, so it
+cannot squat the address. A pending staff invite is never released.
+Signup and resend share one mail ceiling per inbox (one per 10 minutes, three
+a day). The inbox is the canonical form of the address (`canonicalInbox`:
+lowercased, `+tag` removed, Gmail dots removed and googlemail mapped to gmail,
+domain in punycode); mail is stored and sent to the address as typed.
+
+Password recovery goes through `POST /api/password-reset { email }`, never the
+browser's Supabase client: Supabase rate-limits and mails only existing
+addresses, so its answers told a script which addresses have accounts. The
+route allows five requests per IP per minute, applies its own per-inbox mail
+ceiling (same canonical key and limits as signup, separate budget), and
+answers every well-formed request with the same `200 { ok: true }`. It sends
+the standard Auth reset email (token in the link fragment) with the secret-key
+client after the response.
 
 Mixed-station combos keep one priced line and one bill. Each component stores its
 verified preparation facts; the board, detail, paper and station-ready writer use
