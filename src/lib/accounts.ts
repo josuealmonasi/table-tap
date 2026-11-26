@@ -37,6 +37,21 @@ export function cleanEmail(raw: unknown): string | null | "bad" {
   return email.length <= 254 && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ? email : "bad";
 }
 
+const ORDER_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+/** More than a busy account's month of orders; a bound on the request, not on credit. */
+export const MAX_REVIEWED_ORDERS = 2000;
+
+/**
+ * The unpaid orders a collection screen showed: every one an order id, none
+ * twice. Null when the list cannot be what a screen reviewed.
+ */
+export function reviewedOrderIds(raw: unknown): string[] | null {
+  if (!Array.isArray(raw) || raw.length === 0 || raw.length > MAX_REVIEWED_ORDERS) return null;
+  if (!raw.every(id => typeof id === "string" && ORDER_ID.test(id))) return null;
+  const ids = raw as string[];
+  return new Set(ids).size === ids.length ? ids : null;
+}
+
 /** A ceiling in money: positive, two decimals, below the house maximum. */
 export function cleanLimit(raw: unknown): number | null {
   const n = typeof raw === "string" ? Number(raw) : raw;

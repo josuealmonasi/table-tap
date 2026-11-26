@@ -1,7 +1,7 @@
 import { beforeEach, expect, it, vi } from "vitest";
 
 const state = vi.hoisted(() => ({ fetch: vi.fn(), clear: vi.fn() }));
-vi.mock("react", () => ({ useState: (v: unknown) => [v, vi.fn()], useRef: (v: unknown) => ({ current: v }) }));
+vi.mock("react", () => ({ useState: (v: unknown) => [v, vi.fn()], useRef: (v: unknown) => ({ current: v }), useEffect: () => {} }));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn() }) }));
 vi.mock("@/lib/i18n/context", () => ({ useT: () => (k: string) => k, useLocale: () => ({ locale: "en" }) }));
 vi.mock("@/components/ui/Toast", () => ({ useToast: () => vi.fn() }));

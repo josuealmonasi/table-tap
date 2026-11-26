@@ -29,3 +29,40 @@ it("restores an ordinary unfinished cart", () => {
   usePosCart("r1");
   expect(set).toHaveBeenCalledWith([line]);
 });
+
+it("bl39 #1: restores an unanswered account charge so its retry reuses the same request", () => {
+  const held = { request: JSON.stringify({ posRef: "acc-ref", method: "account" }), review: { name: "Ana", amount: 50, currency: "MXN" } };
+  store.set("tt-pos-cart:r1", JSON.stringify([line]));
+  store.set("tt-pos-cart:r1:account", JSON.stringify(held));
+  usePosCart("r1");
+  expect(set).toHaveBeenCalledWith([line]);
+  expect(set).toHaveBeenCalledWith(held);
+});
+
+it("bl39 #1: holdAccount writes the request before sending and removes it once answered", () => {
+  const cart = usePosCart("r1");
+  const held = { request: "{}", review: { name: "Ana", amount: 50, currency: "MXN" } };
+  cart.holdAccount(held);
+  expect(JSON.parse(store.get("tt-pos-cart:r1:account")!)).toEqual(held);
+  cart.holdAccount(null);
+  expect(store.has("tt-pos-cart:r1:account")).toBe(false);
+});
+
+it("bl39 #1: clear removes the cart and its charging marker together, at once", () => {
+  store.set("tt-pos-cart:r1", JSON.stringify([line]));
+  const cart = usePosCart("r1");
+  cart.charging("sale-ref");
+  cart.clear();
+  expect(store.has("tt-pos-cart:r1")).toBe(false);
+  expect(store.has("tt-pos-cart:r1:charging")).toBe(false);
+});
+
+it("bl39 #4: a capped cart refuses a new line past its limit, but a plain twin still grows", () => {
+  const plainLine = { ...line, mods: {} };
+  const cart = usePosCart("r1", true, 2);
+  expect(cart.add({ ...plainLine, itemId: "a" })).toBe(true);
+  expect(cart.add({ ...plainLine, itemId: "b" })).toBe(true);
+  expect(cart.add({ ...plainLine, itemId: "c" })).toBe(false);
+  expect(cart.addOne({ ...plainLine, itemId: "a" })).toBe(true);
+  expect(cart.addOne({ ...plainLine, itemId: "d" })).toBe(false);
+});

@@ -470,6 +470,11 @@ drop function if exists public.open_cash_shift(uuid, text, numeric);
 
 drop function if exists public.account_checkout_currency_v1(uuid, uuid, numeric, numeric, numeric, text) cascade;
 drop function if exists public.account_settle_currency_v1(uuid, uuid, numeric, numeric, text, text, text, text) cascade;
+drop function if exists public.account_settle_reviewed_v1(uuid, uuid, numeric, numeric, text, text, text, text, uuid[]) cascade;
+drop function if exists public.account_set_limit_v1(uuid, uuid, numeric, text, text) cascade;
+drop function if exists public.account_charge_v3(uuid, uuid, uuid[], numeric, text) cascade;
+drop function if exists public.ring_pos_account_v3(uuid, uuid, jsonb, uuid, text, text, jsonb, boolean, int) cascade;
+drop function if exists public.account_limit_unapproved_v1(uuid, uuid) cascade;
 drop function if exists public.collect_table_reviewed_v1(uuid,uuid,numeric,text,numeric,numeric,text,text,text) cascade;
 drop function if exists public.save_product_addons_v1(uuid, uuid, uuid[], jsonb, uuid, uuid) cascade;
 drop function if exists public.guard_recipe_choices() cascade;

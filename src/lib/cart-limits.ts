@@ -37,3 +37,17 @@ export const MAX_CART_LINES = 200;
  * not verify the items", when what happened is that we never managed to ask.
  */
 export const MAX_CART_REFS = 500;
+
+/**
+ * The most lines one till sale may carry.
+ *
+ * A till sale is saved on the device before it is sent, and if the
+ * connection drops it reaches the ledger later through offline intake, which
+ * rings at most this many lines on its own. A larger cart could take the
+ * money and then never land: replay refused it before the review queue, so
+ * the receipt stayed on the tablet with nothing a manager could act on (bl39
+ * finding 4). The till cart stops here, before any money is collected, and
+ * intake checks the same number. Receipts already held with more go to
+ * manager review.
+ */
+export const MAX_TILL_LINES = 100;

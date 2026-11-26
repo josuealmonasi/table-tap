@@ -5,7 +5,7 @@ import { formatMoney } from "@/lib/format";
 import { messagesFor, translate, type Locale } from "@/lib/i18n";
 
 const at = "2026-10-29T01:00:00Z";
-const empty: Statement = { days: [], payments: [], returns: [], chargedBy: {}, owed: 0, balances: [] };
+const empty: Statement = { days: [], payments: [], returns: [], chargedBy: {}, openOrders: {}, owed: 0, balances: [] };
 function mail(statement: Statement, locale: Locale) {
   const t = (key: string, vars?: Record<string, string | number>) => translate(messagesFor(locale), key, vars);
   return { ...statementMail(statement, {

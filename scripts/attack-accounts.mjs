@@ -116,7 +116,7 @@ async function accountCases({ admin, post, who, home, neighbour, ok, bad }) {
     const dish = await order(home.id, 80);
     await charge(home.id, tab, dish, 80);
     await Promise.all([1, 2].map(n =>
-      post("/api/accounts/settle", { currency: "MXN", accountId: tab, expected: 80, tip: 0, method: "cash", ref: `${MARK}-${n}-${Date.now()}` }, who.cashier)));
+      post("/api/accounts/settle", { currency: "MXN", accountId: tab, expected: 80, tip: 0, method: "cash", ref: `${MARK}-${n}-${Date.now()}`, orderIds: [dish] }, who.cashier)));
     const pays = await paymentsOf(tab);
     pays.length === 1 && Math.abs(Number(pays[0].amount) - 80) < 0.01
       ? ok("one account balance collected twice at once is taken once")
@@ -128,7 +128,7 @@ async function accountCases({ admin, post, who, home, neighbour, ok, bad }) {
     const tab = await account(home.id, 1000);
     const dish = await order(home.id, 60);
     await charge(home.id, tab, dish, 60);
-    await post("/api/accounts/settle", { currency: "MXN", accountId: tab, expected: 60, tip: 1000000, method: "card" }, who.cashier);
+    await post("/api/accounts/settle", { currency: "MXN", accountId: tab, expected: 60, tip: 1000000, method: "card", ref: `${MARK}-tip-${Date.now()}`, orderIds: [dish] }, who.cashier);
     const pays = await paymentsOf(tab);
     pays.every(p => Number(p.tip) <= 60 + 0.01)
       ? ok("a tip on an account is capped at the food it thanks")
@@ -140,8 +140,8 @@ async function accountCases({ admin, post, who, home, neighbour, ok, bad }) {
     const tab = await account(home.id, 1000);
     const dish = await order(home.id, 25);
     await charge(home.id, tab, dish, 25);
-    await post("/api/accounts/settle", { currency: "MXN", accountId: tab, expected: 25, tip: 0, method: "cash" }, who.kitchen);
-    await post("/api/accounts/settle", { currency: "MXN", accountId: theirs, expected: 1, tip: 0, method: "cash" }, who.waiter);
+    await post("/api/accounts/settle", { currency: "MXN", accountId: tab, expected: 25, tip: 0, method: "cash", ref: `${MARK}-kitchen-${Date.now()}`, orderIds: [dish] }, who.kitchen);
+    await post("/api/accounts/settle", { currency: "MXN", accountId: theirs, expected: 1, tip: 0, method: "cash", ref: `${MARK}-theirs-${Date.now()}`, orderIds: [dish] }, who.waiter);
     (await paymentsOf(tab)).length === 0 && (await paymentsOf(theirs)).length === 0
       ? ok("the kitchen collects no account, and nobody collects another restaurant's")
       : bad("money was recorded against an account by somebody who may not collect it");
@@ -163,11 +163,11 @@ async function accountCases({ admin, post, who, home, neighbour, ok, bad }) {
     await admin.from("customer_accounts")
       .update({ checkout_until: new Date(Date.now() - 60_000).toISOString() }).eq("id", held);
     const second = await open();
-    const tillWhileOpen = await post("/api/accounts/settle", { currency: "MXN", accountId: held, expected: 30, tip: 0, method: "cash", ref: `${MARK}-held-${Date.now()}` }, who.cashier);
+    const tillWhileOpen = await post("/api/accounts/settle", { currency: "MXN", accountId: held, expected: 30, tip: 0, method: "cash", ref: `${MARK}-held-${Date.now()}`, orderIds: [dish] }, who.cashier);
     // The first one's expiry, late, through the same function the webhook calls.
     const { error } = await admin.rpc("account_checkout_release", { p_checkout: first?.checkout });
     const third = await open();
-    const tillWhileThird = await post("/api/accounts/settle", { currency: "MXN", accountId: held, expected: 30, tip: 0, method: "cash", ref: `${MARK}-held2-${Date.now()}` }, who.cashier);
+    const tillWhileThird = await post("/api/accounts/settle", { currency: "MXN", accountId: held, expected: 30, tip: 0, method: "cash", ref: `${MARK}-held2-${Date.now()}`, orderIds: [dish] }, who.cashier);
     first?.outcome === "open" && second?.outcome === "paying" && tillWhileOpen.status === 409 && !error
       && third?.outcome === "open" && tillWhileThird.status === 409 && (await paymentsOf(held)).length === 0
       ? ok("an open account checkout holds the till at any age, and a late expiry frees only its own page")
@@ -186,7 +186,7 @@ async function accountCases({ admin, post, who, home, neighbour, ok, bad }) {
     })).data;
     await admin.from("customer_accounts")
       .update({ checkout_until: new Date(Date.now() - 60_000).toISOString() }).eq("id", tab);
-    const cash = await post("/api/accounts/settle", { currency: "MXN", accountId: tab, expected: 40, tip: 0, method: "cash", ref: `${MARK}-twice-${Date.now()}` }, who.cashier);
+    const cash = await post("/api/accounts/settle", { currency: "MXN", accountId: tab, expected: 40, tip: 0, method: "cash", ref: `${MARK}-twice-${Date.now()}`, orderIds: [dish] }, who.cashier);
     const intent = `pi_${MARK}_twice_${tab.slice(0, 8)}`;
     await admin.rpc("account_checkout_settle_v2", { p_checkout: checkout?.checkout, p_intent: intent });
     await admin.rpc("account_checkout_settle_v2", { p_checkout: checkout?.checkout, p_intent: intent }); // Stripe sends it again

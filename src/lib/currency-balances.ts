@@ -23,3 +23,12 @@ export function balancesLabel(balances: CurrencyBalance[]): string {
 export function owedLabel(balances: CurrencyBalance[] | undefined, currency: string): string {
   return balances && balances.length > 0 ? balancesLabel(balances) : formatMoney(0, currency);
 }
+
+/**
+ * The currency a ceiling set now is approved in, as the database decides it:
+ * the one the account owes in, or the restaurant's when it owes nothing.
+ * The screen names it beside the amount and sends it with the approval.
+ */
+export function limitCurrencyFor(balances: CurrencyBalance[] | undefined, restaurantCurrency: string): string {
+  return balances?.[0]?.currency ?? restaurantCurrency;
+}

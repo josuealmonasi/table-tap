@@ -36,10 +36,10 @@ vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({
     } };
     state.calls.push({ name, args });
     if (state.reply) return { data: state.reply, error: null };
-    state.ticket = { id: args.p_ref, total: 100, currency: "MXN", pay_method: args.p_method, paid: name !== "ring_pos_account_v2", status: "completed",
-      ...(name === "ring_pos_account_v2" ? { account_id: args.p_account, request_scope: (args.p_order as Record<string, unknown>)?.request_scope, charged_at: "now", customer_accounts: { name: "Guest" } } : {}) };
+    state.ticket = { id: args.p_ref, total: 100, currency: "MXN", pay_method: args.p_method, paid: name !== "ring_pos_account_v3", status: "completed",
+      ...(name === "ring_pos_account_v3" ? { account_id: args.p_account, request_scope: (args.p_order as Record<string, unknown>)?.request_scope, charged_at: "now", customer_accounts: { name: "Guest" } } : {}) };
     if (state.lost) return { data: null, error: { message: "response lost after commit" } };
-    return { data: { outcome: "settled", orderId: args.p_ref, total: 100, settled: true, ...(name === "ring_pos_account_v2" ? { onAccount: { name: "Guest", owed: 100 } } : {}) }, error: null };
+    return { data: { outcome: "settled", orderId: args.p_ref, total: 100, settled: true, ...(name === "ring_pos_account_v3" ? { onAccount: { name: "Guest", owed: 100 } } : {}) }, error: null };
   },
 }) }));
 vi.mock("@/lib/api-error", () => ({
@@ -99,7 +99,7 @@ it("W1.7 never publishes an account ticket before atomic credit approval", async
   const { offline: _, ...online } = body(); void _;
   await POST(new NextRequest("http://localhost/api/pos/order", { method: "POST", body: JSON.stringify({ ...online, method: "account", accountId: id }) }));
   expect(state.ops.filter(o => o.table === "orders" && o.op === "insert")).toEqual([]);
-  expect(state.calls.find(c => c.name === "ring_pos_account_v2")?.args.p_ref).toBe(id);
+  expect(state.calls.find(c => c.name === "ring_pos_account_v3")?.args.p_ref).toBe(id);
 });
 
 it("refuses an online collected amount that differs before recording money", async () => {
@@ -165,7 +165,7 @@ it("an atomic account refusal never causes a second cleanup request", async () =
   const res = await POST(new NextRequest("http://localhost/api/pos/order", { method: "POST", body: JSON.stringify({ ...online, method: "account", accountId: id }) }));
   expect(res.status).toBe(409);
   expect(state.ops).toEqual([]);
-  expect(state.calls.map(c => c.name)).toEqual(["ring_pos_account_v2"]);
+  expect(state.calls.map(c => c.name)).toEqual(["ring_pos_account_v3"]);
 });
 
 it("an account owing in another currency is a final refusal, not a held sale (cross-review 4)", async () => {

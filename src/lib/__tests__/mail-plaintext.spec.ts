@@ -25,7 +25,7 @@ describe.each<Locale>(["en", "es"])("plain-text emails in %s", locale => {
   const t = (key: string, vars?: Record<string, string | number>) => translate(messagesFor(locale), key, vars);
 
   it("separates statement days, dishes, balance and payment link", () => {
-    const mail = statementMail({ owed: 500, payments: [], returns: [], chargedBy: {},
+    const mail = statementMail({ owed: 500, payments: [], returns: [], chargedBy: {}, openOrders: {},
       days: ["2026-11-10", "2026-11-11"].map(day => ({ day, total: 250, charges: [{
         orderId: day, at, total: 250, tableLabel: null,
         lines: [

@@ -8,7 +8,7 @@ import type { PendingOrderDetails } from "@/components/ui/PendingOrder";
 import { beginPosSend } from "@/lib/pos-sending";
 import { rememberLastSale } from "@/lib/pos-last-sale";
 import { refusalSettles } from "@/hooks/useRetryIntent";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useT } from "@/lib/i18n/context";
 import { useToast } from "@/components/ui/Toast";
@@ -25,6 +25,7 @@ import { offlineReceipt } from "@/lib/offline-receipt";
 import { orderCode } from "@/lib/types";
 import { useLocale } from "@/lib/i18n/context";
 import { dateLocale } from "@/lib/format";
+import { MAX_TILL_LINES } from "@/lib/cart-limits";
 
 export interface PendingAccountSale extends PendingOrderDetails {
   name: string;
@@ -77,6 +78,37 @@ export function usePosCharge({ collector, collectorContext, restaurant, cart, de
   const [ticket, setTicket] = useState<PosTicket | null>(null);
   /** How the customer is paying, asked about before the sale is sent. */
   const [pending, setPending] = useState<"cash" | "card" | null>(null);
+
+  // An account charge left unanswered before a reload: the same request, sent
+  // again under the same reference, gets back the sale it rang (bl39 #1).
+  const restoredAccount = cart.heldAccount;
+  useEffect(() => {
+    if (!restoredAccount || accountRequest.current) return;
+    accountRequest.current = restoredAccount.request;
+    accountReview.current = restoredAccount.review;
+    accountResent.current = true;
+    refreshAccount(n => n + 1);
+  }, [restoredAccount]);
+
+  /** The account request is answered for good: forget it here and on the device. */
+  function settleAccount(): void {
+    accountRequest.current = null;
+    accountReview.current = null;
+    cart.holdAccount?.(null);
+  }
+
+  /** Too many lines for one till sale: refused before any money is collected. */
+  function overLimit(): boolean {
+    if (lines.length <= MAX_TILL_LINES || accountRequest.current) return false;
+    toast(t("pos.tooManyLines", { n: MAX_TILL_LINES }), "error");
+    return true;
+  }
+
+  /** Asking how the customer pays is the moment before money changes hands. */
+  function ask(method: "cash" | "card" | null): void {
+    if (method && overLimit()) return;
+    setPending(method);
+  }
 
   const money = (n: number) => formatMoney(n, restaurant.currency);
   // Paperless unless the restaurant asked for paper (off by default).
@@ -136,6 +168,7 @@ export function usePosCharge({ collector, collectorContext, restaurant, cart, de
     account?: AccountListItem,
   ): Promise<void> {
     if (inFlight.current || busy || (lines.length === 0 && !accountRequest.current)) return;
+    if (overLimit()) return;
     if (accountRequest.current) method = "account";
     setPending(null);
     // One reference per sale, made before anything is sent: a request that
@@ -180,7 +213,7 @@ export function usePosCharge({ collector, collectorContext, restaurant, cart, de
     });
     if (!navigator.onLine) {
       offline.setOnline(false);
-      cart.charging?.(null);
+      // Held: showHeld clears the cart and its charging marker together.
       if (sale) showHeld(sale, false, paper, Boolean(saleEmail));
       else toast(t("pos.offlineNoAccount"), "error");
       paper?.close();
@@ -221,6 +254,9 @@ export function usePosCharge({ collector, collectorContext, restaurant, cart, de
         if (method === "account" && !accountRequest.current) {
           accountRequest.current = request;
           accountReview.current = { name: account?.name ?? account?.id ?? "", amount: Math.round((pricing.total - pricing.tip) * 100) / 100, currency: restaurant.currency };
+          // Saved before it leaves: a reload after the server committed must
+          // retry this request and reference, not ring the cart again.
+          cart.holdAccount?.({ request, review: accountReview.current });
         }
         res = await fetch("/api/pos/order", {
           method: "POST",
@@ -232,17 +268,19 @@ export function usePosCharge({ collector, collectorContext, restaurant, cart, de
         // only record of the sale; if it did, sending it again is answered
         // with the sale it already rang.
         offline.setOnline(false);
-        cart.charging?.(null);
         if (sale) showHeld(sale, false, paper, Boolean(saleEmail));
         else toast(t("done.networkError"), "error");
         return;
       }
-      cart.charging?.(null);
+      // The charging marker stays until the body is read and the attempt is
+      // resolved: headers with a stalled body are not an answer, and a reload
+      // then must leave the held receipt to replay rather than restore the
+      // cart under a new reference (bl39 #1).
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
         // A first send is the only request that ever carried this reference,
         // so its refusal settles it; a retry's never does (`refusalSettles`).
-        if (refusalSettles(res.status, retriedAccount) && !data.held) accountRequest.current = null;
+        if (refusalSettles(res.status, retriedAccount) && !data.held) settleAccount();
         // A refusal is the sale not happening — out of stock, the menu closed,
         // an account at its ceiling. The held copy goes and the cart stays, so
         // the cashier fixes it or hands the money back, as before the till
@@ -252,7 +290,11 @@ export function usePosCharge({ collector, collectorContext, restaurant, cart, de
         // that says the money is already in the drawer (`held`), keeps the
         // sale on this device.
         if (sale && (res.status >= 500 || data.held)) showHeld(sale, true, paper, Boolean(saleEmail));
-        else if (sale) offline.discard(sale);
+        else if (sale) {
+          offline.discard(sale);
+          // Refused: the cart stays to fix, so it is no longer being charged.
+          cart.charging?.(null);
+        }
         if (data.code === "outOfStock") {
           // With the numbers in it. The refusal has always known how many are
           // left and every screen dropped them, so the answer to "how many can
@@ -272,7 +314,7 @@ export function usePosCharge({ collector, collectorContext, restaurant, cart, de
         toast(t("done.networkError"), "error");
         return;
       }
-      accountRequest.current = null;
+      if (accountRequest.current) settleAccount();
       if (data.onAccount) {
         toast(
           t("accounts.charged", {
@@ -321,11 +363,10 @@ export function usePosCharge({ collector, collectorContext, restaurant, cart, de
     ? { ...JSON.parse(accountRequest.current), ...accountReview.current } : null;
   function discardAccount(): void {
     if (inFlight.current) return;
-    accountRequest.current = null;
-    accountReview.current = null;
+    settleAccount();
     setPending(null);
     // Refs alone do not redraw the panel when the warning is confirmed.
     refreshAccount(n => n + 1);
   }
-  return { charge, busy, pending, setPending, ticket, setTicket, accountRetry, discardAccount };
+  return { charge, busy, pending, setPending: ask, ticket, setTicket, accountRetry, discardAccount };
 }
