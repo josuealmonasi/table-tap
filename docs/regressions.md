@@ -9233,3 +9233,30 @@ FOR SHARE and answer `sittingClosed`; the route answers 409
 `apiErr.tableBillClosedScan` ("scan again") and gives back stock and coupon as
 its other failures do. Check: `diner-paylater-guard.spec.ts`, checkout
 `route.spec.ts`, and the api gate's `POST /api/checkout` pay-later cases.
+### Staff coupons still counted the service charge; an extra could be its own cart line (2026-11-26)
+
+The 2026-11-24 sweep moved the diner's coupon base to the dishes alone, but
+the floor's discount (`bill/discount`, its approval, its list of options and
+the SQL writers behind them) still judged `total - tip`, which holds the
+service charge. MX$90 of food and MX$15 of service passed a MX$100 minimum at
+the till that the diner's own bill refused, and a percent coupon took a share
+of the service. The options list was worse: the screen sent the whole bill
+total, tips included. Now one helper, `couponBase` / `dishesOf`
+(`src/lib/coupon-base.ts`), is the base for `bill/discount`, its approval,
+`bill/pay` and the bill screen (`billAmounts`); the options route reads the
+bill itself with the apply route's reader (`readDiscountableBill`) instead of
+taking a figure from the screen. The SQL writers are new versions,
+`apply_bill_discount_v2` and `approve_discount_request_v3`, which price the
+minimum, the amount and each order's share on
+`greatest(total - tip - service_fee, 0)`; the old ones are kept.
+
+Separately, `verifyCart` checked a plain line only for availability and the
+open menu, never `is_addon`, so a forged cart could order an extra (cheese at
+MX$20) as a dish of its own. No menu offers one alone — the till's grid and
+quick row both drop add-ons — so it is refused as unavailable everywhere,
+the till included. The offline replay goes through the same check, so a held
+sale with an extra rung alone gets no current price and waits for a manager.
+Checks: `coupon-base-parity.spec.ts` (the same bill through the staff route
+and the diner's bill must agree on the minimum and the amount),
+`staff-discount-tip.spec.ts`, `bill-discount-schema.spec.ts`,
+`verify-cart.spec.ts`, `offline-comparison.spec.ts`.

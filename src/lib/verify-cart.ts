@@ -127,7 +127,11 @@ export function verifyCart(input: VerifyCartInput): VerifyCartResult {
 
   for (const line of plainLines) {
     const db = priceMap.get(line.itemId);
-    if (!db || !db.available || !isOnOpenMenu(db.menu_id)) {
+    // An extra is sold on a dish, never as a line of its own: no menu, the
+    // till's included, offers one alone, so a line naming one is a forged
+    // request — extra cheese at MX$20 as "dinner" (2026-11-26). The offline
+    // replay comes through here too, so a held sale with one goes to a manager.
+    if (!db || db.is_addon || !db.available || !isOnOpenMenu(db.menu_id)) {
       return { ok: false, rejection: gone(line, db?.name) };
     }
 

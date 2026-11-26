@@ -1,6 +1,7 @@
 import { ordersTipBase, tipFromPercent } from "@/lib/tip-base";
 import { applyCoupon, type AppliedCoupon } from "@/lib/pricing";
 import { round2 } from "@/lib/money";
+import { dishesOf } from "@/lib/coupon-base";
 import { applyPayment } from "@/lib/table-balance";
 import { servicePercent, type TableBill } from "@/lib/table-bill";
 
@@ -51,11 +52,11 @@ export function billAmounts(
   const applied = scope === "mine" ? bill.mine.discount : bill.discount;
   const priorTip = scope === "mine" ? bill.mine.tip : bill.tip;
   const service = scope === "mine" ? bill.mine.service : bill.service;
-  const dishes = round2(food - service - priorTip);
+  const dishes = dishesOf({ total: food, tip: priorTip, service_fee: service });
   // A coupon's minimum and its discount are judged on the dishes alone, as the
   // cart judges them: service never helps reach a minimum (security sweep
-  // 2026-11-24). The pay route uses the same base.
-  const couponOff = coupon ? applyCoupon(coupon, Math.max(0, dishes)) : 0;
+  // 2026-11-24). The pay route and the floor's discount use the same helper.
+  const couponOff = coupon ? applyCoupon(coupon, dishes) : 0;
   const discount = round2(applied + couponOff);
   const base = round2(food - couponOff);
   const paying = scope === "mine" ? bill.mine.orders : [...bill.mine.orders, ...bill.others.orders];

@@ -12,7 +12,7 @@ export type DiscountOutcome = "applied" | "part_paid" | "split" | "changed" | "p
  * there is no payment page to abandon, the discount is real the moment the
  * manager grants it.
  *
- * All of it happens in `apply_bill_discount`, under the money lock: the coupon
+ * All of it happens in `apply_bill_discount_v2`, under the money lock: the coupon
  * use, the new totals and the redemption land together or not at all, and a
  * bill with money already collected is refused (paths audit #2). It used to be
  * written order by order from here, with failed writes ignored and the
@@ -25,7 +25,7 @@ export async function applyToOrders(
   amount: number,
   restaurantId: string,
 ): Promise<DiscountOutcome> {
-  const { data, error } = await checkoutPageRpc("apply_bill_discount", {
+  const { data, error } = await checkoutPageRpc("apply_bill_discount_v2", {
     p_restaurant: restaurantId,
     p_orders: orders.map(o => o.id),
     p_coupon: couponId,

@@ -46,7 +46,7 @@ describe("an unresolved card page blocks every collection and movement of its de
     expect(latest("diner_checkout_open")).toContain("raise exception 'checkout_unavailable'");
   });
   it("verification: discounts, write-offs, approvals and ordinary cancellation refuse an open page", () => {
-    for (const fn of ["apply_bill_discount", "write_off_orders", "approve_discount_request", "approve_discount_request_v2",
+    for (const fn of ["apply_bill_discount", "apply_bill_discount_v2", "write_off_orders", "approve_discount_request", "approve_discount_request_v2", "approve_discount_request_v3",
       "approve_write_off_request", "approve_write_off_request_v2"]) {
       expect(latest(fn), fn).toContain("public.whole_bill_card_open_v1(p_restaurant,");
     }
