@@ -8794,6 +8794,43 @@ events) from one reader, `readCorteAdjustments` in `corte-adjustments.ts`.
 Check: `signup-mail-ceiling.spec.ts`, `digest-figures.spec.ts`.
 ### A waiter's round, an expired card page and a stale station "done" (2026-11-25)
 
+### Cancellation, menu imports and account statements (2026-11-25)
+
+The cancel dialog previewed a legacy MX$350 Stripe charge with no verified
+provider account as a Stripe refund, while `prepare_order_refund` recorded it
+for review and sent nothing. `cancelSummary` now classifies coverage exactly
+like the writer (currency, allocation quality, provider account) and the
+dialog shows the amount needing review (`orders.reviewCancelMsg`). Check:
+`cancel-plan.spec.ts`, `cancel-read.spec.tsx`, `cancel-wording.spec.ts`.
+
+A kitchen reprint of a cancelled order re-armed its job and answered
+`queued: true`; the printer then skipped it. `rearm_kitchen_print_v1` takes the
+order row lock that cancellation takes, refuses a cancelled order and the
+route answers `queued: false` (`orders.kitchenCopyNotQueued`). Check:
+`cloudprnt-delivery.spec.ts`, `kitchen-print.spec.ts`, `return-reprint.spec.tsx`,
+`allocation-review.spec.ts`.
+
+Cancelling the order that took the last portion restored stock, but the
+public menu stayed cached for up to 30 seconds. The cancel route now
+invalidates the restaurant's public menu tag after the writer commits. Check:
+`cancel-race.spec.tsx`.
+
+Replacing or removing a dish photo deleted the stored object at once, which
+broke a duplicated dish sharing the URL, and the saved dish too when the form
+was cancelled. `DishPhotoField` only changes the form's URL now; orphans are
+acceptable. Check: `import-photo.react-component.spec.tsx`.
+
+The CSV import passed category and emoji cells of any size to the database.
+The planner and `importRows` now cap them at 60 and 16 characters
+(`importFieldsTooLong`). The dialog refuses files over 2 MB before
+`file.text()` and `parseCsv` stops at the first record past 1,000 products.
+Check: `menu-import.spec.ts`, `s23b-writes.spec.ts`,
+`import-photo.react-component.spec.tsx`.
+
+An account statement read unpaid orders and payment history in two queries,
+so a settlement between them showed MX$100 as both owed and paid.
+`account_statement_v1` returns both from one SQL statement, so one snapshot.
+Check: `accounts-server.spec.tsx`, `invariants/account-debt.spec.ts`.
 Three pairs that had to agree (Codex review bl33, findings 1-3). First, the
 sitting a waiter's round joins and the cashier closing it: the route opened the
 sitting, then inserted the order in a second call, so a sitting closed in

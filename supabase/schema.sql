@@ -3372,6 +3372,29 @@ create unique index if not exists print_jobs_once
 alter table print_jobs enable row level security;
 revoke all on print_jobs from anon, authenticated;
 
+-- Serialize reprints with cancellation at the order row. A fresh generation
+-- keeps an old printer confirmation from closing the newly queued copy.
+create or replace function public.rearm_kitchen_print_v1(p_restaurant uuid, p_order uuid)
+returns boolean language plpgsql security invoker set search_path = '' as $$
+begin
+  perform 1 from public.orders
+    where id = p_order and restaurant_id = p_restaurant and status <> 'cancelled'
+    for update;
+  if not found then return false; end if;
+  if not exists (select 1 from public.restaurants where id = p_restaurant and print_token is not null) then
+    return null;
+  end if;
+  insert into public.print_jobs (restaurant_id, order_id, kind, created_at)
+    values (p_restaurant, p_order, 'kitchen', clock_timestamp())
+  on conflict (order_id, kind) do update set
+    delivery_token = excluded.delivery_token, created_at = excluded.created_at,
+    claimed_at = null, printed_at = null;
+  return true;
+end;
+$$;
+revoke all on function public.rearm_kitchen_print_v1(uuid, uuid) from public, anon, authenticated;
+grant execute on function public.rearm_kitchen_print_v1(uuid, uuid) to service_role;
+
 -- An order reaches the pass from several directions — a diner paying online, a
 -- table ordering to settle later, a cashier ringing a sale — and every one of
 -- them has to queue a ticket. Rather than remembering that in each, the row
@@ -17017,6 +17040,33 @@ $$;
 revoke all on function public.adopt_settled_intent_v1(uuid, text, boolean, text) from public, anon, authenticated;
 grant execute on function public.adopt_settled_intent_v1(uuid, text, boolean, text) to service_role;
 revoke truncate, references, trigger on all tables in schema public from authenticated;
+-- Aggregate the debt and recent payments in one MVCC snapshot. The debt
+-- array has no row cap; only payment history is limited to the latest 20.
+create or replace function public.account_statement_v1(p_restaurant uuid, p_account uuid)
+returns jsonb language sql stable security invoker set search_path = '' as $$
+  select jsonb_build_object(
+    'orders', coalesce((
+      select jsonb_agg(to_jsonb(o) order by o.id)
+      from (
+        select id, items, total, currency, table_label, created_at, charged_at, charged_by, status, service_fee, tip
+        from public.orders
+        where restaurant_id = p_restaurant and account_id = p_account
+          and not paid and not written_off and status <> 'cancelled'
+      ) o
+    ), '[]'::jsonb),
+    'payments', coalesce((
+      select jsonb_agg(to_jsonb(p) - 'id' order by p.created_at desc, p.id desc)
+      from (
+        select id, amount, tip, currency, method, created_at
+        from public.payments
+        where restaurant_id = p_restaurant and account_id = p_account
+        order by created_at desc, id desc limit 20
+      ) p
+    ), '[]'::jsonb)
+  );
+$$;
+revoke all on function public.account_statement_v1(uuid, uuid) from public, anon, authenticated;
+grant execute on function public.account_statement_v1(uuid, uuid) to service_role;
 -- ============================================================================
 -- Cash shifts: the collecting shift, priced offline receipts, and retries
 -- (Codex bl39 review, findings 2, 3, 5 and 6)

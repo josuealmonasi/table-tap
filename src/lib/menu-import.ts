@@ -14,6 +14,14 @@
 export const MAX_IMPORT_PRICE = 100_000;
 export const MAX_NAME = 120;
 export const MAX_DESCRIPTION = 500;
+export const MAX_CATEGORY = 60;
+export const MAX_EMOJI = 16;
+export const MAX_IMPORT_ROWS = 1_000;
+export const MAX_IMPORT_BYTES = 2 * 1024 * 1024;
+
+export function importFieldsTooLong(category: string | null, emoji: string): boolean {
+  return (category !== null && [...category].length > MAX_CATEGORY) || [...emoji].length > MAX_EMOJI;
+}
 /** What a product shows when the sheet gives it no emoji: the column default. */
 export const DEFAULT_EMOJI = "🍽️";
 
@@ -107,7 +115,11 @@ export function planImport(table: string[][], existing: string[]): ImportPlan {
     const refuse = (reason: ImportReason) => problems.push({ line: number, name, reason });
     if (!name) return refuse("noName");
     const description = cell(line, "description");
-    if (name.length > MAX_NAME || description.length > MAX_DESCRIPTION) return refuse("tooLong");
+    const category = cell(line, "category") || null;
+    const emoji = cell(line, "emoji") || DEFAULT_EMOJI;
+    if (name.length > MAX_NAME || description.length > MAX_DESCRIPTION || importFieldsTooLong(category, emoji)) {
+      return refuse("tooLong");
+    }
     const price = readPrice(cell(line, "price"));
     if (price === null) return refuse("badPrice");
     const key = plain(name);
@@ -116,11 +128,11 @@ export function planImport(table: string[][], existing: string[]): ImportPlan {
     seen.add(key);
     rows.push({
       line: number,
-      category: cell(line, "category") || null,
+      category,
       name,
       price,
       description,
-      emoji: cell(line, "emoji") || DEFAULT_EMOJI,
+      emoji,
     });
   });
   return { rows, problems, missingColumns: false };

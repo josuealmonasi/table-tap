@@ -152,9 +152,13 @@ export function orderRefundCases(fx) {
     { name: "GET  /api/orders/cancel (POS card: the terminal, not Stripe)", as: "owner", method: "GET",
       path: f => `/api/orders/cancel?id=${f.posCardOrder}`, expect: [200],
       check: (d, f) => (d.terminal === f.linePrice && d.refund === 0) || `answered ${JSON.stringify(d)}` },
-    { name: "GET  /api/orders/cancel (a table's online bill: Stripe)", as: "owner", method: "GET",
+    // Its receipt has no verified connected account, so the writer records a
+    // review obligation (the POST case below). The preview must say the same,
+    // not offer a Stripe refund or a hand-back it will not make (bl33 #4).
+    { name: "GET  /api/orders/cancel (a table's online bill: unverified Stripe → review)", as: "owner", method: "GET",
       path: f => `/api/orders/cancel?id=${f.tableBillOrder}`, expect: [200],
-      check: (d, f) => (d.withTable === f.linePrice && d.refund === 0) || `answered ${JSON.stringify(d)}` },
+      check: (d, f) => (d.refund === 0 && d.withTable === 0
+        && (d.review ?? []).reduce((sum, r) => sum + r.amount, 0) === f.linePrice) || `answered ${JSON.stringify(d)}` },
     { name: "GET  /api/orders/cancel (waiter refused)", as: "waiter", method: "GET",
       path: f => `/api/orders/cancel?id=${f.posCardOrder}`, expect: [403] },
     // Card on the restaurant's own terminal. This answered "payment still

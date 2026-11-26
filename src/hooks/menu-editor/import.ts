@@ -1,4 +1,4 @@
-import { sameSection, sectionsOf, type ImportRow } from "@/lib/menu-import";
+import { importFieldsTooLong, sameSection, sectionsOf, type ImportRow } from "@/lib/menu-import";
 import type { EditorContext } from "./types";
 import { writeError } from "@/lib/write-result";
 import { refreshDinerMenu } from "@/lib/menu-refresh-client";
@@ -20,6 +20,10 @@ export function importActions(ctx: EditorContext) {
   async function importRows(menuId: string, rows: ImportRow[]): Promise<number> {
     if (!(await ctx.ready())) return 0;
     if (rows.length === 0) return 0;
+    if (rows.some(row => importFieldsTooLong(row.category, row.emoji))) {
+      reportError("write.importMenu", { message: "A category or emoji exceeds the import limit" });
+      return 0;
+    }
     // The sections the read just returned: one added in that read is matched,
     // not created a second time.
     const { sections, products } = ctx.latest.current;

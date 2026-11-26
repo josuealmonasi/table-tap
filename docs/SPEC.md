@@ -1225,7 +1225,9 @@ The menu editor's "Importar desde una hoja de cálculo" reads a CSV in the
 browser (`src/lib/csv.ts`: commas or the semicolons Spanish Excel writes,
 quotes, CRLF, a byte order mark) and plans it (`src/lib/menu-import.ts`):
 headers in Spanish or English, only name and price required, prices read as
-people type them. Before anything is written it shows what will be added,
+people type them. A file can have up to 2 MB and 1,000 product rows.
+Category names can have 60 characters and emojis can have 16. Before
+anything is written it shows what will be added,
 the sections it will make, and every line that will not go in and why. The
 write is the editor's own, through the dashboard's Supabase client like
 adding a product: the missing sections, then every product in one insert, so

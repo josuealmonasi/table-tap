@@ -4,7 +4,7 @@ import { useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { useT } from "@/lib/i18n/context";
 import { useToast } from "@/components/ui/Toast";
-import { BUCKET, DISH, SOURCE_MAX_BYTES, itemPath, pathFromUrl } from "@/lib/images";
+import { BUCKET, DISH, SOURCE_MAX_BYTES, itemPath } from "@/lib/images";
 import { preparePhoto } from "@/lib/image-resize";
 import DishImage from "@/components/customer/DishImage";
 
@@ -66,13 +66,10 @@ export default function DishPhotoField({
         return;
       }
 
-      const previous = value ? pathFromUrl(value) : null;
       const {
         data: { publicUrl },
       } = supabase.storage.from(BUCKET).getPublicUrl(path);
       onChange(publicUrl);
-      // Only once the new one is safely in place.
-      if (previous) await supabase.storage.from(BUCKET).remove([previous]);
     } catch {
       toast(t("img.failed"), "error");
     } finally {
@@ -81,10 +78,9 @@ export default function DishPhotoField({
     }
   }
 
-  async function remove(): Promise<void> {
-    const previous = value ? pathFromUrl(value) : null;
+  function remove(): void {
+    // A saved dish or a duplicate may still use this object.
     onChange(null);
-    if (previous) await createClient().storage.from(BUCKET).remove([previous]);
   }
 
   return (

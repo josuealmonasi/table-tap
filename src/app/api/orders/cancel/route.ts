@@ -4,7 +4,7 @@ import { apiError } from "@/lib/api-error";
 import { jsonBody } from "@/lib/json-body";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { actingManager } from "@/lib/api-guard";
-import { summarise } from "@/lib/cancel-plan";
+import { invalidatePublicMenu } from "@/lib/public-menu-cache";
 import { legacyStockDemand } from "@/lib/legacy-stock";
 import { readCancel } from "@/lib/cancel-read";
 import { executeOrderRefund, orderRefunds } from "@/lib/refunds/operations";
@@ -18,8 +18,9 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   if (!id) return await apiError("apiErr.invalidRequest", 400);
   const read = await readCancel(createAdminClient(), actor.restaurantId, id);
   if ("error" in read) return await apiError(read.error, read.status);
-  const summary = summarise(read.order, read.plan);
-  return NextResponse.json({ ...summary, pending: summary.refund + summary.cash + summary.terminal + summary.withTable > 0 });
+  const summary = read.summary;
+  const pending = summary.refund > 0 || summary.cash > 0 || summary.terminal > 0 || Boolean(summary.review?.length);
+  return NextResponse.json({ ...summary, pending });
 }
 
 /** The database commits cancellation and reserved refund capacity together.
@@ -51,6 +52,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     if (data?.outcome !== "cancelled") return await apiError("apiErr.cancelChanged", 409);
     adjustmentId = data.adjustment;
   }
+  invalidatePublicMenu(actor.restaurantId);
   const operations = await orderRefunds(actor.restaurantId, adjustmentId);
   for (const op of operations) {
     if (op.source === "stripe" && op.status !== "succeeded") {
