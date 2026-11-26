@@ -98,7 +98,8 @@ export async function PATCH(req: NextRequest): Promise<NextResponse> {
     const member = await tableMember(req, restaurantId, tableId);
     const actor = member ? null : await actingFrontOfHouse();
     if (!member && (!actor || actor.restaurantId !== restaurantId)) return await apiError("apiErr.forbidden", 403);
-    const { data, error } = await createAdminClient().rpc("decide_table_member", {
+    const { data, error } = await createAdminClient().rpc("decide_table_member_v2", {
+      // v2: a phone admitted by an unvouched phone stays unvouched (2026-11-26).
       p_member: memberId, p_restaurant: restaurantId, p_table: tableId, p_approve: approve,
       p_staff: actor?.email ?? null, p_hash: member ? memberHash(req) : null,
     });

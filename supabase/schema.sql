@@ -17652,3 +17652,180 @@ end;
 $$;
 revoke all on function public.record_offline_sale_v3(uuid,uuid,jsonb,text,text,timestamptz,text,jsonb,text,text,text,text,text,uuid) from public,anon,authenticated;
 grant execute on function public.record_offline_sale_v3(uuid,uuid,jsonb,text,text,timestamptz,text,jsonb,text,text,text,text,text,uuid) to service_role;
+
+-- ── Diner pay-later: who let the phone in, and an open sitting (2026-11-26) ──
+-- The phone that opens an empty table is let in without staff only when its
+-- order is paid by card. That order could be abandoned on Stripe's page, and
+-- the approval stayed: the same cookie then sent unlimited pay-later orders to
+-- the kitchen. `auto_approved` remembers that nobody vouched for the phone; it
+-- may order on the bill only once the sitting has a paid order. A phone it
+-- admits inherits the flag, so a second cookie of the same person gains
+-- nothing; a staff decision clears it.
+alter table table_session_members add column if not exists auto_approved boolean not null default false;
+
+-- v4: v3 plus `auto_approved` on the phone that opened the sitting unaided.
+create or replace function public.request_table_member_v4(
+  p_restaurant uuid, p_table uuid, p_hash text, p_open boolean, p_first_approved boolean
+) returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  v_session uuid;
+  v_created boolean := false;
+  v_known boolean;
+  v_member table_session_members%rowtype;
+begin
+  if p_hash is null or p_hash !~ '^[0-9a-f]{64}$' then raise exception 'Invalid member credential'; end if;
+  perform 1 from restaurant_tables where id = p_table and restaurant_id = p_restaurant for update;
+  if not found then raise exception 'Table not found'; end if;
+  if p_open then
+    update table_sessions set closed_at = now(), close_reason = 'expired'
+      where table_id = p_table and restaurant_id = p_restaurant and closed_at is null
+        and opened_at < now() - interval '8 hours';
+  end if;
+  select id into v_session from table_sessions
+    where table_id = p_table and restaurant_id = p_restaurant and closed_at is null
+      and opened_at >= now() - interval '8 hours';
+  if v_session is null and not p_open then
+    return jsonb_build_object('status', 'empty', 'sessionId', null, 'diner', null);
+  end if;
+  if v_session is null then
+    insert into table_sessions(restaurant_id, table_id) values (p_restaurant, p_table)
+      on conflict do nothing returning id into v_session;
+    v_created := v_session is not null;
+    if v_session is null then
+      select id into v_session from table_sessions
+        where table_id = p_table and restaurant_id = p_restaurant and closed_at is null;
+    end if;
+  end if;
+  if v_session is null then raise exception 'Could not open sitting'; end if;
+  update table_session_members set seen_at = now()
+    where session_id = v_session and token_hash = p_hash and status = 'pending';
+  delete from table_session_members
+    where session_id = v_session and status = 'pending'
+      and coalesce(seen_at, created_at) < now() - interval '10 minutes';
+  select * into v_member from table_session_members where session_id = v_session and token_hash = p_hash;
+  v_known := found;
+  if not v_known and not v_created and
+    (select count(*) from table_session_members where session_id = v_session and status = 'pending') >= 5 then
+    return jsonb_build_object('status', 'full', 'sessionId', v_session, 'diner', null);
+  end if;
+  insert into table_session_members(session_id, token_hash, status, decided_at, seen_at, auto_approved)
+    values (v_session, p_hash, case when v_created and p_first_approved then 'approved' else 'pending' end,
+      case when v_created and p_first_approved then now() else null end, now(), v_created and p_first_approved)
+    on conflict (session_id, token_hash) do nothing;
+  select * into strict v_member from table_session_members where session_id = v_session and token_hash = p_hash;
+  return jsonb_build_object('status', v_member.status, 'sessionId', v_session, 'diner', v_member.id);
+end; $$;
+revoke all on function public.request_table_member_v4(uuid, uuid, text, boolean, boolean) from public, anon, authenticated;
+grant execute on function public.request_table_member_v4(uuid, uuid, text, boolean, boolean) to service_role;
+
+-- v2: as decide_table_member, and the admitted phone carries its approver's
+-- `auto_approved`; a staff decision vouches for it (false).
+create or replace function public.decide_table_member_v2(
+  p_member uuid, p_restaurant uuid, p_table uuid, p_approve boolean,
+  p_staff text, p_hash text
+) returns boolean language plpgsql security definer set search_path = public as $$
+declare v_session uuid; v_unvouched boolean := false;
+begin
+  select s.id into v_session from table_sessions s join table_session_members m on m.session_id = s.id
+    where m.id = p_member and s.restaurant_id = p_restaurant and s.table_id = p_table
+      and s.closed_at is null and s.opened_at >= now() - interval '8 hours' for update of s;
+  if v_session is null then return false; end if;
+  if p_staff is null then
+    select auto_approved into v_unvouched from table_session_members
+      where session_id = v_session and token_hash = p_hash and status = 'approved';
+    if not found then return false; end if;
+  end if;
+  update table_session_members set status = case when p_approve then 'approved' else 'rejected' end,
+    decided_at = now(), decided_by = coalesce(p_staff, 'member'), auto_approved = coalesce(v_unvouched, false)
+    where id = p_member and session_id = v_session and status = 'pending';
+  return found;
+end; $$;
+revoke all on function public.decide_table_member_v2(uuid, uuid, uuid, boolean, text, text) from public, anon, authenticated;
+grant execute on function public.decide_table_member_v2(uuid, uuid, uuid, boolean, text, text) to service_role;
+
+-- Why this member may not put another order on the bill, or null. Called under
+-- the restaurant's money lock and the sitting's share lock, so two phones at
+-- once cannot both pass the ceiling.
+create or replace function public.diner_pay_later_refusal_v1(
+  p_restaurant uuid, p_session uuid, p_member uuid
+) returns text language sql stable security definer set search_path = public as $$
+  select case
+    when not exists (select 1 from table_session_members
+      where id = p_member and session_id = p_session and status = 'approved') then 'notMember'
+    when exists (select 1 from table_session_members where id = p_member and auto_approved)
+      and not exists (select 1 from orders where restaurant_id = p_restaurant and session_id = p_session
+        and paid and status <> 'cancelled') then 'payLaterNeedsStaff'
+    when (select count(*) from orders where restaurant_id = p_restaurant and session_id = p_session
+        and diner is not null and not paid and not written_off
+        and status not in ('cancelled', 'pending_payment')) >= 15 then 'sittingPayLaterFull'
+  end;
+$$;
+revoke all on function public.diner_pay_later_refusal_v1(uuid, uuid, uuid) from public, anon, authenticated;
+grant execute on function public.diner_pay_later_refusal_v1(uuid, uuid, uuid) to service_role;
+
+-- A diner's pay-later order with a retry reference, saved only into an open
+-- sitting and only for a member who may order on the bill. A replay answers
+-- first, as create_table_order_intent_v2 does; then the sitting is held FOR
+-- SHARE while create_order_intent writes stock, coupon and ticket together.
+create or replace function public.create_diner_order_intent_v1(
+  p_restaurant uuid, p_ref uuid, p_scope text, p_order jsonb, p_demand jsonb,
+  p_inventory boolean, p_threshold int, p_coupon jsonb, p_member uuid
+) returns jsonb language plpgsql security definer set search_path = public as $$
+declare v_result jsonb; v_session uuid := (p_order->>'session_id')::uuid; v_refusal text;
+begin
+  perform public.lock_restaurant_money(p_restaurant);
+  perform pg_advisory_xact_lock(hashtextextended(p_restaurant::text || p_ref::text, 20));
+  v_result := public.order_intent_result(p_restaurant, p_ref, p_scope);
+  if v_result is not null then return v_result; end if;
+  if v_session is null or p_order->>'table_id' is null then raise exception 'diner table order needs a sitting'; end if;
+  perform 1 from table_sessions
+   where id = v_session and restaurant_id = p_restaurant
+     and table_id = (p_order->>'table_id')::uuid and closed_at is null
+   for share;
+  if not found then return '{"sittingClosed":true}'::jsonb; end if;
+  v_refusal := public.diner_pay_later_refusal_v1(p_restaurant, v_session, p_member);
+  if v_refusal is not null then return jsonb_build_object(v_refusal, true); end if;
+  return public.create_order_intent(p_restaurant, p_ref, p_scope, p_order, p_demand, p_inventory, p_threshold, p_coupon);
+end;
+$$;
+revoke all on function public.create_diner_order_intent_v1(uuid, uuid, text, jsonb, jsonb, boolean, int, jsonb, uuid) from public, anon, authenticated;
+grant execute on function public.create_diner_order_intent_v1(uuid, uuid, text, jsonb, jsonb, boolean, int, jsonb, uuid) to service_role;
+
+-- A diner's table order without a retry reference (older phones, and every
+-- card order), saved only into an open sitting. Stock and the coupon are
+-- claimed by the route before this; on a refusal it gives them back. A
+-- pay-later order is also judged by diner_pay_later_refusal_v1, under the
+-- money lock that keeps the per-sitting ceiling exact.
+create or replace function public.create_diner_order_v1(
+  p_restaurant uuid, p_order jsonb, p_member uuid, p_deferred boolean
+) returns jsonb language plpgsql security definer set search_path = public as $$
+declare v_session uuid := (p_order->>'session_id')::uuid; v_refusal text; v_id uuid;
+begin
+  if v_session is null or p_order->>'table_id' is null then raise exception 'diner table order needs a sitting'; end if;
+  if p_deferred then perform public.lock_restaurant_money(p_restaurant); end if;
+  perform 1 from table_sessions
+   where id = v_session and restaurant_id = p_restaurant
+     and table_id = (p_order->>'table_id')::uuid and closed_at is null
+   for share;
+  if not found then return '{"sittingClosed":true}'::jsonb; end if;
+  if p_deferred then
+    v_refusal := public.diner_pay_later_refusal_v1(p_restaurant, v_session, p_member);
+    if v_refusal is not null then return jsonb_build_object(v_refusal, true); end if;
+  end if;
+  insert into orders(restaurant_id, request_ref, request_scope, table_id, table_label, session_id, diner,
+    stock_managed, stock_reservation_id, status, paid, subtotal, service_fee, tip, tax_pct,
+    discount, platform_fee, coupon_code, promo_detail, total, currency, items, note, customer_name)
+  values(p_restaurant, (p_order->>'request_ref')::uuid, p_order->>'request_scope',
+    (p_order->>'table_id')::uuid, p_order->>'table_label', v_session, p_order->>'diner',
+    coalesce((p_order->>'stock_managed')::boolean, false), (p_order->>'stock_reservation_id')::uuid,
+    case when p_deferred then 'received' else 'pending_payment' end, false,
+    (p_order->>'subtotal')::numeric, (p_order->>'service_fee')::numeric, (p_order->>'tip')::numeric,
+    (p_order->>'tax_pct')::numeric, (p_order->>'discount')::numeric, 0, p_order->>'coupon_code',
+    p_order->'promo_detail', (p_order->>'total')::numeric, p_order->>'currency', p_order->'items',
+    p_order->>'note', p_order->>'customer_name')
+  returning id into v_id;
+  return jsonb_build_object('orderId', v_id);
+end;
+$$;
+revoke all on function public.create_diner_order_v1(uuid, jsonb, uuid, boolean) from public, anon, authenticated;
+grant execute on function public.create_diner_order_v1(uuid, jsonb, uuid, boolean) to service_role;

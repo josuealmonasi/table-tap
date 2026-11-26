@@ -5,7 +5,12 @@ const writes: Record<string, unknown>[] = [];
 let foundTable: { id: string; label: string } | null = { id: "00000000-0000-4000-8000-0000000000f7", label: "7" };
 vi.mock("@/lib/supabase/admin", () => ({
   createAdminClient: () => ({
-    rpc: async () => ({ data: false, error: null }),
+    // A table order is written by the locked diner writer (2026-11-26).
+    rpc: async (name: string, args: { p_order?: Record<string, unknown> }) => {
+      if (name !== "create_diner_order_v1") return { data: false, error: null };
+      writes.push(args.p_order ?? {});
+      return { data: { orderId: "order" }, error: null };
+    },
     from: (table: string) => {
       const query = {
         select: () => query, eq: () => query,

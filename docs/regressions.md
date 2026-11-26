@@ -9208,3 +9208,28 @@ still throws, so a hung page is never read as "no dialog". Readiness
 timeouts are still not retried. Checks: `browser-ready.spec.ts` ("lets the
 last sample of a window answer…", "still fails a page that never stops
 changing", and the hung-sample case for an optional window).
+
+### An abandoned card page let a phone run a tab; a diner order on a closed bill (2026-11-26)
+
+Two pairs that had to agree. First, the approval the first phone at an empty
+table gets and the payment that earned it: since the 2026-11-24 sweep that
+phone is let in unaided only for a card order, but nothing remembered why.
+Leaving the Stripe page unpaid kept the approval, and the same cookie then sent
+pay-later orders to the kitchen with no limit while every real diner at the
+table waited for it to let them in. `request_table_member_v4` now marks that
+phone `auto_approved`; `diner_pay_later_refusal_v1` refuses its pay-later
+orders until the sitting has a paid order (409 `apiErr.payLaterNeedsStaff`,
+"pay this one by card or ask your waiter"). A phone it admits inherits the mark
+(`decide_table_member_v2`), so a second cookie gains nothing, and a staff
+decision clears it. Every sitting also stops at 15 unpaid diner orders (409
+`apiErr.tablePayLaterFull`), like the counter's `counter_pay_later_full`.
+Waiter rounds use no diner membership and are unaffected; a diner who paid up
+front can still add pay-later rounds. Second, the sitting a diner's order joins
+and the cashier closing it, as #750 fixed for waiter rounds: `create_order_intent`
+and the route's plain insert held no sitting, so a pay-later order sent as the
+bill closed went to the kitchen on a settled bill. Both now go through
+`create_diner_order_intent_v1` / `create_diner_order_v1`, which hold the sitting
+FOR SHARE and answer `sittingClosed`; the route answers 409
+`apiErr.tableBillClosedScan` ("scan again") and gives back stock and coupon as
+its other failures do. Check: `diner-paylater-guard.spec.ts`, checkout
+`route.spec.ts`, and the api gate's `POST /api/checkout` pay-later cases.

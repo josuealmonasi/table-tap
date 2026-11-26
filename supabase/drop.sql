@@ -527,3 +527,10 @@ drop function if exists public.reconcile_refund_due_send_v1(uuid, uuid, uuid, te
 drop table if exists refund_due_reviews cascade;
 drop function if exists public.start_refund_due_attempt_v3(uuid, uuid, int, text[]);
 alter table if exists refund_due_attempts drop column if exists charge_refund_ids;
+-- Diner pay-later guard and locked diner orders (2026-11-26).
+drop function if exists public.create_diner_order_v1(uuid, jsonb, uuid, boolean);
+drop function if exists public.create_diner_order_intent_v1(uuid, uuid, text, jsonb, jsonb, boolean, int, jsonb, uuid);
+drop function if exists public.diner_pay_later_refusal_v1(uuid, uuid, uuid);
+drop function if exists public.decide_table_member_v2(uuid, uuid, uuid, boolean, text, text);
+drop function if exists public.request_table_member_v4(uuid, uuid, text, boolean, boolean);
+alter table if exists table_session_members drop column if exists auto_approved;

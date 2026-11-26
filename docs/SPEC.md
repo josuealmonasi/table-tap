@@ -305,7 +305,12 @@ An empty table stays empty while someone browses. The first phone to order
 opens the sitting in one database transaction, under the physical table's
 lock. It is approved there only when that order is paid by card; a pay-later
 order at an empty table leaves it pending like any other phone, so a saved
-photo of the QR cannot send unpaid food to the kitchen from anywhere. Another phone, including one returning from
+photo of the QR cannot send unpaid food to the kitchen from anywhere. A card
+order can still be abandoned on Stripe's page, so the phone let in that way is
+marked `auto_approved` (`request_table_member_v4`): it may place pay-later
+orders only once the sitting has a paid order, and is refused with 409
+(`apiErr.payLaterNeedsStaff`) until then. A phone it admits inherits the mark;
+a staff decision clears it (`decide_table_member_v2`). Another phone, including one returning from
 an earlier party, is pending. It can browse and call the waiter, but cannot
 read the shared bill, order onto it, divide it, request collection or claim
 the table's visit card. It sees its phone code and a waiting message.
@@ -398,6 +403,14 @@ payment or ordering at the register. Referenced checkouts count under the
 restaurant's money lock after checking for a saved retry; older clients with
 no reference count immediately before their insert, so that abuse ceiling
 allows a small concurrent overshoot. Table orders and card checkouts are exempt.
+
+A table has its own ceiling: a sitting with 15 unpaid diner orders refuses
+another pay-later diner order with 409 (`apiErr.tablePayLaterFull`); waiter
+rounds and card orders do not count and are not refused. Every diner order at
+a table is written under its sitting's share lock (`create_diner_order_v1`,
+`create_diner_order_intent_v1`), together with the pay-later rules, so one
+landing just after the cashier closed the bill is refused with 409
+(`apiErr.tableBillClosedScan`, "scan again") and its stock and coupon go back.
 
 ## Order status
 
