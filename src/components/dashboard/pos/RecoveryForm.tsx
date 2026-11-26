@@ -7,9 +7,11 @@ import { orderCode } from "@/lib/types";
 import SaleBreakdown from "./SaleBreakdown";
 import type { OfflineComparison } from "@/lib/offline-comparison";
 import type { HeldSale } from "@/lib/offline-sales";
+import type { HeldShiftChoice } from "@/lib/held-shift";
+import HeldShiftPicker from "./HeldShiftPicker";
 
-export interface RecoveryDetails { reason: string; collector?: string; at: string; currency: string }
-export interface RecoveryFormProps { comparison?: OfflineComparison | null; comparing?: boolean; sale: HeldSale; currentCurrency: string; busy: boolean; onClose: () => void; onSubmit: (details: RecoveryDetails) => void }
+export interface RecoveryDetails { reason: string; collector?: string; at: string; currency: string; cashShiftId?: string }
+export interface RecoveryFormProps { comparison?: OfflineComparison | null; comparing?: boolean; shifts?: HeldShiftChoice | null; sale: HeldSale; currentCurrency: string; busy: boolean; onClose: () => void; onSubmit: (details: RecoveryDetails) => void }
 
 function localInput(at: string): string {
   const d = new Date(at);
@@ -17,15 +19,18 @@ function localInput(at: string): string {
   return new Date(d.getTime() - d.getTimezoneOffset() * 60_000).toISOString().slice(0, 23);
 }
 
-export default function RecoveryForm({ sale, currentCurrency, busy, onClose, onSubmit, comparison = null, comparing = false }: RecoveryFormProps) {
+export default function RecoveryForm({ sale, currentCurrency, busy, onClose, onSubmit, comparison = null, comparing = false, shifts = null }: RecoveryFormProps) {
   const t = useT();
   const [collector, setCollector] = useState(sale.collector ?? "");
   const [currency, setCurrency] = useState(sale.currency ?? currentCurrency);
   const [at, setAt] = useState(localInput(sale.at));
   const [reason, setReason] = useState("");
   const [confirmed, setConfirmed] = useState(false);
+  // A held cash sale that names its till's shift is recorded in the shift the manager confirms.
+  const [shift, setShift] = useState<string | null>(null);
+  const shiftChosen = !sale.cashShiftId || Boolean(shift ?? shifts?.taken?.id ?? shifts?.open?.id);
   const matchesCurrency = currency === currentCurrency;
-  const ready = !comparing && confirmed && reason.trim().length >= 8 && at && (sale.collectorContext || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(collector));
+  const ready = !comparing && shiftChosen && confirmed && reason.trim().length >= 8 && at && (sale.collectorContext || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(collector));
   return <Modal open onClose={onClose} title={t("recovery.review")} maxWidth={540}>
     <p><strong>{orderCode(sale.posRef)} · {formatMoney(sale.charge.total, currency)} · {currency}</strong></p>
     <p>{t("recovery.preserve")}</p>
@@ -52,6 +57,7 @@ export default function RecoveryForm({ sale, currentCurrency, busy, onClose, onS
       <input className="tt-input" type="datetime-local" step="0.001" value={at} onChange={e => setAt(e.target.value)} />
     </label>
     <p className="tt-muted">{t("recovery.originalAt", { at: sale.at })}</p>
+    {sale.cashShiftId && !comparing && <HeldShiftPicker shifts={shifts} value={shift ?? shifts?.taken?.id ?? shifts?.open?.id ?? null} onChange={setShift} />}
     <label className="tt-field"><span>{t("recovery.reason")}</span>
       <textarea className="tt-input" value={reason} maxLength={500} onChange={e => setReason(e.target.value)} />
     </label>
@@ -59,6 +65,7 @@ export default function RecoveryForm({ sale, currentCurrency, busy, onClose, onS
       <span><input type="checkbox" checked={confirmed} onChange={e => setConfirmed(e.target.checked)} /> {t("recovery.confirm")}</span>
     </label>
     <button type="button" className="tt-btn tt-btn-primary" disabled={busy || !ready}
-      onClick={() => onSubmit({ reason: reason.trim(), collector: collector.trim() || undefined, at: new Date(at).toISOString(), currency })}>{t("recovery.approve")}</button>
+      onClick={() => onSubmit({ reason: reason.trim(), collector: collector.trim() || undefined, at: new Date(at).toISOString(), currency,
+        ...(sale.cashShiftId ? { cashShiftId: shift ?? shifts?.taken?.id ?? shifts?.open?.id } : {}) })}>{t("recovery.approve")}</button>
   </Modal>;
 }

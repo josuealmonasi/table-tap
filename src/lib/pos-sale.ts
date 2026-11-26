@@ -34,6 +34,11 @@ export interface PosSaleBody {
    * notice says no card data is stored, and the field asks for none.
    */
   terminalRef?: string;
+  /**
+   * A cash sale held offline: the shift the till had open when it was taken.
+   * Absent on receipts from tills before it was kept, and when none was open.
+   */
+  cashShiftId?: unknown;
 }
 
 /** A voucher reference as typed: trimmed, 1–40 characters, or nothing. */

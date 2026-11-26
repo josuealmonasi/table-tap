@@ -11,6 +11,7 @@ import { ringOffline } from "@/lib/pos-offline";
 import { compareOfflineSale } from "@/lib/offline-comparison";
 import type { QueuedOfflineSale } from "@/lib/offline-review";
 import { heldHistory } from "@/lib/held-history";
+import { heldShiftChoice } from "@/lib/held-shift";
 
 export const runtime = "nodejs";
 
@@ -27,7 +28,11 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
       .eq("restaurant_id", actor.restaurantId).eq("pos_ref", posRef).maybeSingle();
     if (error) return await apiError("apiErr.generic", 503);
     if (!data) return await apiError("apiErr.notFound", 404);
-    return NextResponse.json({ comparison: await compareOfflineSale(db, actor.restaurantId, data as QueuedOfflineSale) });
+    const queued = data as QueuedOfflineSale;
+    // A held cash sale that names its till's shift: the shifts the manager confirms between.
+    const shifts = await heldShiftChoice(db, actor.restaurantId, queued.body).catch(() => undefined);
+    if (shifts === undefined) return await apiError("apiErr.generic", 503);
+    return NextResponse.json({ comparison: await compareOfflineSale(db, actor.restaurantId, queued), shifts });
   }
   const history = req.nextUrl.searchParams.get("view") === "history";
   const page = req.nextUrl.searchParams.get("page") ?? "0";
@@ -54,13 +59,14 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   const actor = await actingManager();
   if (!actor) return await apiError("apiErr.forbidden", 403);
   const body = await jsonBody<{ posRef?: string; restaurantId?: string; approval?: {
-    confirmed?: boolean; reason?: string; collector?: string; at?: string; currency?: string;
+    confirmed?: boolean; reason?: string; collector?: string; at?: string; currency?: string; cashShiftId?: string;
   } }>(req);
   if (!body || body.restaurantId !== actor.restaurantId || typeof body.posRef !== "string") return await apiError("apiErr.invalidRequest", 400);
   const a = body.approval;
   if (!a || a.confirmed !== true || typeof a.reason !== "string" || a.reason.trim().length < 8 || a.reason.length > 500
     || (a.collector !== undefined && (typeof a.collector !== "string" || a.collector.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(a.collector)))
-    || (a.at !== undefined && typeof a.at !== "string") || (a.currency !== undefined && !["MXN", "USD"].includes(a.currency))) {
+    || (a.at !== undefined && typeof a.at !== "string") || (a.currency !== undefined && !["MXN", "USD"].includes(a.currency))
+    || (a.cashShiftId !== undefined && typeof a.cashShiftId !== "string")) {
     return await apiError("apiErr.offlineRecoveryDetails", 400);
   }
   const { data: queued, error } = await createAdminClient().from("offline_sale_queue")
@@ -75,5 +81,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   after(() => drainTicketEmails());
   return await ringOffline(actor, queued.body as PosSaleBody & { offline?: unknown }, {
     reason: a.reason.trim(), collector: queued.collector ?? a.collector, at: a.at, currency: queued.currency ?? a.currency,
+    // The shift the manager confirmed for a held cash sale that names one.
+    cashShiftId: a.cashShiftId,
   });
 }

@@ -44,6 +44,7 @@ drop function if exists public.signup_restaurant_with_terms_v1(text, uuid, text,
 drop function if exists public.signup_restaurant_with_terms_v1(text, uuid, text, text, text, text, text, text, timestamptz);
 -- Cash shift fixes (bl39 2, 3, 5): wrappers before the functions they call.
 drop function if exists public.open_cash_shift_v2(uuid, text, numeric, uuid);
+drop function if exists public.record_offline_sale_v3(uuid,uuid,jsonb,text,text,timestamptz,text,jsonb,text,text,text,text,text,uuid);
 drop function if exists public.record_offline_sale_v2(uuid,uuid,jsonb,text,text,timestamptz,text,jsonb,text,text,text,text,text);
 drop function if exists public.offline_pricing_revision_v1(uuid);
 drop function if exists public.ring_pos_sale_v3(uuid, uuid, jsonb, text, text, text, timestamptz, text, jsonb, boolean, int, uuid);

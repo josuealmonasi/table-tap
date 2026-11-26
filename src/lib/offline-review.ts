@@ -22,7 +22,9 @@ export function reviewSale(row: QueuedOfflineSale, restaurantId: string): HeldSa
   const { at } = row.body.offline;
   return { ...row.body, posRef: row.pos_ref, restaurantId, method: row.body.method as HeldSale["method"],
     items: offlineLines(row.body.items), at, charge: reviewCharge(row.body.offline), error: row.reason, collector: row.collector ?? undefined,
-    collectorContext: row.collector ? "verified-on-server" : undefined, currency: row.currency ?? undefined };
+    collectorContext: row.collector ? "verified-on-server" : undefined, currency: row.currency ?? undefined,
+    // Named even when malformed: the manager must still confirm a shift for it.
+    cashShiftId: row.body.method === "cash" && row.body.cashShiftId != null ? String(row.body.cashShiftId) : undefined };
 }
 
 /** Display legacy receipts, including invalid clocks and old numeric strings.

@@ -35,6 +35,8 @@ export interface PendingAccountSale extends PendingOrderDetails {
 
 interface PosChargeInput {
   collectorContext: string;
+  /** The cash shift this till knows to be open; a cash sale held offline is recorded in it. */
+  cashShiftId?: string;
   collector: string;
   restaurant: Restaurant;
   cart: ReturnType<typeof usePosCart>;
@@ -61,7 +63,7 @@ interface PosChargeInput {
  * when the server says it is settled — a hung request or a restarted tablet
  * must not erase money already taken.
  */
-export function usePosCharge({ collector, collectorContext, restaurant, cart, details, canEmailReceipt, pricing, offline }: PosChargeInput) {
+export function usePosCharge({ collector, collectorContext, cashShiftId, restaurant, cart, details, canEmailReceipt, pricing, offline }: PosChargeInput) {
   const t = useT();
   const { locale } = useLocale();
   const toast = useToast();
@@ -191,6 +193,10 @@ export function usePosCharge({ collector, collectorContext, restaurant, cart, de
       charge: { subtotal: pricing.subtotal, serviceFee: pricing.serviceFee, tip: pricing.tip, discount: pricing.discount, total: pricing.total, taxPct: Number(restaurant.tax_pct) || 0 }, currency: restaurant.currency, tipPct: tipCustom === null ? tipPct : undefined, tipAmount: tipCustom ?? undefined,
       customerName: details.customerName.trim() || undefined, note: details.note.trim() || undefined,
       terminalRef: method === "card" ? details.terminalRef.trim() || undefined : undefined,
+      // The drawer that took the cash, as this till knew it when the sale was
+      // taken: a late upload must not land in whichever shift is open then
+      // (bl39 finding 2). The server queues it if that shift has closed.
+      cashShiftId: method === "cash" ? cashShiftId : undefined,
     };
     const finishSend = sale && navigator.onLine ? beginPosSend(restaurant.id, posRef) : () => {};
     // Save before fetch: a hung request and a tablet restart must not erase collected money.
