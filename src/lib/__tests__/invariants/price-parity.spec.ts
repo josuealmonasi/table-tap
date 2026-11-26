@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { CARTS, MENU, PROMOTIONS, RESTAURANT, fakeDb, type ParityCart } from "./price-parity-fixtures";
 import { read } from "./helpers";
+import { sqlBody } from "./order-inventory";
 
 vi.mock("@/lib/promotions-on-sale", () => ({ promotionsOnSale: async () => PROMOTIONS }));
 
@@ -15,7 +16,8 @@ import { currentOfflinePrice, sameOfflinePrice } from "@/lib/offline-pricing";
 import { tableBill } from "@/lib/table-bill";
 import { billAmounts } from "@/lib/bill-amounts";
 import { sharesFor } from "@/lib/split";
-import { billTotal as staffCouponBase, discountableOrders } from "@/lib/staff-discount";
+import { discountableOrders } from "@/lib/staff-discount";
+import { couponBase as staffCouponBase } from "@/lib/coupon-base";
 import { round2 } from "@/lib/money";
 import type { Order, OrderLineItem } from "@/lib/types";
 
@@ -30,7 +32,7 @@ import type { Order, OrderLineItem } from "@/lib/types";
  *   offline replay  currentOfflinePrice → sameOfflinePrice       (pos-offline)
  *   diner bill      tableBill → billAmounts(coupon, tip%)        (bill sheet; bill/pay uses the same base)
  *   split           sharesFor over the bill
- *   staff coupon    discountableOrders → billTotal → applyCoupon (bill/discount, bill/discount/approve)
+ *   staff coupon    discountableOrders → couponBase → applyCoupon (bill/discount, its approval and options)
  */
 
 const promos = toCartPromos(PROMOTIONS);
@@ -53,11 +55,6 @@ function storedOrder(c: ParityCart, verified: OrderLineItem[], waiter: PricedCar
   });
   return { ...row, id: `o-${c.name}`, account_id: null, written_off: false, pay_method: null,
     stripe_payment_intent: null, stripe_refund_id: null, created_at: "2026-11-26T12:00:00Z" } as unknown as Order;
-}
-
-/** Marks a known disagreement: passes while it exists, fails once it is fixed so the marker is removed. */
-function expectedGap(agree: boolean, what: string): void {
-  expect(agree, `expected-gap now agrees: ${what} — remove the marker`).toBe(false);
 }
 
 describe.each(CARTS)("price parity: $name", c => {
@@ -128,15 +125,12 @@ describe.each(CARTS)("price parity: $name", c => {
       expect(cents(sharesFor(amount, 3).reduce((s, n) => s + n, 0))).toBe(cents(amount));
     }
 
-    // Staff coupon: should judge the same dishes the diner's bill judges.
+    // Staff coupon: judged on the same dishes the diner's bill judges (#766), service never included.
     if (c.coupon) {
       const staffBase = staffCouponBase(discountableOrders(orders));
-      const same = staffBase === bill.dishes
-        && applyCoupon(toAppliedCoupon(c.coupon), staffBase) === bill.couponOff
-        && (couponProblem(c.coupon, staffBase) === null) === (couponProblem(c.coupon, bill.dishes) === null);
-      // expected-gap (claude/coupon-base-addon): the staff base is total − tip, service included.
-      if (c.servicePct > 0) expectedGap(same, "staff coupon base includes the service charge");
-      else expect(same, "staff coupon and diner bill disagree on a bill without service").toBe(true);
+      expect(staffBase, "staff coupon base differs from the diner bill's dishes").toBe(bill.dishes);
+      expect(applyCoupon(toAppliedCoupon(c.coupon), staffBase)).toBe(bill.couponOff);
+      expect(couponProblem(c.coupon, staffBase) === null).toBe(couponProblem(c.coupon, bill.dishes) === null);
     }
   });
 });
@@ -160,10 +154,23 @@ describe("price parity: the fixtures exercise what they claim", () => {
     expect(MENU.some(m => m.is_addon)).toBe(true);
   });
 
-  it("bill/pay judges a coupon on the same dishes billAmounts does: the owed principal minus service", () => {
-    const route = read("src/app/api/bill/pay/route.ts");
-    expect(route).toMatch(/const dishes = Math\.max\(0, round2\(principal - orders\.reduce\(\(sum, o\) => sum \+ Number\(o\.service_fee/);
-    expect(route).toMatch(/applyCoupon\(toAppliedCoupon\(coupon\), dishes\)/);
+  it("every place a coupon meets a stored bill judges it on couponBase, in TS and in SQL", () => {
+    // bill/pay, the staff discount, its approval and its options: one base, the dishes.
+    const sites: [string, RegExp][] = [
+      ["src/app/api/bill/pay/route.ts", /const dishes = couponBase\(orders\)[\s\S]*applyCoupon\(toAppliedCoupon\(coupon\), dishes\)/],
+      ["src/app/api/bill/discount/route.ts", /const food = couponBase\(orders\)[\s\S]*applyCoupon\(toAppliedCoupon\(coupon\), food\)/],
+      ["src/app/api/bill/discount/approve/route.ts", /const food = couponBase\(orders\)[\s\S]*applyCoupon\(toAppliedCoupon\(coupon\), food\)/],
+      ["src/app/api/bill/discount/options/route.ts", /const total = couponBase\(orders\)[\s\S]*couponProblem\(coupon, total\)/],
+    ];
+    for (const [file, re] of sites) expect(read(file), file).toMatch(re);
+    expect(read("src/lib/bill-amounts.ts")).toMatch(/const dishes = dishesOf\(/);
+    // The SQL writers that move the money spell the same rule, and are the ones the routes call.
+    for (const fn of ["apply_bill_discount_v2", "approve_discount_request_v3"]) {
+      expect(sqlBody(fn), fn).toMatch(/greatest\(total - tip - service_fee, 0\)/);
+      expect(sqlBody(fn), `${fn} judges a coupon on total - tip alone`).not.toMatch(/greatest\(total - tip, 0\)|sum\(total - tip\)/);
+    }
+    expect(read("src/lib/apply-bill-discount.ts")).toMatch(/checkoutPageRpc\("apply_bill_discount_v2"/);
+    expect(read("src/app/api/bill/discount/approve/route.ts")).toMatch(/checkoutPageRpc\("approve_discount_request_v3"/);
   });
 
   it("the till and the waiter round call priceCart the way this spec calls it", () => {
@@ -172,7 +179,5 @@ describe("price parity: the fixtures exercise what they claim", () => {
     const waiter = read("src/app/api/table-order/route.ts");
     const call = waiter.slice(waiter.indexOf("priceCart({"), waiter.indexOf("});", waiter.indexOf("priceCart({")));
     expect(call).not.toMatch(/tip|coupon/);
-    expect(read("src/app/api/bill/discount/route.ts")).toMatch(/const food = billTotal\(orders\)/);
-    expect(read("src/app/api/bill/discount/approve/route.ts")).toMatch(/const food = billTotal\(orders\)/);
   });
 });

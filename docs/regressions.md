@@ -9230,9 +9230,10 @@ table orders — as `enforced` (grep-level probes on the route, the helpers it
 imports and the SQL bodies must all pass), `expected-gap` (a known hole: a
 probe must fail, so the test goes red when the fix lands) or `exempt` (with
 the reason). It also checks no order-creating function is executable by a
-browser role. Known gaps at the time of writing: the diner's table order is
-not saved under the sitting's lock (claude/diner-paylater-guard), and plain
-cart lines do not check `is_addon` (claude/coupon-base-addon).
+browser role. The two gaps it was written against are closed and now
+`enforced`: plain cart lines refusing `is_addon` (#766), and the diner's table
+order saved under the sitting's lock through `create_diner_order_v1` and
+`create_diner_order_intent_v1` (#767).
 
 To add a path: add the route to `ORDER_PATHS` and any new SQL function to
 `ORDER_SQL` (entry, internal or legacy), and decide all nine preconditions.
@@ -9246,14 +9247,18 @@ and then every pricing entry point the routes call: `priceCart` as checkout,
 the till and the waiter round call it, `checkoutOrderRow` and
 `checkoutLineItems` (Stripe), `currentOfflinePrice`/`sameOfflinePrice`,
 `tableBill`/`billAmounts`, `sharesFor`, and the staff coupon base
-(`discountableOrders`/`billTotal`). Dish subtotal, discounts, coupon base, tip
+(`discountableOrders`/`couponBase`). Dish subtotal, discounts, coupon base, tip
 and total must agree wherever paths are meant to agree. Encoded differences:
 the till never takes a coupon; the waiter round has no tip; a coupon applied
 at payment does not re-price the service already charged on the stored
 order, so the bill total exceeds the checkout total by that service. The
-staff coupon base including service is marked `expected-gap`. To add a
+staff coupon base is enforced equal to the diner bill's dishes (`couponBase`,
+#766), and a static check holds bill/pay, the staff discount, its approval,
+its options and the SQL writers `apply_bill_discount_v2` and
+`approve_discount_request_v3` to that one base. To add a
 pricing path: call it in the per-cart test with the arguments its route
 passes, and assert what it must agree with.
+
 ### An abandoned card page let a phone run a tab; a diner order on a closed bill (2026-11-26)
 
 Two pairs that had to agree. First, the approval the first phone at an empty

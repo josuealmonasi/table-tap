@@ -72,10 +72,10 @@ const ITEM_AVAILABLE = [
   { what: "verifyCart refuses an unavailable plain line or one off an open menu",
     test: (ctx: ProbeContext) => /!db\.available \|\| !isOnOpenMenu\(db\.menu_id\)/.test(plainLoop(ctx)) },
 ];
-/** Known gap: a plain line naming an extra (`is_addon`) is sold as a dish. */
-const STANDALONE_GAP: Rule = { status: "expected-gap", fixedIn: "claude/coupon-base-addon", probes: [
-  { what: "verifyCart's plain-line loop checks is_addon", test: ctx => /is_addon/.test(plainLoop(ctx)) },
-] };
+/** A plain line naming an extra (`is_addon`) is refused, not sold as a dish (#766). */
+const STANDALONE: Rule = enforced(
+  { what: "verifyCart's plain-line loop refuses db.is_addon", test: ctx => /db\.is_addon/.test(plainLoop(ctx)) },
+);
 const SITTING_LOCK = /from table_sessions[\s\S]*?closed_at is null[\s\S]*?for share/;
 
 const CHECKOUT = "src/app/api/checkout/route.ts";
@@ -83,6 +83,7 @@ const WAITER = "src/app/api/table-order/route.ts";
 const TILL = "src/app/api/pos/order/route.ts";
 const RECOVER = "src/app/api/pos/recover/route.ts";
 const INTENT = "src/lib/order-intent.ts";
+const DINER_ORDER = "src/lib/checkout/diner-order.ts";
 const OFFLINE = "src/lib/pos-offline.ts";
 const INTAKE = "src/lib/offline-intake.ts";
 const UPLOAD = "src/app/api/pos/upload/route.ts";
@@ -100,7 +101,8 @@ const offlineStock = enforced(
 export const ORDER_PATHS: OrderPath[] = [
   {
     id: "diner checkout (card, pay-later, counter or table)",
-    route: CHECKOUT, writes: [CHECKOUT, INTENT], rpcs: ["create_order_intent"],
+    route: CHECKOUT, writes: [CHECKOUT, INTENT, DINER_ORDER],
+    rpcs: ["create_order_intent", "create_diner_order_intent_v1", "create_diner_order_v1"],
     rules: {
       notSuspended: enforced(has(CHECKOUT, /suspensionRefusal\(restaurant\.suspended_at\)/)),
       notClosing: enforced(has(CHECKOUT, /restaurant\.closing_at/), CLOSING_TRIGGER),
@@ -110,18 +112,22 @@ export const ORDER_PATHS: OrderPath[] = [
         has(CHECKOUT, /restaurant\.accepting_orders/)),
       menuOpen: enforced(has(CHECKOUT, /orderableNow\(/), has(CHECKOUT, /if \(closedNow\)/)),
       itemAvailable: enforced(has(CHECKOUT, /verifiedLines\(/), ...ITEM_AVAILABLE),
-      standaloneDish: STANDALONE_GAP,
+      standaloneDish: STANDALONE,
       pricesVerified: enforced(has(CHECKOUT, /verifiedLines\(/), has(CHECKOUT, /priceCart\(/),
         has(CHECKOUT, /reviewedTotal/)),
       stockReserved: enforced(has(CHECKOUT, /reserveStock\(/), sqlHas("create_order_intent", /reserve_stock\(/)),
-      // Known gap: the diner's table order is inserted without holding the
-      // sitting FOR SHARE, so a cashier closing the bill can slip in between.
-      // Pay-later is the reported case; the card path shares the same insert.
-      sittingLocked: { status: "expected-gap", fixedIn: "claude/diner-paylater-guard", probes: [{
-        what: "the diner's table order is saved under the sitting's lock",
-        test: ctx => /create_table_order|openSitting:\s*true/.test(src(ctx, CHECKOUT))
-          || SITTING_LOCK.test(sqlBody("create_order_intent")),
-      }] },
+      // A table order (card or pay-later) goes in under the sitting's lock
+      // (#767): without a reference through create_diner_order_v1, with one
+      // through create_diner_order_intent_v1. Only a counter order, which has
+      // no sitting, uses the plain insert or create_order_intent.
+      sittingLocked: enforced(
+        has(CHECKOUT, /if \(sessionId && member\) \{\s*const inserted = await insertDinerOrder\(/),
+        has(CHECKOUT, /dinerMember: sessionId && member \? member : undefined/),
+        has(DINER_ORDER, /rpc\("create_diner_order_v1"/),
+        has(INTENT, /input\.dinerMember\s*\?\s*await createAdminClient\(\)\.rpc\("create_diner_order_intent_v1"/),
+        sqlHas("create_diner_order_v1", SITTING_LOCK),
+        sqlHas("create_diner_order_intent_v1", SITTING_LOCK),
+      ),
     },
   },
   {
@@ -134,7 +140,7 @@ export const ORDER_PATHS: OrderPath[] = [
         has(WAITER, /planBlocks\(actor\.restaurantId, "waiterService"\)/)),
       menuOpen: enforced(has(WAITER, /orderableNow\(/), has(WAITER, /if \(closedNow\)/)),
       itemAvailable: enforced(has(WAITER, /verifiedLines\(/), ...ITEM_AVAILABLE),
-      standaloneDish: STANDALONE_GAP,
+      standaloneDish: STANDALONE,
       pricesVerified: enforced(has(WAITER, /verifiedLines\(/), has(WAITER, /priceCart\(/)),
       stockReserved: enforced(has(WAITER, /reserveStock\(/), sqlHas("create_order_intent", /reserve_stock\(/)),
       sittingLocked: enforced(has(WAITER, /openSitting:\s*true/), sqlHas("create_table_order_v2", SITTING_LOCK),
@@ -151,7 +157,7 @@ export const ORDER_PATHS: OrderPath[] = [
         has(TILL, /planBlocks\(actor\.restaurantId, "openAccounts"\)/)),
       menuOpen: enforced(has(TILL, /orderableNow\(/), has(TILL, /if \(closedNow\)/)),
       itemAvailable: enforced(has(TILL, /verifiedLines\(/), ...ITEM_AVAILABLE),
-      standaloneDish: STANDALONE_GAP,
+      standaloneDish: STANDALONE,
       pricesVerified: enforced(has(TILL, /verifiedLines\(/), has(TILL, /priceCart\(/)),
       stockReserved: enforced(sqlHas("ring_pos_sale_v2", /reserve_stock\(/), sqlHas("ring_pos_account_v2", /reserve_stock\(/)),
       sittingLocked: exempt("counter sale: no table, no sitting"),
@@ -167,8 +173,8 @@ export const ORDER_PATHS: OrderPath[] = [
       planAllows: enforced(has(INTAKE, /frozenBlocks\(actor\.restaurantId\)/), has(INTAKE, /planBlocks\(actor\.restaurantId, "pos"\)/)),
       menuOpen: exempt("the sale already happened; currentOfflinePrice waives closed menus by design"),
       itemAvailable: exempt("the sale already happened; currentOfflinePrice waives sold-out by design"),
-      // Repriced through verifyCart, so the same hole: an extra as a plain line compares as a dish.
-      standaloneDish: STANDALONE_GAP,
+      // Repriced through verifyCart, so a receipt with an extra as a plain line goes to a manager.
+      standaloneDish: STANDALONE,
       pricesVerified: enforced(has(OFFLINE, /currentOfflinePrice\(/), has(OFFLINE, /sameOfflinePrice\(/),
         sqlHas("record_offline_sale_v2", /offline_pricing_revision_v1\(/)),
       stockReserved: offlineStock,
@@ -210,6 +216,8 @@ export const ORDER_PATHS: OrderPath[] = [
 export const ORDER_SQL: Record<string, "entry" | "internal" | "legacy"> = {
   create_order_intent: "entry",
   create_table_order_intent_v2: "entry",
+  create_diner_order_intent_v1: "entry",
+  create_diner_order_v1: "entry",
   create_table_order_v2: "entry",
   ring_pos_sale_v3: "entry",
   ring_pos_account_v3: "entry",
