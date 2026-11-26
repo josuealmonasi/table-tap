@@ -8818,8 +8818,14 @@ caller quotes a fresh attempt with a new key and expiry. Uncertain answers stay
 reserved: the next resume replays the same key (returning the page, which
 binds and expires through the webhook, or a refusal, which closes it), and
 `resolveCheckoutPages` does the same replay for unbound pages under 23 hours.
+That replay exposed a third pair: `splitRpc` treated `reserved` as a refusal
+to resolve for every split RPC, but `reserve_split_slots_v1` answers
+`reserved` on success, so each card reservation replayed its own attempt's
+Stripe request from inside itself; once a refusal could close the attempt,
+the reservation's retry answered `invalid` (400) instead of the 502 the
+refusal deserves. A successful card reservation is no longer resolved.
 Checks: `checkout-attempt-refusal.spec.ts`, `diner-checkout.spec.ts`,
-`platform-fee.spec.ts`.
+`platform-fee.spec.ts`, `split-page-recovery.spec.ts`.
 ### A waiter's round, an expired card page and a stale station "done" (2026-11-25)
 
 ### Table admission and waiter calls (2026-11-25)
