@@ -1848,6 +1848,7 @@ foundingLeftBody: "Quien contrata ahora conserva este precio de suscripción mie
     newPassword8: "La nueva contraseña debe tener al menos 8 caracteres.",
     pickRestaurant: "Elige un restaurante (o nombra uno nuevo para un dueño).",
     signupFields: "Se requieren el nombre del restaurante y el correo.",
+    restaurantNameLength: "El nombre del restaurante debe tener entre 1 y {n} caracteres.",
     restaurantDelete: "No se pudo eliminar el restaurante.",
     restaurantDeleteRefund: "Este restaurante todavía tiene devoluciones por terminar. Complétalas antes de eliminarlo.",
     restaurantDeleteRefundWindow: "Stripe todavía puede avisar que un reembolso reciente falló. Espera 30 días desde el último reembolso antes de eliminar este restaurante. Puedes volver a intentarlo a partir del {date}, cuando ya no haya pagos ni reembolsos pendientes.",

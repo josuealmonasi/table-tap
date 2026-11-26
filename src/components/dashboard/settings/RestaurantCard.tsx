@@ -6,6 +6,7 @@ import type { Restaurant } from "@/lib/types";
 import type { SettingsInput } from "@/hooks/useSettings";
 import { useLocale, useT } from "@/lib/i18n/context";
 import { dateLocale } from "@/lib/format";
+import { RESTAURANT_NAME_MAX } from "@/lib/restaurant-name";
 
 // Two-decimal currencies only, so checkout's Math.round(amount * 100) stays
 // correct (zero-decimal currencies like JPY would be off by 100x).
@@ -70,6 +71,7 @@ export default function RestaurantCard({
             style={{ flex: 1 }}
             placeholder={t("dash.restaurantName")}
             value={name}
+            maxLength={RESTAURANT_NAME_MAX}
             onChange={e => setName(e.target.value)}
             required
           />

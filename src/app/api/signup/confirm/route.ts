@@ -30,6 +30,15 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   const locale = pending.payload.locale;
   // Auth confirms the email inside its transaction. The database trigger
   // consumes this signup and provisions the restaurant in that transaction.
+  // A stale unconfirmed login under this address (one made by calling Auth's
+  // public signup directly after the request was stored) would make Auth
+  // refuse the mailbox owner. Release it first; a login something vouches for
+  // (a staff invite, a restaurant) stays, and Auth then refuses as before.
+  const { error: releaseError } = await admin.rpc("release_stale_signup_login_v1", { p_email: pending.payload.email });
+  if (releaseError) {
+    console.error("signup confirmation release failed", releaseError.code);
+    return await apiError("apiErr.signupFailed", 503);
+  }
   const { data, error: authError } = await admin.auth.admin.createUser({
     email: pending.payload.email,
     password: body.password,

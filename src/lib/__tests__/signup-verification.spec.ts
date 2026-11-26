@@ -57,7 +57,7 @@ it("prepares a password-free signup without creating Auth or restaurant records"
   expect(await res.json()).toEqual({ ok: true, pendingVerification: true });
   expect(mock.isRateLimited).toHaveBeenCalledWith("signup:ip", 5, 60);
   expect(mock.create).not.toHaveBeenCalled();
-  expect(mock.rpc).toHaveBeenCalledExactlyOnceWith("request_pending_signup_v1", {
+  expect(mock.rpc).toHaveBeenCalledExactlyOnceWith("request_pending_signup_v2", {
     p_email: payload.email, p_restaurant_name: payload.restaurantName, p_locale: "en",
     p_token_hash: expect.stringMatching(/^[a-f0-9]{64}$/),
     p_terms_version: expect.any(String), p_terms_text_hash: expect.stringMatching(/^[a-f0-9]{64}$/),

@@ -103,6 +103,17 @@ it("sends at most three per address in a day, whichever route asks", async () =>
   expect(mock.after).toHaveBeenCalledTimes(SIGNUP_MAILS_PER_DAY + 1);
 });
 
+it("counts plus-tags and Gmail dots as the same inbox, while mailing the address as typed", async () => {
+  await askSignup("o.wner+1@gmail.com");
+  expect(mock.after).toHaveBeenCalledTimes(1);
+  expect(mock.rpc.mock.lastCall?.[1].p_email).toBe("o.wner+1@gmail.com");
+  for (const spelling of ["owner+2@gmail.com", "OW.NER@googlemail.com"]) {
+    expect(await (await askSignup(spelling)).json()).toEqual({ ok: true, pendingVerification: true });
+    expect(await (await askResend(spelling)).json()).toEqual({ ok: true });
+  }
+  expect(mock.after).toHaveBeenCalledTimes(1);
+});
+
 it("does not spend the day's budget on requests the cooldown already refused", async () => {
   await askSignup();
   for (let i = 0; i < 5; i++) await askResend();
