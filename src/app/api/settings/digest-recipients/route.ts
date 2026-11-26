@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { apiError } from "@/lib/api-error";
 import { actingOwner } from "@/lib/api-guard";
+import { frozenBlocks } from "@/lib/plan-guard";
 import { jsonBody } from "@/lib/json-body";
 import { isValidEmail, normalizeEmail } from "@/lib/email";
 import { isRateLimited } from "@/lib/rate-limit";
@@ -40,6 +41,8 @@ async function sendConfirmation(req: NextRequest, restaurantId: string, email: s
 export async function POST(req: NextRequest): Promise<NextResponse> {
   const actor = await actingOwner();
   if (!actor) return await apiError("apiErr.forbidden", 403);
+  const frozen = await frozenBlocks(actor.restaurantId);
+  if (frozen) return frozen;
   const body = await jsonBody<{ email?: unknown }>(req);
   const email = normalizeEmail(String(body?.email ?? ""));
   if (!isValidEmail(email)) return await apiError("digestRecipients.badEmail", 400);
@@ -62,6 +65,8 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 export async function PATCH(req: NextRequest): Promise<NextResponse> {
   const actor = await actingOwner();
   if (!actor) return await apiError("apiErr.forbidden", 403);
+  const frozen = await frozenBlocks(actor.restaurantId);
+  if (frozen) return frozen;
   const body = await jsonBody<{ id?: unknown; action?: unknown }>(req);
   const id = canonicalUuid(body?.id);
   if (!id || body?.action !== "resend") return await apiError("apiErr.invalidRequest", 400);
@@ -79,6 +84,8 @@ export async function PATCH(req: NextRequest): Promise<NextResponse> {
 export async function DELETE(req: NextRequest): Promise<NextResponse> {
   const actor = await actingOwner();
   if (!actor) return await apiError("apiErr.forbidden", 403);
+  const frozen = await frozenBlocks(actor.restaurantId);
+  if (frozen) return frozen;
   const body = await jsonBody<{ id?: unknown }>(req);
   if (typeof body?.id !== "string") return await apiError("apiErr.invalidRequest", 400);
   try {

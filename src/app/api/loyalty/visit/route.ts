@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { apiError } from "@/lib/api-error";
 import { jsonBody } from "@/lib/json-body";
 import { actingManager } from "@/lib/api-guard";
+import { frozenBlocks } from "@/lib/plan-guard";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { logEvent } from "@/lib/activity-log";
 import { logDetail } from "@/lib/log-detail";
@@ -20,6 +21,8 @@ export const runtime = "nodejs";
 export async function DELETE(req: NextRequest) {
   const actor = await actingManager();
   if (!actor) return await apiError("apiErr.forbidden", 403);
+  const frozen = await frozenBlocks(actor.restaurantId);
+  if (frozen) return frozen;
 
   const body = await jsonBody<{ id?: unknown }>(req);
   const id = typeof body?.id === "string" ? body.id : null;

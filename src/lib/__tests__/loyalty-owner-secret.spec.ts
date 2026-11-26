@@ -13,6 +13,7 @@ const db = vi.hoisted(() => ({
 vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({ from: () => db, rpc: db.rpc }) }));
 vi.mock("@/lib/membership", async original => ({ ...await original<typeof import("@/lib/membership")>(), getMember: db.getMember }));
 vi.mock("@/lib/plan-server", () => ({ getPlan: async () => null }));
+vi.mock("@/lib/plan-guard", () => ({ frozenBlocks: async () => null, planBlocks: async () => null }));
 vi.mock("@/lib/rate-limit", () => ({ PHONES_PER_ADDRESS: 20, clientKey: () => "ip", isRateLimited: async () => false }));
 vi.mock("@/lib/table-membership", () => ({}));
 vi.mock("@/lib/loyalty/card-email-confirmation", () => ({ sendCardEmailConfirmation: db.sendConfirmation }));
