@@ -32,6 +32,7 @@ import { checkoutStockAlerts } from "@/lib/checkout/stock-alerts";
 import { checkoutHold } from "@/lib/checkout/hold";
 import { uuidOf } from "@/lib/costs/guard";
 import { readOrderIntent, writeOrderIntent } from "@/lib/order-intent";
+import { dinerOrderRefusal, insertDinerOrder, refuseDinerOrder } from "@/lib/checkout/diner-order";
 import { getLocale } from "@/lib/i18n/server";
 import { siteOrigin } from "@/lib/site-origin";
 
@@ -247,7 +248,8 @@ export async function POST(req: NextRequest) {
       return await apiError("apiErr.tableJoin", 403);
     }
     const sessionId = admission?.sessionId ?? null;
-    if (tableId && !sessionId) {
+    const member = admission?.diner ?? null;
+    if (tableId && (!sessionId || !member)) {
       await held.giveBack();
       return await apiError("apiErr.sessionGone", 409);
     }
@@ -274,10 +276,18 @@ export async function POST(req: NextRequest) {
         // and a MX$10 coupon with a MX$100 minimum on MX$100 was refused.
         threshold: Number(restaurant.low_stock_threshold) || 0,
         coupon: coupon ? couponQuote(coupon, base.subtotal) : null,
+        // A table order is saved only into its open sitting, and only while
+        // this phone may order on the bill (2026-11-26).
+        dinerMember: sessionId && member ? member : undefined,
       });
       if ("closing" in result) {
         await held.giveBack();
         return await apiError("apiErr.restaurantClosing", 409);
+      }
+      const refused = dinerOrderRefusal(result);
+      if (refused) {
+        await held.giveBack();
+        return await refuseDinerOrder(refused);
       }
       if (result.conflict) return await apiError("apiErr.retryConflict", 409);
       if (result.counterFull) {
@@ -321,29 +331,42 @@ export async function POST(req: NextRequest) {
     }
 
     // Create the pending order first so the webhook can find it.
-    const { data: order, error: oErr } = await supabase
-      .from("orders")
-      .insert({
-        stock_managed: true,
-        stock_reservation_id: stockReservationId,
-        ...(cardRetry ? { request_ref: ref, request_scope: cardScope } : {}),
-        ...checkoutOrderRow({
-          restaurantId,
-          table,
-          sessionId,
-          diner: admission?.diner ?? body.diner,
-          deferred,
-          pricing,
-          taxPct: Number(restaurant.tax_pct) || 0,
-          couponCode: coupon?.code ?? null,
-          currency: restaurant.currency,
-          verified,
-          note: body.note,
-          customerName: body.customerName,
-        }),
-      })
-      .select("id")
-      .single();
+    const row = {
+      stock_managed: true,
+      stock_reservation_id: stockReservationId,
+      ...(cardRetry ? { request_ref: ref, request_scope: cardScope } : {}),
+      ...checkoutOrderRow({
+        restaurantId,
+        table,
+        sessionId,
+        diner: admission?.diner ?? body.diner,
+        deferred,
+        pricing,
+        taxPct: Number(restaurant.tax_pct) || 0,
+        couponCode: coupon?.code ?? null,
+        currency: restaurant.currency,
+        verified,
+        note: body.note,
+        customerName: body.customerName,
+      }),
+    };
+    // A table order goes in under its sitting's lock: one closed since the
+    // admission above is refused, never written onto a settled bill.
+    let order: { id: string } | null = null;
+    let oErr: { code?: string; message: string } | null = null;
+    if (sessionId && member) {
+      const inserted = await insertDinerOrder(restaurantId, row, member, deferred);
+      if (inserted.refusal) {
+        await held.giveBack();
+        return await refuseDinerOrder(inserted.refusal);
+      }
+      order = inserted.id ? { id: inserted.id } : null;
+      oErr = inserted.error;
+    } else {
+      const counter = await supabase.from("orders").insert(row).select("id").single();
+      order = counter.data;
+      oErr = counter.error;
+    }
 
     if (oErr || !order) {
       await held.giveBack();

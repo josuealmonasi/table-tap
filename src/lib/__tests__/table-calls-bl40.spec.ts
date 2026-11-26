@@ -43,14 +43,15 @@ beforeEach(() => { state.member = null; state.qrKey = null; state.limited = []; 
 
 describe("finding 2: an abandoned waiting phone leaves the queue", () => {
   it("refreshes its own wait, purges phones unseen for the same minutes the list hides, then counts", () => {
-    const v3 = fn("request_table_member_v3");
+    // v4 (2026-11-26) keeps v3's queue rules; the route calls the newest.
+    const v3 = fn("request_table_member_v4");
     const refresh = v3.indexOf("update table_session_members set seen_at = now()");
     const purge = v3.indexOf(`coalesce(seen_at, created_at) < now() - interval '${PENDING_PHONE_MINUTES} minutes'`);
     const count = v3.indexOf(">= 5 then");
     expect(refresh).toBeGreaterThan(v3.indexOf("for update"));
     expect(purge).toBeGreaterThan(refresh);
     expect(count).toBeGreaterThan(purge);
-    expect(read("src/lib/table-membership.ts")).toContain('rpc("request_table_member_v3"');
+    expect(read("src/lib/table-membership.ts")).toContain('rpc("request_table_member_v4"');
     expect(read("src/lib/table-member-requests.ts")).toContain('.gte("seen_at", new Date(Date.now() - PENDING_PHONE_MINUTES * 60000)');
   });
 });

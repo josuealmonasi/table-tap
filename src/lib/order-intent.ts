@@ -27,8 +27,12 @@ export interface OrderIntentResult {
   counterFull?: boolean;
   couponReason?: string;
   couponChanged?: boolean;
-  /** A waiter's round whose sitting closed before it could be saved. */
+  /** A waiter's round, or a diner's order, whose sitting closed before it could be saved. */
   sittingClosed?: boolean;
+  /** A diner's pay-later order the database refused (`diner_pay_later_refusal_v1`). */
+  notMember?: boolean;
+  payLaterNeedsStaff?: boolean;
+  sittingPayLaterFull?: boolean;
   short?: StockShortfall[];
   low?: StockWarning[];
 }
@@ -61,9 +65,21 @@ export async function writeOrderIntent(intent: OrderIntent, input: {
    * sitting's lock, so a cashier closing the bill cannot slip in between.
    */
   openSitting?: boolean;
+  /**
+   * A diner's pay-later order at a table: the member who sent it. Saved only
+   * into the open sitting, and only while that member may order on the bill
+   * (2026-11-26).
+   */
+  dinerMember?: string;
 }): Promise<OrderIntentResult | { closing: true }> {
   const demand = toDemandPayload(stockDemand(input.lines));
-  const { data, error } = input.openSitting
+  const { data, error } = input.dinerMember
+    ? await createAdminClient().rpc("create_diner_order_intent_v1", {
+      p_restaurant: intent.restaurantId, p_ref: intent.ref, p_scope: intent.scope,
+      p_order: input.order, p_demand: demand, p_inventory: input.inventory, p_threshold: input.threshold,
+      p_coupon: input.coupon ?? null, p_member: input.dinerMember,
+    })
+    : input.openSitting
     ? await createAdminClient().rpc("create_table_order_intent_v2", {
       p_restaurant: intent.restaurantId, p_ref: intent.ref, p_scope: intent.scope,
       p_order: input.order, p_demand: demand, p_inventory: input.inventory, p_threshold: input.threshold,
