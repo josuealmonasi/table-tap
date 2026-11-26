@@ -1,11 +1,26 @@
 import { deadline } from "./browser-deadline.mjs";
 
+/**
+ * The least time a sample that has started is given to answer.
+ *
+ * The window decides when to stop STARTING samples, not how long a started one
+ * may take. Each sample used to get only what was left of the window, so the
+ * last one raced a timer of a few milliseconds: on the orders board — the
+ * heaviest DOM the gates open — a dialog check for «completed sale return»
+ * started with 6 ms (and once 31 ms) of a 1.5 s window left, took longer, and
+ * threw «readiness sample timed out» instead of answering "no dialog". The
+ * window was `required: false`, so that answer was the expected one and the
+ * visit failed for nothing. A page that truly hangs still fails: a sample that
+ * cannot answer in this long throws, whatever the window.
+ */
+export const SAMPLE_FLOOR = 2000;
+
 /** Node-side polling: production's CSP forbids Playwright's waitForFunction. */
 export async function observe(tab, sample, { timeout = 30000, interval = 100, required = true } = {}) {
   const until = Date.now() + timeout;
   do {
     if (tab.isClosed()) throw new Error("page closed before readiness");
-    if (await deadline(Math.max(1, until - Date.now()), sample, undefined, 5000, "readiness sample")) return true;
+    if (await deadline(Math.max(SAMPLE_FLOOR, until - Date.now()), sample, undefined, 5000, "readiness sample")) return true;
     await new Promise(resolve => setTimeout(resolve, interval));
   } while (Date.now() < until);
   if (required) throw new Error(`page state did not become ready in ${timeout}ms`);
