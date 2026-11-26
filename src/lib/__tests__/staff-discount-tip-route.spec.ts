@@ -14,7 +14,7 @@ vi.mock("@/lib/coupon-service", () => ({ findCoupon: async () => ({ id: "coupon"
 vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({
   rpc: async (name: string, args: Record<string, unknown>) => {
     f.calls.push({ name, args });
-    return { data: name === "apply_bill_discount" ? "applied" : "approved", error: null };
+    return { data: name === "apply_bill_discount_v2" ? "applied" : "approved", error: null };
   },
   from: (table: string) => {
     let columns = "*";
@@ -36,14 +36,14 @@ beforeEach(() => { f.calls = []; f.role = "manager"; f.requestAmount = 100; });
 it("N2: direct manager pricing reads tip and sends a principal-only discount", async () => {
   const res = await direct(req({ orderId: "order", code: "FREE" }));
   expect(res.status).toBe(200); expect((await res.json()).amount).toBe(100);
-  expect(f.calls[0]).toMatchObject({ name: "apply_bill_discount", args: { p_amount: 100 } });
+  expect(f.calls[0]).toMatchObject({ name: "apply_bill_discount_v2", args: { p_amount: 100 } });
 });
 it("N2: waiter requests and manager approvals agree on the principal-only amount", async () => {
   f.role = "waiter";
   expect((await direct(req({ orderId: "order", code: "FREE" }))).status).toBe(200);
   expect(f.calls[0]).toMatchObject({ name: "request", args: { amount: 100 } });
   expect((await approve(req({ requestId: "request", approve: true, reviewedAmount: 100 }))).status).toBe(200);
-  expect(f.calls[1]).toMatchObject({ name: "approve_discount_request_v2", args: { p_amount: 100 } });
+  expect(f.calls[1]).toMatchObject({ name: "approve_discount_request_v3", args: { p_amount: 100 } });
 });
 it("N2: an old request that discounted tips is refused as a changed quote", async () => {
   f.requestAmount = 120;

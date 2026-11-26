@@ -9,9 +9,9 @@ import { logEvent } from "@/lib/activity-log";
 import { logDetail } from "@/lib/log-detail";
 import { couponProblem, findCoupon, toAppliedCoupon } from "@/lib/coupon-service";
 import { applyCoupon } from "@/lib/pricing";
-import { billTotal, discountableOrders } from "@/lib/staff-discount";
+import { readDiscountableBill } from "@/lib/discount-bill";
+import { couponBase } from "@/lib/coupon-base";
 import { applyToOrders } from "@/lib/apply-bill-discount";
-import type { Order } from "@/lib/types";
 import { repeatedStaffRequest } from "@/lib/staff-request-guard";
 
 export const runtime = "nodejs";
@@ -58,21 +58,13 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   const db = createAdminClient();
 
   // Scoped to the actor's own restaurant, so an id from elsewhere finds nothing.
-  let query = db
-    .from("orders")
-    .select("id, total, tip, paid, written_off, status, coupon_code, table_id, table_label")
-    .is("account_id", null)
-    .eq("restaurant_id", actor.restaurantId);
-  query = orderId ? query.eq("id", orderId) : query.eq("table_id", tableId!);
-
-  if (body.currency) query = query.eq("currency", body.currency);
-  const { data: rows, error: readError } = await query;
+  const orders = await readDiscountableBill(db, actor.restaurantId, { tableId, orderId, currency: body.currency });
   // A failed read is not an empty bill.
-  if (readError) return await apiError("apiErr.generic", 503);
-  const orders = discountableOrders((rows ?? []) as Order[]);
+  if (!orders) return await apiError("apiErr.generic", 503);
   if (orders.length === 0) return await apiError("apiErr.nothingToDiscount", 409);
 
-  const food = billTotal(orders);
+  // Judged on the dishes, as the diner's own bill judges it (2026-11-26).
+  const food = couponBase(orders);
   // A failed lookup is not "no such code" (findCoupon throws): the code may be
   // perfectly good, so it is kept and the person is asked to try again.
   const coupon = await findCoupon(actor.restaurantId, code).catch(() => undefined);

@@ -11,7 +11,7 @@ vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({
   rpc: async (name: string, args: Record<string, unknown>) => {
     s.calls.push({ name, args });
     if (name === "finish_diner_checkout") { s.closed = true; return { data: null, error: null }; }
-    if (name === "apply_bill_discount") return { data: s.closed ? "applied" : "paying", error: null };
+    if (name === "apply_bill_discount_v2") return { data: s.closed ? "applied" : "paying", error: null };
     return { data: { outcome: s.closed ? (name === "account_charge_v2" ? "charged" : "written") : "paying", amount: 100, tip: 0, owed: 100 }, error: null };
   },
   from: (table: string) => {

@@ -75,7 +75,7 @@ it("money is allocated at once, and the close never invents a pay method", () =>
 });
 
 it("split audit #1: no discount or write-off lowers orders a live split has frozen, and settlement never raises on them", () => {
-  for (const name of ["apply_bill_discount", "approve_discount_request_v2", "write_off_orders", "approve_write_off_request_v2"]) {
+  for (const name of ["apply_bill_discount_v2", "approve_discount_request_v3", "write_off_orders", "approve_write_off_request_v2"]) {
     expect(body(name), name).toMatch(/b\.status = 'locked'\s+and b\.order_ids && /);
   }
   // A charge the frozen orders can no longer take is owed back, recorded.

@@ -71,6 +71,14 @@ describe("verifyCart — prices come from the database", () => {
     if (res.ok) expect(res.lines[0].extras?.[0].price).toBe(45);
   });
 
+  it("refuses an extra ordered as a line of its own (2026-11-26)", () => {
+    const truffle = item({ id: "truffle", name: "Truffle oil", price: 45, emoji: "🍄", is_addon: true, item_addons: [] });
+    expect(run([line({ itemId: "truffle", name: "forged" })], [item(), truffle]))
+      .toMatchObject({ ok: false, rejection: { kind: "unavailable", name: "Truffle oil" } });
+    // Still sold as an extra on a dish.
+    expect(run([line({ extras: [{ id: "truffle", name: "Truffle oil", emoji: "🍄", price: 45 }] })], [item(), truffle]).ok).toBe(true);
+  });
+
   it.each([-1, 0, 1.5, 100, 1_000_000, "2", "abc", null, true, NaN, Infinity])("L1: refuses an impossible quantity: %s", qty => {
     expect(run([line({ qty: qty as number })], [item()]))
       .toEqual({ ok: false, rejection: { kind: "invalidQuantity" } });

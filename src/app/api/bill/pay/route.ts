@@ -20,6 +20,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { getPlan } from "@/lib/plan-server";
 import { NO_FEE, feeMetadata, reserveFee } from "@/lib/platform-fee";
 import { applyCoupon } from "@/lib/pricing";
+import { couponBase } from "@/lib/coupon-base";
 import {
   couponProblem,
   couponQuote,
@@ -140,10 +141,11 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   if (couponCode && orders.some(o => Number(o.collected ?? 0) > 0)) return await apiError("apiErr.couponAlreadyUsed", 409);
   const food = round2(orders.reduce((sum, o) => sum + Number(o.total) - Number(o.collected ?? 0), 0));
   const principal = remainingPrincipal(orders);
-  // A coupon is judged on the dishes alone, as the cart and the bill screen
-  // judge it: service never counts toward a minimum (security sweep 2026-11-24).
+  // A coupon is judged on the dishes alone, as the cart, the bill screen and
+  // the floor's discount judge it: service never counts toward a minimum
+  // (security sweep 2026-11-24; one helper for all of them since 2026-11-26).
   // Coupons are refused once anything was collected, so nothing is netted here.
-  const dishes = Math.max(0, round2(principal - orders.reduce((sum, o) => sum + Number(o.service_fee ?? 0), 0)));
+  const dishes = couponBase(orders);
 
   // A coupon here discounts the share being settled, which is what lets two
   // people at one table each use their own on their own food. Two rules keep

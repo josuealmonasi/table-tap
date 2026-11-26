@@ -34,7 +34,7 @@ const rpc = async (name: string, args: Row) => {
     open.forEach(o => { o.total = coverage[o.id as string] ?? 0; o.paid = true; o.status = "completed"; });
     return { data: { outcome: "forgiven", forgiven_cents: forgiven, written_off_cents: 0, orderIds: ids, sessions: [] }, error: null };
   }
-  if (name === "apply_bill_discount") {
+  if (name === "apply_bill_discount_v2") {
     const open = (tables.orders ?? []).filter(o => ids.includes(o.id as string) && !o.account_id && !o.paid && !o.written_off);
     if (open.length !== ids.length) return { data: "changed", error: null };
     if (paid > 0) return { data: "part_paid", error: null };
@@ -115,7 +115,7 @@ describe("table adjustment routes leave account orders alone", () => {
     const { applyToOrders } = await vi.importActual<typeof import("@/lib/apply-bill-discount")>("@/lib/apply-bill-discount");
     expect(await applyToOrders([{ id: "yesterday", total: 100 }] as never, "c1", 30, "r1")).toBe("changed");
     expect(tables.orders[1].total).toBe(100);
-    const fn = readFileSync("supabase/schema.sql", "utf8").split("create or replace function public.apply_bill_discount(")[1]!.split("end; $$;")[0]!;
+    const fn = readFileSync("supabase/schema.sql", "utf8").split("create or replace function public.apply_bill_discount_v2(")[1]!.split("end; $$;")[0]!;
     expect(fn).toContain("and coupon_code is null and account_id is null");
     expect(fn).toContain("perform public.lock_restaurant_money(p_restaurant);");
     expect(fn).toContain("retained_order_coverage(p_restaurant, o.id) > 0) then return 'part_paid'");
