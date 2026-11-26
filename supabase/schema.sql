@@ -16661,6 +16661,185 @@ create or replace view daily_digests_due with (security_invoker = true) as
 revoke all on daily_digests_due from anon, authenticated, public, service_role;
 grant select on daily_digests_due to service_role;
 
+-- ── Account money bound to what was reviewed (backlog 35, findings 1 and 2) ──
+-- An in-person collection carries a reference that is never blank and the
+-- unpaid orders the cashier showed. A retry whose first try committed is the
+-- same payment; a late first try against replacement debt of the same total
+-- is refused. Deployed callers keep account_settle_currency_v1.
+create or replace function public.account_settle_reviewed_v1(
+  p_restaurant uuid,
+  p_account    uuid,
+  p_expected   numeric,
+  p_tip        numeric,
+  p_method     text,
+  p_actor      text,
+  p_ref        text,
+  p_currency   text,
+  p_reviewed_orders uuid[]
+) returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  v_account customer_accounts;
+  v_ids     uuid[];
+  v_payment uuid;
+  v_owed    numeric;
+  v_recorded_tip numeric;
+  v_tip     numeric := greatest(coalesce(p_tip, 0), 0);
+begin
+  if p_currency is null or p_currency not in ('MXN', 'USD') then raise exception 'invalid account currency'; end if;
+  if p_ref is null or btrim(p_ref) = '' then raise exception 'an account collection needs a reference'; end if;
+  if p_reviewed_orders is null or cardinality(p_reviewed_orders) = 0 then
+    raise exception 'an account collection needs the reviewed orders';
+  end if;
+  perform public.lock_restaurant_money(p_restaurant);
+  perform set_config('tabletap.allocation_writer', 'v1', true);
+  if p_restaurant is not null then perform public.backfill_payment_allocations(p_restaurant); end if;
+  perform set_config('tabletap.allocation_scope', '', true);
+  select * into v_account from customer_accounts
+   where id = p_account and restaurant_id = p_restaurant for update;
+  if v_account.id is null then return jsonb_build_object('outcome', 'missing'); end if;
+  if exists (select 1 from payments where restaurant_id = p_restaurant and client_ref = p_ref) then
+    if exists(select 1 from payments where restaurant_id = p_restaurant and client_ref = p_ref
+      and (account_id is distinct from p_account or currency is distinct from p_currency or amount <> p_expected + p_tip)) then
+      raise exception 'account collection reference differs';
+    end if;
+    return (select jsonb_build_object('outcome','duplicate','amount',amount,'tip',tip,'currency',currency)
+      from payments where restaurant_id = p_restaurant and client_ref = p_ref);
+  end if;
+  if public.unresolved_account_page_v1(p_restaurant, p_account) then
+    return jsonb_build_object('outcome', 'paying');
+  end if;
+
+  perform 1 from orders where restaurant_id = p_restaurant and currency = p_currency and account_id = p_account
+    and paid = false and written_off = false and status <> 'cancelled' order by id for update;
+  select coalesce(sum(total), 0), array_agg(id order by created_at desc)
+    into v_owed, v_ids
+    from orders where restaurant_id = p_restaurant and currency = p_currency and account_id = p_account
+      and paid = false and written_off = false and status <> 'cancelled';
+  if v_owed <= 0 then return jsonb_build_object('outcome', 'nothing'); end if;
+  if abs(v_owed - p_expected) > 0.005 then
+    return jsonb_build_object('outcome', 'changed', 'owed', v_owed);
+  end if;
+  -- The same total is not the same debt: an order paid elsewhere and a new
+  -- one of the same price would be collected on a review of the old one.
+  if cardinality(v_ids) <> cardinality(p_reviewed_orders)
+    or not (v_ids <@ p_reviewed_orders and p_reviewed_orders <@ v_ids) then
+    return jsonb_build_object('outcome', 'orders_changed', 'owed', v_owed);
+  end if;
+  v_tip := least(v_tip, v_owed);
+
+  perform set_config('tabletap.allocation_scope',to_json(v_ids)::text,true);
+  insert into payments (restaurant_id, account_id, amount, tip, method, actor_email, client_ref, account_added_tip_cents, account_tip_order_id, created_at)
+  values (p_restaurant, p_account, v_owed + v_tip,
+    v_tip + (select coalesce(sum(tip), 0) from orders where id = any(v_ids) and written_off = false), p_method, p_actor, p_ref, round(v_tip * 100),
+    case when v_tip > 0 then v_ids[1] end, clock_timestamp()) returning id, tip into v_payment, v_recorded_tip;
+  update orders set paid = true, pay_method = p_method where id = any(v_ids);
+  if v_tip > 0 then
+    update orders set tip = tip + v_tip, total = total + v_tip where id = v_ids[1];
+  end if;
+  perform public.append_account_collection_v1(v_payment);
+  perform set_config('tabletap.allocation_scope','',true);
+  return jsonb_build_object('outcome', 'paid', 'amount', v_owed + v_tip, 'tip', v_recorded_tip, 'currency', p_currency);
+end;
+$$;
+revoke all on function public.account_settle_reviewed_v1(uuid, uuid, numeric, numeric, text, text, text, text, uuid[]) from public, anon, authenticated;
+grant execute on function public.account_settle_reviewed_v1(uuid, uuid, numeric, numeric, text, text, text, text, uuid[]) to service_role;
+
+-- A ceiling is stored in the currency the manager saw when approving it. The
+-- account's debt decides that currency, or the restaurant's when it owes
+-- nothing; a screen that showed another one reviews again. Deployed callers
+-- keep account_change_v2.
+create or replace function public.account_set_limit_v1(
+  p_restaurant uuid, p_account uuid, p_limit numeric, p_currency text, p_actor text
+) returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  v_account customer_accounts;
+  v_owed numeric;
+  v_debt_currencies text[];
+  v_target text;
+begin
+  if p_currency is null or p_currency !~ '^[A-Z]{3}$' then raise exception 'a ceiling needs the currency it was approved in'; end if;
+  perform public.lock_restaurant_money(p_restaurant);
+  perform set_config('tabletap.allocation_writer', 'v1', true);
+  if p_restaurant is not null then perform public.backfill_payment_allocations(p_restaurant); end if;
+  perform set_config('tabletap.allocation_scope', '', true);
+  select * into v_account from customer_accounts
+   where id = p_account and restaurant_id = p_restaurant for update;
+  if v_account.id is null then return jsonb_build_object('outcome', 'missing'); end if;
+  if p_limit is null or p_limit <= 0 or p_limit > 1000000 then
+    return jsonb_build_object('outcome', 'invalid');
+  end if;
+  select array_agg(distinct currency) into v_debt_currencies from orders
+   where restaurant_id = p_restaurant and account_id = p_account
+     and not paid and written_off = false and status <> 'cancelled';
+  if cardinality(v_debt_currencies) > 1 then
+    return jsonb_build_object('outcome', 'mixed_currency');
+  end if;
+  v_target := coalesce(v_debt_currencies[1], (select currency from restaurants where id = p_restaurant));
+  if p_currency is distinct from v_target then
+    return jsonb_build_object('outcome', 'currency', 'currency', v_target);
+  end if;
+  v_owed := public.account_owed(p_account);
+  if p_limit < v_owed then return jsonb_build_object('outcome', 'limit', 'owed', v_owed); end if;
+  update customer_accounts set credit_limit = p_limit, credit_currency = p_currency where id = p_account;
+  return jsonb_build_object('outcome', 'changed', 'previous_limit', v_account.credit_limit,
+    'previous_currency', v_account.credit_currency);
+end;
+$$;
+revoke all on function public.account_set_limit_v1(uuid, uuid, numeric, text, text) from public, anon, authenticated;
+grant execute on function public.account_set_limit_v1(uuid, uuid, numeric, text, text) to service_role;
+
+-- A ceiling from before credit_currency, on an account never charged, has no
+-- currency anyone approved: it used to take the menu's currency of the day.
+-- It is refused until a manager sets it again (account_set_limit_v1). An
+-- account charged before keeps its last charge's currency, as v2 decides.
+create or replace function public.account_limit_unapproved_v1(p_restaurant uuid, p_account uuid)
+returns boolean language sql stable security definer set search_path = public as $$
+  select exists (
+    select 1 from customer_accounts a
+     where a.id = p_account and a.restaurant_id = p_restaurant and a.credit_currency is null
+       and not exists (select 1 from orders o where o.account_id = a.id and o.written_off = false));
+$$;
+revoke all on function public.account_limit_unapproved_v1(uuid, uuid) from public, anon, authenticated;
+grant execute on function public.account_limit_unapproved_v1(uuid, uuid) to service_role;
+
+create or replace function public.account_charge_v3(
+  p_restaurant uuid,
+  p_account    uuid,
+  p_orders     uuid[],
+  p_expected   numeric,
+  p_actor      text
+) returns jsonb language plpgsql security definer set search_path = public as $$
+begin
+  perform public.lock_restaurant_money(p_restaurant);
+  perform 1 from customer_accounts where id = p_account and restaurant_id = p_restaurant for update;
+  if public.account_limit_unapproved_v1(p_restaurant, p_account) then
+    return jsonb_build_object('outcome', 'limit_unapproved');
+  end if;
+  return public.account_charge_v2(p_restaurant, p_account, p_orders, p_expected, p_actor);
+end;
+$$;
+revoke all on function public.account_charge_v3(uuid, uuid, uuid[], numeric, text) from public, anon, authenticated;
+grant execute on function public.account_charge_v3(uuid, uuid, uuid[], numeric, text) to service_role;
+
+-- A sale rung onto an account: the same refusal before anything is inserted.
+-- A sale already rung charged the account, which stamped its currency, so a
+-- retry never reaches the refusal.
+create or replace function public.ring_pos_account_v3(
+  p_restaurant uuid, p_ref uuid, p_order jsonb, p_account uuid, p_actor text,
+  p_status text, p_demand jsonb, p_inventory boolean, p_threshold int
+) returns jsonb language plpgsql security definer set search_path = public as $$
+begin
+  perform public.lock_restaurant_money(p_restaurant);
+  perform 1 from customer_accounts where id = p_account and restaurant_id = p_restaurant for update;
+  if public.account_limit_unapproved_v1(p_restaurant, p_account) then
+    return jsonb_build_object('outcome', 'limit_unapproved');
+  end if;
+  return public.ring_pos_account_v2(p_restaurant, p_ref, p_order, p_account, p_actor,
+    p_status, p_demand, p_inventory, p_threshold);
+end;
+$$;
+revoke all on function public.ring_pos_account_v3(uuid, uuid, jsonb, uuid, text, text, jsonb, boolean, int) from public, anon, authenticated;
+grant execute on function public.ring_pos_account_v3(uuid, uuid, jsonb, uuid, text, text, jsonb, boolean, int) to service_role;
 -- ── Table calls and admission (Codex review bl40, findings 2–6) ─────────────
 -- A waiting phone holds one of the five admission slots only while it keeps
 -- asking. A copied QR could fill all five and walk away; the party then waited

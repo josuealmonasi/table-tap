@@ -9,6 +9,8 @@ interface OpenAccountDialogProps {
   open: boolean;
   onClose: () => void;
   onOpened: (id: string) => void;
+  /** The restaurant's currency: the one the ceiling is approved and stored in. */
+  currency: string;
 }
 
 /**
@@ -16,7 +18,7 @@ interface OpenAccountDialogProps {
  * most it may owe (the restaurant's risk, set by whoever opens it), and — only
  * if they want the statement by mail — an email.
  */
-export default function OpenAccountDialog({ open, onClose, onOpened }: OpenAccountDialogProps) {
+export default function OpenAccountDialog({ open, onClose, onOpened, currency }: OpenAccountDialogProps) {
   const t = useT();
   const toast = useToast();
   const [name, setName] = useState("");
@@ -33,7 +35,7 @@ export default function OpenAccountDialog({ open, onClose, onOpened }: OpenAccou
       const res = await fetch("/api/accounts", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, email: email.trim() || undefined, limit: Number(limit) }),
+        body: JSON.stringify({ name, email: email.trim() || undefined, limit: Number(limit), currency }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
@@ -62,7 +64,7 @@ export default function OpenAccountDialog({ open, onClose, onOpened }: OpenAccou
           <input className="tt-input" value={name} onChange={e => setName(e.target.value)} maxLength={80} autoFocus required />
         </label>
         <label className="tt-field">
-          <span className="tt-mod-label">{t("accounts.limit")}</span>
+          <span className="tt-mod-label">{t("accounts.limitIn", { currency })}</span>
           <input className="tt-input" inputMode="decimal" value={limit} onChange={e => setLimit(e.target.value)} required />
           <span className="tt-muted" style={{ fontSize: 12 }}>{t("accounts.limitHint")}</span>
         </label>

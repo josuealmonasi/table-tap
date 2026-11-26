@@ -8792,6 +8792,31 @@ drawer read MX$100 cash in the mail and MX$70 on the corte. Both now read
 their adjustments (logged write-offs and refunds, plus completed return
 events) from one reader, `readCorteAdjustments` in `corte-adjustments.ts`.
 Check: `signup-mail-ceiling.spec.ts`, `digest-figures.spec.ts`.
+### Account collections and ceilings bound to what was reviewed (2026-11-25)
+
+Two pairs that had to agree (backlog 35, Codex findings 1 and 2). First, an
+in-person account collection and the debt the cashier showed. `ref` was
+optional, so a MX$100 collection whose answer was lost, retried after another
+MX$100 order reached the account, recorded a second payment; and a late first
+try collected replacement debt of the same total, because only the sum was
+compared. `/api/accounts/settle` now requires a nonblank `ref` and the unpaid
+`orderIds` the screen showed (none: 409 refresh), and
+`account_settle_reviewed_v1` answers a replayed ref first, then refuses a
+different order set with the same total (`orders_changed`, 409
+`apiErr.accountOrdersChanged`) before any money is written.
+`SettleAccountDialog` keeps one ref per review and starts a new one when the
+statement's `openOrders` change. Second, a credit ceiling and the currency the
+manager saw. The limit request carried only the number, so a MX$500 review
+saved after the restaurant switched to USD stored US$500; and a legacy ceiling
+with no `credit_currency` and no charge took the menu's currency of the day on
+its first charge. Opening an account and moving a ceiling now send the currency
+the form named; `account_set_limit_v1` compares it with the account's debt
+currency (or the restaurant's when it owes nothing) under the money lock
+(`currency`, 409 `apiErr.accountLimitCurrencyChanged`), and
+`account_charge_v3`/`ring_pos_account_v3` refuse an unconfirmed legacy ceiling
+(`limit_unapproved`, 409 `apiErr.accountLimitUnapproved`) until a manager saves
+it again. Check: `backlog35-account-money.spec.ts`,
+`settle-account-review.spec.tsx`, the api gate's account cases.
 ### A waiter's round, an expired card page and a stale station "done" (2026-11-25)
 
 ### Table admission and waiter calls (2026-11-25)

@@ -11,7 +11,7 @@ import { cleanEmail, cleanLimit, cleanName, newCode } from "@/lib/accounts";
 import { accountByCode, accountById, listAccounts, statementOf } from "@/lib/accounts-server";
 import { logAccountLinkViewed } from "@/lib/staff-removal";
 import { formatMoney } from "@/lib/format";
-import { currencyOf } from "@/lib/account-charge";
+import { isDinerCurrency } from "@/lib/diner-currency";
 
 export const runtime = "nodejs";
 
@@ -68,7 +68,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   const blocked = await planBlocks(actor.restaurantId, "openAccounts");
   if (blocked) return blocked;
 
-  const body = await jsonBody<{ name?: unknown; email?: unknown; limit?: unknown }>(req);
+  const body = await jsonBody<{ name?: unknown; email?: unknown; limit?: unknown; currency?: unknown }>(req);
   if (!body) return await apiError("apiErr.invalidRequest", 400);
   const name = cleanName(body.name);
   if (!name) return await apiError("apiErr.accountName", 400);
@@ -76,6 +76,11 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   if (email === "bad") return await apiError("apiErr.email", 400);
   const limit = cleanLimit(body.limit);
   if (limit === null) return await apiError("apiErr.accountLimitAmount", 400);
+  // The ceiling is approved in the currency the form showed, and stored in it:
+  // left to the database it took the restaurant's currency at the moment the
+  // row was written (backlog 35, finding 2). A screen from before sends none.
+  if (body.currency === undefined) return await apiError("apiErr.refreshToApproveLimit", 409);
+  if (!isDinerCurrency(body.currency)) return await apiError("apiErr.invalidRequest", 400);
 
   const db = createAdminClient();
   // Sixty random bits collide essentially never, but a unique index answers
@@ -89,6 +94,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         email,
         code: newCode(),
         credit_limit: limit,
+        credit_currency: body.currency,
         opened_by: actor.email,
       })
       .select("id")
@@ -99,7 +105,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         actor: actor.email,
         entity: "account",
         action: "created",
-        detail: logDetail({ name, limit: limit.toFixed(2) }),
+        detail: logDetail({ name, limit: limit.toFixed(2), currency: body.currency }),
       });
       return NextResponse.json({ ok: true, id: data.id });
     }
@@ -110,14 +116,15 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
 /**
  * PATCH — one change to one account:
- *   { id, action: "limit", limit }  a new ceiling (managers and owners)
+ *   { id, action: "limit", limit, currency }  a new ceiling, in the currency
+ *                                   the manager saw (managers and owners)
  *   { id, action: "code" }          a new code, when the old QR went astray
  *   { id, action: "close" }         only once it owes nothing
  */
 export async function PATCH(req: NextRequest): Promise<NextResponse> {
   const actor = await actingFrontOfHouse();
   if (!actor) return await apiError("apiErr.forbidden", 403);
-  const body = await jsonBody<{ id?: unknown; action?: unknown; limit?: unknown }>(req);
+  const body = await jsonBody<{ id?: unknown; action?: unknown; limit?: unknown; currency?: unknown }>(req);
   if (!body || typeof body.id !== "string") return await apiError("apiErr.invalidRequest", 400);
   const account = await accountById(actor.restaurantId, body.id);
   if (!account) return await apiError("apiErr.notFound", 404);
@@ -128,24 +135,32 @@ export async function PATCH(req: NextRequest): Promise<NextResponse> {
     if (!MANAGES(actor.role)) return await apiError("apiErr.forbidden", 403);
     const limit = cleanLimit(body.limit);
     if (limit === null) return await apiError("apiErr.accountLimitAmount", 400);
+    // The amount alone let a MX$500 review become a US$500 ceiling when the
+    // restaurant switched before the save (backlog 35, finding 2).
+    if (body.currency === undefined) return await apiError("apiErr.refreshToApproveLimit", 409);
+    if (!isDinerCurrency(body.currency)) return await apiError("apiErr.invalidRequest", 400);
     // Below what is already owed the account could never be charged again,
     // and would read as though it were over its limit through nobody's doing.
     // Checked under the account's lock, so a charge cannot land in between.
-    const { data, error } = await db.rpc("account_change_v2", {
+    const { data, error } = await db.rpc("account_set_limit_v1", {
       p_restaurant: actor.restaurantId, p_account: account.id,
-      p_action: "limit", p_limit: limit, p_actor: actor.email,
+      p_limit: limit, p_currency: body.currency, p_actor: actor.email,
     });
     if (error || !data) return await apiError("apiErr.generic", 500);
     if (data.outcome === "missing") return await apiError("apiErr.notFound", 404);
+    if (data.outcome === "currency") {
+      return await apiError("apiErr.accountLimitCurrencyChanged", 409, { currency: String(data.currency) });
+    }
+    if (data.outcome === "mixed_currency") return await apiError("apiErr.accountLimitMixed", 409);
     if (data.outcome === "limit") {
       return await apiError("apiErr.accountLimitBelowOwed", 409, {
-        owed: formatMoney(Number(data.owed), await currencyOf(actor.restaurantId)),
+        owed: formatMoney(Number(data.owed), body.currency),
       });
     }
     if (data.outcome !== "changed") return await apiError("apiErr.generic", 500);
     await logEvent({
       restaurantId: actor.restaurantId, actor: actor.email, entity: "account", action: "updated",
-      detail: logDetail({ name: account.name, from: Number(data.previous_limit).toFixed(2), to: limit.toFixed(2) }),
+      detail: logDetail({ name: account.name, from: Number(data.previous_limit).toFixed(2), to: limit.toFixed(2), currency: body.currency }),
     });
     return NextResponse.json({ ok: true });
   }
