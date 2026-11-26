@@ -16714,6 +16714,33 @@ end; $$;
 revoke all on function public.add_digest_recipient_v1(uuid, text, text, text, text) from public, anon, authenticated;
 grant execute on function public.add_digest_recipient_v1(uuid, text, text, text, text) to service_role;
 
+-- admin_transfer_ownership plus the restaurant's extra digest addresses. Those
+-- were added and confirmed by the former owner, so after a transfer they kept
+-- receiving the new owner's daily sales; the new owner re-adds and re-confirms
+-- whoever should. Same row lock, same answers; v1 stays for deployed callers.
+create or replace function public.admin_transfer_ownership_v2(p_restaurant uuid, p_new_owner uuid)
+returns text language plpgsql security definer set search_path = public as $$
+declare v_old uuid; v_email text; v_member uuid;
+begin
+  select owner_id into v_old from restaurants where id = p_restaurant for update;
+  if not found then return 'not_found'; end if;
+  if v_old = p_new_owner then return 'already_owner'; end if;
+  if v_old is not null and exists (select 1 from restaurants where owner_id = v_old and id <> p_restaurant) then
+    return 'owns_another';
+  end if;
+  delete from staff where restaurant_id = p_restaurant and user_id = p_new_owner returning user_id into v_member;
+  if v_member is null then return 'not_on_team'; end if;
+  if v_old is not null then
+    select email into v_email from auth.users where id = v_old;
+    insert into staff (restaurant_id, user_id, email, role) values (p_restaurant, v_old, coalesce(v_email, ''), 'manager');
+  end if;
+  update restaurants set owner_id = p_new_owner where id = p_restaurant;
+  delete from digest_recipients where restaurant_id = p_restaurant;
+  return 'transferred';
+end; $$;
+revoke all on function public.admin_transfer_ownership_v2(uuid, uuid) from public, anon, authenticated;
+grant execute on function public.admin_transfer_ownership_v2(uuid, uuid) to service_role;
+
 -- An address nobody confirmed within seven days is deleted (the privacy notice
 -- promises it).
 select cron.schedule('tabletap-expire-digest-recipients', '17 * * * *',

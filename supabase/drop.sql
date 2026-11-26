@@ -81,6 +81,7 @@ drop function if exists public.delete_dietary_tag_v1(uuid, uuid);
 drop function if exists public.check_item_addon_restaurant() cascade;
 drop function if exists public.keep_platform_admin_audit();
 drop function if exists public.one_trial_per_rfc() cascade;
+drop function if exists public.admin_transfer_ownership_v2(uuid, uuid);
 drop function if exists public.admin_transfer_ownership(uuid, uuid);
 drop function if exists public.guard_order_during_restaurant_closure() cascade;
 drop function if exists public.admin_cleanup_restaurant_logins_v1(uuid, uuid);
