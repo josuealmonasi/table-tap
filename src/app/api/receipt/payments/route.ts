@@ -33,7 +33,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     if (slotError || !slots) return await apiError("apiErr.ordersLoad", 503);
     const paymentIds = [...new Set(slots.map(s => s.payment_id).filter(Boolean))];
     const { data: ledger, error: paymentError } = paymentIds.length
-      ? await db.from("payments").select("id, stripe_payment_intent")
+      ? await db.from("payments").select("id, order_id, stripe_payment_intent")
         .eq("restaurant_id", restaurantId).eq("session_id", sessionId).in("id", paymentIds)
       : { data: [], error: null };
     if (paymentError || !ledger) return await apiError("apiErr.ordersLoad", 503);
@@ -49,8 +49,26 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
       receipt.slots.push(slot.share_no);
     }
     // A completed split still owns its order receipts, but not the next round.
-    const splitOrderIds = [...new Set(splits.filter(s => s.status !== "cancelled"
-      || paidSplits.has(s.id)).flatMap(s => s.order_ids ?? []))];
+    const covered = [...new Set(splits.filter(s => s.status !== "cancelled"
+      || paidSplits.has(s.id)).flatMap(s => (s.order_ids ?? []) as string[]))];
+    // An order id is the public tracker's whole credential, so name only the
+    // orders this phone could already read: the ones it placed, and the ones
+    // its own payments were recorded against. Never the rest of the party's.
+    const paidByMe = ledger.filter(p => owners.get(p.stripe_payment_intent)?.payer_member_id === member.id)
+      .map(p => p.order_id).filter(Boolean);
+    const placed = await ordersPlacedBy(db, restaurantId, sessionId, member.id, covered);
+    if (!placed) return await apiError("apiErr.ordersLoad", 503);
+    const readable = new Set([...placed, ...paidByMe]);
+    const splitOrderIds = covered.filter(id => readable.has(id));
     return NextResponse.json({ split: splits.some(s => ["proposed", "locked"].includes(s.status)), splitOrderIds, payments });
   } catch { return await apiError("apiErr.ordersLoad", 503); }
+}
+
+async function ordersPlacedBy(
+  db: ReturnType<typeof createAdminClient>, restaurantId: string, sessionId: string, memberId: string, ids: string[],
+): Promise<string[] | null> {
+  if (!ids.length) return [];
+  const { data, error } = await db.from("orders").select("id")
+    .eq("restaurant_id", restaurantId).eq("session_id", sessionId).eq("diner", memberId).in("id", ids);
+  return error || !data ? null : data.map(o => o.id as string);
 }

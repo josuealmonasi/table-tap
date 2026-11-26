@@ -29,25 +29,34 @@ export function orderBoardCases(fx) {
     // and a station with nothing in the order cannot either.
     { name: "POST /api/orders/station (the bar finishes its part)", as: "kitchen", method: "POST",
       path: "/api/orders/station",
-      body: async f => ({ id: await kitchenTicketId(f, f.stationOrder), station: "bar" }), expect: [200],
+      body: async f => ({ id: await kitchenTicketId(f, f.stationOrder), station: "bar", revision: 0 }), expect: [200],
       check: async (d, f) => {
         const { data } = await f.admin.from("orders").select("status, stations_ready").eq("id", f.stationOrder).single();
         if (d.status !== "preparing") return `answered ${d.status}, not preparing`;
         return data?.status === "preparing" && JSON.stringify(data.stations_ready) === '["bar"]' || `stored ${JSON.stringify(data)}`;
       } },
+    // A "done" from before the ticket was sent back names an older cycle than
+    // the order is on, and must not count (bl33 #3).
+    { name: "POST /api/orders/station (a done from another preparation cycle)", as: "kitchen", method: "POST",
+      path: "/api/orders/station", body: async f => ({ id: await kitchenTicketId(f, f.stationOrder), station: "kitchen", revision: 7 }),
+      expect: [409], expectError: /se regresó|sent back/i,
+      effect: async f => {
+        const { data } = await f.admin.from("orders").select("status, stations_ready").eq("id", f.stationOrder).single();
+        return data?.status === "preparing" && JSON.stringify(data.stations_ready) === '["bar"]' || `stored ${JSON.stringify(data)}`;
+      } },
     { name: "POST /api/orders/station (a waiter cannot press it)", as: "waiter", method: "POST",
-      path: "/api/orders/station", body: f => ({ id: f.stationOrder, station: "kitchen" }), expect: [403] },
+      path: "/api/orders/station", body: f => ({ id: f.stationOrder, station: "kitchen", revision: 0 }), expect: [403] },
     { name: "POST /api/orders/station (a station with nothing here)", as: "kitchen", method: "POST",
-      path: "/api/orders/station", body: async f => ({ id: await kitchenTicketId(f, f.kitchenOnlyOrder), station: "bar" }), expect: [409],
+      path: "/api/orders/station", body: async f => ({ id: await kitchenTicketId(f, f.kitchenOnlyOrder), station: "bar", revision: 0 }), expect: [409],
       expectError: /nada que preparar|nothing to make/i },
     { name: "POST /api/orders/station (the kitchen finishes: the order is ready)", as: "kitchen", method: "POST",
-      path: "/api/orders/station", body: async f => ({ id: await kitchenTicketId(f, f.stationOrder), station: "kitchen" }), expect: [200],
+      path: "/api/orders/station", body: async f => ({ id: await kitchenTicketId(f, f.stationOrder), station: "kitchen", revision: 0 }), expect: [200],
       check: async (d, f) => {
         const { data } = await f.admin.from("orders").select("status").eq("id", f.stationOrder).single();
         return d.status === "ready" && data?.status === "ready" || `answered ${d.status}, stored ${data?.status}`;
       } },
     { name: "POST /api/orders/station (an order already ready)", as: "kitchen", method: "POST",
-      path: "/api/orders/station", body: async f => ({ id: await kitchenTicketId(f, f.stationOrder), station: "bar" }), expect: [409],
+      path: "/api/orders/station", body: async f => ({ id: await kitchenTicketId(f, f.stationOrder), station: "bar", revision: 0 }), expect: [409],
       expectError: /ya avanzó|already moved on/i },
     { name: "PATCH /api/orders (move)", as: "kitchen", method: "PATCH", path: "/api/orders",
       body: async f => ({ id: await kitchenTicketId(f, unpaidOrder), status: "preparing" }), expect: [200] },

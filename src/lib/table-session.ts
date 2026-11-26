@@ -101,7 +101,7 @@ export async function closeSessionIfClear(
 ): Promise<void> {
   if (!sessionId) return;
   const db = createAdminClient();
-  await db.rpc("close_session_if_clear", { p_session: sessionId, p_reason: reason });
+  await db.rpc("close_session_if_clear_v2", { p_session: sessionId, p_reason: reason });
 
   // If that closed it, nothing is owed on this sitting any more — so a
   // division of it is over too, however it was going. Left locked, the shares

@@ -16,10 +16,7 @@ export interface CancelWording {
   done: string;
 }
 
-export function cancelWording(s: CancelSummary, money: (n: number) => string, t: Translate): CancelWording {
-  if (s.pending) {
-    return { message: t("orders.refundPendingMessage"), confirmKey: "orders.cancelOrder", done: t("orders.refundPendingDone") };
-  }
+export function cancelWording(s: CancelSummary, money: (n: number, currency?: string) => string, t: Translate): CancelWording {
   if (!s.paid) {
     return { message: t("orders.unpaidCancelMsg"), confirmKey: "orders.cancelOrder", done: t("orders.cancelledToast") };
   }
@@ -29,6 +26,13 @@ export function cancelWording(s: CancelSummary, money: (n: number) => string, t:
   if (s.cash > 0) sentences.push(t("orders.cashCancelMsg", { amount: money(s.cash) }));
   if (s.terminal > 0) sentences.push(t("orders.terminalCancelMsg", { amount: money(s.terminal) }));
   if (s.withTable > 0) sentences.push(t("orders.withTableCancelMsg", { amount: money(s.withTable) }));
+
+  for (const review of s.review ?? []) {
+    sentences.push(t("orders.reviewCancelMsg", { amount: money(review.amount, review.currency) }));
+  }
+  if (s.pending || s.review?.length) {
+    return { message: sentences.join(" ") || t("orders.refundPendingMessage"), confirmKey: "orders.cancelOrder", done: t("orders.refundPendingDone") };
+  }
 
   const byHand = s.cash + s.terminal + s.withTable;
   const onlyCash = s.cash > 0 && s.cash === byHand && s.refund === 0;

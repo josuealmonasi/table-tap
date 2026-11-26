@@ -8694,6 +8694,25 @@ to 2 L turned two packs for MX$100 into 4 L at MX$25/L. `record_purchase_v2` and
 `apiErr.purchasePackChanged`, which now asks to reload), after answering a retry
 already saved. Check: `terminal-waste-pack-races.spec.ts`.
 
+### Promotions price the same on the till and the phone (2026-11-25)
+
+Three pairs that had to agree. First, the order the deals arrive in and the
+deal a product gets: the loader sorted by `sort_order` only and `priceCart`
+took the first deal covering a product, even one that saved nothing, so two
+MX$100 dishes under a tied 2x1 and 3x2 cost MX$100 on one screen and MX$200 on
+another. `fetchPromotions` now orders by `sort_order` then `id`, and
+`bestPromoFor` gives each product the deal that saves the most for the cart
+(ties by that order); the phone, the till, the waiter's order, checkout and
+offline pricing all reach it through `priceCart`. Second, the dish screen's
+quote and the cart: with a plain MX$10 dish in the cart under 2x1, a second
+with a MX$5 extra was quoted MX$0 while the cart went up by MX$5. The quote is
+now `quoteItemLine` (`src/lib/item-quote.ts`), the cart priced by `priceCart`
+before and after the line, and the till and waiter screens get the same quote
+and deal callout. Third, the quantity charged and the quantity discounted: the
+charge read the 99-unit cap and the deal maths the raw quantity, so a 100-unit
+line was charged MX$990 and discounted MX$1,000; every step now reads one
+capped `lineQty`. Check: `promo-selection.spec.ts`, `item-quote.spec.ts`,
+`deal-callout.spec.tsx`.
 ### Daily digest eligibility, retries and stop links (2026-11-25)
 
 A removed manager or stopped outside address could remain in a queued batch.
@@ -8801,3 +8820,159 @@ binds and expires through the webhook, or a refusal, which closes it), and
 `resolveCheckoutPages` does the same replay for unbound pages under 23 hours.
 Checks: `checkout-attempt-refusal.spec.ts`, `diner-checkout.spec.ts`,
 `platform-fee.spec.ts`.
+### A waiter's round, an expired card page and a stale station "done" (2026-11-25)
+
+### Table admission and waiter calls (2026-11-25)
+
+Codex review bl40, findings 2–6, each two places that had to agree. The
+admission queue and the phones in it: five pending slots and no expiry, so a
+copied QR could hold them all for the sitting. A waiting phone now refreshes
+`table_session_members.seen_at` on each poll, and `request_table_member_v3`
+purges one unseen for ten minutes before counting; `pendingPhones` hides it by
+the same `PENDING_PHONE_MINUTES`. One row per cookie per sitting was already
+the table's unique key. The printed QR and the table it names: a renamed table
+kept answering an old sticker's waiter call. Tables now carry `qr_key`, put in
+the dashboard's QR as `?k=`, rotated by a trigger on rename or move, and
+required for a waiter call from a phone not let in (`apiErr.tableQrStale`);
+tables made before the key have none and keep working until renamed. The
+duplicate check and the insert: two taps at once both read "no open call".
+`raise_service_request_v1` does both under the table's lock. The rate limiter
+and the database: an upper-case spelling of a table id opened a second
+counter; the route validates and lower-cases the UUID first, and `tableKey`
+lower-cases too. The sitting and its calls: `ownBillAccess` read a sitting past
+eight hours without `closed_at` as live, and dedupe matched only table and
+kind, so the last party's open call swallowed the next one's. Calls now need
+live membership (`tableMember`), record `service_requests.session_id`, and
+dedupe within that sitting. Checks: `table-calls-bl40.spec.ts`,
+`service-request-expiry.spec.ts`, `dine-in-entitlement.spec.ts`,
+`rate-limit-table.spec.ts`, `scan-target` tests, and the api gate's stale-key
+case.
+### Cancellation, menu imports and account statements (2026-11-25)
+
+The cancel dialog previewed a legacy MX$350 Stripe charge with no verified
+provider account as a Stripe refund, while `prepare_order_refund` recorded it
+for review and sent nothing. `cancelSummary` now classifies coverage exactly
+like the writer (currency, allocation quality, provider account) and the
+dialog shows the amount needing review (`orders.reviewCancelMsg`). Check:
+`cancel-plan.spec.ts`, `cancel-read.spec.tsx`, `cancel-wording.spec.ts`.
+
+A kitchen reprint of a cancelled order re-armed its job and answered
+`queued: true`; the printer then skipped it. `rearm_kitchen_print_v1` takes the
+order row lock that cancellation takes, refuses a cancelled order and the
+route answers `queued: false` (`orders.kitchenCopyNotQueued`). Check:
+`cloudprnt-delivery.spec.ts`, `kitchen-print.spec.ts`, `return-reprint.spec.tsx`,
+`allocation-review.spec.ts`.
+
+Cancelling the order that took the last portion restored stock, but the
+public menu stayed cached for up to 30 seconds. The cancel route now
+invalidates the restaurant's public menu tag after the writer commits. Check:
+`cancel-race.spec.tsx`.
+
+Replacing or removing a dish photo deleted the stored object at once, which
+broke a duplicated dish sharing the URL, and the saved dish too when the form
+was cancelled. `DishPhotoField` only changes the form's URL now; orphans are
+acceptable. Check: `import-photo.react-component.spec.tsx`.
+
+The CSV import passed category and emoji cells of any size to the database.
+The planner and `importRows` now cap them at 60 and 16 characters
+(`importFieldsTooLong`). The dialog refuses files over 2 MB before
+`file.text()` and `parseCsv` stops at the first record past 1,000 products.
+Check: `menu-import.spec.ts`, `s23b-writes.spec.ts`,
+`import-photo.react-component.spec.tsx`.
+
+An account statement read unpaid orders and payment history in two queries,
+so a settlement between them showed MX$100 as both owed and paid.
+`account_statement_v1` returns both from one SQL statement, so one snapshot.
+Check: `accounts-server.spec.tsx`, `invariants/account-debt.spec.ts`.
+Three pairs that had to agree (Codex review bl33, findings 1-3). First, the
+sitting a waiter's round joins and the cashier closing it: the route opened the
+sitting, then inserted the order in a second call, so a sitting closed in
+between took an MX$120 round to the kitchen under a closed bill, and a failed
+open saved the round with no sitting at all. The round is now inserted by
+`create_table_order_v2` / `create_table_order_intent_v2`, which hold the sitting
+row FOR SHARE and refuse a closed one, and `close_session_if_clear_v2` holds it
+FOR UPDATE before counting what is owed (the old name delegates to it). A null
+sitting answers 503 `apiErr.tableBillUnavailable`, a closed one 409
+`apiErr.tableBillClosed`; both put the stock back. Second, a cancellation and
+the card page that blocks it: an unpaid table order on a whole-bill page Stripe
+had already expired answered `changed`, and `checkoutPageRpc` only asks Stripe on
+`paying`, so the manager could never cancel. `prepare_order_refund_v2` answers
+`paying` for that page under the order lock, so the wrapper verifies the page
+closed and retries. Third, a kitchen rewind and a station's delayed "done": a
+completion sent before a two-station ticket was sent back counted toward the
+new cycle, and one fresh completion then called the order ready. A backward
+move now bumps `orders.prep_revision` (trigger `orders_bump_prep_revision`,
+copied to `kitchen_tickets`), the board sends the revision it rendered, and
+`mark_station_ready_v2` refuses another under the order lock (409
+`apiErr.stationStale`). Check: `open-sitting.spec.ts`, `cancel-race.spec.tsx`,
+`kitchen-station.spec.ts`.
+
+### Cash shifts: collecting shift, offline prices and retries (2026-11-25)
+
+Four pairs that had to agree (bl39 review, findings 2, 3, 5 and 6). First, the
+shift that collected a cash sale and the shift that counted it: a sale taken
+at 11:59 and posted after a noon close was dated after the close, so the
+first shift read MX$80 over and the next MX$80 short. The till route now reads
+the open shift as the sale arrives (`collectingShiftId`) and
+`ring_pos_sale_v3` binds the receipt to it (`payments.cash_shift_id`, set
+once). `cash_shift_totals`, `cash_shifts_for_day` and the money gate count a
+bound receipt in its own shift whatever its time; one posted after that shift
+closed shows on it as cash that arrived after the count, for the manager to
+review there, never in the next shift. `recorded_at` keeps the posting time.
+Offline receipts are still placed by their device time. Second, the price an
+offline receipt was compared with and the price it was posted at: a manager's
+change between the two posted the old price with zero drift.
+`record_offline_sale_v2` re-reads `offline_pricing_revision_v1` under the
+money lock and answers `pricing_changed`, and the receipt is queued for Held
+sales; a manager's approval still posts the collected price. Third, an opening
+and its retry: the dialog keeps one reference until a definite answer, and
+`open_cash_shift_v2` returns the shift that reference opened, closed or not,
+instead of a second shift with the same float. Fourth, a close and its retry:
+the route checked queued cash before the RPC, so cash queued after a
+successful close hid it; the RPC now answers the saved close first and checks
+the queue itself. Check: `cash-shift-binding.spec.ts`,
+`offline-exceptions.spec.ts`, `cash-shift-open.spec.ts`,
+`shift-held-cash.spec.ts`.
+### Stripe refund race, early refund fee, early dispute (2026-11-25)
+
+Three pairs that had to agree with nothing checking (bl43 review, findings 1,
+4 and 5). First, the charge TableTap read and the charge it refunded: a
+MX$100 duplicate-payment due on a MX$200 charge, MX$40 returned by hand in
+Stripe after TableTap listed the refunds, and Stripe still accepted MX$100 —
+MX$140 back to the diner. Each attempt now freezes the charge's live refund
+ids (`start_refund_due_attempt_v3`), and `guardRefundSend` lists the charge
+again right before every POST, replacements included. A new refund that is
+pending holds the send; one that succeeded is counted by
+`reconcile_refund_due_send_v1`, which retires the unsent attempt and opens a
+new one, with its own idempotency key, for only what is still owed. Owed with
+nothing refundable left writes `refund_due_reviews` and leaves the due open,
+so an owed refund is never silently dropped. Second and third, Stripe's
+event order and our books: a refund or a dispute that beat its checkout's
+completion webhook matched no sale, so the fee return was never queued and
+the dispute stayed in review, out of the restaurant's totals. Unmatched
+refunds are kept in `unmatched_refund_notices`, and one hook in verified
+settlement (`adoptSettledIntent` → `adopt_settled_intent_v1`) queues their
+fee reconciliation and sends the intent's review disputes back to the
+worker. Checks: `refund-due-race.spec.ts`, `refund-due-resume.spec.ts`,
+`settled-intent.spec.ts`, `fee-queue-scope.spec.ts`.
+### Diner data a copied link or code could reach (2026-11-25)
+
+Three places where a bearer value was read as more authority than it carried
+(Codex bl40 review, findings 1, 7 and 8). First, `/api/receipt/payments`
+named every order on a completed split in `splitOrderIds`, and the public
+tracker treats an order id as its whole credential, so a former guest who paid
+one part could read the other diners' lines and notes after the sitting
+closed. It now names only orders this phone placed (`orders.diner`) or its own
+payments were recorded against; the receipt offer only ever compared the list
+with the phone's own orders. Second, `/api/rewards` returned the card's masked
+email to anyone holding the printed code, and its PATCH let that holder advance
+`saved_at`, clearing the owner's "save it again" prompt while their image was
+stale. The address now goes only to the phone with the owner cookie, and PATCH
+records the save only for it (others get `{ ok: true, saved: false }`); a
+code-only holder still sees the card. Third, deleting a table cleared
+`orders.table_id` and, through its sittings, `session_id`, so
+`memberRatingOrders` treated the paid order as a counter order and any copied
+order link could overwrite its ratings. The `table_label` copied onto the
+order at insert is never cleared, and now keeps it on the dine-in path, where
+with no sitting left it is refused. Check: `slot-receipt-payments-route.spec.ts`,
+`loyalty-owner-secret.spec.ts`, `rating-membership.spec.ts`.

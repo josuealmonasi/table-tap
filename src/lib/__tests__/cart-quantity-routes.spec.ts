@@ -26,7 +26,7 @@ vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({ rpc: writes
     : table === "restaurant_tables" ? { id: "00000000-0000-4000-8000-000000000001", label: "1" }
       : table === "menu_items" ? [{ id: "dish", name: "Dish", price: 20, available: true, modifiers: [] }] : null;
   const query = {
-    select: () => query, eq: () => query, in: () => query, lt: () => query, insert: writes, update: writes,
+    select: () => query, eq: () => query, in: () => query, lt: () => query, is: () => query, insert: writes, update: writes,
     single: async () => ({ data, error: null }), maybeSingle: async () => ({ data, error: null }),
     then: (resolve: (value: unknown) => unknown) => Promise.resolve({ data, error: null }).then(resolve),
   };

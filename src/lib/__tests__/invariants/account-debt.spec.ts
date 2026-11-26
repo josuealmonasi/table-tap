@@ -3,7 +3,7 @@ import ts from "typescript";
 import { read, walk, schema } from "./helpers";
 
 /** Discover database chains, rather than maintain a list that a new reader can
- * escape. Statement history is deliberately a separate non-debt query. */
+ * escape. The statement reads debt and payment history together in SQL. */
 function debtQueries(source: string): string[] {
   const ast = ts.createSourceFile("reader.ts", source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
   const queries: string[] = [];
@@ -33,7 +33,7 @@ const validSql = (q: string): boolean => /(?:written_off\s*=\s*false|not written
 
 it("every unpaid account debt query reads reduced total and excludes written-off orders", () => {
   const found = walk("src").flatMap(file => debtQueries(read(file)).map(q => ({ file, q })));
-  expect(found.length).toBeGreaterThanOrEqual(3);
+  expect(found.length).toBeGreaterThanOrEqual(2);
   expect(found.filter(({ q }) => !validQuery(q)).map(({ file }) => file)).toEqual([]);
   const sql = sqlDebtQueries(schema);
   expect(sql.length).toBeGreaterThanOrEqual(6);
@@ -61,4 +61,15 @@ it("collection and online payment still compare expected amounts inside the lock
     expect(body).toContain("written_off = false");
     expect(body).toContain("sum(total)");
   }
+});
+
+it("returns scoped debt and recent payments from one stable, server-only statement RPC", () => {
+  const reader = schema.split("create or replace function public.account_statement_v1(")[1].split("$$;")[0];
+  expect(reader).toContain("language sql stable security invoker");
+  expect(reader).toMatch(/select id, items, total,[^;]+from public.orders/);
+  expect(reader).toContain("and not paid and not written_off and status <> 'cancelled'");
+  expect(reader).toContain("from public.payments");
+  expect(reader.match(/where restaurant_id = p_restaurant and account_id = p_account/g)).toHaveLength(2);
+  expect(reader.match(/limit \d+/g)).toEqual(["limit 20"]);
+  expect(schema).toContain("revoke all on function public.account_statement_v1(uuid, uuid) from public, anon, authenticated;");
 });

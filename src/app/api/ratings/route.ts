@@ -53,7 +53,7 @@ export async function POST(req: NextRequest) {
   // restaurant or an abandoned checkout entitles nobody to anything.
   const { data: orders, error } = await supabase
     .from("orders")
-    .select("id, items, table_id, session_id, diner")
+    .select("id, items, table_id, table_label, session_id, diner")
     .in("id", orderIds)
     .eq("restaurant_id", restaurantId)
     .eq("paid", true);

@@ -117,7 +117,8 @@ export default function OrdersBoard({
       const res = await fetch("/api/orders/station", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id, station: done }),
+        // The cycle this screen showed: a "done" from before a rewind is refused.
+        body: JSON.stringify({ id, station: done, revision: byId.get(id)?.prep_revision ?? 0 }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
@@ -144,7 +145,7 @@ export default function OrdersBoard({
         toast(plan, "error");
         return;
       }
-      const words = cancelWording(plan, n => formatMoney(n, order.currency ?? restaurant.currency), t);
+      const words = cancelWording(plan, (n, currency) => formatMoney(n, currency ?? order.currency ?? restaurant.currency), t);
       const ok = await confirm({
         title: t("orders.cancelConfirm", { code: boardOrderCode(order) }),
         message: words.message,

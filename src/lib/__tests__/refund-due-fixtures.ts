@@ -28,13 +28,14 @@ interface FeeReturn {
 }
 interface Attempt {
   id: string; attempt_no: number; idempotency_key: string; amount: number;
-  provider_status?: string; stripe_refund_id?: string | null;
+  provider_status?: string; stripe_refund_id?: string | null; charge_refund_ids?: string[];
 }
 interface QueueRow { restaurant_id: string; stripe_payment_intent: string; generation: number }
 const ledgers = new WeakMap<Row[], ReturnType<typeof newLedger>>();
 function newLedger() {
   return { attempts: new Map<string, Attempt>(), revisions: new Map<string, number>(), returns: [] as FeeReturn[],
     queue: [] as QueueRow[], failures: new Set<string>(), returned: new Map<string, number>(),
+    reconciles: [] as Record<string, unknown>[], reviews: new Map<string, number>(),
     coverage: new Map<string, Map<string, { amount_cents: number; active: boolean }>>() };
 }
 /** Database state survives a new client, but stays isolated from other tests. */
@@ -166,6 +167,48 @@ export function fakeDb(rows: Row[], stripeAccount: string | null = "acct_1") {
           state.attempts.set(row.id, attempt);
         }
         return result({ ...attempt, stripe_account_id: row.stripe_account_id, stripe_payment_intent: row.stripe_payment_intent });
+      }
+      if (name === "start_refund_due_attempt_v3") {
+        // As v2, and the attempt freezes the charge's live refunds (bl43 finding 1).
+        // Only an attempt this call opened is stamped; a resumed one keeps null.
+        if (!Array.isArray(args.p_refund_ids)) throw new Error("charge refunds required");
+        const before = attempt;
+        const started: { data: unknown; error: null } = await db.rpc("start_refund_due_attempt_v2", args);
+        const opened = state.attempts.get(row.id);
+        if (!started.data || "outcome" in (started.data as object) || !opened) return started;
+        if (opened !== before) opened.charge_refund_ids ??= [...args.p_refund_ids as string[]];
+        return result({ ...opened, stripe_account_id: row.stripe_account_id, stripe_payment_intent: row.stripe_payment_intent });
+      }
+      if (name === "reconcile_refund_due_send_v1") {
+        state.reconciles.push(args);
+        if (!attempt || attempt.id !== args.p_attempt || attempt.stripe_refund_id || attempt.provider_status || row.refunded_at) {
+          return result({ outcome: "stale" });
+        }
+        const unknown = (args.p_new as { id: string; amount_cents: number; status: string }[])
+          .filter(r => !state.failures.has(JSON.stringify([row.restaurant_id, r.id])) && !coverage.has(r.id));
+        if (unknown.length === 0) {
+          attempt.charge_refund_ids = [...args.p_refund_ids as string[]];
+          return result({ outcome: "send" });
+        }
+        if (unknown.some(r => r.status !== "succeeded")) return result({ outcome: "hold" });
+        attempt.provider_status = "canceled";
+        for (const r of unknown) coverage.set(r.id, { amount_cents: r.amount_cents, active: true });
+        if (outstanding() === 0) {
+          Object.assign(row, { refunded_at: new Date().toISOString(), refunded_by: args.p_actor,
+            stripe_refund_id: row.stripe_refund_id ?? unknown[0].id, fee_verification_pending: true });
+          return result({ outcome: "completed", marked: true, outstanding_cents: 0 });
+        }
+        const send = Math.min(outstanding(), Number(args.p_refundable_cents));
+        if (send <= 0) {
+          state.reviews.set(row.id, outstanding());
+          return result({ outcome: "review", outstanding_cents: outstanding() });
+        }
+        const no = attempt.attempt_no + 1;
+        attempt = { id: `due-${row.id}-attempt-${no}`, attempt_no: no, idempotency_key: `refund-due-${row.id}-${no}`,
+          amount: send / 100, stripe_refund_id: null, charge_refund_ids: [...args.p_refund_ids as string[]] };
+        state.attempts.set(row.id, attempt);
+        return result({ outcome: "retry", attempt: { ...attempt, stripe_account_id: row.stripe_account_id,
+          stripe_payment_intent: row.stripe_payment_intent } });
       }
       if (name === "record_refund_due_coverage_v1") {
         // Manual refunds in Stripe: coverage only, never a change to our attempt.

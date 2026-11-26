@@ -22,5 +22,9 @@ it("a table order has a per-person ceiling", () => {
 });
 
 it("only the current sitting calls for its bill", () => {
-  expect(read("src/app/api/service-requests/route.ts")).toContain("if (!member || member.closed) return await apiError(\"apiErr.tableJoin\", 403);");
+  // Live membership: never the historical read, which outlived the sitting
+  // (Codex review bl40, finding 6).
+  const route = read("src/app/api/service-requests/route.ts");
+  expect(route).toContain("member = await tableMember(req, restaurantId, tableId); }");
+  expect(route).toContain('if (kind !== "waiter" && !member) return await apiError("apiErr.tableJoin", 403);');
 });

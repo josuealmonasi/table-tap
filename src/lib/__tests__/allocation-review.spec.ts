@@ -92,3 +92,11 @@ describe("PR1 schema review regressions", () => {
 // The production delta is a release artifact, generated and checked at release
 // time (tabletap-release/2026-10-18/build-delta.py), not a file in the repo: a
 // test pinning it to the schema would break every later change to a writer.
+
+it("serializes kitchen reprints with cancellation and keeps the RPC server-only", () => {
+  const writer = definition(schema, "rearm_kitchen_print_v1");
+  expect(writer).toMatch(/where id = p_order and restaurant_id = p_restaurant and status <> 'cancelled'\s+for update;\s+if not found then return false; end if;/);
+  expect(writer.indexOf("for update")).toBeLessThan(writer.indexOf("insert into public.print_jobs"));
+  expect(writer).toContain("delivery_token = excluded.delivery_token");
+  expect(schema).toContain("revoke all on function public.rearm_kitchen_print_v1(uuid, uuid) from public, anon, authenticated;");
+});

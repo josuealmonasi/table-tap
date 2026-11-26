@@ -175,6 +175,12 @@ export type RestaurantTable = {
   id: string;
   restaurant_id: string;
   label: string;
+  /**
+   * The key the diner's QR carried (`?k=`), echoed back on a waiter call. It
+   * is what the phone brought, never read from the table: handing the stored
+   * key to every page view would let a stale QR learn the new one.
+   */
+  qrKey?: string;
 };
 
 export type OrderStatus =
@@ -267,6 +273,8 @@ export type Order = {
   status: OrderStatus;
   /** The stations that have finished their part (see src/lib/stations.ts). */
   stations_ready?: string[];
+  /** The preparation cycle; sending the ticket back starts a new one. */
+  prep_revision?: number;
   subtotal: number;
   service_fee: number;
   /** When a card checkout for this order last went to Stripe (see service-reprice). */

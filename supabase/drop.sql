@@ -42,6 +42,13 @@ drop function if exists public.accept_terms_v1(uuid, uuid, text, text, text);
 drop function if exists public.accept_terms_v1(uuid, uuid, text, text, text, text, text);
 drop function if exists public.signup_restaurant_with_terms_v1(text, uuid, text, text, text, text, timestamptz);
 drop function if exists public.signup_restaurant_with_terms_v1(text, uuid, text, text, text, text, text, text, timestamptz);
+-- Cash shift fixes (bl39 2, 3, 5): wrappers before the functions they call.
+drop function if exists public.open_cash_shift_v2(uuid, text, numeric, uuid);
+drop function if exists public.record_offline_sale_v2(uuid,uuid,jsonb,text,text,timestamptz,text,jsonb,text,text,text,text,text);
+drop function if exists public.offline_pricing_revision_v1(uuid);
+drop function if exists public.ring_pos_sale_v3(uuid, uuid, jsonb, text, text, text, timestamptz, text, jsonb, boolean, int, uuid);
+drop trigger if exists keep_cash_shift_binding on payments;
+drop function if exists public.keep_cash_shift_binding_v1();
 drop table if exists account_movements cascade;
 -- Required-parameter review overloads; drop before their legacy callees.
 drop function if exists public.collect_split_slots_v1(uuid, uuid, int, int[], int, text, int, text, text, text, boolean);
@@ -102,6 +109,9 @@ drop table if exists table_session_members cascade;
 drop function if exists public.recount_stock(uuid, uuid, int, int, int) cascade;
 drop function if exists public.request_table_member(uuid, uuid, text, boolean);
 drop function if exists public.request_table_member_v2(uuid, uuid, text, boolean, boolean);
+drop function if exists public.request_table_member_v3(uuid, uuid, text, boolean, boolean);
+drop function if exists public.raise_service_request_v1(uuid, uuid, text, uuid);
+drop function if exists public.rotate_table_qr_key() cascade;
 drop function if exists public.decide_table_member(uuid, uuid, uuid, boolean, text, text);
 drop table if exists refund_due_attempts cascade;
 drop table if exists refund_failures cascade;
@@ -182,6 +192,8 @@ drop function if exists public.loyalty_delete_card(uuid, text, text);
 -- Dropping the cards also drops their per-card stop-token index.
 drop table if exists loyalty_cards       cascade;
 drop table if exists loyalty_programs    cascade;
+drop function if exists public.rearm_kitchen_print_v1(uuid, uuid) cascade;
+drop function if exists public.account_statement_v1(uuid, uuid) cascade;
 drop table if exists print_jobs          cascade;
 drop table if exists bill_split_checkout_slots cascade;
 drop table if exists bill_split_slots    cascade;
@@ -250,6 +262,8 @@ drop function if exists public.loyalty_progress(uuid);
 drop function if exists public.loyalty_steps_ok(jsonb);
 drop function if exists public.claim_founding_price(uuid, int);
 drop function if exists public.close_session_if_clear(uuid, text);
+drop function if exists public.close_session_if_clear_v2(uuid, text);
+drop function if exists public.create_table_order_v2(uuid, jsonb);
 drop function if exists public.collect_on_sitting(uuid, uuid, numeric, numeric, text, text, text) cascade;
 drop function if exists public.settle_orders(uuid, uuid[], text, text, jsonb);
 drop function if exists public.settle_card_orders(uuid[], text, numeric, uuid, text, numeric);
@@ -263,6 +277,8 @@ drop function if exists public.reserve_stock(uuid, jsonb, int);
 drop function if exists public.release_stock(uuid, jsonb);
 drop function if exists public.enqueue_kitchen_ticket();
 drop function if exists public.mark_station_ready(uuid, uuid, text);
+drop function if exists public.mark_station_ready_v2(uuid, uuid, text, int);
+drop function if exists public.bump_prep_revision_v1() cascade;
 drop function if exists public.complete_when_paid();
 drop function if exists public.redeem_coupon(uuid);
 drop function if exists public.redeem_coupon(uuid, uuid, jsonb);
@@ -328,6 +344,7 @@ drop function if exists public.collect_on_sittings_v1(uuid, jsonb, text, text, t
 drop function if exists public.collect_on_sitting_v2(uuid, uuid, numeric, numeric, text, text, text) cascade;
 drop function if exists public.order_refund_coverage(uuid, uuid) cascade;
 drop function if exists public.prepare_order_refund(uuid, uuid, text, jsonb, boolean, uuid, timestamptz, uuid) cascade;
+drop function if exists public.prepare_order_refund_v2(uuid, uuid, text, jsonb, boolean, uuid, timestamptz, uuid) cascade;
 drop function if exists public.start_refund_attempt(uuid, uuid) cascade;
 drop function if exists public.finish_refund_operation(uuid, uuid, text, text, text) cascade;
 drop function if exists public.retained_order_coverage(uuid, uuid) cascade;
@@ -412,6 +429,7 @@ drop function if exists public.split_cents(int, int, int);
 drop function if exists public.guard_split_checkout_slot();
 
 drop function if exists public.sync_kitchen_ticket();
+drop function if exists public.sync_kitchen_ticket_v2() cascade;
 drop function if exists public.kitchen_items(jsonb);
 drop function if exists public.sync_kitchen_request();
 
@@ -437,6 +455,7 @@ drop function if exists public.start_refund_due_fee(uuid, uuid, text, int);
 drop function if exists public.stamp_refund_due_charge() cascade;
 drop function if exists public.order_intent_result(uuid, uuid, text);
 drop function if exists public.create_order_intent(uuid, uuid, text, jsonb, jsonb, boolean, int, jsonb);
+drop function if exists public.create_table_order_intent_v2(uuid, uuid, text, jsonb, jsonb, boolean, int);
 drop function if exists public.create_cash_withdrawal_once(uuid, uuid, numeric, text, text, uuid);
 drop function if exists public.create_cash_withdrawal_once(uuid, uuid, numeric, text, text, uuid, text);
 drop function if exists public.create_cash_withdrawal_once(uuid, uuid, numeric, text, text, uuid, text, text);
@@ -490,3 +509,11 @@ drop function if exists public.schedule_plan_price_change(text, numeric, timesta
 drop table if exists plan_price_notices cascade;
 drop table if exists plan_price_changes cascade;
 drop function if exists public.admin_restaurant_last_sign_in_v1(uuid);
+-- Stripe reconcile (Codex bl43 findings 1, 4, 5).
+drop function if exists public.adopt_settled_intent_v1(uuid, text, boolean, text);
+drop function if exists public.note_unmatched_refund_v1(uuid, text, boolean, text);
+drop table if exists unmatched_refund_notices cascade;
+drop function if exists public.reconcile_refund_due_send_v1(uuid, uuid, uuid, text, jsonb, int, text[]);
+drop table if exists refund_due_reviews cascade;
+drop function if exists public.start_refund_due_attempt_v3(uuid, uuid, int, text[]);
+alter table if exists refund_due_attempts drop column if exists charge_refund_ids;

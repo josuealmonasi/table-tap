@@ -34,7 +34,7 @@ export function inactiveOrderCases() {
         id = data.id; ticket = data.kitchen_ticket_id; original = data;
         return cleanup;
       },
-      body: () => method === "POST" ? { id: as === "kitchen" ? ticket : id, station: "kitchen" }
+      body: () => method === "POST" ? { id: as === "kitchen" ? ticket : id, station: "kitchen", revision: 0 }
         : { id: as === "kitchen" ? ticket : id, status: "preparing", from: "received" },
       effect: async f => {
         const [order, projection, payments] = await Promise.all([
