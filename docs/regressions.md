@@ -8948,3 +8948,45 @@ order link could overwrite its ratings. The `table_label` copied onto the
 order at insert is never cleared, and now keeps it on the dine-in path, where
 with no sitting left it is refused. Check: `slot-receipt-payments-route.spec.ts`,
 `loyalty-owner-secret.spec.ts`, `rating-membership.spec.ts`.
+
+### Six low-severity disagreements (2026-11-25)
+
+Each was two places that had to agree. First, staff addresses: the invite
+stored the address as typed, while Auth and the activity log keep the login's
+lowercase one, so the removal dialog's "reset the account links they opened"
+found nothing for `Ana@Example.com` and reset nothing, silently. Invites now
+store `normalizeEmail(...)`, and `accountsOpenedBy` matches the log
+case-insensitively (an escaped `ilike`, so `_` in an address is not a
+wildcard) for rows invited before. It also read only the newest 1,000 log
+rows; it pages with `everyRow` now. Rows already stored in mixed case still
+fail the SQL owner/manager checks in `record_offline_sale` and
+`resolve_held_sale` (`staff.email = p_manager`): that needs either a one-time
+`lower(btrim(email))` of existing `staff` rows (a production data change) or
+new function versions; neither is in this change. Checks:
+`staff-email-case.spec.ts`.
+
+Second, purchases: a delivery's price becomes the ingredient's price, so a
+total of 0 made every recipe using it free in the margins; and a price per pack
+over 1,000,000 or a quantity over 10,000,000 broke a check constraint and came
+back as a 500. The route refuses `total <= 0` (`apiErr.purchaseTotalZero`),
+checks `total / packs` and `packs × packSize` before the writer
+(`apiErr.purchaseTooLarge`), and maps SQLSTATE 23514 to that 400. Checks:
+`purchase-limits.spec.ts`.
+
+Third, dish waste: the writer clamps a counted dish's stock at 0, so wasting 3
+of 2 lost one unit of difference, and a pending checkout's reservation released
+later left the count above the shelf. The route refuses waste of a counted
+dish past its count (`apiErr.wasteOverStock`, returned plates excepted, as
+they never touched the count); a retry whose entry is already saved is let
+through, because its units already left. The SQL clamp stays as the backstop
+for a race between the read and the write. Checks: `waste-over-stock.spec.ts`.
+
+Fourth, the corte's "on account today" counted charges cancelled or written
+off since, while "still owed" excluded them. Both read the same filters now.
+Check: `corte-on-account-cancelled.spec.ts`.
+
+Not changed: discounts of checkout orders cancelled after acceptance stay in
+the corte. That is the sweep 9 design (`report-discounts.spec.ts`, "keeps
+accepted checkout savings after a later cancellation without changing drawer
+lines"): the sale's payment stays in the ledger and its hand-back is a
+separate line on its own day, so the discount stays with the day it was given.

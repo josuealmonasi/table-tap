@@ -4,6 +4,7 @@ import { invalidatePublicMenu } from "@/lib/public-menu-cache";
 import { logEvent } from "@/lib/activity-log";
 import { logDetail } from "@/lib/log-detail";
 import { newCode } from "@/lib/accounts";
+import { everyRow } from "@/lib/paged";
 
 /**
  * What a removed member of staff may still hold: links they copied while they
@@ -30,14 +31,25 @@ export async function logAccountLinkViewed(restaurantId: string, actorEmail: str
   await logEvent({ restaurantId, actor: actorEmail, entity: "account", action: "opened", detail: logDetail({ name, link: accountId }) });
 }
 
-/** The accounts whose link this person opened here, newest first. */
+/** `email` as an ILIKE pattern that matches only itself, in any case. */
+function exactCaseless(email: string): string {
+  return email.trim().replace(/[\\%_]/g, c => `\\${c}`);
+}
+
+/**
+ * The accounts whose link this person opened here, newest first. Every log
+ * row is read, a page at a time: someone who opened a thousand links is the
+ * one whose links most need resetting. The email is matched in any case:
+ * the log holds the login's own (lowercase) address, and staff rows invited
+ * before 2026-11-25 kept the address as it was typed.
+ */
 export async function accountsOpenedBy(restaurantId: string, email: string): Promise<string[]> {
-  const { data, error } = await createAdminClient().from("user_logs").select("detail")
-    .eq("restaurant_id", restaurantId).eq("actor_email", email).eq("entity", "account").eq("action", "opened")
-    .order("created_at", { ascending: false }).limit(1000);
-  if (error) throw new Error(`Could not read which accounts were opened: ${error.message}`);
+  const db = createAdminClient();
+  const rows = await everyRow<{ detail: string | null }>((from, to) => db.from("user_logs").select("detail")
+    .eq("restaurant_id", restaurantId).ilike("actor_email", exactCaseless(email)).eq("entity", "account").eq("action", "opened")
+    .order("created_at", { ascending: false }).order("id", { ascending: true }).range(from, to), "which accounts were opened");
   const ids = new Set<string>();
-  for (const row of data ?? []) {
+  for (const row of rows) {
     const id = /(?:^| )link=([0-9a-f-]{36})(?: |$)/.exec(String(row.detail ?? ""))?.[1];
     if (id) ids.add(id);
   }

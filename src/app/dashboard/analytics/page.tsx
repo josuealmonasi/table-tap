@@ -96,11 +96,13 @@ export default async function AnalyticsPage({
     // Food put on a customer's account today: out of the kitchen, owed, and in
     // nobody's drawer. Read from the orders the charge stamped, not from its
     // log line, which a failed insert loses for good (sweep 8, finding 6).
+    // A charge cancelled or written off since is not owed, as `owedRows` says.
     everyRow<{ total: number }>((a, b) => admin
       .from("orders")
       .select("total")
       .eq("restaurant_id", membership.restaurant.id).eq("currency", membership.restaurant.currency)
       .not("account_id", "is", null)
+      .neq("status", "cancelled").eq("written_off", false)
       .gte("charged_at", since)
       .order("id").range(a, b), "today's account charges"),
     otherCurrencyTakings(membership.restaurant.id, membership.restaurant.currency, since),

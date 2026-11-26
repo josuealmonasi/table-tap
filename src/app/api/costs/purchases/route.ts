@@ -6,12 +6,14 @@ import { logEvent } from "@/lib/activity-log";
 import { logDetail } from "@/lib/log-detail";
 import { actingManager } from "@/lib/api-guard";
 import { costsBlocks, uuidOf } from "@/lib/costs/guard";
-import { decimal, packPrice, quantityRefusal } from "@/lib/costs/input";
+import { decimal, MAX_PACK_PRICE, packPrice, quantityRefusal } from "@/lib/costs/input";
 
 export const runtime = "nodejs";
 
 /** More packs than anybody receives in one delivery. */
 const MAX_PACKS = 10_000;
+/** `ingredient_purchases.quantity`'s check: 10,000 kg of one thing, in grams. */
+const MAX_PURCHASE_QUANTITY = 10_000_000;
 
 // POST /api/costs/purchases — { ingredientId, packs, total }: a delivery came
 // in. It adds to what the shelf should hold, and the price it came at is the
@@ -31,6 +33,12 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   if (packs === null || packs <= 0) return await apiError(quantityRefusal(body.packs, "apiErr.purchasePacks"), 400);
   const total = packPrice(body.total);
   if (total === null) return await apiError("apiErr.purchaseTotal", 400);
+  // A delivery's price becomes the ingredient's price: a total of 0 made every
+  // recipe that uses it free in the margins until the next delivery.
+  if (total <= 0) return await apiError("apiErr.purchaseTotalZero", 400);
+  // The price per pack and the quantity are derived, and the tables refuse
+  // either past its limit: answer that here as what was typed, not as a 500.
+  if (total / packs > MAX_PACK_PRICE) return await apiError("apiErr.purchaseTooLarge", 400);
 
   // The pack size the form showed is part of what was entered: changed by
   // another manager meanwhile, two 1-litre packs were recorded as 4 litres and
@@ -40,6 +48,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   // retry goes to the writer even without one, to be answered if it was saved.
   const packSize = typeof body.packSize === "number" && Number.isFinite(body.packSize) && body.packSize > 0 ? body.packSize : null;
   if (packSize === null && !ref) return await apiError("apiErr.purchasePackChanged", 409);
+  if (packSize !== null && packs * packSize > MAX_PURCHASE_QUANTITY) return await apiError("apiErr.purchaseTooLarge", 400);
 
   const db = createAdminClient();
   const { data: id, error } = await db.rpc(ref ? "record_purchase_once_v3" : "record_purchase_v2", {
@@ -49,6 +58,9 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   });
   if (error?.code === "PT412") return await apiError("apiErr.purchasePackChanged", 409);
   if (error?.code === "PT409") return await apiError("apiErr.retryConflict", 409);
+  // A check constraint: a limit the checks above did not see (a retry sent no
+  // pack size). What was typed is refused, the server did not fail.
+  if (error?.code === "23514") return await apiError("apiErr.purchaseTooLarge", 400);
   if (error) return await apiError("apiErr.generic", 500);
   if (!id) return await apiError("apiErr.notFound", 404);
   if (!ref) {

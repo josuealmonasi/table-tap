@@ -46,6 +46,19 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   // Only a dish can come back from a table; an ingredient never left the kitchen.
   if (ingredientId && PRODUCT_ONLY_REASONS.includes(reason)) return await apiError("apiErr.wasteReason", 400);
 
+  // A counted dish cannot lose more than it has: the writer stops the count at
+  // 0, and the units a pending checkout holds come back on top of that later,
+  // so the shelf read more than was on it. A retry of a saved entry is let
+  // through, because its units already left the count.
+  if (itemId && reason !== "returned") {
+    try {
+      const stock = await stockShortfall(actor.restaurantId, itemId, quantity, ref);
+      if (stock !== null) return await apiError("apiErr.wasteOverStock", 400, { n: stock });
+    } catch {
+      return await apiError("apiErr.generic", 503);
+    }
+  }
+
   let cost: number | null = null;
   let productChoices: WasteProduct["choices"] | undefined;
   try {
@@ -82,6 +95,25 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     detail: logDetail({ note: `${entry?.name ?? ""} × ${quantity}` }),
   });
   return NextResponse.json({ ok: true, id });
+}
+
+/**
+ * The dish's count when `quantity` is more than it, else null. Null too for a
+ * dish whose stock is not counted, and for a retry whose entry is saved.
+ */
+async function stockShortfall(restaurantId: string, itemId: string, quantity: number, ref: string | null): Promise<number | null> {
+  const db = createAdminClient();
+  if (ref) {
+    const { data, error } = await db.from("waste_entries").select("id")
+      .eq("restaurant_id", restaurantId).eq("request_ref", ref).maybeSingle();
+    if (error) throw new Error(error.message);
+    if (data) return null;
+  }
+  const { data, error } = await db.from("menu_items").select("stock")
+    .eq("id", itemId).eq("restaurant_id", restaurantId).maybeSingle();
+  if (error) throw new Error(error.message);
+  const stock = data?.stock;
+  return typeof stock === "number" && Math.ceil(quantity) > stock ? stock : null;
 }
 
 export async function DELETE(req: NextRequest): Promise<NextResponse> {

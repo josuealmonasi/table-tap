@@ -4,15 +4,19 @@ import { apiError } from "@/lib/api-error";
 import { parsePlanLimit, planLimitText } from "@/lib/plan-error";
 import { planLabel } from "@/lib/plan";
 import { DEFAULT_LOCALE, type Locale } from "@/lib/i18n";
+import { normalizeEmail } from "@/lib/email";
 
 /**
  * `locale` is the inviter's language: the invitation email is written in it
  * (the Supabase templates switch on `user_metadata.locale`).
  */
 export async function inviteStaff(
-  restaurantId: string, email: string, role: string, origin: string, locale: Locale = DEFAULT_LOCALE,
+  restaurantId: string, typedEmail: string, role: string, origin: string, locale: Locale = DEFAULT_LOCALE,
 ): Promise<NextResponse | null> {
   const admin = createAdminClient();
+  // Auth keeps addresses lowercase; the staff row must hold the same one, or
+  // nothing that matches the log by address finds this person.
+  const email = normalizeEmail(typedEmail);
 
   // Create the password-less login without sending mail. The staff insert
   // reserves the seat before any link can reach somebody's inbox.
