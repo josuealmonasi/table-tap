@@ -71,7 +71,7 @@ export default function ServiceButtons({
       const res = await fetch("/api/service-requests", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ restaurantId, tableId: table.id, kind }),
+        body: JSON.stringify({ restaurantId, tableId: table.id, kind, qrKey: table.qrKey }),
       });
       if (!res.ok) {
         const data = (await res.json().catch(() => ({}))) as { error?: string };

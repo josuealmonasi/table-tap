@@ -62,7 +62,8 @@ describe("an order stores only verified choices and a validated destination", ()
       expect(code).toMatch(/verifyExtras\(/);
       expect(code).not.toMatch(/\b(?:mods|extras):\s*(?:line|chosen|component)\.(?:mods|extras)/);
     }
-    expect(read("src/app/api/service-requests/route.ts")).toContain("table_label: table.label");
+    expect(read("src/app/api/service-requests/route.ts")).toContain('rpc("raise_service_request_v1"');
+    expect(read("supabase/schema.sql")).toContain("values (p_restaurant, p_table, v_label, p_kind, p_session)");
     expect(read("src/hooks/useCart.ts")).toContain("removeLineExtras(line, drop)");
   });
 });
