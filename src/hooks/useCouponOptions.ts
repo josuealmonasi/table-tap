@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import type { DiscountBillScope } from "@/lib/discount-bill";
 
 /** A promotion the floor may apply to this bill, priced against it. */
 export interface CouponOption {
@@ -12,11 +13,13 @@ export interface CouponOption {
 }
 
 /**
- * The promotions that would actually apply to a bill of `total`, from the
- * server — the floor shouldn't have to remember codes, or leave the table to
- * go and read the promotions page. Asked for each time the dialog opens.
+ * The promotions that would actually apply to this bill, from the server,
+ * which reads the bill itself and judges it on the dishes — the floor
+ * shouldn't have to remember codes, or leave the table to go and read the
+ * promotions page. Asked for each time the dialog opens, and again when
+ * `revision` (the bill's total) changes under it.
  */
-export function useCouponOptions(open: boolean, total: number) {
+export function useCouponOptions(open: boolean, bill: DiscountBillScope, revision = 0) {
   const [options, setOptions] = useState<CouponOption[]>([]);
   // The list arrives a moment after the dialog does. Its space is held from
   // the start: a modal that grows under a finger already on its way down is
@@ -30,7 +33,11 @@ export function useCouponOptions(open: boolean, total: number) {
     if (!open) return;
     setLoading(true);
     setFailed(false);
-    fetch(`/api/bill/discount/options?total=${total}`)
+    const query = new URLSearchParams();
+    if (bill.tableId) query.set("tableId", bill.tableId);
+    else if (bill.orderId) query.set("orderId", bill.orderId);
+    if (bill.currency) query.set("currency", bill.currency);
+    fetch(`/api/bill/discount/options?${query}`)
       .then(async r => {
         if (!r.ok) throw new Error(String(r.status));
         const d = await r.json();
@@ -41,7 +48,7 @@ export function useCouponOptions(open: boolean, total: number) {
         setFailed(true);
       })
       .finally(() => setLoading(false));
-  }, [open, total]);
+  }, [open, bill.tableId, bill.orderId, bill.currency, revision]);
 
   return { options, loading, failed };
 }

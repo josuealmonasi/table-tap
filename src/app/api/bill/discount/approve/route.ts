@@ -7,7 +7,8 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { logEvent } from "@/lib/activity-log";
 import { logDetail } from "@/lib/log-detail";
 import { findCoupon } from "@/lib/coupon-service";
-import { billTotal, discountableOrders } from "@/lib/staff-discount";
+import { discountableOrders } from "@/lib/staff-discount";
+import { couponBase } from "@/lib/coupon-base";
 import type { Order } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -76,7 +77,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
   const { data: rows, error: readError } = await db
     .from("orders")
-    .select("id, total, tip, paid, written_off, status, coupon_code, discount")
+    .select("id, total, tip, service_fee, paid, written_off, status, coupon_code, discount")
     .is("account_id", null)
     .eq("restaurant_id", actor.restaurantId)
     .in("id", request.order_ids);
@@ -96,7 +97,8 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
   const { applyCoupon } = await import("@/lib/pricing");
   const { toAppliedCoupon, couponProblem } = await import("@/lib/coupon-service");
-  const food = billTotal(orders);
+  // Judged on the dishes, as the diner's own bill judges it (2026-11-26).
+  const food = couponBase(orders);
   if (couponProblem(coupon, food)) return await apiError("apiErr.couponNotValid", 400);
 
   const amount = applyCoupon(toAppliedCoupon(coupon), food);
@@ -104,7 +106,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     return await apiError("apiErr.approvalChanged", 409);
   }
   // Rechecked under the order and request locks: pricing may have changed since this read.
-  const { data: outcome, error } = await checkoutPageRpc("approve_discount_request_v2", {
+  const { data: outcome, error } = await checkoutPageRpc("approve_discount_request_v3", {
     p_request: request.id, p_restaurant: actor.restaurantId,
     p_actor: actor.email, p_amount: reviewedAmount,
   }, { orderIds: request.order_ids });

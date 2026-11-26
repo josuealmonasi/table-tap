@@ -91,7 +91,12 @@ export default function BillDiscountDialog({
   const discountBlocked = bill.split ? "dash.billSplitDiscount"
     : (bill.collected ?? 0) > 0 ? "dash.billCollectedDiscount"
     : bill.discounted ? "dash.billAlreadyDiscounted" : null;
-  const coupons = useCouponOptions(open && !discountBlocked, bill.total);
+  // The same bill the submit below names, so what is offered is what applies.
+  const coupons = useCouponOptions(
+    open && !discountBlocked,
+    { tableId: bill.tableId, orderId: bill.tableId ? null : bill.orderIds[0], currency },
+    bill.total,
+  );
 
   function pick(next: string): void {
     setCode(next);

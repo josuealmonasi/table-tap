@@ -17652,3 +17652,160 @@ end;
 $$;
 revoke all on function public.record_offline_sale_v3(uuid,uuid,jsonb,text,text,timestamptz,text,jsonb,text,text,text,text,text,uuid) from public,anon,authenticated;
 grant execute on function public.record_offline_sale_v3(uuid,uuid,jsonb,text,text,timestamptz,text,jsonb,text,text,text,text,text,uuid) to service_role;
+
+-- Staff coupons are judged on the dishes, as the diner's are (2026-11-26).
+-- The writers above priced a staff discount on total - tip, which still holds
+-- the service charge: MX$90 of food and MX$15 of service passed a MX$100
+-- minimum at the till that the diner's own bill screen refused, and a percent
+-- coupon took a share of the service charge too. These versions use
+-- greatest(total - tip - service_fee, 0) for the minimum, the amount and each
+-- order's share, so service and gratuities stay owed in full. The app's rule
+-- is `couponBase` (src/lib/coupon-base.ts); the old versions are kept.
+create or replace function public.approve_discount_request_v3(
+  p_request uuid, p_restaurant uuid, p_actor text, p_amount numeric
+) returns text language plpgsql security definer set search_path = public as $$
+declare
+  v_request discount_requests%rowtype;
+  v_coupon coupons%rowtype;
+  v_count int;
+  v_total numeric;
+  v_amount numeric;
+  v_allocated numeric;
+begin
+  perform public.lock_restaurant_money(p_restaurant);
+  perform set_config('tabletap.allocation_writer', 'v1', true);
+  if p_restaurant is not null then perform public.backfill_payment_allocations(p_restaurant); end if;
+  perform set_config('tabletap.allocation_scope', '', true);
+  select * into v_request from discount_requests
+   where id = p_request and restaurant_id = p_restaurant for update;
+  if not found or v_request.status <> 'pending' then return 'gone'; end if;
+  if p_amount is null or p_amount <= 0 or v_request.amount <> p_amount then return 'changed'; end if;
+  perform 1 from orders where id = any(v_request.order_ids) and restaurant_id = p_restaurant
+   order by id for update;
+  select count(*), coalesce(sum(greatest(total - tip - service_fee, 0)), 0) into v_count, v_total from orders
+   where id = any(v_request.order_ids) and restaurant_id = p_restaurant
+     and paid = false and written_off = false and status not in ('cancelled', 'pending_payment')
+     and coupon_code is null and account_id is null;
+  if v_count <> cardinality(v_request.order_ids) or v_total <= 0 then return 'changed'; end if;
+  -- A card page still open on these orders was quoted the current total; the
+  -- debt may not change under it (unresolved-checkout contract, verification 1).
+  if public.whole_bill_card_open_v1(p_restaurant, v_request.order_ids) then return 'paying'; end if;
+  -- Paid in part since it was asked for: a lower total would sit under money
+  -- already collected (paths audit #2). The guard would raise; this says why.
+  if exists (select 1 from unnest(v_request.order_ids) o(id)
+    where public.retained_order_coverage(p_restaurant, o.id) > 0) then return 'part_paid'; end if;
+  -- Orders a live split has frozen are paid by its slots: lowering their total
+  -- under a held card attempt left the charge unallocatable (split audit #1).
+  if exists (select 1 from bill_splits b where b.restaurant_id = p_restaurant and b.status = 'locked'
+    and b.order_ids && v_request.order_ids) then return 'split'; end if;
+  select * into v_coupon from coupons
+   where restaurant_id = p_restaurant and upper(code) = upper(v_request.code) for update;
+  if not found or not v_coupon.active
+     or v_coupon.starts_at > now() or v_coupon.ends_at <= now()
+     or v_total < v_coupon.min_subtotal
+     or v_coupon.uses_count >= v_coupon.max_uses then return 'changed'; end if;
+  if exists (select 1 from orders o where o.restaurant_id = p_restaurant
+    and o.id = any(v_request.order_ids) and (o.total < o.tip or o.tip < 0)) then return 'changed'; end if;
+
+  v_amount := greatest(0, least(v_total, round(case when v_coupon.kind = 'percent'
+    then v_total * v_coupon.value / 100 else v_coupon.value end, 2)));
+  if v_amount <> p_amount then return 'changed'; end if;
+  if redeem_coupon(v_coupon.id) is null then return 'changed'; end if;
+
+  -- Whole cents first; award spare cents by largest remainder, with stable ties.
+  with shares as (
+    select id, floor(p_amount * 100 * greatest(total - tip - service_fee, 0) / v_total) cents,
+      mod(p_amount * 100 * greatest(total - tip - service_fee, 0), v_total) remainder
+    from orders where id = any(v_request.order_ids) and restaurant_id = p_restaurant
+     and account_id is null
+  ), ranked as (
+    select *, row_number() over (order by remainder desc, id) position from shares
+  ), amounts as (
+    select id, (cents + case when position <= round(p_amount * 100) - sum(cents) over ()
+      then 1 else 0 end) / 100.0 amount from ranked
+  ), updated as (
+    update orders o set coupon_code = v_coupon.code,
+      discount = round(coalesce(o.discount, 0) + a.amount, 2), total = round(o.total - a.amount, 2)
+      from amounts a where o.id = a.id and o.restaurant_id = p_restaurant
+        and not (o.total - a.amount < o.tip + o.service_fee)
+      returning a.amount
+  )
+  select coalesce(sum(amount), 0) into v_allocated from updated;
+  if v_allocated <> p_amount then raise exception 'discount shares do not match approved amount'; end if;
+  insert into coupon_redemptions (restaurant_id, coupon_id, order_id, code, amount, confirmed_at)
+  values (p_restaurant, v_coupon.id, v_request.order_ids[1], v_coupon.code, p_amount, now());
+  update discount_requests set status = 'approved', decided_by = p_actor, decided_at = now()
+   where id = p_request and restaurant_id = p_restaurant and status = 'pending';
+  return 'approved';
+end; $$;
+revoke all on function public.approve_discount_request_v3(uuid, uuid, text, numeric) from public, anon, authenticated;
+grant execute on function public.approve_discount_request_v3(uuid, uuid, text, numeric) to service_role;
+
+create or replace function public.apply_bill_discount_v2(
+  p_restaurant uuid, p_orders uuid[], p_coupon uuid, p_amount numeric
+) returns text language plpgsql security definer set search_path = public as $$
+declare
+  v_coupon coupons%rowtype;
+  v_count int;
+  v_total numeric;
+  v_amount numeric;
+  v_allocated numeric;
+begin
+  perform public.lock_restaurant_money(p_restaurant);
+  perform set_config('tabletap.allocation_writer', 'v1', true);
+  perform public.backfill_payment_allocations(p_restaurant);
+  perform set_config('tabletap.allocation_scope', '', true);
+  perform 1 from orders where id = any(p_orders) and restaurant_id = p_restaurant order by id for update;
+  select count(*), coalesce(sum(greatest(total - tip - service_fee, 0)), 0) into v_count, v_total from orders
+   where id = any(p_orders) and restaurant_id = p_restaurant
+     and paid = false and written_off = false and status not in ('cancelled', 'pending_payment')
+     and coupon_code is null and account_id is null;
+  -- Orders a live split has frozen are paid by its slots: lowering their total
+  -- under a held card attempt left the charge unallocatable (split audit #1).
+  if exists (select 1 from bill_splits b where b.restaurant_id = p_restaurant and b.status = 'locked'
+    and b.order_ids && p_orders) then return 'split'; end if;
+  -- A card page still open on these orders was quoted the current total; the
+  -- debt may not change under it (unresolved-checkout contract, verification 1).
+  if public.whole_bill_card_open_v1(p_restaurant, p_orders) then return 'paying'; end if;
+  if v_count = 0 or v_count <> cardinality(p_orders) or v_total <= 0 then return 'changed'; end if;
+  if p_amount is null or p_amount <= 0 or p_amount > v_total then return 'changed'; end if;
+  if exists (select 1 from unnest(p_orders) o(id)
+    where public.retained_order_coverage(p_restaurant, o.id) > 0) then return 'part_paid'; end if;
+  select * into v_coupon from coupons where id = p_coupon and restaurant_id = p_restaurant for update;
+  if not found or not v_coupon.active
+     or v_coupon.starts_at > now() or v_coupon.ends_at <= now()
+     or v_total < v_coupon.min_subtotal
+     or v_coupon.uses_count >= v_coupon.max_uses then return 'changed'; end if;
+  if exists (select 1 from orders o where o.restaurant_id = p_restaurant
+    and o.id = any(p_orders) and (o.total < o.tip or o.tip < 0)) then return 'changed'; end if;
+
+  v_amount := greatest(0, least(v_total, round(case when v_coupon.kind = 'percent'
+    then v_total * v_coupon.value / 100 else v_coupon.value end, 2)));
+  if v_amount <> p_amount then return 'changed'; end if;
+  if redeem_coupon(v_coupon.id) is null then return 'changed'; end if;
+
+  -- Whole cents first; award spare cents by largest remainder, with stable ties.
+  with shares as (
+    select id, floor(p_amount * 100 * greatest(total - tip - service_fee, 0) / v_total) cents,
+      mod(p_amount * 100 * greatest(total - tip - service_fee, 0), v_total) remainder
+    from orders where id = any(p_orders) and restaurant_id = p_restaurant
+  ), ranked as (
+    select *, row_number() over (order by remainder desc, id) position from shares
+  ), amounts as (
+    select id, (cents + case when position <= round(p_amount * 100) - sum(cents) over ()
+      then 1 else 0 end) / 100.0 amount from ranked
+  ), updated as (
+    update orders o set coupon_code = v_coupon.code,
+      discount = round(coalesce(o.discount, 0) + a.amount, 2), total = round(o.total - a.amount, 2)
+      from amounts a where o.id = a.id and o.restaurant_id = p_restaurant
+        and not (o.total - a.amount < o.tip + o.service_fee)
+      returning a.amount
+  )
+  select coalesce(sum(amount), 0) into v_allocated from updated;
+  if v_allocated <> p_amount then raise exception 'discount shares do not match approved amount'; end if;
+  insert into coupon_redemptions (restaurant_id, coupon_id, order_id, code, amount, confirmed_at)
+  values (p_restaurant, v_coupon.id, p_orders[1], v_coupon.code, p_amount, now());
+  return 'applied';
+end; $$;
+revoke all on function public.apply_bill_discount_v2(uuid, uuid[], uuid, numeric) from public, anon, authenticated;
+grant execute on function public.apply_bill_discount_v2(uuid, uuid[], uuid, numeric) to service_role;

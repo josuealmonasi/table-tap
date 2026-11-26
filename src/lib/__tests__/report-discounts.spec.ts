@@ -59,7 +59,7 @@ it("refuses to publish a partial discount total when durable evidence cannot be 
 
 it("staff grants and checkout store the evidence in the same SQL transaction as the order changes", () => {
   const schema = readFileSync("supabase/schema.sql", "utf8");
-  for (const name of ["apply_bill_discount", "approve_discount_request_v2", "create_order_intent"]) {
+  for (const name of ["apply_bill_discount_v2", "approve_discount_request_v3", "create_order_intent"]) {
     const start = schema.indexOf(`create or replace function public.${name}(`);
     const body = schema.slice(start, schema.indexOf("$$;", start));
     expect(body, name).toContain("insert into coupon_redemptions");

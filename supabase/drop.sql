@@ -390,6 +390,8 @@ drop function if exists public.approve_write_off_request_v2(uuid, uuid, text, nu
 drop function if exists public.write_off_orders(uuid, uuid[], text, text, text);
 drop function if exists public.approve_discount_request_v2(uuid, uuid, text, numeric);
 drop function if exists public.apply_bill_discount(uuid, uuid[], uuid, numeric);
+drop function if exists public.approve_discount_request_v3(uuid, uuid, text, numeric);
+drop function if exists public.apply_bill_discount_v2(uuid, uuid[], uuid, numeric);
 drop function if exists public.reprice_open_service(uuid, numeric);
 drop function if exists public.attribute_payment(uuid, uuid, text, jsonb, text, text, boolean);
 
