@@ -9153,3 +9153,28 @@ restaurant's digest recipients; the new owner re-adds and re-confirms whoever
 should get it. v1 stays for the deployed route. Not changed: the former
 owner, now a manager, still gets the digest only if they opted in as a
 manager (`daily_digest_recipients`). Check: `admin-owner-transfer.spec.ts`.
+
+### Browser gates: the last sample of a window raced what was left of it (2026-11-26)
+
+Three CI runs failed one visit each on the orders board — layout at 1280px
+as the kitchen (#752, #760) and dialogs at 360px as the cashier (#764) —
+with «readiness sample timed out after 6ms» (then 31 ms, then 296 ms), and
+passed on rerun. The message had no «in flight:» list, which every `ready()`
+failure carries, so it was not the 30 s readiness wait: it came from an
+`overlay()` window. The layout visit had just closed «order detail» and was
+looking for «completed sale return», which the kitchen never has; the
+dialogs sweep was checking whether a button opened anything. Both windows
+are `required: false`: "nothing opened" is a legitimate answer.
+
+`observe()` gave each sample only what was left of its window, so the last
+sample raced a timer of a few milliseconds. The orders board is the heaviest
+DOM the gates open, so its samples are the slowest, and once in a few hundred
+windows one started too close to the end, lost the race, and threw instead of
+answering. Now a started sample gets at least `SAMPLE_FLOOR` (2 s) to answer:
+the window decides when to stop starting samples, not how long one may take.
+A required window that ends unanswered fails as «did not become ready», a page
+that never stops changing still fails, and a sample that hangs past the floor
+still throws, so a hung page is never read as "no dialog". Readiness
+timeouts are still not retried. Checks: `browser-ready.spec.ts` ("lets the
+last sample of a window answer…", "still fails a page that never stops
+changing", and the hung-sample case for an optional window).

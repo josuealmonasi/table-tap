@@ -1428,7 +1428,9 @@ audit counts, and print navigation/readiness/audit/auth worker seconds plus wall
 time. Readiness observes route/content, completed data, absent skeletons, fonts,
 images and stable geometry; dialog no-ops retain bounded observation windows.
 Each visit bounds context/page creation, preparation, auth, navigation, readiness,
-audit and close, including individual readiness samples. Failed cleanup stops the
+audit and close, including individual readiness samples (a sample that has
+started gets at least 2 s to answer, so the last one in a window is not cut off
+by what remains of it). Failed cleanup stops the
 pool; unreported visits fail explicitly. A 90-minute watchdog covers the whole
 script, including setup, the overlap control, final fingerprints and shutdown.
 Development pools pause admission while the target port is unreachable, share a
