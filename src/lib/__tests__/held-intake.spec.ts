@@ -1,4 +1,6 @@
-import { beforeEach, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { MAX_CART_LINES, MAX_TILL_LINES } from "@/lib/cart-limits";
+import { round2 } from "@/lib/money";
 import type { Actor } from "@/lib/api-guard";
 import type { PosSaleBody } from "@/lib/pos-sale";
 import { receiveOffline } from "@/lib/offline-intake";
@@ -12,7 +14,7 @@ vi.mock("@/lib/offline-authority", () => ({ readOfflineContext: () => null }));
 vi.mock("@/lib/offline-pricing", () => ({ currentOfflinePrice: async () => null }));
 vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({
   from: (table: string) => {
-    const q = { select: () => q, eq: () => q, maybeSingle: async () => ({ data: null }),
+    const q = { select: () => q, eq: () => q, maybeSingle: async () => ({ data: table === "restaurants" ? { suspended_at: null } : null }),
       single: async () => ({ data: table === "restaurants" ? { currency: "MXN" } : null }) };
     return q;
   },
@@ -96,3 +98,29 @@ it.each([{ extras: {} }, { extras: [null] }, { name: { poisoned: true } }])(
         ? [{ id: "", name: "", emoji: "", price: 0 }] : [], name: "name" in malformed ? "—" : "Soup" }],
     });
   });
+
+describe("bl39 #4: a held receipt with more lines than a till sale may carry", () => {
+  const wide = (n: number) => ({ ...receipt(), items: Array.from({ length: n }, (_, i) => ({ ...receipt().items[0], itemId: `dish-${i}`, price: 0.1, qty: 1 })),
+    offline: { ...receipt().offline, subtotal: round2(n * 0.1), total: round2(n * 0.1) } });
+
+  it("is queued for manager review instead of refused and stranded on the device", async () => {
+    const raw = wide(MAX_TILL_LINES + 1);
+    const res = await receiveOffline(actor, raw as unknown as PosSaleBody & { offline: unknown });
+    expect(res.status).toBe(200);
+    expect(state.calls.map(c => c.name)).toEqual(["queue_offline_sale"]);
+    expect(state.calls[0].args).toMatchObject({ p_reason: "apiErr.offlineTooManyLines", p_body: raw });
+  });
+
+  it("is recorded with every one of its lines when a manager approves it", async () => {
+    const raw = wide(MAX_TILL_LINES + 1);
+    const res = await ringOffline(actor, raw as unknown as PosSaleBody & { offline: unknown },
+      { reason: "Paper receipt reviewed", collector: "original@example.com", currency: "MXN" });
+    expect(res.status).toBe(200);
+    expect((state.calls[0].args.p_order as { items: unknown[] }).items).toHaveLength(MAX_TILL_LINES + 1);
+  });
+
+  it("past the cap every order route has, is still refused before any write", async () => {
+    const res = await intake(wide(MAX_CART_LINES + 1));
+    expect({ status: res.status, writes: state.calls }).toEqual({ status: 400, writes: [] });
+  });
+});

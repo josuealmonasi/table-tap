@@ -8694,6 +8694,31 @@ to 2 L turned two packs for MX$100 into 4 L at MX$25/L. `record_purchase_v2` and
 `apiErr.purchasePackChanged`, which now asks to reload), after answering a retry
 already saved. Check: `terminal-waste-pack-races.spec.ts`.
 
+### Till retry after a reload, and oversized held sales (2026-11-25)
+
+Two pairs that had to agree (bl39 findings 1 and 4). First, the request a till
+sent and the one it sends after a reload. An account charge kept its retry
+request only in memory: the cashier charged MX$120 to an account, lost the
+answer, reloaded, and the restored cart was charged again under a new
+reference, owing MX$240. The exact request and its reference are now saved
+next to the cart before they leave (`tt-pos-cart:<id>:account`,
+`usePosCart().holdAccount`) and restored into the retry panel, so the retry is
+byte-for-byte the first request and `existingTicket` answers it with the sale
+already rung (same `pos_ref`, same `request_scope`). Cash and card had the
+same gap from the other side: the till dropped its charging marker when the
+headers came back, before reading the body, so a reload during a stalled body
+restored the cart while the held receipt was still replaying. The marker now
+goes only with the cart, together and synchronously (`clear()`), once the
+attempt is resolved, or on a refusal that keeps the cart. Second, the lines a
+till cart could hold and the lines offline intake accepts: a 101-line cash sale
+was collected and held, then refused before the review queue on every replay,
+so it stayed on the tablet where no manager could reach it. The cart now
+stops at `MAX_TILL_LINES` (100, `cart-limits.ts`, the same constant intake
+uses) before payment is asked, with `pos.tooManyLines`; a receipt already held
+with more is queued whole for manager review (`apiErr.offlineTooManyLines`)
+and an approval records every line, up to `MAX_CART_LINES`. Check:
+`pos-charge-reload.spec.tsx`, `pos-cart-charging.spec.ts`,
+`held-intake.spec.ts`.
 ### Promotions price the same on the till and the phone (2026-11-25)
 
 Three pairs that had to agree. First, the order the deals arrive in and the
