@@ -5,6 +5,7 @@ import { PATCH } from "@/app/api/settings/digest-recipients/route";
 const { limit, renew } = vi.hoisted(() => ({ limit: vi.fn(), renew: vi.fn() }));
 vi.mock("@/lib/api-guard", () => ({ actingOwner: async () => ({ restaurantId: "r", email: "owner@example.test" }) }));
 vi.mock("@/lib/rate-limit", () => ({ isRateLimited: limit }));
+vi.mock("@/lib/plan-guard", () => ({ frozenBlocks: async () => null, planBlocks: async () => null }));
 vi.mock("@/lib/i18n/server", () => ({ getLocale: async () => "en" }));
 vi.mock("@/lib/digest-recipients", async importOriginal => ({
   ...await importOriginal<typeof import("@/lib/digest-recipients")>(), renewConfirmation: renew,

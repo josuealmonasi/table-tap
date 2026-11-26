@@ -3736,7 +3736,7 @@ begin
     select 1
       from loyalty_programs p
       join restaurants r on r.id = p.restaurant_id
-      join plan_limits l on l.plan = r.plan
+      join plan_limits l on l.plan = public.effective_restaurant_plan(r.id)
      where p.restaurant_id = p_restaurant and p.active and l.allows_loyalty
   ) then
     return;
@@ -3816,7 +3816,7 @@ alter table table_sessions add column if not exists loyalty_card_id uuid referen
 create or replace function public.loyalty_open(p_restaurant uuid)
 returns boolean language sql stable security definer set search_path = public as $$
   select exists (select 1 from loyalty_programs p join restaurants r on r.id = p.restaurant_id
-    join plan_limits l on l.plan = r.plan
+    join plan_limits l on l.plan = public.effective_restaurant_plan(r.id)
     where p.restaurant_id = p_restaurant and p.active and l.allows_loyalty);
 $$;
 revoke all on function public.loyalty_open(uuid) from public, anon, authenticated;

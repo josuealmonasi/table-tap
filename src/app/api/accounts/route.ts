@@ -124,6 +124,11 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 export async function PATCH(req: NextRequest): Promise<NextResponse> {
   const actor = await actingFrontOfHouse();
   if (!actor) return await apiError("apiErr.forbidden", 403);
+  // A ceiling, a new code and a closing are desk work, refused while the
+  // subscription is locked. Collecting or forgiving what is owed is not, and
+  // lives in /credit and /settle.
+  const frozen = await frozenBlocks(actor.restaurantId);
+  if (frozen) return frozen;
   const body = await jsonBody<{ id?: unknown; action?: unknown; limit?: unknown; currency?: unknown }>(req);
   if (!body || typeof body.id !== "string") return await apiError("apiErr.invalidRequest", 400);
   const account = await accountById(actor.restaurantId, body.id);

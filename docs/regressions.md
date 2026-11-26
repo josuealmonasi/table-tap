@@ -9121,6 +9121,36 @@ enforces it on new writes. Check: `stale-signup-login.spec.ts`,
 `canonical-inbox.spec.ts`, `signup-mail-ceiling.spec.ts`,
 `password-reset/__tests__/route.spec.ts`, `restaurant-name-length.spec.ts`.
 
+### Desk writes and the visit card's SQL ignored a locked plan (2026-11-25)
+
+Two low findings from the billing recheck, each "the plan check one place
+makes and the next one forgot".
+
+First, eight desk writes went through while the subscription was locked:
+`PATCH /api/accounts` (a new ceiling, a new code, a closing), `DELETE
+/api/loyalty/lookup` (a card), `DELETE /api/loyalty/visit` (a stamp taken
+back) and `POST`/`PATCH`/`DELETE /api/settings/digest-recipients` (add,
+resend, remove). Each now answers `frozenBlocks` right after its role check,
+before it reads the body or touches the database, exactly as `POST
+/api/accounts` already did. Collecting or forgiving what is owed stays open
+while frozen (owner decision): `accounts/credit`, `accounts/settle`,
+`loyalty/redeem` and the table-payment routes keep no freeze, and the spec
+asserts that too. The screens needed nothing new: a locked dashboard answers
+with the read-only `FrozenBanner` on every screen, as it does for opening an
+account, and `pnpm promises` checks that banner. No api gate case runs these
+routes on a locked plan, so none changed. Check: `desk-freeze-lows.spec.ts`
+(each verb answers 402 with nothing done; each still works when open).
+
+Second, `loyalty_stamp` and `loyalty_open` joined `plan_limits` on
+`r.plan`, the stored plan, so a local trial that had run out still stamped
+and attached cards as though it were on the trial's tier, while every other
+gate already read `public.effective_restaurant_plan(r.id)`. Both read it now.
+Changed in place with `create or replace`: the signatures stay the same, both
+are called by name (from routes, `attach_loyalty_card_v1` and the paid-order
+triggers), and the change only narrows behaviour, so deployed code calling
+them is unaffected and no new version is needed. Check:
+`entitlement-schema.spec.ts` ("the visit card's gates read the effective
+plan").
 ### Admin console: unaudited reads, optional lift guard, digest after transfer (2026-11-25)
 
 Three places that had to agree with the rest of the admin console. First,

@@ -27,6 +27,12 @@ describe("entitlements at the database write boundary", () => {
     expect(body("enforce_plan_feature")).toContain("public.effective_restaurant_plan");
     expect(sql.match(/create or replace function public\.plan_ceiling[^]*?\$\$;/)?.[0]).toContain("public.effective_restaurant_plan");
   });
+  it("D9 the visit card's gates read the effective plan, not the stored one", () => {
+    const open = sql.match(/create or replace function public\.loyalty_open\([^]*?\$\$;/)?.[0] ?? "";
+    expect(open).toContain("public.effective_restaurant_plan(r.id)");
+    expect(body("loyalty_stamp")).toContain("public.effective_restaurant_plan(r.id)");
+    expect(open + body("loyalty_stamp")).not.toMatch(/l\.plan = r\.plan\b/);
+  });
   it("D13 removes reporting ceilings the plan screen never promised", () => {
     expect(sql).toContain("drop column if exists analytics_days");
     expect(sql).toContain("drop column if exists log_days");

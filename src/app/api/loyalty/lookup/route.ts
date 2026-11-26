@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { apiError } from "@/lib/api-error";
 import { actingManager } from "@/lib/api-guard";
+import { frozenBlocks } from "@/lib/plan-guard";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { normalizeCode } from "@/lib/loyalty/code";
 import { standing } from "@/lib/loyalty/standing";
@@ -64,6 +65,8 @@ export async function GET(req: NextRequest) {
 export async function DELETE(req: NextRequest) {
   const actor = await actingManager();
   if (!actor) return await apiError("apiErr.forbidden", 403);
+  const frozen = await frozenBlocks(actor.restaurantId);
+  if (frozen) return frozen;
 
   const code = normalizeCode(req.nextUrl.searchParams.get("c") ?? "");
   if (!code) return await apiError("rewards.invalid", 400);
