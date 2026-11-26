@@ -1,7 +1,7 @@
 import { EventEmitter } from "node:events";
 import { runInNewContext } from "node:vm";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { navigate, overlay, ready, trackData } from "../../../scripts/browser-ready.mjs";
+import { navigate, observe, overlay, ready, SAMPLE_FLOOR, trackData } from "../../../scripts/browser-ready.mjs";
 import { phaseTimings } from "../../../scripts/browser-jobs.mjs";
 
 class FakePage extends EventEmitter {
@@ -134,9 +134,56 @@ it("waits for overlays to open and close, and observes a legitimate no-op for it
 it("bounds a readiness sample whose page evaluation never settles", async () => {
   const page = new FakePage();
   vi.spyOn(page, "evaluate").mockImplementation(() => new Promise(() => {}));
-  const result = expect(ready(page, { timeout: 20 })).rejects.toThrow("readiness sample timed out");
-  await vi.advanceTimersByTimeAsync(21);
+  const result = expect(ready(page, { timeout: 20 })).rejects.toThrow(`readiness sample timed out after ${SAMPLE_FLOOR}ms`);
+  await vi.advanceTimersByTimeAsync(SAMPLE_FLOOR + 1);
   await result;
+  // A window that may end empty still does not read a hung page as "no dialog".
+  vi.spyOn(page, "locator").mockReturnValue({ count: () => new Promise(() => {}) } as never);
+  const optional = expect(overlay(page, "[role=dialog]", true, 700, false)).rejects.toThrow("readiness sample timed out");
+  await vi.advanceTimersByTimeAsync(SAMPLE_FLOOR + 1);
+  await optional;
+});
+
+// CI, 2026-11-25/26 (#752, #760, #764): 1280px kitchen and 360px cashier on
+// /dashboard/orders failed with «readiness sample timed out after 6ms». The
+// last sample of a 1.5 s dialog window got only the 6 ms left of it.
+it("lets the last sample of a window answer instead of racing what is left of it", async () => {
+  const page = new FakePage();
+  // A busy page: every check takes 50 ms. Samples start at 0, 150, … 600,
+  // and the one at 600 has 40 ms of a 640 ms window left.
+  const slow = <T,>(value: () => T) => new Promise<T>(resolve => setTimeout(() => resolve(value()), 50));
+  vi.spyOn(page, "locator").mockReturnValue({
+    count: () => slow(() => page.dialog ? 1 : 0), first: () => ({ isVisible: () => slow(() => page.dialog) }),
+  } as never);
+  const start = Date.now();
+  const nothing = overlay(page, "[role=dialog]", true, 640, false);
+  await vi.advanceTimersByTimeAsync(800);
+  expect(await nothing).toBe(false);
+  expect(Date.now() - start).toBeGreaterThanOrEqual(640);
+  // A required window that ends unanswered says so as itself, not as a sample.
+  const required = expect(overlay(page, "[role=dialog]", true, 640)).rejects.toThrow("did not become ready in 640ms");
+  await vi.advanceTimersByTimeAsync(800);
+  await required;
+  // And a dialog that shows up during that last sample is seen.
+  const late = overlay(page, "[role=dialog]", true, 640, false);
+  await vi.advanceTimersByTimeAsync(610);
+  page.dialog = true;
+  await vi.advanceTimersByTimeAsync(200);
+  expect(await late).toBe(true);
+});
+
+it("still fails a page that never stops changing", async () => {
+  const page = new FakePage();
+  // A label that changes on every sample: never two agreeing samples.
+  vi.spyOn(page, "evaluate").mockImplementation(async () => ({ ready: true, signature: String(Math.random()) }));
+  const result = expect(ready(page, { timeout: 1000 })).rejects.toThrow("page state did not become ready in 1000ms");
+  await vi.advanceTimersByTimeAsync(1100);
+  await result;
+  const sampled = vi.fn(async () => false);
+  const never = observe(page, sampled, { timeout: 1000, required: false });
+  await vi.advanceTimersByTimeAsync(1100);
+  expect(await never).toBe(false);
+  expect(sampled.mock.calls.length).toBeGreaterThan(5);
 });
 
 it("forgets the last page's requests once the new page commits", async () => {
